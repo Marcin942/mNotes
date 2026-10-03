@@ -133,7 +133,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.mdev.mnotes.app.app
 import com.mdev.mnotes.app.openNewWindow
-import com.mdev.mnotes.data.CoverStyle
 import com.mdev.mnotes.data.Folder
 import com.mdev.mnotes.data.NotebookMeta
 import com.mdev.mnotes.data.Repository
@@ -159,6 +158,7 @@ sealed interface LibDialog {
     data class Move(val keys: Set<String>) : LibDialog
     data class Tags(val nb: Set<String>) : LibDialog
     data class FolderColor(val id: String) : LibDialog
+    data class Cover(val id: String) : LibDialog
     data class Confirm(val title: String, val text: String, val ok: String, val action: () -> Unit) : LibDialog
 }
 
@@ -193,46 +193,6 @@ private fun foKey(id: String) = "f:$id"
 private fun keyId(k: String) = k.substring(2)
 
 // ─────────────────────────────── Okładki i miniatury ───────────────────────────────
-
-@Composable
-fun CoverArt(color: Int, style: Int, modifier: Modifier = Modifier) {
-    val base = Color(color)
-    val light = lerp(base, Color.White, 0.20f)
-    val dark = lerp(base, Color.Black, 0.30f)
-    Canvas(modifier) {
-        drawRect(Brush.linearGradient(listOf(light, base, dark), start = Offset.Zero, end = Offset(size.width, size.height)))
-        val pat = Color.White.copy(alpha = 0.17f)
-        val w = size.width; val h = size.height
-        when (style) {
-            CoverStyle.STRIPES -> {
-                var x = -h
-                while (x < w) { drawLine(pat, Offset(x, h), Offset(x + h, 0f), strokeWidth = w * 0.035f); x += w * 0.1f }
-            }
-            CoverStyle.DOTS -> {
-                val st = w * 0.1f
-                var y = st / 2
-                while (y < h) { var x = st / 2; while (x < w) { drawCircle(pat, w * 0.016f, Offset(x, y)); x += st }; y += st }
-            }
-            CoverStyle.WAVES -> {
-                val amp = w * 0.03f
-                var y = h * 0.08f
-                while (y < h) {
-                    val p = Path(); p.moveTo(0f, y)
-                    var x = 0f
-                    while (x <= w) { p.lineTo(x, y + sin(x / w * 6.2832f * 3f) * amp); x += 4f }
-                    drawPath(p, pat, style = Stroke(w * 0.012f)); y += h * 0.065f
-                }
-            }
-            CoverStyle.GRID -> {
-                val st = w * 0.12f
-                var x = st; while (x < w) { drawLine(pat, Offset(x, 0f), Offset(x, h), w * 0.006f); x += st }
-                var y = st; while (y < h) { drawLine(pat, Offset(0f, y), Offset(w, y), w * 0.006f); y += st }
-            }
-        }
-        drawRect(Color.Black.copy(alpha = 0.20f), size = Size(w * 0.055f, h))
-        drawRect(Color.White.copy(alpha = 0.14f), topLeft = Offset(w * 0.055f, 0f), size = Size(w * 0.01f, h))
-    }
-}
 
 /** Pierwsza strona zeszytu jako miniatura (async, z cache). */
 @Composable
@@ -806,6 +766,7 @@ private fun SelectionBar(st: LibState, ops: LibOps, inTrash: Boolean, order: Lis
                 IconBtn(if (allFav) Icons.Rounded.Star else Icons.Rounded.StarBorder, T.t("Ulubione", "Favorite"), { ops.favorite(st.sel) }, tint = if (allFav) Color(0xFFF5B800) else Color.Unspecified)
                 IconBtn(Icons.AutoMirrored.Rounded.Label, T.t("Tagi", "Tags"), { st.dialog = LibDialog.Tags(ops.nbs(st.sel).toSet()) })
                 IconBtn(Icons.Rounded.ContentCopy, T.t("Duplikuj", "Duplicate"), { ops.duplicate(st.sel) })
+                if (st.sel.size == 1) IconBtn(Icons.Rounded.Palette, T.t("Okładka", "Cover"), { st.dialog = LibDialog.Cover(ops.nbs(st.sel).first()) })
             }
             IconBtn(Icons.Rounded.DriveFileMove, T.t("Przenieś", "Move"), { st.dialog = LibDialog.Move(st.sel) })
             IconBtn(Icons.Rounded.Delete, T.t("Do kosza", "Move to trash"), { ops.trash(st.sel) }, shortcut = "Del")
@@ -919,22 +880,12 @@ private fun NotebookTile(
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Box(Modifier.fillMaxWidth().aspectRatio(0.76f), contentAlignment = Alignment.Center) {
-            val shape = RoundedCornerShape(topStart = 4.dp, bottomStart = 4.dp, topEnd = 10.dp, bottomEnd = 10.dp)
             if (preview) {
                 val spec = n.pages.firstOrNull()?.spec
                 val ar = if (spec != null) (spec.w / spec.h).coerceIn(0.4f, 2.5f) else 0.707f
                 PageThumb(n, 420, Modifier.then(if (ar >= 0.76f) Modifier.fillMaxWidth().aspectRatio(ar) else Modifier.fillMaxHeight().aspectRatio(ar)).shadow(5.dp, RoundedCornerShape(4.dp)).clip(RoundedCornerShape(4.dp)))
             } else {
-                Box(Modifier.fillMaxSize().shadow(6.dp, shape).clip(shape)) {
-                    CoverArt(n.cover, n.coverStyle, Modifier.fillMaxSize())
-                    Box(
-                        Modifier.align(Alignment.Center).padding(start = 18.dp, end = 12.dp).fillMaxWidth().clip(RoundedCornerShape(6.dp))
-                            .background(Color.White.copy(alpha = 0.93f)).padding(horizontal = 8.dp, vertical = 8.dp),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Text(n.title, color = Color(0xFF24272B), maxLines = 3, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center, style = MaterialTheme.typography.titleSmall)
-                    }
-                }
+                NotebookCover(n.title, n.cover, n.coverStyle, Modifier.fillMaxSize().shadow(6.dp, CoverShape).clip(CoverShape))
             }
             if (n.favorite) Icon(Icons.Rounded.Star, null, Modifier.align(Alignment.TopEnd).padding(5.dp).size(20.dp), tint = Color(0xFFF5B800))
             if (n.locked) Icon(Icons.Rounded.Lock, null, Modifier.align(Alignment.BottomEnd).padding(6.dp).size(16.dp), tint = Color.White)
@@ -1125,6 +1076,7 @@ private fun ItemMenu(st: LibState, ops: LibOps, inTrash: Boolean) {
                 }
                 if (!multi && !isFolder) { val ctx = LocalContext.current; Item(Icons.Rounded.OpenInNew, T.t("Otwórz w nowym oknie", "Open in new window")) { ctx.openNewWindow(keyId(mt.key)) } }
                 if (!multi) Item(Icons.Rounded.Edit, T.t("Zmień nazwę…", "Rename…"), "F2") { st.dialog = LibDialog.Rename(mt.key) }
+                if (!multi && !isFolder) Item(Icons.Rounded.Palette, T.t("Zmień okładkę…", "Change cover…")) { st.dialog = LibDialog.Cover(keyId(mt.key)) }
                 if (!multi && isFolder) Item(Icons.Rounded.Palette, T.t("Kolor folderu…", "Folder color…")) { st.dialog = LibDialog.FolderColor(keyId(mt.key)) }
                 if (!isFolder || multi) {
                     val ids = ops.nbs(st.sel)

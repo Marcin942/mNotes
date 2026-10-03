@@ -18,7 +18,9 @@ object CoverStyle {
     const val DOTS = 2
     const val WAVES = 3
     const val GRID = 4
-    const val COUNT = 5
+    const val LINEN = 5
+    const val ARCS = 6
+    const val COUNT = 7
 }
 
 data class Folder(

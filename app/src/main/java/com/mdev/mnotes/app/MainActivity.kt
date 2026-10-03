@@ -43,7 +43,7 @@ import com.mdev.mnotes.ui.importUris
 import com.mdev.mnotes.core.model.PageFormat
 import com.mdev.mnotes.core.model.PageSpec
 import com.mdev.mnotes.core.model.Template
-import com.mdev.mnotes.data.CoverStyle
+import com.mdev.mnotes.ui.CoverPalette
 import com.mdev.mnotes.editor.Editor
 import com.mdev.mnotes.editor.T
 import com.mdev.mnotes.ui.Chip
@@ -90,7 +90,7 @@ class UiModel(application: Application) : AndroidViewModel(application) {
     fun quickNote() {
         val s = app.settings
         val spec = PageSpec.of(PageFormat.fromId(s.newFormat) ?: PageFormat.A4, s.newLandscape, Template.fromCode(s.newTemplate), s.newPaper)
-        val n = app.repo.createNotebook(T.t("Nowa notatka", "New note"), spec, 0xFF4C9A6A.toInt(), CoverStyle.STRIPES, null)
+        val n = app.repo.createNotebook(T.t("Nowa notatka", "New note"), spec, CoverPalette.default, CoverPalette.DEFAULT_STYLE, null)
         open(n.id)
     }
 

@@ -46,7 +46,6 @@ import com.mdev.mnotes.core.model.PageFormat
 import com.mdev.mnotes.core.model.PageSpec
 import com.mdev.mnotes.core.model.Paper
 import com.mdev.mnotes.core.model.Template
-import com.mdev.mnotes.data.CoverStyle
 import com.mdev.mnotes.editor.T
 import com.mdev.mnotes.render.PageRenderer
 
@@ -132,6 +131,18 @@ fun LibDialogs(st: LibState, onOpen: (String) -> Unit) {
             if (f == null) { st.dialog = null; return }
             MDialog(T.t("Kolor folderu", "Folder color"), { st.dialog = null }, null) {
                 FolderColors(f.color) { c -> repo.updateFolder(f.id) { it.copy(color = c) }; st.dialog = null }
+            }
+        }
+        is LibDialog.Cover -> {
+            val nb = repo.meta(d.id)
+            if (nb == null) { st.dialog = null; return }
+            var cover by remember { mutableStateOf(nb.cover) }
+            var style by remember { mutableStateOf(nb.coverStyle) }
+            MDialog(T.t("Okładka zeszytu", "Notebook cover"), { st.dialog = null }, T.t("Zapisz", "Save"), { repo.update(d.id) { it.copy(cover = cover, coverStyle = style) }; st.dialog = null }) {
+                Row(horizontalArrangement = Arrangement.spacedBy(18.dp)) {
+                    Column(Modifier.weight(1f)) { CoverPicker(cover, style, { cover = it }, { style = it }) }
+                    NotebookCover(nb.title, cover, style, Modifier.width(108.dp).height(144.dp).shadow(6.dp, CoverShape).clip(CoverShape))
+                }
             }
         }
         is LibDialog.Export -> ExportDialog(d.nb, 0, {}) { st.dialog = null }
@@ -272,11 +283,10 @@ fun NewNotebookDialog(onDismiss: () -> Unit, onCreate: (String, PageSpec, Int, I
     var landscape by remember { mutableStateOf(set.newLandscape) }
     var template by remember { mutableStateOf(Template.fromCode(set.newTemplate)) }
     var paper by remember { mutableStateOf(set.newPaper) }
-    var cover by remember { mutableStateOf(0xFF4C9A6A.toInt()) }
-    var style by remember { mutableStateOf(CoverStyle.STRIPES) }
+    var cover by remember { mutableStateOf(CoverPalette.default) }
+    var style by remember { mutableStateOf(CoverPalette.DEFAULT_STYLE) }
 
     val spec = remember(format, landscape, template, paper) { PageSpec.of(format, landscape, template, paper) }
-    val covers = remember { listOf(0xFF4C9A6A, 0xFF3E7CB1, 0xFF8A5FB5, 0xFFD2674A, 0xFFC94A6B, 0xFFD9A441, 0xFF4B5563, 0xFF1F2933, 0xFF2AA198, 0xFF7B8F3A).map { it.toInt() } }
 
     fun create() {
         set.newFormat = format.id; set.newLandscape = landscape; set.newTemplate = template.code; set.newPaper = paper
@@ -309,19 +319,13 @@ fun NewNotebookDialog(onDismiss: () -> Unit, onCreate: (String, PageSpec, Int, I
                 Text(paperName(paper), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 4.dp))
 
                 SectionLabel(T.t("Okładka", "Cover"), Modifier.padding(top = 14.dp))
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    for (c in covers) Dot(Color(c), 30.dp, selected = c == cover, onClick = { cover = c })
-                }
-                Row(Modifier.padding(top = 10.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    val names = listOf(T.t("Gładka", "Plain"), T.t("Pasy", "Stripes"), T.t("Kropki", "Dots"), T.t("Fale", "Waves"), T.t("Kratka", "Grid"))
-                    for (i in 0 until CoverStyle.COUNT) Chip(names[i], style == i, { style = i })
-                }
+                CoverPicker(cover, style, { cover = it }, { style = it })
             }
             Column(Modifier.width(150.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                 SectionLabel(T.t("Podgląd", "Preview"), Modifier.align(Alignment.Start))
                 Spacer(Modifier.height(6.dp))
                 Box(Modifier.fillMaxWidth().height(150.dp)) {
-                    CoverArt(cover, style, Modifier.align(Alignment.Center).width(108.dp).height(144.dp).shadow(6.dp, RoundedCornerShape(topStart = 3.dp, bottomStart = 3.dp, topEnd = 8.dp, bottomEnd = 8.dp)).clip(RoundedCornerShape(topStart = 3.dp, bottomStart = 3.dp, topEnd = 8.dp, bottomEnd = 8.dp)))
+                    NotebookCover(title.trim().ifEmpty { T.t("Zeszyt", "Notebook") }, cover, style, Modifier.align(Alignment.Center).width(108.dp).height(144.dp).shadow(6.dp, CoverShape).clip(CoverShape))
                 }
                 Spacer(Modifier.height(14.dp))
                 Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {

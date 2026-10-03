@@ -1,0 +1,264 @@
+package com.mdev.mnotes.ui
+
+import android.content.Context
+import android.content.Intent
+import android.net.Uri
+import android.os.CancellationSignal
+import android.os.ParcelFileDescriptor
+import android.print.PageRange
+import android.print.PrintAttributes
+import android.print.PrintDocumentAdapter
+import android.print.PrintDocumentInfo
+import android.print.PrintManager
+import android.provider.DocumentsContract
+import android.provider.OpenableColumns
+import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.IosShare
+import androidx.compose.material.icons.rounded.Print
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.dp
+import androidx.core.content.FileProvider
+import com.mdev.mnotes.app.MNotesApp
+import com.mdev.mnotes.app.app
+import com.mdev.mnotes.data.ExportFormat
+import com.mdev.mnotes.data.Exporter
+import com.mdev.mnotes.data.Importer
+import com.mdev.mnotes.data.NotebookMeta
+import com.mdev.mnotes.editor.T
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.io.File
+import java.io.FileInputStream
+import java.io.FileOutputStream
+
+private fun Context.toast(s: String) = Toast.makeText(this, s, Toast.LENGTH_SHORT).show()
+
+private fun fmtLabel(f: ExportFormat) = when (f) {
+    ExportFormat.PDF -> "PDF"
+    ExportFormat.PNG -> "PNG"
+    ExportFormat.SVG -> "SVG"
+    ExportFormat.MD -> "Markdown"
+    ExportFormat.MNOTES -> ".mnotes"
+}
+
+private fun fmtInfo(f: ExportFormat) = when (f) {
+    ExportFormat.PDF -> T.t("Wektorowy dokument: tekst i pismo pozostają ostre, tło PDF zachowane.", "Vector document: text and ink stay sharp, PDF background preserved.")
+    ExportFormat.PNG -> T.t("Obraz rastrowy każdej strony (kilka stron → archiwum ZIP).", "Raster image of each page (several pages → ZIP archive).")
+    ExportFormat.SVG -> T.t("Grafika wektorowa do edycji w Inkscape (kilka stron → archiwum ZIP).", "Vector graphics for Inkscape (several pages → ZIP archive).")
+    ExportFormat.MD -> T.t("Tylko tekst z pól tekstowych; pismo odręczne i obrazy nie wchodzą do pliku.", "Text boxes only; handwriting and images are not included.")
+    ExportFormat.MNOTES -> T.t("Pełna kopia zeszytu (otwarty format ZIP) — do przeniesienia na inne urządzenie lub kopii zapasowej.", "Full notebook copy (open ZIP format) — for moving to another device or backup.")
+}
+
+/** Eksport zeszytu: zapis do wybranego miejsca (SAF), udostępnienie lub wydruk. [prepare] zapisuje stan edytora przed odczytem z dysku. */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+fun ExportDialog(nb: String, currentPage: Int, prepare: () -> Unit, onDismiss: () -> Unit) {
+    val ctx = LocalContext.current
+    val app = ctx.app
+    val pageCount = remember(nb) { prepare(); app.repo.meta(nb)?.pages?.size ?: 0 }
+    val title = app.repo.meta(nb)?.title ?: "mNotes"
+    val exporter = remember { Exporter(app.repo, app.assets, app.pdf) }
+    var fmt by remember { mutableStateOf(ExportFormat.PDF) }
+    var all by remember { mutableStateOf(true) }
+    var busy by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+
+    val canScope = pageCount > 1 && fmt != ExportFormat.MNOTES
+    val pages: List<Int>? = if (canScope && !all) listOf(currentPage.coerceIn(0, pageCount - 1)) else null
+    val count = if (fmt == ExportFormat.MNOTES) pageCount else pages?.size ?: pageCount
+    val zip = !fmt.multi && count > 1
+    val name = exporter.fileName(title, fmt, if (!fmt.multi && count == 1 && pageCount > 1) (pages?.first() ?: 0) else null, zip)
+    val mime = if (zip) "application/zip" else fmt.mime
+    // Dla własnego rozszerzenia SAF dostaje typ ogólny, żeby nie dopisywać „.bin” ani „.zip”.
+    val safMime = if (fmt == ExportFormat.MNOTES) "application/octet-stream" else mime
+
+    /** Eksport do pliku w pamięci podręcznej (udostępnianie, wydruk). */
+    suspend fun toCache(): File? = withContext(Dispatchers.IO) {
+        exporter.awaitWrites()
+        val dir = File(ctx.cacheDir, "share").apply { mkdirs(); listFiles()?.forEach { it.delete() } }
+        val f = File(dir, name)
+        val ok = FileOutputStream(f).use { exporter.write(nb, fmt, pages, it) }
+        if (ok) f else { f.delete(); null }
+    }
+
+    val saver = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument(safMime)) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        busy = true
+        scope.launch {
+            val ok = withContext(Dispatchers.IO) {
+                exporter.awaitWrites()
+                val good = runCatching { ctx.contentResolver.openOutputStream(uri)?.use { exporter.write(nb, fmt, pages, it) } ?: false }.getOrDefault(false)
+                if (!good) runCatching { DocumentsContract.deleteDocument(ctx.contentResolver, uri) }
+                good
+            }
+            busy = false
+            ctx.toast(if (ok) T.t("Zapisano: $name", "Saved: $name") else T.t("Eksport nie powiódł się", "Export failed"))
+            if (ok) onDismiss()
+        }
+    }
+
+    fun share() {
+        busy = true
+        scope.launch {
+            val f = toCache()
+            busy = false
+            if (f == null) { ctx.toast(T.t("Eksport nie powiódł się", "Export failed")); return@launch }
+            val uri = FileProvider.getUriForFile(ctx, "${ctx.packageName}.files", f)
+            val send = Intent(Intent.ACTION_SEND).setType(mime).putExtra(Intent.EXTRA_STREAM, uri).putExtra(Intent.EXTRA_SUBJECT, title)
+                .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            runCatching { ctx.startActivity(Intent.createChooser(send, T.t("Udostępnij", "Share"))) }.onFailure { ctx.toast(T.t("Brak aplikacji do udostępniania", "No app to share with")) }
+            onDismiss()
+        }
+    }
+
+    fun print() {
+        busy = true
+        scope.launch {
+            val f = toCache()
+            busy = false
+            if (f == null) { ctx.toast(T.t("Eksport nie powiódł się", "Export failed")); return@launch }
+            val pm = ctx.getSystemService(Context.PRINT_SERVICE) as? PrintManager
+            if (pm == null) { ctx.toast(T.t("Drukowanie niedostępne", "Printing unavailable")); return@launch }
+            pm.print(title, object : PrintDocumentAdapter() {
+                override fun onLayout(old: PrintAttributes?, new: PrintAttributes?, cancel: CancellationSignal?, cb: LayoutResultCallback, extras: android.os.Bundle?) {
+                    if (cancel?.isCanceled == true) { cb.onLayoutCancelled(); return }
+                    cb.onLayoutFinished(PrintDocumentInfo.Builder(name).setContentType(PrintDocumentInfo.CONTENT_TYPE_DOCUMENT).setPageCount(PrintDocumentInfo.PAGE_COUNT_UNKNOWN).build(), true)
+                }
+                override fun onWrite(range: Array<out PageRange>, dest: ParcelFileDescriptor, cancel: CancellationSignal?, cb: WriteResultCallback) {
+                    try {
+                        FileInputStream(f).use { i -> FileOutputStream(dest.fileDescriptor).use { o -> i.copyTo(o) } }
+                        cb.onWriteFinished(arrayOf(PageRange.ALL_PAGES))
+                    } catch (e: Exception) { cb.onWriteFailed(e.message) }
+                }
+            }, null)
+            onDismiss()
+        }
+    }
+
+    MDialog(
+        T.t("Eksport i udostępnianie", "Export & share"), { if (!busy) onDismiss() },
+        confirm = T.t("Zapisz jako…", "Save as…"), onConfirm = { saver.launch(name) }, confirmEnabled = !busy && pageCount > 0,
+    ) {
+        Text(title, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        SectionLabel(T.t("Format", "Format"))
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            for (f in ExportFormat.entries) Chip(fmtLabel(f), fmt == f, { if (!busy) fmt = f })
+        }
+        Text(fmtInfo(fmt), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 8.dp))
+        if (canScope) {
+            SectionLabel(T.t("Zakres", "Range"))
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Chip(T.t("Cały zeszyt ($pageCount)", "Whole notebook ($pageCount)"), all, { if (!busy) all = true })
+                Chip(T.t("Strona ${currentPage + 1}", "Page ${currentPage + 1}"), !all, { if (!busy) all = false })
+            }
+        }
+        SectionLabel(T.t("Inne działania", "Other actions"))
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+            Chip(T.t("Udostępnij…", "Share…"), false, { if (!busy) share() }, icon = Icons.Rounded.IosShare)
+            if (fmt == ExportFormat.PDF) Chip(T.t("Drukuj…", "Print…"), false, { if (!busy) print() }, icon = Icons.Rounded.Print)
+            if (busy) {
+                CircularProgressIndicator(Modifier.padding(start = 8.dp).size(20.dp), strokeWidth = 2.dp, color = mint.accent)
+                Text(T.t("Przygotowuję…", "Preparing…"), style = MaterialTheme.typography.bodySmall, modifier = Modifier.width(110.dp))
+            }
+        }
+    }
+}
+
+// ─────────────────────────────── Import ───────────────────────────────
+
+private enum class Kind { PDF, IMAGE, MNOTES }
+
+private fun Context.displayName(uri: Uri): String =
+    runCatching { contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { if (it.moveToFirst()) it.getString(0) else null } }.getOrNull()
+        ?: uri.lastPathSegment?.substringAfterLast('/') ?: "import"
+
+/**
+ * Importuje pliki (PDF, obrazy, .mnotes) jako nowe zeszyty. Praca na wątku IO, rejestracja w bibliotece na głównym.
+ * Zwraca utworzone zeszyty; użytkownik dostaje komunikat (także o plikach pominiętych).
+ */
+suspend fun importUris(app: MNotesApp, uris: List<Uri>, folderId: String?, mimeHint: String? = null): List<NotebookMeta> {
+    val ctx: Context = app
+    val imp = Importer(app.repo, app.pdf)
+    val made = ArrayList<NotebookMeta>()
+    var skipped = 0
+    withContext(Dispatchers.IO) {
+        val images = ArrayList<Pair<Uri, String>>()
+        for (u in uris) {
+            val name = ctx.displayName(u)
+            val low = name.lowercase()
+            val mime = (ctx.contentResolver.getType(u) ?: mimeHint).orEmpty()
+            val kind = when {
+                mime == "application/pdf" || low.endsWith(".pdf") -> Kind.PDF
+                low.endsWith(".mnotes") || mime == "application/x-mnotes" -> Kind.MNOTES
+                mime.startsWith("image/") -> Kind.IMAGE
+                low.endsWith(".zip") -> Kind.MNOTES
+                else -> null
+            }
+            val base = name.substringBeforeLast('.', name).ifBlank { "import" }
+            val meta = runCatching {
+                when (kind) {
+                    Kind.PDF -> ctx.contentResolver.openInputStream(u)?.use { imp.importPdf(it, base, folderId) }
+                    Kind.MNOTES -> ctx.contentResolver.openInputStream(u)?.use { imp.importMnotes(it, folderId) }
+                    Kind.IMAGE -> {
+                        val ext = low.substringAfterLast('.', "").takeIf { it.matches(Regex("[a-z0-9]{2,4}")) } ?: "jpg"
+                        images.add(u to ext)
+                        null
+                    }
+                    null -> null
+                }
+            }.getOrNull()
+            if (meta != null) made.add(meta) else if (kind != Kind.IMAGE) skipped++
+        }
+        if (images.isNotEmpty()) {
+            val title = if (images.size == 1) ctx.displayName(images[0].first).substringBeforeLast('.') else T.t("Import obrazów", "Imported images")
+            val sources = images.map { (u, ext) -> ({ ctx.contentResolver.openInputStream(u) } as () -> java.io.InputStream?) to ext }
+            val meta = runCatching { imp.importImages(sources, title, folderId) }.getOrNull()
+            if (meta != null) made.add(meta) else skipped += images.size
+        }
+    }
+    made.forEach { app.repo.addNotebook(it) }
+    ctx.toast(
+        when {
+            made.isEmpty() -> T.t("Nie udało się zaimportować plików", "Could not import the files")
+            skipped > 0 -> T.t("Zaimportowano ${made.size}, pominięto $skipped", "Imported ${made.size}, skipped $skipped")
+            else -> T.t("Zaimportowano: ${made.size}", "Imported: ${made.size}")
+        },
+    )
+    return made
+}
+
+/** Zwraca funkcję otwierającą systemowy wybór plików do importu; po imporcie jednego zeszytu otwiera go. */
+@Composable
+fun rememberImportLauncher(folderId: () -> String?, onOpen: (String) -> Unit): () -> Unit {
+    val app = LocalContext.current.app
+    val scope = rememberCoroutineScope()
+    val launcher = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
+        if (uris.isNotEmpty()) scope.launch {
+            val made = importUris(app, uris, folderId())
+            if (made.size == 1) onOpen(made[0].id)
+        }
+    }
+    return { launcher.launch(arrayOf("application/pdf", "image/*", "application/zip", "application/x-mnotes", "application/octet-stream")) }
+}

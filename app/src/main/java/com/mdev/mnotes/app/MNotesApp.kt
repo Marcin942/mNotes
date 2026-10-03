@@ -1,0 +1,40 @@
+package com.mdev.mnotes.app
+
+import android.app.Application
+import android.content.Context
+import com.mdev.mnotes.data.Repository
+import com.mdev.mnotes.data.SearchIndex
+import com.mdev.mnotes.data.Settings
+import com.mdev.mnotes.data.SyncFolder
+import com.mdev.mnotes.render.Assets
+import com.mdev.mnotes.render.PdfPool
+import com.mdev.mnotes.render.Thumbs
+
+/** Singletony aplikacji: repozytorium, ustawienia i wspólne cache grafik (bez DI — wystarczy prosty kontener). */
+class MNotesApp : Application() {
+    lateinit var repo: Repository
+    lateinit var settings: Settings
+    lateinit var assets: Assets
+    lateinit var pdf: PdfPool
+    lateinit var thumbs: Thumbs
+    lateinit var search: SearchIndex
+    lateinit var sync: SyncFolder
+    /** Zapytanie z biblioteki, które edytor ma od razu wpisać w pasek szukania (jednorazowo). */
+    @Volatile var pendingSearch: String? = null
+    /** Zeszyty otwarte teraz w którymkolwiek oknie — jeden zeszyt nie może być edytowany w dwóch oknach naraz. */
+    val openIds: MutableSet<String> = java.util.Collections.synchronizedSet(mutableSetOf())
+
+    override fun onCreate() {
+        super.onCreate()
+        repo = Repository(this)
+        settings = Settings(this)
+        assets = Assets(repo)
+        pdf = PdfPool(repo)
+        thumbs = Thumbs(repo, assets, pdf)
+        search = SearchIndex(repo)
+        sync = SyncFolder(this, repo, settings, assets, pdf)
+        repo.load()
+    }
+}
+
+val Context.app: MNotesApp get() = applicationContext as MNotesApp

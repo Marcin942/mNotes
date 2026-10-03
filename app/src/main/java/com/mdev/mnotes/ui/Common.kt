@@ -1,0 +1,356 @@
+package com.mdev.mnotes.ui
+
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.waitForUpOrCancellation
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Check
+import androidx.compose.material.icons.rounded.Colorize
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.PlainTooltip
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.TooltipBox
+import androidx.compose.material3.TooltipDefaults
+import androidx.compose.material3.rememberTooltipState
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.pointer.PointerEventTimeoutCancellationException
+import androidx.compose.ui.input.pointer.changedToUp
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalViewConfiguration
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
+import com.mdev.mnotes.editor.T
+import java.text.DateFormat
+import java.util.Date
+import androidx.compose.ui.graphics.toArgb
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.isSecondaryPressed
+import androidx.compose.ui.input.pointer.isCtrlPressed
+import androidx.compose.ui.input.pointer.isShiftPressed
+import androidx.compose.ui.geometry.Size
+import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.foundation.layout.offset
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.foundation.Canvas
+import androidx.compose.ui.draw.drawBehind
+
+fun dateText(ms: Long): String = DateFormat.getDateInstance(DateFormat.MEDIUM).format(Date(ms))
+fun dateTimeText(ms: Long): String = DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT).format(Date(ms))
+
+/** Przycisk-ikona z podpowiedzią (tooltip pokazuje też skrót klawiszowy — wygodne przy myszy). */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun IconBtn(
+    icon: ImageVector,
+    tip: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+    selected: Boolean = false,
+    tint: Color = Color.Unspecified,
+    size: Dp = 40.dp,
+    iconSize: Dp = 22.dp,
+    shortcut: String? = null,
+) {
+    val m = mint
+    TooltipBox(
+        positionProvider = TooltipDefaults.rememberPlainTooltipPositionProvider(),
+        tooltip = { PlainTooltip { Text(if (shortcut != null) "$tip  ($shortcut)" else tip) } },
+        state = rememberTooltipState(),
+    ) {
+        val c = when {
+            !enabled -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.32f)
+            tint != Color.Unspecified -> tint
+            selected -> m.accentText
+            else -> MaterialTheme.colorScheme.onSurface
+        }
+        Box(
+            modifier.size(size).clip(RoundedCornerShape(8.dp))
+                .background(if (selected) m.accentSoft else Color.Transparent)
+                .clickable(enabled = enabled, onClick = onClick),
+            contentAlignment = Alignment.Center,
+        ) { Icon(icon, tip, tint = c, modifier = Modifier.size(iconSize)) }
+    }
+}
+
+/**
+ * Wejście dla kafelka/wiersza: klik (z Ctrl/Shift), długie przytrzymanie, prawy przycisk myszy.
+ * Przewijanie rodzica anuluje gest, więc nie przeszkadza w listach.
+ */
+fun Modifier.tileInput(
+    onClick: (ctrl: Boolean, shift: Boolean) -> Unit,
+    onLong: () -> Unit = {},
+    onSecondary: (Offset) -> Unit = {},
+): Modifier = pointerInput(Unit) {
+    awaitEachGesture {
+        val down = awaitFirstDown(requireUnconsumed = false)
+        val ev = currentEvent
+        if (ev.buttons.isSecondaryPressed) {
+            down.consume(); onSecondary(down.position)
+            waitForUpOrCancellation()
+            return@awaitEachGesture
+        }
+        val ctrl = ev.keyboardModifiers.isCtrlPressed
+        val shift = ev.keyboardModifiers.isShiftPressed
+        var timedOut = false
+        val up = try {
+            withTimeout(viewConfiguration.longPressTimeoutMillis) { waitForUpOrCancellation() }
+        } catch (_: PointerEventTimeoutCancellationException) { timedOut = true; null }
+        if (timedOut) { onLong(); waitForUpOrCancellation() }
+        else if (up != null) { up.consume(); onClick(ctrl, shift) }
+    }
+}
+
+@Composable
+fun MDialog(
+    title: String,
+    onDismiss: () -> Unit,
+    confirm: String? = null,
+    onConfirm: () -> Unit = {},
+    confirmEnabled: Boolean = true,
+    dismissText: String = T.t("Anuluj", "Cancel"),
+    content: @Composable () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(title, style = MaterialTheme.typography.titleLarge) },
+        text = { Column { content() } },
+        confirmButton = { if (confirm != null) TextButton(onClick = onConfirm, enabled = confirmEnabled) { Text(confirm, color = if (confirmEnabled) mint.accentText else Color.Unspecified) } },
+        dismissButton = if (dismissText.isEmpty()) null else { { TextButton(onClick = onDismiss) { Text(dismissText) } } },
+        containerColor = MaterialTheme.colorScheme.surface,
+        shape = RoundedCornerShape(14.dp),
+    )
+}
+
+/** True, gdy jakiekolwiek pole tekstowe ma fokus — skróty jednoliterowe edytora są wtedy wyłączone. */
+var fieldFocused by mutableStateOf(false)
+
+/** Rama pola tekstowego w stylu Mint (wspólna dla wersji String i TextFieldValue). */
+@Composable
+private fun FieldFrame(focus: Boolean, singleLine: Boolean, leading: @Composable (() -> Unit)?, hint: String, empty: Boolean, inner: @Composable () -> Unit) {
+    val m = mint
+    Row(
+        Modifier.fillMaxWidth().height(if (singleLine) 40.dp else 96.dp).clip(RoundedCornerShape(8.dp))
+            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = if (m.dark) 0.6f else 0.55f))
+            .border(1.5.dp, if (focus) m.accent else Color.Transparent, RoundedCornerShape(8.dp))
+            .padding(horizontal = 12.dp),
+        verticalAlignment = if (singleLine) Alignment.CenterVertically else Alignment.Top,
+    ) {
+        if (leading != null) { leading(); Spacer(Modifier.width(8.dp)) }
+        Box(Modifier.weight(1f).padding(vertical = if (singleLine) 0.dp else 10.dp)) {
+            if (empty && hint.isNotEmpty()) Text(hint, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyLarge)
+            inner()
+        }
+    }
+}
+
+/** Pole tekstowe w stylu Mint (obramowanie, akcent przy fokusie) — bez pływającej etykiety. */
+@Composable
+fun MField(
+    value: String,
+    onChange: (String) -> Unit,
+    modifier: Modifier = Modifier,
+    hint: String = "",
+    singleLine: Boolean = true,
+    number: Boolean = false,
+    leading: @Composable (() -> Unit)? = null,
+    onDone: (() -> Unit)? = null,
+) {
+    val m = mint
+    var focus by remember { mutableStateOf(false) }
+    BasicTextField(
+        value = value, onValueChange = onChange, singleLine = singleLine,
+        textStyle = MaterialTheme.typography.bodyLarge.copy(color = MaterialTheme.colorScheme.onSurface),
+        cursorBrush = SolidColor(m.accent),
+        keyboardOptions = KeyboardOptions(keyboardType = if (number) KeyboardType.Decimal else KeyboardType.Text),
+        modifier = modifier.onFocusChanged { focus = it.isFocused; fieldFocused = it.isFocused },
+        decorationBox = { inner -> FieldFrame(focus, singleLine, leading, hint, value.isEmpty(), inner) },
+    )
+}
+
+/** Jak [MField], ale ze stanem zaznaczenia (np. do operacji na wierszach). Zawsze wielowierszowe. */
+@Composable
+fun MAreaField(value: TextFieldValue, onChange: (TextFieldValue) -> Unit, modifier: Modifier = Modifier, hint: String = "") {
+    val m = mint
+    var focus by remember { mutableStateOf(false) }
+    BasicTextField(
+        value = value, onValueChange = onChange,
+        textStyle = MaterialTheme.typography.bodyLarge.copy(color = MaterialTheme.colorScheme.onSurface),
+        cursorBrush = SolidColor(m.accent),
+        modifier = modifier.onFocusChanged { focus = it.isFocused; fieldFocused = it.isFocused },
+        decorationBox = { inner -> FieldFrame(focus, false, null, hint, value.text.isEmpty(), inner) },
+    )
+}
+
+@Composable
+fun Dot(color: Color, size: Dp = 22.dp, selected: Boolean = false, onClick: (() -> Unit)? = null, modifier: Modifier = Modifier) {
+    val m = mint
+    Box(
+        modifier.size(size).clip(CircleShape).background(color)
+            .border(if (selected) 2.5.dp else 1.dp, if (selected) m.accent else MaterialTheme.colorScheme.outline.copy(alpha = 0.7f), CircleShape)
+            .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier),
+        contentAlignment = Alignment.Center,
+    ) {
+        if (selected) Icon(Icons.Rounded.Check, null, tint = if (color.luminanceLow()) Color.White else Color.Black, modifier = Modifier.size(size * 0.6f))
+    }
+}
+
+private fun Color.luminanceLow() = (0.2126f * red + 0.7152f * green + 0.0722f * blue) < 0.5f
+
+@Composable
+fun Chip(text: String, selected: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier, icon: ImageVector? = null) {
+    val m = mint
+    Row(
+        modifier.clip(RoundedCornerShape(8.dp))
+            .background(if (selected) m.accentSoft else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f))
+            .border(1.dp, if (selected) m.accent else Color.Transparent, RoundedCornerShape(8.dp))
+            .clickable(onClick = onClick).padding(horizontal = 12.dp, vertical = 7.dp),
+        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        if (icon != null) Icon(icon, null, Modifier.size(16.dp), tint = if (selected) m.accentText else MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(text, style = MaterialTheme.typography.labelLarge, color = if (selected) m.accentText else MaterialTheme.colorScheme.onSurface)
+    }
+}
+
+@Composable
+fun SectionLabel(text: String, modifier: Modifier = Modifier) {
+    Text(text.uppercase(), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = modifier.padding(top = 14.dp, bottom = 6.dp))
+}
+
+/** Suwak z gradientowym torem (do HSV). */
+@Composable
+fun GradientSlider(value: Float, brush: Brush, onChange: (Float) -> Unit, modifier: Modifier = Modifier) {
+    var w by remember { mutableStateOf(1f) }
+    val m = mint
+    Box(
+        modifier.fillMaxWidth().height(26.dp).onSizeChanged { w = it.width.toFloat().coerceAtLeast(1f) }
+            .pointerInput(Unit) { detectTapGestures { onChange((it.x / w).coerceIn(0f, 1f)) } }
+            .pointerInput(Unit) { detectDragGestures { c, _ -> onChange((c.position.x / w).coerceIn(0f, 1f)); c.consume() } },
+        contentAlignment = Alignment.CenterStart,
+    ) {
+        Box(Modifier.fillMaxWidth().height(12.dp).clip(RoundedCornerShape(6.dp)).background(brush).border(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.5f), RoundedCornerShape(6.dp)))
+        val x = (value * w).coerceIn(0f, w)
+        val half = with(LocalDensity.current) { 11.dp.toPx() }
+        Box(Modifier.offset { IntOffset((x - half).toInt().coerceIn(0, (w - 2 * half).toInt().coerceAtLeast(0)), 0) }.size(22.dp).clip(CircleShape).background(Color.White).border(2.dp, m.accent, CircleShape))
+    }
+}
+
+/**
+ * Paleta atramentów: trzy rzędy po osiem — neutralne i głębokie, „rdzeniowe” (stonowane, nienasycone),
+ * oraz miękkie pastele. Odcienie dobrane tak, by dobrze wyglądały na białym, kremowym i ciemnym papierze.
+ */
+val PALETTE: List<Int> = listOf(
+    0xFF1B1D21, 0xFF454A52, 0xFF868C95, 0xFFC9CDD3, 0xFFFFFFFF, 0xFF24407E, 0xFF7A4A2B, 0xFF6A3D8F,
+    0xFFC8433F, 0xFFE2742F, 0xFFDDA11C, 0xFF3E8E5A, 0xFF1E8C93, 0xFF2F7FC1, 0xFF5E6AD2, 0xFFD1568A,
+    0xFFE58B8B, 0xFFF0AE7B, 0xFFEBCB6B, 0xFF9CCB8B, 0xFF7FCBC6, 0xFF8FBDE8, 0xFFA9A6E8, 0xFFE8A3C4,
+).map { it.toInt() }
+
+/**
+ * Paleta zakreślaczy. Zakreślacz miesza się z papierem w trybie „multiply” przy kryciu 50 %, więc zapisane
+ * barwy są umiarkowanie nasycone, a efekt na papierze to jasny pastel (patrz [highlighterLook]).
+ */
+val HIGHLIGHTER_PALETTE: List<Int> = listOf(
+    0xFFFFD93D, 0xFFFFA94D, 0xFFFF7A7A, 0xFFF687B3, 0xFFA78BFA,
+    0xFF63B3ED, 0xFF4FD1C5, 0xFF7EDC8F, 0xFFB9D96C, 0xFFB7A99A,
+).map { it.toInt() }
+
+/** Jak zakreślacz o danej barwie wygląda na białym papierze (multiply, krycie 0,5). */
+fun highlighterLook(c: Int): Int {
+    fun ch(sh: Int) = (255 + ((c shr sh and 0xFF) - 255) / 2)
+    return (0xFF shl 24) or (ch(16) shl 16) or (ch(8) shl 8) or ch(0)
+}
+
+/** Rozjaśnia barwę do zakresu sensownego dla zakreślacza (ciemne zakreślacze zasłaniają tekst). */
+fun softenForHighlighter(c: Int): Int {
+    val hsv = FloatArray(3); android.graphics.Color.colorToHSV(c, hsv)
+    if (hsv[1] < 0.18f || hsv[2] < 0.35f) return HIGHLIGHTER_PALETTE[0]
+    hsv[1] = hsv[1].coerceAtMost(0.80f); hsv[2] = hsv[2].coerceAtLeast(0.80f)
+    return android.graphics.Color.HSVToColor(hsv)
+}
+
+/** Wybór koloru: paleta + HSV + hex. */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+fun ColorPicker(
+    color: Int, onChange: (Int) -> Unit, modifier: Modifier = Modifier, recent: List<Int> = emptyList(), withAlpha: Boolean = false,
+    onPipette: (() -> Unit)? = null, highlighter: Boolean = false,
+) {
+    val hsv = remember(color) { FloatArray(3).also { android.graphics.Color.colorToHSV(color, it) } }
+    var hex by remember(color) { mutableStateOf(String.format("%06X", color and 0xFFFFFF)) }
+    val set: (Int) -> Unit = { c -> onChange(if (highlighter) softenForHighlighter(c) else c) }
+    fun emit(h: Float, s: Float, v: Float) { set(android.graphics.Color.HSVToColor(floatArrayOf(h, s, v))) }
+    // Zakreślacz: miniatury pokazują efekt na papierze, a nie zapisaną barwę.
+    fun shown(c: Int) = Color(if (highlighter) highlighterLook(c) else c)
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        val pal = if (highlighter) HIGHLIGHTER_PALETTE else PALETTE
+        val per = if (highlighter) 5 else 8
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            for (row in pal.chunked(per)) Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                for (c in row) Dot(shown(c), 30.dp, selected = (c and 0xFFFFFF) == (color and 0xFFFFFF), onClick = { onChange(c) })
+            }
+        }
+        if (recent.isNotEmpty()) {
+            Text(T.t("Ostatnie", "Recent"), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                for (c in recent.take(10)) Dot(shown(c), 24.dp, onClick = { onChange(c) })
+            }
+        }
+        val hues = remember { Brush.horizontalGradient(List(7) { Color(android.graphics.Color.HSVToColor(floatArrayOf(it * 60f, 1f, 1f))) }) }
+        GradientSlider(hsv[0] / 360f, hues, { emit(it * 360f, hsv[1].coerceAtLeast(0.05f), hsv[2].coerceAtLeast(0.05f)) })
+        GradientSlider(hsv[1], Brush.horizontalGradient(listOf(Color(android.graphics.Color.HSVToColor(floatArrayOf(hsv[0], 0f, hsv[2]))), Color(android.graphics.Color.HSVToColor(floatArrayOf(hsv[0], 1f, hsv[2]))))), { emit(hsv[0], it, hsv[2]) })
+        GradientSlider(hsv[2], Brush.horizontalGradient(listOf(Color.Black, Color(android.graphics.Color.HSVToColor(floatArrayOf(hsv[0], hsv[1], 1f))))), { emit(hsv[0], hsv[1], it) })
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Dot(shown(color), 32.dp)
+            MField(hex, { s ->
+                val t = s.uppercase().filter { it in "0123456789ABCDEF" }.take(6)
+                hex = t
+                if (t.length == 6) set(0xFF000000.toInt() or t.toInt(16))
+            }, Modifier.width(140.dp), leading = { Text("#", color = MaterialTheme.colorScheme.onSurfaceVariant) })
+            if (onPipette != null) IconBtn(Icons.Rounded.Colorize, T.t("Pipeta — pobierz kolor ze strony", "Eyedropper — pick a color from the page"), onPipette, size = 36.dp, iconSize = 20.dp, shortcut = "I")
+        }
+    }
+}

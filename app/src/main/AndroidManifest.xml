@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- Aplikacja działa w pełni offline: celowo bez uprawnienia INTERNET. -->
+
+    <application
+        android:name=".app.MNotesApp"
+        android:allowBackup="false"
+        android:enableOnBackInvokedCallback="true"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.MNotes">
+        <activity
+            android:name=".app.MainActivity"
+            android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboard|keyboardHidden|navigation|uiMode|density|fontScale|layoutDirection"
+            android:exported="true"
+            android:launchMode="singleTask"
+            android:resizeableActivity="true"
+            android:windowSoftInputMode="adjustResize">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.CREATE_NOTE" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="application/pdf" />
+                <data android:mimeType="application/x-mnotes" />
+                <data android:mimeType="image/*" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="application/pdf" />
+                <data android:mimeType="application/x-mnotes" />
+                <data android:mimeType="image/*" />
+            </intent-filter>
+        </activity>
+
+        <!-- Dodatkowe okno (NAV-008): każde uruchomienie to osobne zadanie, do układania obok głównego. -->
+        <activity
+            android:name=".app.NoteWindowActivity"
+            android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboard|keyboardHidden|navigation|uiMode|density|fontScale|layoutDirection"
+            android:documentLaunchMode="always"
+            android:exported="false"
+            android:launchMode="standard"
+            android:resizeableActivity="true"
+            android:windowSoftInputMode="adjustResize" />
+
+        <!-- Udostępnianie wyeksportowanych plików (cache/share) innym aplikacjom. -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.files"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
+    </application>
+
+</manifest>

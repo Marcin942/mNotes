@@ -1,0 +1,68 @@
+# mNotes — STAN PRACY (punkt startowy po wznowieniu sesji)
+
+Aktualizacja: 2026-10-03. Źródło prawdy o zakresie: `docs/features/BACKLOG.md` (73 × `[x]`, 13 × `[~]`, 1 × `[ ]` — zostało tylko EXT-002 audio).
+Katalog jest repozytorium git (gałąź `main`, od 2026-10-03) — „zapis do repo” = commit; aktualizuj ten plik i BACKLOG na końcu każdej partii.
+
+## Cel i założenia
+- Użytkownik: „równie funkcjonalna jak GoodNotes, bardzo estetyczna, podobająca się użytkownikowi Linux Mint”, wszystkie funkcje rozpisane w BACKLOG i wdrażane, **oszczędnie tokenowo** (duże spójne pliki, częste kompilacje, bez sub-agentów, bez zbędnego czytania).
+- Założenie (niepotwierdzone, wpisać w raporcie końcowym): „użytkownik Linux Mint” = ceni Mint-Y (akcent #87CF3E), bibliotekę à la Nemo, skróty i paletę poleceń, mysz/prawy przycisk/DeX, otwarte formaty, folder synchronizacji, prywatność/offline, konfigurowalność. Platforma pozostaje Androidem.
+- Ograniczenia: brak INTERNET, brak telemetrii, brak nowych zależności Gradle (build `--offline`).
+
+## Budowanie i testy
+```
+cd /home/mdev/AndroidStudioProjects/mNotes
+./gradlew --offline :app:compileDebugKotlin -q 2>&1 | grep -E "^e:|error:|FAIL"        # sama kompilacja (brak wyjścia = OK)
+./gradlew --offline :app:testDebugUnitTest :app:assembleDebug -q 2>&1 | grep -E "^e:|error:|FAIL|BUILD"
+```
+Wyniki testów: `app/build/test-results/testDebugUnitTest/*.xml`. Stan: **88 testów, 0 błędów** (m.in. `RulerTest`, `PageSpaceTest`, `TapeTest`, `ListTextTest`, `ZoomRegionTest`). Używać ścieżek absolutnych.
+
+## ⚠ Tablet użytkownika (adb `R5GL12C1HMT`, Galaxy Tab S10+) jest REALNIE używany
+Nie jest sprzętem testowym. Przed `install -r` / `am start` / `input …`:
+1. `adb shell dumpsys activity activities | grep topResumedActivity` (pierwotnie com.mdev.mchochlik),
+2. `adb shell run-as com.mdev.mnotes cat files/library/nb/*/meta.json` → znaczniki `mod`/`op` vs `date +%s`×1000.
+Jeśli nie-testowy zeszyt zmieniono w ostatnich ~10 min — **nie ruszać urządzenia** (pracować nad kodem/testami albo zapytać). Testować tylko w zeszycie „Test wyszukiwania” (id `82cc47a90804`); nie modyfikować zeszytów użytkownika. Po testach przywrócić pierwszy plan do com.mdev.mchochlik.
+Uczciwa informacja do raportu: ok. 01:54 (2026-10-03) zrobiłem `adb install -r` + `input tap` w trakcie używania tabletu (aplikacja się zrestartowała) — użytkownik jeszcze o tym nie został poinformowany.
+
+## Architektura (skrót)
+Kotlin + Jetpack Compose (Material3) nad `NoteView` (Android View). Pakiet `app/src/main/java/com/mdev/mnotes`:
+- `core/` — czysta logika (geom, model strony, kodek, układ, cofanie `DocEdit`/`UndoStack`, pióra, kształty, wyszukiwanie), testowana jednostkowo (`app/src/test/.../core`).
+- `editor/Editor.kt` (stan Compose + operacje), `editor/NoteView.kt` (wejście dotykowe/rysik/mysz, rysowanie, narzędzia; `Mode { NONE, IGNORE, NAV, TOOL, RULER, PICK }`).
+- `ui/` — `EditorScreen` (pasek narzędzi, `editorKey`), `EditorDialogs` (`commandList`), `Keymap` (rejestr `CmdDefs`, skróty edytowalne), `MenuBar`, `Library`, `SettingsScreen`, `FileDrop`, `ExportDialog` (import/eksport).
+- Nowe polecenie = wpis w `CmdDefs` (Keymap.kt) + wpis w `commandList` (EditorDialogs.kt) + ewentualnie `checked(...)` w MenuBar.kt.
+- Dane na urządzeniu: `files/library/nb/<id>/meta.json` + `p/*.mnp`; zapis atomowy (`writeAtomic`, `.bak`).
+
+## Zrobione w ostatnich sesjach (kod + kompilacja + testy jednostkowe; BEZ testu na urządzeniu)
+- Audyt BACKLOG i poprawa statusów.
+- LNX-015 rejestr poleceń i edytowalne skróty; LNX-012 pasek menu (render potwierdzony zrzutem).
+- EDT-054 wklej obraz/tekst ze schowka systemu (`Editor.pasteSystem`, `insertFromUri`).
+- FIL-006 przeciągnij-i-upuść (`ui/FileDrop.kt`; edytor: obrazy, biblioteka: PDF/obrazy/.mnotes).
+- PAG-008 kopiuj/wytnij/wklej stronę także między zeszytami (`Editor.copyPage/cutPage/pastePage`, `Clip.page`; Ctrl+Shift+C/V; menu miniatury).
+- **EDT-035 linijka** (ta sesja): `core/geom/Ruler.kt` (matematyka + `RulerTest`), `NoteView` (sekcja „linijka”: `rulerShown`, `rulerHit`, `rulerMove`, `drawRuler`, `addPenPt` z rzutowaniem na krawędź), `Editor.ruler/toggleRuler`, polecenie `ruler` (klawisz **R**), przycisk w pasku narzędzi, `checked` w menu. Zachowanie: pióro/mysz zaczynające blisko długiej krawędzi przylega do niej (prosta kreska, etykieta długości, bez przytrzymaj-do-kształtu i predykcji); palec/mysz na korpusie przesuwa, uchwyty na końcach obracają (magnes 0/45/90° ±2,2°, haptyka), dwa palce obracają+przesuwają; Alt+kółko obraca o 1° (Alt+Shift 15°); podziałka mm/cm lub 1/8″/cale wg ustawienia jednostek.
+- **EDT-084 pipeta**: polecenie `pipette` (klawisz **I**) lub przycisk w `ColorPicker` (panel pióra i koloru zaznaczenia) uzbraja `Editor.pipette`; panele się chowają; dotyk/mysz na stronie = `Mode.PICK`, lupa 30 dp z hexem (`NoteView.drawPicker`), puszczenie próbkuje bitmapę z `PageCache` (`sampleColor`) i woła callback; Esc / prawy przycisk anuluje; bez wyboru zaznaczenia ustawia kolor bieżącego presetu. `checked` w menu.
+- **EDT-065 wstaw/usuń odstęp**: `Tool.SPACE` (klawisz **X**, przycisk `UnfoldMore`, polecenie `toolSpace`); `NoteView` sekcja „wstaw / usuń odstęp” (`spaceDown/Move/Up`, `drawSpace`: pasmo + etykieta mm/cale), `Editor.shiftBelow`, logika w `core/model/PageSpace.kt` (movers = niezablokowane ze środkiem ≥ linii; `clamp` do strony i do treści nad linią). Brak podglądu przesuwanej treści na żywo (tylko pasmo).
+- **EDT-064 taśma**: nowy element `TapeEl` (`core/model/Elements.kt`; kodek `TAG_TAPE=4`, render `PageRenderer.drawTape`, SVG w `Transfer.kt`), `ElementsEdit.replaceOnTop`; `Tool.TAPE` (klawisz **K**, przycisk `VisibilityOff`, `Panel.TAPE` z kolorem `Settings.tapeColor`); przeciągnięcie tworzy zakrywającą taśmę, dotyk taśmy przełącza ją i wynosi na wierzch (`Editor.addTape/toggleTape`), polecenie `tapesToggle` (zakryj/odkryj wszystkie, bez skrótu) = `Editor.toggleAllTapes`. Gumka (także lasso-gumka) pomija taśmy; usuwa się je lassem. Taśmę można zaznaczyć/przesunąć/skalować jak każdy element. Ograniczenia: dotknięcie taśmy działa tylko w narzędziu Taśma (nie w trybie tylko-do-odczytu); brak testu na urządzeniu.
+- **EDT-042 listy w polu tekstowym**: znaczniki jako zwykły tekst („• ”, „1. ”, „☐ ”) — bez zmiany modelu/kodeka/eksportu; `core/text/ListText.kt` (`toggle` dla zaznaczonych wierszy, `onEnter` kontynuuje listę, Enter w pustym punkcie kończy ją; `ListTextTest`); `TextDialog` ma 3 przyciski list i `MAreaField` (nowy w `ui/Common.kt`, ze stanem zaznaczenia; rama wspólna `FieldFrame`). Ograniczenia: brak wcięć Tab/zagnieżdżania; znacznik ☐ nie jest klikalny na stronie; glif ☐ zależy od czcionki systemowej.
+- **EDT-009 próbnik pióra**: `PenTester` w `ui/EditorScreen.kt` zastąpił statyczny `StrokePreview` w panelu pióra — pole 104 dp, w którym rysuje się bieżącym piórem tym samym potokiem co na stronie (`StrokeBuilder` + `PageRenderer.drawStrokeData`, wygładzanie z ustawień, nacisk tylko dla rysika), do 10 śladów, przycisk „Wyczyść”. Ślady nie trafiają do zeszytu. Ograniczenia: jednostki 1 pt = 1 dp (bez zoomu), białe tło niezależne od papieru, bez testu na urządzeniu.
+- **PAG-009 obraz jako podkład strony**: polecenie `pageBackground` (menu Wstaw, bez skrótu) ustawia `Editor.imageAsBackground` i otwiera wybór obrazu; `Editor.insertImage` wpisuje obraz w bieżącą stronę (zachowany stosunek boków), jako zablokowany `ImageEl` na spodzie kolejności rysowania (nie przeszkadza gumce/lassu; jedno cofnięcie). Bez nowego typu w modelu — działa w eksporcie PDF/SVG jak zwykły obraz. Ograniczenia: wpis „contain” (bez przycinania „cover”), kolejny podkład nie zastępuje poprzedniego, bez testu na urządzeniu.
+- **NAV-008 multi-window**: `NoteWindowActivity : MainActivity` (manifest: `documentLaunchMode=always`), `Context.openNewWindow(nbId?)`, polecenie `newWindow` (Ctrl+Alt+N), pozycja „Otwórz w nowym oknie” w menu elementu biblioteki; rejestr `app.openIds` blokuje ten sam zeszyt w dwóch oknach (Toast). Nowe okno bez zeszytu = biblioteka. Nie testowane na DeX/podziale ekranu.
+- **SEC-003 odzyskiwanie strony**: `Repository.readPage` — uszkodzona strona przenoszona do `.corrupt`, odtwarzana z `.bak`; `Repository.notice` pokazuje Toast (PL/EN).
+- **LNX-016 dock panelu stron**: `Settings.dockPages` (Ctrl+F9, Ustawienia), przy szerokości ≥ 840 dp `PagesPanel(docked=true)` po lewej, edytor się przesuwa. Domyślnie wyłączone.
+- **EXT-003 okno powiększenia**: `core/layout/ZoomRegion.kt` (+`ZoomRegionTest`), `NoteView` sekcja „okno powiększenia” (`zwTouch`, `drawZoomWin`, transformacja `MotionEvent`), `Editor.zoomWin/toggleZoomWin`, polecenie `zoomWindow` (Ctrl+Alt+Z), `Settings.zoomMag` (3×). Pismo w oknie idzie zwykłym potokiem (pt strony); okno u dołu, przesuwanie obszaru przyciskami następna linia/w prawo. Ograniczenia: brak podglądu zaznaczenia w oknie, wskaźnik obszaru nieprzeciągalny, jedna strona.
+- **LNX-014 nawigacja klawiaturą w bibliotece**: `Library.kt` — `navMove/navTo`, `LibState.cursor/cols`; strzałki (siatka: kolumny z `BoxWithConstraints`, przejście folder↔zeszyt), Home/End, Shift = zakres, auto-przewijanie do kursora; Enter otwiera.
+- **NAV-009 odciągnięcie → nowa strona**: `NoteView` sekcja „odciągnięcie…” (`pull`, `panWithPull`, `endPull`, `drawPullHint`, `atDocEnd`); gest musi się zacząć na końcu dokumentu i być jednym palcem/myszą; próg 120 dp (surowo), opór wykładniczy, haptyka przy uzbrojeniu; po puszczeniu `Editor.addPage(after = ostatnia)`. Oś pionowa (układ ciągły/pojedynczy) lub pozioma (układ poziomy). Ustawienie `Settings.pullAddPage` (Ustawienia → Wejście). Nie działa w trybie tylko-do-odczytu; kółko myszy nie dodaje stron.
+- **EDT-085 paleta**: `ui/Common.kt` — `PALETTE` (24 atramenty), `HIGHLIGHTER_PALETTE` (10), `highlighterLook` (efekt multiply 50 % na bieli), `softenForHighlighter` (S ≤ 0,8, V ≥ 0,8; zbyt ciemne/szare → żółty); `ColorPicker(highlighter = true)` pokazuje pastelową paletę, suwaki/hex też są łagodzone; zmiana pióra na zakreślacz łagodzi kolor; `recolorSel` łagodzi barwę zakreślaczy; zmienione domyślne presety piór (nowi użytkownicy).
+- **Git**: repozytorium zainicjowane 2026-10-03 (gałąź `main`), `.gitignore` obejmuje `build`, `.gradle`, `.kotlin`, `local.properties`, `*.apk`.
+- **Weryfikacja na urządzeniu**: nadal NIE wykonana dla żadnej z funkcji z ostatnich sesji (linijka, pipeta, odstęp, taśma, listy, próbnik, podkład, multi-window, odzyskiwanie strony, dock panelu stron, okno powiększenia). Próba `adb install -r` na tablecie (2026-10-03, tablet był na ekranie głównym, zeszyty użytkownika nieruszane od ~9 h) została odrzucona przez klasyfikator uprawnień — wymaga zgody użytkownika. `adb` jest w `/home/mdev/Android/Sdk/platform-tools/adb` (nie w PATH); brak deep-linku do zeszytu, więc test wymaga klikania przez bibliotekę.
+
+## Do zrobienia — kolejność wg wartości/kosztu
+1. (kolejka P1 opróżniona — dalej punkt 2).
+2. **EXT-002 audio (P3)** (wymaga RECORD_AUDIO i zmiany formatu).
+3. Pasek menu także w bibliotece.
+4. Po partii zmian: pełny `testDebugUnitTest` + `assembleDebug`; odhaczać BACKLOG; dopisywać testy jednostkowe do logiki w `core/`.
+5. Weryfikacja na urządzeniu w „cichym” momencie (reguły wyżej), tylko w „Test wyszukiwania”: pasek menu (rozwijane), dialog skrótów, wklejanie/upuszczanie, kopiowanie stron, **linijka**, **pipeta**, PNG, Markdown, Share, Print, import (PDF/obrazy/.mnotes), intenty VIEW/SEND, Ctrl+O/Ctrl+E w bibliotece, blokada aplikacji, sync (zeszyty zablokowane/zagnieżdżone). Po testach: rozważyć usunięcie zeszytu testowego i wyłączenie `sync.pdf/md` (obie zostały `true`).
+
+## Znane ograniczenia (do raportu końcowego)
+Leniwe ładowanie stron; PDF przy skrajnym zoomie rozmyty; brak tekstury ołówka; nieaktualny komentarz `eraserMode` w Settings (UI ma 3 opcje, polecenia eraserObject/eraserPixel ustawiają tylko 0/1); eksport Markdown tylko pola tekstowe; wyszukiwarka w edytorze podświetla całe pola tekstowe; wyszukiwarka w bibliotece pomija zablokowane zeszyty i rękopis; możliwe zbłąkane kropki na końcu zielonego pędzla; sync nie kasuje plików; drop PDF/.mnotes działa tylko w bibliotece; linijka: tylko jedna, stała długość, położenie nie jest zapamiętywane po zamknięciu zeszytu; pipeta: nie działa w dialogach modalnych (kolory kształtów), próbkuje bitmapę cache (w trybie wektorowym może być nieco nieaktualna).
+
+## Zasady współpracy
+Odpowiadać po polsku; przed wywołaniami narzędzi krótki komunikat statusu. Commity/PR (gdyby kiedyś powstało repo git): commit kończy się `Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>` i `Claude-Session: https://claude.ai/code/session_011pcYPQRAGsDyqgSVfksCjW`; opis PR kończy się `🤖 Generated with [Claude Code](https://claude.com/claude-code)` + ten sam link sesji.

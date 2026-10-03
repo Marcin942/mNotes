@@ -1,0 +1,41 @@
+[versions]
+agp = "9.3.3"
+coreKtx = "1.16.0"
+junit = "4.13.2"
+lifecycleRuntimeKtx = "2.9.4"
+activityCompose = "1.10.1"
+fragment = "1.8.9"
+biometric = "1.1.0"
+motionPrediction = "1.0.0"
+profileInstaller = "1.4.1"
+exifinterface = "1.4.2"
+coroutines = "1.10.2"
+kotlin = "2.2.10"
+composeBom = "2026.02.01"
+orgJson = "20240303"
+
+[libraries]
+androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
+junit = { group = "junit", name = "junit", version.ref = "junit" }
+androidx-lifecycle-viewmodel-compose = { group = "androidx.lifecycle", name = "lifecycle-viewmodel-compose", version.ref = "lifecycleRuntimeKtx" }
+androidx-lifecycle-runtime-ktx = { group = "androidx.lifecycle", name = "lifecycle-runtime-ktx", version.ref = "lifecycleRuntimeKtx" }
+androidx-activity-compose = { group = "androidx.activity", name = "activity-compose", version.ref = "activityCompose" }
+androidx-fragment = { group = "androidx.fragment", name = "fragment", version.ref = "fragment" }
+androidx-biometric = { group = "androidx.biometric", name = "biometric", version.ref = "biometric" }
+androidx-input-motionprediction = { group = "androidx.input", name = "input-motionprediction", version.ref = "motionPrediction" }
+androidx-profileinstaller = { group = "androidx.profileinstaller", name = "profileinstaller", version.ref = "profileInstaller" }
+androidx-exifinterface = { group = "androidx.exifinterface", name = "exifinterface", version.ref = "exifinterface" }
+kotlinx-coroutines-android = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-android", version.ref = "coroutines" }
+androidx-compose-bom = { group = "androidx.compose", name = "compose-bom", version.ref = "composeBom" }
+androidx-compose-ui = { group = "androidx.compose.ui", name = "ui" }
+androidx-compose-ui-graphics = { group = "androidx.compose.ui", name = "ui-graphics" }
+androidx-compose-ui-tooling = { group = "androidx.compose.ui", name = "ui-tooling" }
+androidx-compose-ui-tooling-preview = { group = "androidx.compose.ui", name = "ui-tooling-preview" }
+androidx-compose-material3 = { group = "androidx.compose.material3", name = "material3" }
+androidx-compose-material-icons-extended = { group = "androidx.compose.material", name = "material-icons-extended" }
+
+org-json = { group = "org.json", name = "json", version.ref = "orgJson" }
+
+[plugins]
+android-application = { id = "com.android.application", version.ref = "agp" }
+kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }

@@ -1,0 +1,419 @@
+package com.mdev.mnotes.ui
+
+import android.graphics.Bitmap
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.ArrowDownward
+import androidx.compose.material.icons.rounded.ArrowUpward
+import androidx.compose.material.icons.rounded.Bookmark
+import androidx.compose.material.icons.rounded.BookmarkBorder
+import androidx.compose.material.icons.rounded.ContentCopy
+import androidx.compose.material.icons.rounded.Delete
+import androidx.compose.material.icons.rounded.FormatAlignCenter
+import androidx.compose.material.icons.rounded.FormatAlignLeft
+import androidx.compose.material.icons.rounded.FormatAlignRight
+import androidx.compose.material.icons.rounded.FormatBold
+import androidx.compose.material.icons.rounded.FormatItalic
+import androidx.compose.material.icons.rounded.FormatStrikethrough
+import androidx.compose.material.icons.rounded.FormatUnderlined
+import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.Search
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.material.icons.rounded.Checklist
+import androidx.compose.material.icons.rounded.FormatListNumbered
+import androidx.compose.material.icons.rounded.FormatListBulleted
+import com.mdev.mnotes.core.text.ListText
+import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
+import com.mdev.mnotes.app.app
+import com.mdev.mnotes.app.openNewWindow
+import com.mdev.mnotes.core.model.Ids
+import com.mdev.mnotes.core.model.PenKind
+import com.mdev.mnotes.core.model.TextBox
+import com.mdev.mnotes.editor.Clip
+import com.mdev.mnotes.editor.Editor
+import com.mdev.mnotes.editor.T
+import com.mdev.mnotes.editor.TextRequest
+import com.mdev.mnotes.editor.Tool
+import com.mdev.mnotes.render.PageRenderer
+
+// ─────────────────────────────── Polecenia (paleta Ctrl+K) ───────────────────────────────
+
+/** Polecenie edytora w czasie działania: definicja + skrót użytkownika + warunek dostępności liczony w chwili użycia. */
+class Cmd(val def: CmdDef, val keyText: String, private val isEnabled: () -> Boolean, val run: () -> Unit) {
+    val title get() = def.title
+    val chord: Chord? = Chord.parse(keyText)
+    val enabled get() = isEnabled()
+}
+
+/** Wszystkie polecenia edytora (paleta Ctrl+K, pasek menu i skróty). Dostępność i widok są odczytywane leniwie. */
+fun commandList(
+    ed: Editor, set: com.mdev.mnotes.data.Settings, pickTool: (Tool, Panel?) -> Unit, setPanel: (Panel?) -> Unit,
+    pickImage: () -> Unit, goTo: () -> Unit, applyLayout: (Int) -> Unit, onSettings: () -> Unit, onShortcuts: () -> Unit,
+    openPalette: () -> Unit, onExit: () -> Unit,
+): List<Cmd> {
+    val keys = Keymap.overrides(set)
+    val acts: Map<String, Pair<() -> Boolean, () -> Unit>> = mapOf(
+        "export" to ({ true } to { ed.exportOpen = true }),
+        "settings" to ({ true } to { onSettings() }),
+        "newWindow" to ({ true } to { ed.ctx.openNewWindow(null) }),
+        "zoomWindow" to ({ true } to { ed.toggleZoomWin() }),
+        "pagesDock" to ({ true } to { set.dockPages = !set.dockPages }),
+        "close" to ({ true } to { onExit() }),
+        "undo" to ({ ed.canUndo && !ed.readOnly } to { ed.undo() }),
+        "redo" to ({ ed.canRedo && !ed.readOnly } to { ed.redo() }),
+        "cut" to ({ ed.sel != null && !ed.readOnly } to { ed.cutSel() }),
+        "copy" to ({ ed.sel != null } to { ed.copySel() }),
+        "paste" to ({ !ed.readOnly } to { ed.paste() }),
+        "duplicate" to ({ ed.sel != null && !ed.readOnly } to { ed.duplicateSel() }),
+        "delete" to ({ ed.sel != null && !ed.readOnly } to { ed.deleteSel() }),
+        "selectAll" to ({ !ed.readOnly } to { ed.setToolKey(Tool.LASSO); ed.selectAllOnPage() }),
+        "find" to ({ true } to { ed.openSearch() }),
+        "findNext" to ({ true } to { if (ed.searchOpen) ed.searchStep(1) else ed.openSearch() }),
+        "findPrev" to ({ ed.searchOpen } to { ed.searchStep(-1) }),
+        "zoomIn" to ({ true } to { ed.view?.zoomBy(1.2f) }),
+        "zoomOut" to ({ true } to { ed.view?.zoomBy(1f / 1.2f) }),
+        "fitWidth" to ({ true } to { ed.view?.fitWidth() }),
+        "layoutV" to ({ true } to { applyLayout(0) }),
+        "layoutH" to ({ true } to { applyLayout(1) }),
+        "layoutS" to ({ true } to { applyLayout(2) }),
+        "pagesPanel" to ({ true } to { setPanel(Panel.PAGES) }),
+        "focusMode" to ({ true } to { ed.chrome = !ed.chrome }),
+        "readOnly" to ({ true } to { ed.readOnly = !ed.readOnly }),
+        "tbTop" to ({ true } to { set.toolbarPos = 0 }),
+        "tbBottom" to ({ true } to { set.toolbarPos = 1 }),
+        "tbLeft" to ({ true } to { set.toolbarPos = 2 }),
+        "tbRight" to ({ true } to { set.toolbarPos = 3 }),
+        "insertImage" to ({ !ed.readOnly } to { pickImage() }),
+        "pageBackground" to ({ !ed.readOnly } to { ed.imageAsBackground = true; pickImage() }),
+        "addPage" to ({ !ed.readOnly } to { ed.addPage() }),
+        "bookmark" to ({ true } to { ed.toggleBookmark() }),
+        "copyPage" to ({ true } to { ed.copyPage() }),
+        "cutPage" to ({ !ed.readOnly && ed.pageCount > 1 } to { ed.cutPage() }),
+        "pastePage" to ({ !ed.readOnly && Clip.page != null } to { ed.pastePage() }),
+        "goTo" to ({ true } to { goTo() }),
+        "pageNext" to ({ true } to { ed.view?.goToPage(ed.pageIndex + 1) }),
+        "pagePrev" to ({ true } to { ed.view?.goToPage(ed.pageIndex - 1) }),
+        "pageFirst" to ({ true } to { ed.view?.goToPage(0) }),
+        "pageLast" to ({ true } to { ed.view?.goToPage(ed.pageCount - 1) }),
+        "pageStyle" to ({ true } to { setPanel(Panel.STYLE) }),
+        "pageDup" to ({ !ed.readOnly } to { ed.duplicatePage() }),
+        "pageDelete" to ({ !ed.readOnly && ed.pageCount > 1 } to { ed.deletePage() }),
+        "pageClear" to ({ !ed.readOnly } to { ed.clearPage() }),
+        "toolPen" to ({ !ed.readOnly } to { pickTool(Tool.PEN, null) }),
+        "toolEraser" to ({ !ed.readOnly } to { pickTool(Tool.ERASER, null) }),
+        "toolLasso" to ({ !ed.readOnly } to { pickTool(Tool.LASSO, null) }),
+        "toolText" to ({ !ed.readOnly } to { pickTool(Tool.TEXT, null) }),
+        "toolLaser" to ({ true } to { pickTool(Tool.LASER, null) }),
+        "toolHand" to ({ true } to { pickTool(Tool.HAND, null) }),
+        "toolSpace" to ({ !ed.readOnly } to { pickTool(Tool.SPACE, null) }),
+        "ruler" to ({ !ed.readOnly } to { ed.toggleRuler() }),
+        "toolTape" to ({ !ed.readOnly } to { pickTool(Tool.TAPE, Panel.TAPE) }),
+        "tapesToggle" to ({ !ed.readOnly } to { ed.toggleAllTapes() }),
+        "pipette" to ({ !ed.readOnly } to { ed.pipetteForCurrent() }),
+        "presetNext" to ({ true } to { ed.nextPreset(1) }),
+        "presetPrev" to ({ true } to { ed.nextPreset(-1) }),
+        "penSettings" to ({ true } to { pickTool(Tool.PEN, null); setPanel(Panel.PEN) }),
+        "eraserSettings" to ({ true } to { pickTool(Tool.ERASER, null); setPanel(Panel.ERASER) }),
+        "eraserObject" to ({ true } to { set.eraserMode = 0; pickTool(Tool.ERASER, null) }),
+        "eraserPixel" to ({ true } to { set.eraserMode = 1; pickTool(Tool.ERASER, null) }),
+        "palette" to ({ true } to { openPalette() }),
+        "shortcuts" to ({ true } to { onShortcuts() }),
+    )
+    return CmdDefs.list.map { d ->
+        val a = acts.getValue(d.id)
+        Cmd(d, keys[d.id] ?: d.key, a.first, a.second)
+    }
+}
+
+@Composable
+fun PaletteDialog(cmds: List<Cmd>, onDismiss: () -> Unit) {
+    val m = mint
+    var q by remember { mutableStateOf("") }
+    var cur by remember { mutableIntStateOf(0) }
+    val focus = remember { FocusRequester() }
+    val list = remember(q, cmds) {
+        val t = q.trim().lowercase()
+        if (t.isEmpty()) cmds else cmds.filter { c -> t.split(' ').all { it in c.title.lowercase() || it in c.keyText.lowercase() || it in CmdDefs.groupName(c.def.group).lowercase() } }
+    }
+    LaunchedEffect(Unit) { runCatching { focus.requestFocus() } }
+    LaunchedEffect(q) { cur = 0 }
+    fun run(c: Cmd?) { if (c != null && c.enabled) { onDismiss(); c.run() } }
+    Dialog(onDismissRequest = onDismiss) {
+        Column(
+            Modifier.fillMaxWidth().widthMax().shadow(18.dp, RoundedCornerShape(14.dp)).clip(RoundedCornerShape(14.dp))
+                .background(MaterialTheme.colorScheme.surface).border(1.dp, m.line, RoundedCornerShape(14.dp)).padding(12.dp),
+        ) {
+            MField(
+                q, { q = it }, Modifier.fillMaxWidth().focusRequester(focus), hint = T.t("Wpisz polecenie…", "Type a command…"),
+                leading = { androidx.compose.material3.Icon(Icons.Rounded.Search, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant) },
+                onDone = { run(list.getOrNull(cur)) },
+            )
+            Spacer(Modifier.height(8.dp))
+            val ls = rememberLazyListState()
+            LazyColumn(Modifier.heightIn(max = 380.dp), state = ls) {
+                itemsIndexed(list) { i, c ->
+                    Row(
+                        Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(if (i == cur) m.accentSoft else Color.Transparent)
+                            .clickable(enabled = c.enabled) { run(c) }.padding(horizontal = 12.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            c.title, Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodyMedium,
+                            color = if (c.enabled) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f),
+                        )
+                        if (c.keyText.isNotEmpty()) Text(c.keyText, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+            }
+            if (list.isEmpty()) Text(T.t("Brak wyników", "No results"), Modifier.padding(12.dp), color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
+}
+
+private fun Modifier.widthMax(): Modifier = this.then(Modifier.widthIn480())
+private fun Modifier.widthIn480(): Modifier = this.width(480.dp)
+
+// ─────────────────────────────── Idź do strony / zmiana nazwy ───────────────────────────────
+
+@Composable
+fun GoToDialog(ed: Editor, onDismiss: () -> Unit) {
+    var t by remember { mutableStateOf("") }
+    val n = t.trim().toIntOrNull()
+    val ok = n != null && n in 1..ed.pageCount
+    val focus = remember { FocusRequester() }
+    LaunchedEffect(Unit) { runCatching { focus.requestFocus() } }
+    fun go() { if (ok) { ed.view?.goToPage(n!! - 1); onDismiss() } }
+    MDialog(T.t("Idź do strony", "Go to page"), onDismiss, T.t("Idź", "Go"), ::go, ok) {
+        MField(t, { t = it.filter(Char::isDigit) }, Modifier.fillMaxWidth().focusRequester(focus), hint = "1 – ${ed.pageCount}", number = true, onDone = ::go)
+    }
+}
+
+@Composable
+fun RenameDialog(ed: Editor, onDismiss: () -> Unit) {
+    var t by remember { mutableStateOf(ed.repo.meta(ed.nbId)?.title ?: "") }
+    val focus = remember { FocusRequester() }
+    LaunchedEffect(Unit) { runCatching { focus.requestFocus() } }
+    fun ok() { val s = t.trim(); if (s.isNotEmpty()) { ed.repo.update(ed.nbId) { it.copy(title = s) }; ed.structTick++ }; onDismiss() }
+    MDialog(T.t("Zmień nazwę zeszytu", "Rename notebook"), onDismiss, T.t("Zapisz", "Save"), ::ok, t.isNotBlank()) {
+        MField(t, { t = it }, Modifier.fillMaxWidth().focusRequester(focus), onDone = ::ok)
+    }
+}
+
+// ─────────────────────────────── Pole tekstowe (TextBox) ───────────────────────────────
+
+@Composable
+fun TextDialog(ed: Editor, req: TextRequest) {
+    val set = ed.settings
+    val ex = req.existing
+    var field by remember(req) { (ex?.text ?: req.initial).let { mutableStateOf(TextFieldValue(it, TextRange(it.length))) } }
+    val text = field.text
+    var size by remember(req) { mutableStateOf(ex?.size ?: set.textSize) }
+    var color by remember(req) { mutableIntStateOf(ex?.color ?: set.textColor) }
+    var family by remember(req) { mutableIntStateOf(ex?.family ?: set.textFamily) }
+    var style by remember(req) { mutableIntStateOf(ex?.style ?: 0) }
+    var align by remember(req) { mutableIntStateOf(ex?.align ?: TextBox.ALIGN_START) }
+    var fill by remember(req) { mutableIntStateOf(ex?.fill ?: 0) }
+    val focus = remember { FocusRequester() }
+    LaunchedEffect(Unit) { runCatching { focus.requestFocus() } }
+    val renderer = remember { PageRenderer(ed.app.assets) }
+
+    fun commit() {
+        val w = ex?.w ?: 240f
+        val base = TextBox(ex?.id ?: Ids.next(), 0f, 0f, w, 20f, ex?.rot ?: 0f, text, size, color, family, style, align, fill, ex?.locked ?: false)
+        val h = renderer.layoutFor(base, w).height.toFloat().coerceAtLeast(size * 1.3f) + 8f
+        val cx = ex?.cx ?: (req.x + w / 2f)
+        val cy = if (ex != null) ex.cy + (h - ex.h) / 2f else req.y + h / 2f
+        set.textSize = size; set.textColor = color; set.textFamily = family
+        ed.commitText(req, base.copy(cx = cx, cy = cy, h = h))
+    }
+    MDialog(
+        if (ex == null) T.t("Nowy tekst", "New text") else T.t("Edytuj tekst", "Edit text"), { ed.textReq = null },
+        T.t("Gotowe", "Done"), ::commit, true,
+    ) {
+        MAreaField(field, { nv ->
+            // Enter w wierszu listy dopisuje kolejny znacznik (EDT-042)
+            val r = if (nv.selection.collapsed) ListText.onEnter(field.text, nv.text, nv.selection.start) else null
+            field = if (r != null) TextFieldValue(r.text, TextRange(r.selStart, r.selEnd)) else nv
+        }, Modifier.fillMaxWidth().focusRequester(focus), hint = T.t("Wpisz tekst…", "Type text…"))
+        Row(Modifier.padding(top = 10.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            fun st(bit: Int, icon: androidx.compose.ui.graphics.vector.ImageVector, tip: String) =
+                @Composable { IconBtn(icon, tip, { style = style xor bit }, selected = style and bit != 0, size = 36.dp, iconSize = 20.dp) }
+            st(TextBox.STYLE_BOLD, Icons.Rounded.FormatBold, T.t("Pogrubienie", "Bold"))()
+            st(TextBox.STYLE_ITALIC, Icons.Rounded.FormatItalic, T.t("Kursywa", "Italic"))()
+            st(TextBox.STYLE_UNDERLINE, Icons.Rounded.FormatUnderlined, T.t("Podkreślenie", "Underline"))()
+            st(TextBox.STYLE_STRIKE, Icons.Rounded.FormatStrikethrough, T.t("Przekreślenie", "Strikethrough"))()
+            Box(Modifier.padding(horizontal = 4.dp).height(22.dp).width(1.dp).background(mint.line))
+            fun list(k: ListText.Kind) {
+                val r = ListText.toggle(field.text, field.selection.min, field.selection.max, k)
+                field = TextFieldValue(r.text, TextRange(r.selStart, r.selEnd))
+                runCatching { focus.requestFocus() }
+            }
+            IconBtn(Icons.Rounded.FormatListBulleted, T.t("Lista punktowana", "Bulleted list"), { list(ListText.Kind.BULLET) }, size = 36.dp, iconSize = 20.dp)
+            IconBtn(Icons.Rounded.FormatListNumbered, T.t("Lista numerowana", "Numbered list"), { list(ListText.Kind.NUMBER) }, size = 36.dp, iconSize = 20.dp)
+            IconBtn(Icons.Rounded.Checklist, T.t("Lista kontrolna", "Checklist"), { list(ListText.Kind.CHECK) }, size = 36.dp, iconSize = 20.dp)
+            Box(Modifier.padding(horizontal = 4.dp).height(22.dp).width(1.dp).background(mint.line))
+            IconBtn(Icons.Rounded.FormatAlignLeft, T.t("Do lewej", "Left"), { align = TextBox.ALIGN_START }, selected = align == TextBox.ALIGN_START, size = 36.dp, iconSize = 20.dp)
+            IconBtn(Icons.Rounded.FormatAlignCenter, T.t("Do środka", "Center"), { align = TextBox.ALIGN_CENTER }, selected = align == TextBox.ALIGN_CENTER, size = 36.dp, iconSize = 20.dp)
+            IconBtn(Icons.Rounded.FormatAlignRight, T.t("Do prawej", "Right"), { align = TextBox.ALIGN_END }, selected = align == TextBox.ALIGN_END, size = 36.dp, iconSize = 20.dp)
+        }
+        FlowRow(Modifier.padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Chip(T.t("Bezszeryfowa", "Sans"), family == TextBox.FAMILY_SANS, { family = TextBox.FAMILY_SANS })
+            Chip(T.t("Szeryfowa", "Serif"), family == TextBox.FAMILY_SERIF, { family = TextBox.FAMILY_SERIF })
+            Chip(T.t("Mono", "Mono"), family == TextBox.FAMILY_MONO, { family = TextBox.FAMILY_MONO })
+            Chip(T.t("Pismo ręczne", "Handwriting"), family == TextBox.FAMILY_HAND, { family = TextBox.FAMILY_HAND })
+        }
+        Row(Modifier.padding(top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+            SectionLabel(T.t("Rozmiar", "Size")); Spacer(Modifier.weight(1f))
+            Text("${size.toInt()} pt", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        MSlider(size, 8f, 96f) { size = it }
+        SectionLabel(T.t("Kolor", "Color"))
+        ColorPicker(color, { color = it }, recent = ed.presets.map { it.color }.distinct())
+        ToggleRow(T.t("Tło pola", "Box background"), fill != 0) { fill = if (it) 0xFFFFF59D.toInt() else 0 }
+        if (fill != 0) ColorPicker(fill, { fill = it }, withAlpha = true)
+    }
+}
+
+// ─────────────────────────────── Panel stron i zakładek ───────────────────────────────
+
+@Composable
+fun PagesPanel(ed: Editor, close: () -> Unit, pickImage: () -> Unit, docked: Boolean = false) {
+    val m = mint
+    val ctx = LocalContext.current
+    val thumbs = ctx.app.thumbs
+    var tab by remember { mutableIntStateOf(0) }
+    val nb = ed.repo.meta(ed.nbId)
+    ed.structTick; ed.undoTick
+    val pages = ed.doc.pages
+    val ls = rememberLazyListState()
+    LaunchedEffect(ed.pageIndex) { if (tab == 0) runCatching { ls.animateScrollToItem(ed.pageIndex.coerceIn(0, (pages.size - 1).coerceAtLeast(0))) } }
+    Column(
+        (if (docked) Modifier.width(236.dp).fillMaxHeight().padding(start = 8.dp, top = 8.dp, bottom = 8.dp)
+        else Modifier.width(236.dp).fillMaxHeight().padding(top = 0.dp, end = 8.dp, bottom = 8.dp).shadow(10.dp, RoundedCornerShape(14.dp)))
+            .clip(RoundedCornerShape(14.dp)).background(m.chrome).border(1.dp, m.line, RoundedCornerShape(14.dp)),
+    ) {
+        Row(Modifier.padding(horizontal = 10.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            Chip(T.t("Strony", "Pages"), tab == 0, { tab = 0 })
+            Chip(T.t("Zakładki", "Bookmarks"), tab == 1, { tab = 1 })
+            Spacer(Modifier.weight(1f))
+            IconBtn(Icons.Rounded.Close, if (docked) T.t("Odepnij panel", "Undock panel") else T.t("Zamknij", "Close"), close, size = 32.dp, iconSize = 18.dp)
+        }
+        HorizontalDivider(color = m.line)
+        if (tab == 0) {
+            LazyColumn(Modifier.weight(1f), state = ls, contentPadding = androidx.compose.foundation.layout.PaddingValues(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                itemsIndexed(pages, key = { _, p -> p.id }) { i, p ->
+                    PageThumbItem(ed, i, p.id, i == ed.pageIndex, pages.size)
+                }
+            }
+            HorizontalDivider(color = m.line)
+            Row(Modifier.fillMaxWidth().padding(6.dp), horizontalArrangement = Arrangement.Center) {
+                Chip(T.t("Dodaj stronę", "Add page"), false, { ed.addPage() }, icon = Icons.Rounded.Add)
+            }
+        } else {
+            val marks = nb?.bookmarks.orEmpty()
+            if (marks.isEmpty()) Text(T.t("Brak zakładek. Użyj ikony zakładki w nagłówku (Ctrl+B).", "No bookmarks. Use the bookmark icon (Ctrl+B)."), Modifier.padding(16.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            LazyColumn(Modifier.weight(1f)) {
+                itemsIndexed(marks) { _, b ->
+                    val idx = pages.indexOfFirst { it.id == b.pageId }
+                    if (idx >= 0) Row(
+                        Modifier.fillMaxWidth().clickable { ed.view?.goToPage(idx) }.padding(horizontal = 14.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    ) {
+                        androidx.compose.material3.Icon(Icons.Rounded.Bookmark, null, Modifier.size(18.dp), tint = m.accent)
+                        Text(b.title.ifBlank { T.t("Strona", "Page") + " ${idx + 1}" }, Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodyMedium)
+                        Text("${idx + 1}", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun PageThumbItem(ed: Editor, index: Int, pageId: String, current: Boolean, total: Int) {
+    val m = mint
+    val ctx = LocalContext.current
+    val thumbs = ctx.app.thumbs
+    val page = ed.doc.pages.getOrNull(index) ?: return
+    val spec = page.spec
+    val wPx = 360
+    val key = "p:${page.id}:${page.version}:$wPx"
+    var bmp by remember(key) { mutableStateOf<Bitmap?>(thumbs.cached(key)) }
+    if (bmp == null) {
+        // Zawartość czytamy na wątku UI (bezpieczne dla modelu), rysujemy w tle.
+        val content = remember(key) { ed.doc.content(page) }
+        LaunchedEffect(key) { thumbs.async(key, { thumbs.render(ed.nbId, spec, content, wPx) }) { bmp = it } }
+    }
+    var menu by remember { mutableStateOf(false) }
+    Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
+        Box(
+            Modifier.fillMaxWidth().aspectRatio(spec.w / spec.h).clip(RoundedCornerShape(6.dp)).background(Color(spec.paper))
+                .border(if (current) 2.5.dp else 1.dp, if (current) m.accent else m.line, RoundedCornerShape(6.dp))
+                .tileInput({ _, _ -> ed.view?.goToPage(index) }, { menu = true }, { menu = true }),
+        ) {
+            bmp?.let { Image(it.asImageBitmap(), null, Modifier.fillMaxWidth(), contentScale = ContentScale.FillWidth) }
+            if (ed.isBookmarked(index)) androidx.compose.material3.Icon(Icons.Rounded.Bookmark, null, Modifier.align(Alignment.TopEnd).padding(2.dp).size(18.dp), tint = m.accent)
+            androidx.compose.material3.DropdownMenu(menu, { menu = false }) {
+                @Composable
+                fun It(t: String, en: Boolean = true, f: () -> Unit) = androidx.compose.material3.DropdownMenuItem(text = { Text(t) }, enabled = en, onClick = { menu = false; f() })
+                It(T.t("Dodaj stronę po tej", "Add page after")) { ed.addPage(index) }
+                It(T.t("Duplikuj", "Duplicate")) { ed.duplicatePage(index) }
+                It(T.t("Kopiuj stronę", "Copy page")) { ed.copyPage(index) }
+                It(T.t("Wytnij stronę", "Cut page"), total > 1) { ed.cutPage(index) }
+                It(T.t("Wklej stronę po tej", "Paste page after"), Clip.page != null) { ed.pastePage(index) }
+                It(if (ed.isBookmarked(index)) T.t("Usuń zakładkę", "Remove bookmark") else T.t("Dodaj zakładkę", "Add bookmark")) { ed.toggleBookmark(index) }
+                It(T.t("Przesuń w górę", "Move up"), index > 0) { ed.movePage(index, index - 1) }
+                It(T.t("Przesuń w dół", "Move down"), index < total - 1) { ed.movePage(index, index + 1) }
+                It(T.t("Wyczyść", "Clear")) { ed.clearPage(index) }
+                It(T.t("Usuń", "Delete"), total > 1) { ed.deletePage(index) }
+            }
+        }
+        Text("${index + 1}", Modifier.padding(top = 3.dp), style = MaterialTheme.typography.labelMedium, color = if (current) m.accentText else MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}

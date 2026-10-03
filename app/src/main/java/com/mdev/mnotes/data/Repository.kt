@@ -1,0 +1,247 @@
+package com.mdev.mnotes.data
+
+import com.mdev.mnotes.editor.T
+import android.content.Context
+import android.os.Handler
+import android.os.Looper
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import com.mdev.mnotes.core.codec.PageCodec
+import com.mdev.mnotes.core.model.PageContent
+import com.mdev.mnotes.core.model.PageSpec
+import org.json.JSONArray
+import org.json.JSONObject
+import java.io.File
+import java.io.FileOutputStream
+import java.io.InputStream
+import java.util.concurrent.ExecutorService
+import java.util.concurrent.Executors
+
+/**
+ * Biblioteka na dysku (zwykłe pliki, otwarte formaty):
+ *
+ *     library/folders.json · tags.json
+ *     library/nb/<id>/meta.json · p/<strona>.mnp · assets/<plik> · thumb.png
+ *
+ * Wszystkie zapisy są atomowe (plik tymczasowy + zmiana nazwy) i zostawiają kopię `.bak` (SEC-003).
+ * Stan w pamięci jest stanem Compose; zapisy idą przez jeden wątek `io`, więc kolejność jest zachowana.
+ */
+class Repository(ctx: Context) {
+    val root = File(ctx.filesDir, "library")
+    private val nbRoot = File(root, "nb")
+    val io: ExecutorService = Executors.newSingleThreadExecutor { Thread(it, "mnotes-io").apply { priority = Thread.NORM_PRIORITY - 1 } }
+    private val main = Handler(Looper.getMainLooper())
+
+    var notebooks by mutableStateOf<List<NotebookMeta>>(emptyList())
+        private set
+    var folders by mutableStateOf<List<Folder>>(emptyList())
+        private set
+    var tagColors by mutableStateOf<Map<String, Int>>(emptyMap())
+        private set
+    var loaded by mutableStateOf(false)
+        private set
+
+    fun load(onDone: () -> Unit = {}) {
+        io.execute {
+            nbRoot.mkdirs()
+            val nbs = ArrayList<NotebookMeta>()
+            nbRoot.listFiles()?.forEach { d ->
+                if (!d.isDirectory) return@forEach
+                d.walkTopDown().filter { it.name.endsWith(".tmp") }.forEach { it.delete() }
+                readText(File(d, "meta.json"))?.let { runCatching { NotebookMeta.fromJson(it) }.getOrNull() }?.let { nbs.add(it) }
+            }
+            val fl = ArrayList<Folder>()
+            readText(File(root, "folders.json"))?.let { s ->
+                runCatching { val a = JSONArray(s); for (i in 0 until a.length()) fl.add(Folder.fromJson(a.getJSONObject(i))) }
+            }
+            val tg = LinkedHashMap<String, Int>()
+            readText(File(root, "tags.json"))?.let { s ->
+                runCatching { val o = JSONObject(s); for (k in o.keys()) tg[k] = o.getInt(k) }
+            }
+            val cutoff = System.currentTimeMillis() - TRASH_DAYS * DAY
+            val expired = nbs.filter { it.trashedAt in 1 until cutoff }
+            expired.forEach { File(nbRoot, it.id).deleteRecursively() }
+            main.post {
+                notebooks = nbs - expired.toSet()
+                folders = fl
+                tagColors = tg
+                loaded = true
+                onDone()
+            }
+        }
+    }
+
+    fun meta(id: String): NotebookMeta? = notebooks.firstOrNull { it.id == id }
+    fun folder(id: String?): Folder? = if (id == null) null else folders.firstOrNull { it.id == id }
+
+    fun dir(id: String) = File(nbRoot, id)
+    fun pageFile(nb: String, page: String) = File(dir(nb), "p/$page.mnp")
+    fun assetFile(nb: String, name: String) = File(dir(nb), "assets/$name")
+    fun thumbFile(nb: String) = File(dir(nb), "thumb.png")
+
+    // — Notatniki —
+
+    fun update(id: String, f: (NotebookMeta) -> NotebookMeta) {
+        var updated: NotebookMeta? = null
+        notebooks = notebooks.map { if (it.id == id) f(it).also { n -> updated = n } else it }
+        updated?.let { m -> val json = m.toJson(); io.execute { writeAtomic(File(dir(id), "meta.json"), json.toByteArray(), true) } }
+    }
+
+    fun createNotebook(title: String, spec: PageSpec, cover: Int, coverStyle: Int, folderId: String?, pageCount: Int = 1): NotebookMeta {
+        val now = System.currentTimeMillis()
+        val pages = List(pageCount.coerceAtLeast(1)) { PageMeta(newId(), spec) }
+        return addNotebook(NotebookMeta(newId(), title, folderId, now, now, now, cover, coverStyle, pages = pages))
+    }
+
+    fun addNotebook(m: NotebookMeta): NotebookMeta {
+        notebooks = notebooks + m
+        val json = m.toJson()
+        io.execute { writeAtomic(File(dir(m.id), "meta.json"), json.toByteArray(), true) }
+        return m
+    }
+
+    fun duplicate(id: String, suffix: String) {
+        val src = meta(id) ?: return
+        val now = System.currentTimeMillis()
+        val copy = src.copy(id = newId(), title = src.title + suffix, created = now, modified = now, opened = now, favorite = false, trashedAt = 0L)
+        io.execute {
+            dir(id).copyRecursively(dir(copy.id), overwrite = true)
+            writeAtomic(File(dir(copy.id), "meta.json"), copy.toJson().toByteArray(), false)
+            main.post { notebooks = notebooks + copy }
+        }
+    }
+
+    fun trash(ids: Collection<String>) { val now = System.currentTimeMillis(); ids.forEach { update(it) { m -> m.copy(trashedAt = now) } } }
+    fun restore(ids: Collection<String>) { ids.forEach { update(it) { m -> m.copy(trashedAt = 0L) } } }
+
+    fun deleteForever(id: String) {
+        notebooks = notebooks.filter { it.id != id }
+        io.execute { dir(id).deleteRecursively() }
+    }
+
+    fun emptyTrash() {
+        val trashedFolders = folders.filter { it.trashedAt > 0 }.map { it.id }.toSet()
+        notebooks.filter { it.isTrashed || isInside(it.folderId, trashedFolders) }.forEach { deleteForever(it.id) }
+        folders = folders.filter { it.trashedAt == 0L && !isInside(it.id, trashedFolders) }
+        saveFolders()
+    }
+
+    private fun isInside(folderId: String?, ancestors: Set<String>): Boolean {
+        var f = folderId
+        var guard = 0
+        while (f != null && guard++ < 64) { if (f in ancestors) return true; f = folder(f)?.parentId }
+        return false
+    }
+
+    /** Czy folder (lub któryś jego przodek) jest w koszu. */
+    fun folderTrashed(id: String?): Boolean {
+        var f = id
+        var guard = 0
+        while (f != null && guard++ < 64) { val fo = folder(f) ?: return false; if (fo.trashedAt > 0) return true; f = fo.parentId }
+        return false
+    }
+
+    // — Foldery i tagi —
+
+    fun createFolder(name: String, parentId: String?, color: Int): Folder {
+        val f = Folder(newId(), name, parentId, color)
+        folders = folders + f
+        saveFolders()
+        return f
+    }
+
+    fun updateFolder(id: String, f: (Folder) -> Folder) {
+        folders = folders.map { if (it.id == id) f(it) else it }
+        saveFolders()
+    }
+
+    fun deleteFolderForever(id: String) {
+        val kids = folders.filter { it.parentId == id }.map { it.id }
+        kids.forEach { deleteFolderForever(it) }
+        notebooks.filter { it.folderId == id }.forEach { deleteForever(it.id) }
+        folders = folders.filter { it.id != id }
+        saveFolders()
+    }
+
+    fun isFolderDescendant(candidate: String?, ancestor: String): Boolean = isInside(candidate, setOf(ancestor))
+
+    private fun saveFolders() {
+        val a = JSONArray(); folders.forEach { a.put(it.toJson()) }
+        val s = a.toString()
+        io.execute { writeAtomic(File(root, "folders.json"), s.toByteArray(), true) }
+    }
+
+    fun setTag(name: String, color: Int?) {
+        tagColors = if (color == null) tagColors - name else tagColors + (name to color)
+        val o = JSONObject(); tagColors.forEach { (k, v) -> o.put(k, v) }
+        val s = o.toString()
+        io.execute { writeAtomic(File(root, "tags.json"), s.toByteArray(), false) }
+        if (color == null) notebooks.filter { name in it.tags }.forEach { n -> update(n.id) { it.copy(tags = it.tags - name) } }
+    }
+
+    // — Strony i zasoby —
+
+    /** Komunikat dla użytkownika (np. odzyskanie strony z kopii `.bak`); ustawiany przez aktywność, wołany z dowolnego wątku. */
+    @Volatile var notice: ((String) -> Unit)? = null
+
+    fun readPage(nb: String, page: String): PageContent {
+        val main = pageFile(nb, page)
+        val bak = File(main.path + ".bak")
+        if (main.exists()) {
+            runCatching { PageCodec.decode(main.readBytes()) }.getOrNull()?.let { return it }
+            // Uszkodzony plik strony: zachowujemy go obok (nie zostanie nadpisany kopią), a stronę odtwarzamy z `.bak`.
+            runCatching { main.copyTo(File(main.path + ".corrupt"), overwrite = true) }
+            val c = if (bak.exists()) runCatching { PageCodec.decode(bak.readBytes()) }.getOrNull() else null
+            if (c != null) {
+                runCatching { bak.copyTo(main, overwrite = true) }
+                notice?.invoke(T.t("Odzyskano stronę z kopii zapasowej", "A page was recovered from its backup copy"))
+                return c
+            }
+            notice?.invoke(T.t("Strona jest uszkodzona i nie da się jej odzyskać", "A page is damaged and cannot be recovered"))
+            return PageContent.EMPTY
+        }
+        if (bak.exists()) runCatching { PageCodec.decode(bak.readBytes()) }.getOrNull()?.let { return it }
+        return PageContent.EMPTY
+    }
+
+    fun writePage(nb: String, page: String, bytes: ByteArray) = writeAtomic(pageFile(nb, page), bytes, true)
+
+    fun deletePageFiles(nb: String, page: String) {
+        val f = pageFile(nb, page)
+        f.delete(); File(f.path + ".bak").delete()
+    }
+
+    /** Kopiuje strumień do zasobów zeszytu i zwraca nazwę pliku. Wywoływać poza wątkiem UI. */
+    fun importAsset(nb: String, input: InputStream, ext: String): String {
+        val name = newId() + "." + ext
+        val f = assetFile(nb, name)
+        f.parentFile?.mkdirs()
+        FileOutputStream(f).use { out -> input.copyTo(out) }
+        return name
+    }
+
+    private fun readText(f: File): String? {
+        for (c in listOf(f, File(f.path + ".bak"))) {
+            if (c.exists()) runCatching { c.readText() }.getOrNull()?.let { if (it.isNotBlank()) return it }
+        }
+        return null
+    }
+
+    companion object {
+        const val DAY = 24L * 3600_000L
+        const val TRASH_DAYS = 30L
+
+        fun writeAtomic(f: File, bytes: ByteArray, keepBak: Boolean) {
+            f.parentFile?.mkdirs()
+            val tmp = File(f.path + ".tmp")
+            FileOutputStream(tmp).use { it.write(bytes); it.fd.sync() }
+            if (keepBak && f.exists()) {
+                val bak = File(f.path + ".bak")
+                bak.delete()
+                f.renameTo(bak)
+            }
+            if (!tmp.renameTo(f)) { f.delete(); tmp.renameTo(f) }
+        }
+    }
+}

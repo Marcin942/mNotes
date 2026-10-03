@@ -111,7 +111,7 @@ Założenie projektowe: „Linux Mint user” = osoba ceniąca kontrolę, skrót
 - [~] EXT-004 Kopia do folderu synchronizacji jako otwarte pliki (jw.) _(jw. (FIL-004))_
 
 ## J. Estetyka „Apple-grade” (AES) — cel: co najmniej tak piękne jak GoodNotes / Apple Notes
-- [x] AES-001 Zakreślacz jak prawdziwy marker: `BlendMode.MULTIPLY` (API ≥ 29; poniżej: kolor wstępnie rozjaśniony + `PorterDuff.MULTIPLY`), końce okrągłe, ciemny papier → `SCREEN` (α·0,84), nowa pastelowa paleta 10 kolorów (OKLCH, w gamucie sRGB), łagodzenie zbyt ciemnych barw _(render/PageRenderer.styleHighlighter; SVG: mix-blend-mode multiply/screen; PDF wektorowy; bez testu na urządzeniu)_
+- [x] AES-001 Zakreślacz jak prawdziwy marker: `BlendMode.MULTIPLY` (API ≥ 29; poniżej: kolor wstępnie rozjaśniony + `PorterDuff.MULTIPLY`), końce okrągłe, ciemny papier → `SCREEN` (α·0,84), nowa pastelowa paleta 10 kolorów (OKLCH, w gamucie sRGB), łagodzenie zbyt ciemnych barw _(render/PageRenderer.styleHighlighter; SVG: mix-blend-mode multiply/screen; PDF wektorowy; **zweryfikowane na tablecie**: biały i ciemny papier, nakładanie, paleta)_
 - [ ] AES-002 Audyt jakości kreski: pióro/pędzel/ołówek (tekstura), kontrast i wygładzanie, końcówki
 - [ ] AES-003 Papier i siatka: delikatniejsze linie, proporcje, odcienie papieru (jak Apple Notes/GoodNotes)
 - [ ] AES-004 Pływający pasek narzędzi, ikony, animacje i haptyka na poziomie systemowych aplikacji

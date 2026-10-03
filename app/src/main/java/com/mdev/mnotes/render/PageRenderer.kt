@@ -1,6 +1,7 @@
 package com.mdev.mnotes.render
 
 import android.graphics.Bitmap
+import android.graphics.BlendMode
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
@@ -8,6 +9,7 @@ import android.graphics.Path
 import android.graphics.PorterDuff
 import android.graphics.PorterDuffXfermode
 import android.graphics.RectF
+import android.os.Build
 import android.graphics.Typeface
 import android.text.Layout
 import android.text.StaticLayout
@@ -39,6 +41,7 @@ class PageRenderer(private val assets: Assets?) {
     private val fl = FloatList()
     private val rect = RectF()
     private val multiply = PorterDuffXfermode(PorterDuff.Mode.MULTIPLY)
+    private val screen = PorterDuffXfermode(PorterDuff.Mode.SCREEN)
     private val geoms = HashMap<PageSpec, TemplateGeom>()
 
     fun geom(spec: PageSpec): TemplateGeom {
@@ -80,18 +83,18 @@ class PageRenderer(private val assets: Assets?) {
     }
 
     /** Rysuje elementy od indeksu [from]; z [clip] pomija te, które go nie dotykają. */
-    fun drawElements(c: Canvas, nb: String, content: PageContent, from: Int, clip: Bounds?, scale: Float, decodeImages: Boolean) {
+    fun drawElements(c: Canvas, nb: String, content: PageContent, from: Int, clip: Bounds?, scale: Float, decodeImages: Boolean, dark: Boolean = false) {
         val els = content.elements
         for (i in from until els.size) {
             val e = els[i]
             if (clip != null && !e.bounds.intersects(clip)) continue
-            drawElement(c, nb, e, scale, decodeImages)
+            drawElement(c, nb, e, scale, decodeImages, dark)
         }
     }
 
-    fun drawElement(c: Canvas, nb: String, e: Element, scale: Float, decodeImages: Boolean) {
+    fun drawElement(c: Canvas, nb: String, e: Element, scale: Float, decodeImages: Boolean, dark: Boolean = false) {
         when (e) {
-            is Stroke -> drawStrokeData(c, e.pen, e.color, e.width, e.pts, e.count, scale)
+            is Stroke -> drawStrokeData(c, e.pen, e.color, e.width, e.pts, e.count, scale, dark)
             is TextBox -> drawText(c, e)
             is ImageEl -> drawImage(c, nb, e, decodeImages)
             is TapeEl -> drawTape(c, e)
@@ -120,16 +123,41 @@ class PageRenderer(private val assets: Assets?) {
         return (0xFF shl 24) or (r shl 16) or (g shl 8) or b
     }
 
-    /** Kreska z surowych danych (trójki x,y,p) — używana też do podglądu na żywo. */
-    fun drawStrokeData(c: Canvas, pen: PenKind, color: Int, width: Float, pts: FloatArray, n: Int, scale: Float) {
+    /**
+     * Zakreślacz jak marker na papierze: na jasnym papierze prawdziwe „multiply” (wynik D·(1−α+α·C), tekst pod spodem
+     * zostaje czytelny, kolor nie brudzi się przy nakładaniu), na ciemnym — „screen” (rozświetlenie).
+     * Uwaga: [PorterDuff.Mode.MULTIPLY] to na Androidzie „modulate” (mnoży też alfę) i przy kryciu < 1 robi w bitmapie
+     * dziurę, przez którą prześwituje tło — dlatego od API 29 używamy [BlendMode.MULTIPLY], a poniżej API 29 koloru
+     * wstępnie rozjaśnionego i w pełni kryjącego (przy nieprzezroczystym papierze wynik jest identyczny).
+     */
+    private fun styleHighlighter(color: Int, alpha: Float, dark: Boolean) {
+        if (dark) {
+            paint.color = color
+            paint.alpha = (alpha * 0.84f * 255f + 0.5f).toInt().coerceIn(0, 255)
+            paint.xfermode = screen
+        } else if (Build.VERSION.SDK_INT >= 29) {
+            paint.color = color
+            paint.alpha = (alpha * 255f + 0.5f).toInt().coerceIn(0, 255)
+            paint.blendMode = BlendMode.MULTIPLY
+        } else {
+            fun ch(sh: Int) = (255f + ((color shr sh and 0xFF) - 255) * alpha + 0.5f).toInt().coerceIn(0, 255)
+            paint.color = (0xFF shl 24) or (ch(16) shl 16) or (ch(8) shl 8) or ch(0)
+            paint.xfermode = multiply
+        }
+    }
+
+    /** Kreska z surowych danych (trójki x,y,p) — używana też do podglądu na żywo. [dark] = ciemny papier. */
+    fun drawStrokeData(c: Canvas, pen: PenKind, color: Int, width: Float, pts: FloatArray, n: Int, scale: Float, dark: Boolean = false) {
         if (n <= 0) return
         val spec = PenSpec.of(pen)
         paint.reset(); paint.isAntiAlias = true
-        paint.color = color
-        val a = (spec.alpha * 255f + 0.5f).toInt().coerceIn(0, 255)
-        if (a < 255) paint.alpha = a
         val hl = pen == PenKind.HIGHLIGHTER
-        if (hl) paint.xfermode = multiply
+        if (hl) styleHighlighter(color, spec.alpha, dark)
+        else {
+            paint.color = color
+            val a = (spec.alpha * 255f + 0.5f).toInt().coerceIn(0, 255)
+            if (a < 255) paint.alpha = a
+        }
         val minW = 0.9f / scale
         if (n == 1 || StrokeOutline.isConstant(pts, n)) {
             var avg = 0f
@@ -142,7 +170,7 @@ class PageRenderer(private val assets: Assets?) {
             }
             paint.style = Paint.Style.STROKE
             paint.strokeWidth = w
-            paint.strokeCap = if (hl) Paint.Cap.SQUARE else Paint.Cap.ROUND
+            paint.strokeCap = Paint.Cap.ROUND
             paint.strokeJoin = Paint.Join.ROUND
             path.rewind()
             path.moveTo(pts[0], pts[1])

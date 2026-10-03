@@ -164,8 +164,8 @@ class Settings(ctx: Context) {
             PenPreset(PenKind.BALLPOINT, 0xFFC8433F.toInt(), 1.42f),
             PenPreset(PenKind.PENCIL, 0xFF454A52.toInt(), 1.98f),
             PenPreset(PenKind.BRUSH, 0xFF3E8E5A.toInt(), 8.5f),
-            PenPreset(PenKind.HIGHLIGHTER, 0xFFFFD93D.toInt(), 14.17f),
-            PenPreset(PenKind.HIGHLIGHTER, 0xFF7EDC8F.toInt(), 14.17f),
+            PenPreset(PenKind.HIGHLIGHTER, 0xFFF5CF17.toInt(), 14.17f),
+            PenPreset(PenKind.HIGHLIGHTER, 0xFF71DF77.toInt(), 14.17f),
         )
     }
 }

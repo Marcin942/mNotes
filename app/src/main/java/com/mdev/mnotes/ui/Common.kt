@@ -290,12 +290,13 @@ val PALETTE: List<Int> = listOf(
 ).map { it.toInt() }
 
 /**
- * Paleta zakreślaczy. Zakreślacz miesza się z papierem w trybie „multiply” przy kryciu 50 %, więc zapisane
- * barwy są umiarkowanie nasycone, a efekt na papierze to jasny pastel (patrz [highlighterLook]).
+ * Paleta zakreślaczy: dziesięć stonowanych pasteli (dobór w OKLCH: jasność .83–.93, chroma .03–.115).
+ * Zapisana barwa C to „atrament” zakreślacza; na papierze, przy multiply z kryciem 50 %, wychodzi z niej
+ * pastel E = (255 + C) / 2 (patrz [highlighterLook]) — stąd C = 2E − 255. Kolejność: ciepłe → chłodne → neutralny.
  */
 val HIGHLIGHTER_PALETTE: List<Int> = listOf(
-    0xFFFFD93D, 0xFFFFA94D, 0xFFFF7A7A, 0xFFF687B3, 0xFFA78BFA,
-    0xFF63B3ED, 0xFF4FD1C5, 0xFF7EDC8F, 0xFFB9D96C, 0xFFB7A99A,
+    0xFFF5CF17, 0xFFFFA355, 0xFFFD614F, 0xFFF57BA5, 0xFFAB85F7,
+    0xFF5F97FF, 0xFF85CFFD, 0xFF57F3C1, 0xFF71DF77, 0xFFC7AD85,
 ).map { it.toInt() }
 
 /** Jak zakreślacz o danej barwie wygląda na białym papierze (multiply, krycie 0,5). */
@@ -304,12 +305,18 @@ fun highlighterLook(c: Int): Int {
     return (0xFF shl 24) or (ch(16) shl 16) or (ch(8) shl 8) or ch(0)
 }
 
-/** Rozjaśnia barwę do zakresu sensownego dla zakreślacza (ciemne zakreślacze zasłaniają tekst). */
+/**
+ * Dla dowolnej barwy (suwaki, hex, pipeta) pilnuje, by efekt na papierze pozostał jasnym pastelem: barwy tak
+ * ciemne, że po multiply miałyby jasność poniżej ~0,68 (zasłaniałyby tekst), są rozjaśniane ku bieli.
+ */
 fun softenForHighlighter(c: Int): Int {
-    val hsv = FloatArray(3); android.graphics.Color.colorToHSV(c, hsv)
-    if (hsv[1] < 0.18f || hsv[2] < 0.35f) return HIGHLIGHTER_PALETTE[0]
-    hsv[1] = hsv[1].coerceAtMost(0.80f); hsv[2] = hsv[2].coerceAtLeast(0.80f)
-    return android.graphics.Color.HSVToColor(hsv)
+    val r = c shr 16 and 0xFF; val g = c shr 8 and 0xFF; val b = c and 0xFF
+    val lum = 0.2126f * r + 0.7152f * g + 0.0722f * b
+    val min = 92f
+    if (lum >= min) return c or (0xFF shl 24)
+    val t = (min - lum) / (255f - lum)
+    fun up(v: Int) = (v + (255 - v) * t + 0.5f).toInt().coerceIn(0, 255)
+    return (0xFF shl 24) or (up(r) shl 16) or (up(g) shl 8) or up(b)
 }
 
 /** Wybór koloru: paleta + HSV + hex. */

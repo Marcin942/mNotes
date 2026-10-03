@@ -58,6 +58,9 @@ data class PageSpec(
 ) {
     val marginLine: Boolean get() = opts and OPT_MARGIN != 0
 
+    /** Ciemny papier bez tła PDF — zakreślacz działa na nim jak „screen”, nie „multiply”. */
+    val darkPaper: Boolean get() = pdf == null && Paper.isDark(paper)
+
     fun withSize(w: Float, h: Float) = copy(w = w, h = h)
 
     /** Zmiana wzoru zachowuje papier i rozmiar, ale przywraca rozstaw typowy dla wzoru. */

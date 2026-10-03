@@ -82,7 +82,7 @@ class PageCache(
                 val c = Canvas(bmp)
                 c.scale(w / spec.w, h / spec.h)
                 worker.drawPaper(c, spec, sc, bg)
-                worker.drawElements(c, doc.id, content, 0, null, sc, true)
+                worker.drawElements(c, doc.id, content, 0, null, sc, true, spec.darkPaper)
                 bmp to bg
             }.getOrNull()
             main.post { finish(page, e, ver, sc, result?.first, result?.second) }
@@ -114,7 +114,7 @@ class PageCache(
         val n = content.size
         val appended = edit.removed.isEmpty() && edit.added.isNotEmpty() && edit.added.all { it.index >= n - edit.added.size }
         if (appended) {
-            for (p in edit.added.sortedBy { it.index }) ui.drawElement(c, doc.id, p.element, sc, false)
+            for (p in edit.added.sortedBy { it.index }) ui.drawElement(c, doc.id, p.element, sc, false, spec.darkPaper)
         } else {
             val d = edit.dirtyBounds.inflate(2.5f / sc)
             val r = Bounds(maxOf(0f, d.l), maxOf(0f, d.t), minOf(spec.w, d.r), minOf(spec.h, d.b))
@@ -122,7 +122,7 @@ class PageCache(
             c.save()
             c.clipRect(r.l, r.t, r.r, r.b)
             ui.drawPaper(c, spec, sc, e.bg)
-            ui.drawElements(c, doc.id, content, 0, r, sc, false)
+            ui.drawElements(c, doc.id, content, 0, r, sc, false, spec.darkPaper)
             c.restore()
         }
         e.version = page.version
@@ -194,7 +194,7 @@ class Thumbs(private val repo: Repository, assets: Assets, private val pdf: PdfP
         val c = Canvas(bmp)
         c.scale(sc, h / spec.h)
         renderer.drawPaper(c, spec, sc, bg)
-        renderer.drawElements(c, nb, content, 0, null, sc, true)
+        renderer.drawElements(c, nb, content, 0, null, sc, true, spec.darkPaper)
         return bmp
     }
 

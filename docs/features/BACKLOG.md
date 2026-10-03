@@ -110,6 +110,14 @@ Założenie projektowe: „Linux Mint user” = osoba ceniąca kontrolę, skrót
 - [x] EXT-003 Okno powiększenia (zoom window, P2) _(Ctrl+Alt+Z; pisanie w powiększeniu u dołu ekranu, `ZoomRegion`; bez testu na urządzeniu)_
 - [~] EXT-004 Kopia do folderu synchronizacji jako otwarte pliki (jw.) _(jw. (FIL-004))_
 
+## J. Estetyka „Apple-grade” (AES) — cel: co najmniej tak piękne jak GoodNotes / Apple Notes
+- [x] AES-001 Zakreślacz jak prawdziwy marker: `BlendMode.MULTIPLY` (API ≥ 29; poniżej: kolor wstępnie rozjaśniony + `PorterDuff.MULTIPLY`), końce okrągłe, ciemny papier → `SCREEN` (α·0,84), nowa pastelowa paleta 10 kolorów (OKLCH, w gamucie sRGB), łagodzenie zbyt ciemnych barw _(render/PageRenderer.styleHighlighter; SVG: mix-blend-mode multiply/screen; PDF wektorowy; bez testu na urządzeniu)_
+- [ ] AES-002 Audyt jakości kreski: pióro/pędzel/ołówek (tekstura), kontrast i wygładzanie, końcówki
+- [ ] AES-003 Papier i siatka: delikatniejsze linie, proporcje, odcienie papieru (jak Apple Notes/GoodNotes)
+- [ ] AES-004 Pływający pasek narzędzi, ikony, animacje i haptyka na poziomie systemowych aplikacji
+- [ ] AES-005 Biblioteka: okładki zeszytów, typografia, odstępy, ciemny motyw
+- [ ] AES-006 Weryfikacja wizualna na emulatorze/urządzeniu (zrzuty porównawcze z GoodNotes/Apple Notes)
+
 ## Poza zakresem (świadomie)
 - [-] Rozpoznawanie pisma → tekst, formuły → LaTeX (EDT-046/047), OCR wyszukiwanie w piśmie odręcznym — brak lokalnego silnika offline w zależnościach; wróci, gdy będzie model on-device.
 - [-] Konta, chmura producenta, współpraca w czasie rzeczywistym (sprzeczne z „offline, bez kont”).

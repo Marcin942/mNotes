@@ -454,7 +454,7 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
         } else {
             renderer.drawPaper(c, spec, zoom, e.bg)
             val content = page.content
-            if (content != null) renderer.drawElements(c, doc.id, content, 0, Bounds(vb.l - r.l, vb.t - r.t, vb.r - r.l, vb.b - r.t), zoom, false)
+            if (content != null) renderer.drawElements(c, doc.id, content, 0, Bounds(vb.l - r.l, vb.t - r.t, vb.r - r.l, vb.b - r.t), zoom, false, spec.darkPaper)
         }
         c.restore()
         c.drawRect(r.l, r.t, r.r, r.b, borderPaint)
@@ -466,7 +466,7 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
             c.save()
             c.translate(layout.left(livePage), layout.top(livePage))
             c.clipRect(0f, 0f, spec.w, spec.h)
-            if (shapeSnapped) renderer.drawStrokeData(c, builder.penKind, builder.penColor, builder.width, shapePts, shapePts.size / 3, zoom)
+            if (shapeSnapped) renderer.drawStrokeData(c, builder.penKind, builder.penColor, builder.width, shapePts, shapePts.size / 3, zoom, spec.darkPaper)
             else {
                 val n = builder.count
                 var total = n
@@ -482,8 +482,8 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
                         scratch[3 * (n + k) + 2] = pl
                     }
                     total = n + predN
-                    renderer.drawStrokeData(c, builder.penKind, builder.penColor, builder.width, scratch, total, zoom)
-                } else renderer.drawStrokeData(c, builder.penKind, builder.penColor, builder.width, builder.pts, total, zoom)
+                    renderer.drawStrokeData(c, builder.penKind, builder.penColor, builder.width, scratch, total, zoom, spec.darkPaper)
+                } else renderer.drawStrokeData(c, builder.penKind, builder.penColor, builder.width, builder.pts, total, zoom, spec.darkPaper)
             }
             c.restore()
         }
@@ -494,7 +494,7 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
             c.clipRect(0f, 0f, spec.w, spec.h)
             c.concat(matrixOf(lM))
             val z = zoom * lM.scaleFactor
-            for (el in lEls) renderer.drawElement(c, doc.id, el, z, false)
+            for (el in lEls) renderer.drawElement(c, doc.id, el, z, false, spec.darkPaper)
             c.restore()
         }
     }
@@ -1609,10 +1609,10 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
         c.clipRect(0f, 0f, spec.w, spec.h)
         val e = cache.entry(page, cache.scaleFor(zoom, spec), true)
         renderer.drawPaper(c, spec, z, e.bg)
-        renderer.drawElements(c, doc.id, doc.content(page), 0, Bounds(zw.x, zw.y, zw.x + rw, zw.y + rh), z, false)
+        renderer.drawElements(c, doc.id, doc.content(page), 0, Bounds(zw.x, zw.y, zw.x + rw, zw.y + rh), z, false, spec.darkPaper)
         if (liveActive && livePage == zwPage) {
-            if (shapeSnapped) renderer.drawStrokeData(c, builder.penKind, builder.penColor, builder.width, shapePts, shapePts.size / 3, z)
-            else renderer.drawStrokeData(c, builder.penKind, builder.penColor, builder.width, builder.pts, builder.count, z)
+            if (shapeSnapped) renderer.drawStrokeData(c, builder.penKind, builder.penColor, builder.width, shapePts, shapePts.size / 3, z, spec.darkPaper)
+            else renderer.drawStrokeData(c, builder.penKind, builder.penColor, builder.width, builder.pts, builder.count, z, spec.darkPaper)
         }
         c.restore()
 

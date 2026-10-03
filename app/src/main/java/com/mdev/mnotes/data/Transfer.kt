@@ -94,7 +94,7 @@ class Exporter(private val repo: Repository, private val assets: Assets, private
         val spec = p.spec
         val bg = spec.pdf?.let { pdf.render(nb, it.asset, it.page, (spec.w * bgScale).roundToInt(), (spec.h * bgScale).roundToInt()) }
         renderer.drawPaper(c, spec, scale, bg)
-        renderer.drawElements(c, nb, repo.readPage(nb, p.id), 0, null, scale, true)
+        renderer.drawElements(c, nb, repo.readPage(nb, p.id), 0, null, scale, true, spec.darkPaper)
     }
 
     // — PNG i SVG: jedna strona = jeden plik; więcej stron = archiwum ZIP —
@@ -150,7 +150,7 @@ class Exporter(private val repo: Repository, private val assets: Assets, private
         } else svgTemplate(sb, spec)
         val fl = FloatList()
         for (e in repo.readPage(nb, p.id).elements) when (e) {
-            is Stroke -> svgStroke(sb, e, fl)
+            is Stroke -> svgStroke(sb, e, fl, spec.darkPaper)
             is TextBox -> svgText(sb, e)
             is TapeEl -> {
                 val tr = if (e.rot != 0f) " transform=\"rotate(${f(Math.toDegrees(e.rot.toDouble()).toFloat())} ${f(e.cx)} ${f(e.cy)})\"" else ""
@@ -188,19 +188,19 @@ class Exporter(private val repo: Repository, private val assets: Assets, private
         }
     }
 
-    private fun svgStroke(sb: StringBuilder, s: Stroke, fl: FloatList) {
+    private fun svgStroke(sb: StringBuilder, s: Stroke, fl: FloatList, dark: Boolean) {
         val n = s.count
         if (n <= 0) return
         val pts = s.pts
-        val alpha = PenSpec.of(s.pen).alpha
-        val common = (if (alpha < 0.999f) " opacity=\"${f(alpha)}\"" else "") + (if (s.pen == PenKind.HIGHLIGHTER) " style=\"mix-blend-mode:multiply\"" else "")
+        val hl = s.pen == PenKind.HIGHLIGHTER
+        val alpha = PenSpec.of(s.pen).alpha * (if (hl && dark) 0.84f else 1f)
+        val common = (if (alpha < 0.999f) " opacity=\"${f(alpha)}\"" else "") + (if (hl) " style=\"mix-blend-mode:${if (dark) "screen" else "multiply"}\"" else "")
         if (n == 1 || StrokeOutline.isConstant(pts, n)) {
             var avg = 0f
             for (i in 0 until n) avg += pts[3 * i + 2]
             val w = max(s.width * (avg / n), 0.3f)
             if (n == 1) { sb.append("<circle cx=\"${f(pts[0])}\" cy=\"${f(pts[1])}\" r=\"${f(w / 2)}\" fill=\"${hex(s.color)}\"$common/>\n"); return }
-            val cap = if (s.pen == PenKind.HIGHLIGHTER) "square" else "round"
-            sb.append("<path fill=\"none\" stroke=\"${hex(s.color)}\" stroke-width=\"${f(w)}\" stroke-linecap=\"$cap\" stroke-linejoin=\"round\"$common d=\"M${f(pts[0])} ${f(pts[1])}")
+            sb.append("<path fill=\"none\" stroke=\"${hex(s.color)}\" stroke-width=\"${f(w)}\" stroke-linecap=\"round\" stroke-linejoin=\"round\"$common d=\"M${f(pts[0])} ${f(pts[1])}")
             if (n == 2) sb.append("L${f(pts[3])} ${f(pts[4])}")
             else {
                 for (i in 1 until n - 1) {

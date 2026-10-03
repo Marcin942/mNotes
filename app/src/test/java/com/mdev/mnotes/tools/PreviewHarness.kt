@@ -52,7 +52,7 @@ class PreviewHarness {
         g.stroke = BasicStroke(lw, BasicStroke.CAP_BUTT, BasicStroke.JOIN_MITER)
         var i = 0
         while (i + 3 < geom.lines.size) { g.draw(Line2D.Float(geom.lines[i], geom.lines[i + 1], geom.lines[i + 2], geom.lines[i + 3])); i += 4 }
-        g.stroke = BasicStroke(lw * 1.7f, BasicStroke.CAP_BUTT, BasicStroke.JOIN_MITER)
+        g.stroke = BasicStroke(lw * 1.5f, BasicStroke.CAP_BUTT, BasicStroke.JOIN_MITER)
         i = 0
         while (i + 3 < geom.heavy.size) { g.draw(Line2D.Float(geom.heavy[i], geom.heavy[i + 1], geom.heavy[i + 2], geom.heavy[i + 3])); i += 4 }
         val dw = max(lw * 2.6f, 1.4f / s)
@@ -81,9 +81,11 @@ class PreviewHarness {
         } else {
             val fl = FloatList()
             StrokeOutline.build(pts, n, width, fl)
-            val p = Path2D.Float(Path2D.WIND_NON_ZERO); p.moveTo(fl.a[0], fl.a[1])
+            val sm = FloatList()
+            StrokeOutline.smooth(fl, sm)
+            val p = Path2D.Float(Path2D.WIND_NON_ZERO); p.moveTo(sm.a[0], sm.a[1])
             var i = 2
-            while (i + 1 < fl.size) { p.lineTo(fl.a[i], fl.a[i + 1]); i += 2 }
+            while (i + 3 < sm.size) { p.quadTo(sm.a[i], sm.a[i + 1], sm.a[i + 2], sm.a[i + 3]); i += 4 }
             p.closePath(); g.fill(p)
         }
     }
@@ -118,9 +120,11 @@ class PreviewHarness {
             PageSpec(paper = Paper.IVORY, template = Template.GRID),
             PageSpec(paper = Paper.WHITE, template = Template.DOTS),
             PageSpec(paper = Paper.IVORY, template = Template.LINED),
+            PageSpec(paper = Paper.DARK, template = Template.LINED),
+            PageSpec(paper = Paper.BLACK, template = Template.GRID),
         )
         val s = 2.7f; val w = 150; val h = 110
-        val sheet = BufferedImage((w * s).toInt() * 2 + 30, (h * s).toInt() * 2 + 30, BufferedImage.TYPE_INT_ARGB)
+        val sheet = BufferedImage((w * s).toInt() * 2 + 30, (h * s).toInt() * 3 + 40, BufferedImage.TYPE_INT_ARGB)
         val sg = g2(sheet); sg.color = Color(0x70, 0x70, 0x70); sg.fillRect(0, 0, sheet.width, sheet.height)
         tiles.forEachIndexed { i, sp ->
             sg.drawImage(paper(sp, s, w, h), 10 + (i % 2) * ((w * s).toInt() + 10), 10 + (i / 2) * ((h * s).toInt() + 10), null)

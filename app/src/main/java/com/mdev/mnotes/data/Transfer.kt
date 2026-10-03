@@ -178,7 +178,7 @@ class Exporter(private val repo: Repository, private val assets: Assets, private
             while (i + 3 < a.size) { sb.append("M${f(a[i])} ${f(a[i + 1])}L${f(a[i + 2])} ${f(a[i + 3])}"); i += 4 }
             sb.append("\"/>\n")
         }
-        lines(g.lines, lw); lines(g.heavy, lw * 1.7f)
+        lines(g.lines, lw); lines(g.heavy, lw * 1.5f)
         var i = 0
         while (i + 1 < g.dots.size) { sb.append("<circle cx=\"${f(g.dots[i])}\" cy=\"${f(g.dots[i + 1])}\" r=\"${f(lw * 1.3f)}\" fill=\"$col\"/>\n"); i += 2 }
         i = 0
@@ -212,10 +212,12 @@ class Exporter(private val repo: Repository, private val assets: Assets, private
             sb.append("\"/>\n")
         } else {
             StrokeOutline.build(pts, n, s.width, fl)
-            if (fl.size < 6) return
-            sb.append("<path fill=\"${hex(s.color)}\"$common d=\"M${f(fl.a[0])} ${f(fl.a[1])}")
+            val sm = FloatList()
+            StrokeOutline.smooth(fl, sm)
+            if (sm.size < 6) return
+            sb.append("<path fill=\"${hex(s.color)}\"$common d=\"M${f(sm.a[0])} ${f(sm.a[1])}")
             var i = 2
-            while (i + 1 < fl.size) { sb.append("L${f(fl.a[i])} ${f(fl.a[i + 1])}"); i += 2 }
+            while (i + 3 < sm.size) { sb.append("Q${f(sm.a[i])} ${f(sm.a[i + 1])} ${f(sm.a[i + 2])} ${f(sm.a[i + 3])}"); i += 4 }
             sb.append("Z\"/>\n")
         }
     }

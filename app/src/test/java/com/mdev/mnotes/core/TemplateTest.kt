@@ -91,4 +91,19 @@ class TemplateTest {
         assertTrue(Paper.isDark(Paper.BLACK))
         assertFalse(Paper.isDark(Paper.YELLOW))
     }
+
+    @Test
+    fun legacyAutoLineColorIsMigratedButCustomColorIsKept() {
+        // Strona zapisana przed AES-003 z dawnym kolorem automatycznym dostaje delikatniejszy kolor obecny…
+        val legacy = Paper.mix(Paper.WHITE, 0xFF3F5F8F.toInt(), 0.30f)
+        val migrated = PageSpec.fromJson("""{"p":${Paper.WHITE},"t":1,"l":$legacy}""")
+        assertEquals(Paper.autoLineColor(Paper.WHITE), migrated.line)
+        assertTrue(Paper.luminance(migrated.line) > Paper.luminance(legacy))
+        // …a kolor wybrany przez użytkownika zostaje bez zmian.
+        val custom = 0xFFD04040.toInt()
+        assertEquals(custom, PageSpec.fromJson("""{"p":${Paper.WHITE},"t":1,"l":$custom}""").line)
+        // Obecny kolor automatyczny jest stabilny po zapisie i odczycie.
+        val spec = PageSpec(template = Template.LINED)
+        assertEquals(spec.line, PageSpec.fromJson(spec.toJson()).line)
+    }
 }

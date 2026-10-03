@@ -39,6 +39,7 @@ class PageRenderer(private val assets: Assets?) {
     private val bmpPaint = Paint(Paint.FILTER_BITMAP_FLAG or Paint.ANTI_ALIAS_FLAG)
     private val path = Path()
     private val fl = FloatList()
+    private val sm = FloatList()
     private val rect = RectF()
     private val multiply = PorterDuffXfermode(PorterDuff.Mode.MULTIPLY)
     private val screen = PorterDuffXfermode(PorterDuff.Mode.SCREEN)
@@ -70,7 +71,7 @@ class PageRenderer(private val assets: Assets?) {
         paint.style = Paint.Style.STROKE
         paint.strokeCap = Paint.Cap.BUTT
         if (g.lines.isNotEmpty()) { paint.strokeWidth = lw; c.drawLines(g.lines, paint) }
-        if (g.heavy.isNotEmpty()) { paint.strokeWidth = lw * 1.7f; c.drawLines(g.heavy, paint) }
+        if (g.heavy.isNotEmpty()) { paint.strokeWidth = lw * 1.5f; c.drawLines(g.heavy, paint) }
         if (g.dots.isNotEmpty()) {
             paint.strokeWidth = max(lw * 2.6f, 1.4f / scale); paint.strokeCap = Paint.Cap.ROUND
             c.drawPoints(g.dots, paint)
@@ -186,13 +187,14 @@ class PageRenderer(private val assets: Assets?) {
             c.drawPath(path, paint)
         } else {
             StrokeOutline.build(pts, n, width, fl)
-            if (fl.size < 6) return
+            StrokeOutline.smooth(fl, sm)
+            if (sm.size < 6) return
             paint.style = Paint.Style.FILL
             path.rewind()
             path.fillType = Path.FillType.WINDING
-            path.moveTo(fl.a[0], fl.a[1])
+            path.moveTo(sm.a[0], sm.a[1])
             var i = 2
-            while (i + 1 < fl.size) { path.lineTo(fl.a[i], fl.a[i + 1]); i += 2 }
+            while (i + 3 < sm.size) { path.quadTo(sm.a[i], sm.a[i + 1], sm.a[i + 2], sm.a[i + 3]); i += 4 }
             path.close()
             c.drawPath(path, paint)
         }

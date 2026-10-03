@@ -85,6 +85,23 @@ class PenAndShapesTest {
         assertTrue(StrokeOutline.isConstant(s.pts))
     }
 
+    @Test fun smoothedOutlineStaysWithinTheOutlineBounds() {
+        val s = stroke(0f, 0f, 10f, 5f, 20f, 0f, width = 4f)
+        val poly = FloatList(); val sm = FloatList()
+        StrokeOutline.build(s.pts, s.count, s.width, poly)
+        StrokeOutline.smooth(poly, sm)
+        // początek + czwórka (cx, cy, ex, ey) na każdy wierzchołek wielokąta
+        assertEquals(2 + 2 * poly.size, sm.size)
+        var i = 0
+        while (i < sm.size) {
+            // krzywe przez środki krawędzi leżą w otoczce wypukłej wielokąta → w jego prostokącie
+            assertTrue(sm[i] in -2.05f..22.05f); assertTrue(sm[i + 1] in -2.05f..7.05f)
+            i += 2
+        }
+        poly.clear(); StrokeOutline.smooth(poly, sm)
+        assertEquals(0, sm.size)
+    }
+
     @Test fun diffRoundTrips() {
         val a = stroke(0f, 0f, 1f, 1f); val b = stroke(5f, 5f, 6f, 6f); val c = stroke(9f, 9f, 8f, 8f)
         val before = PageContent.of(listOf(a, b, c))

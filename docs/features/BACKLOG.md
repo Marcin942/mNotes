@@ -112,8 +112,8 @@ Założenie projektowe: „Linux Mint user” = osoba ceniąca kontrolę, skrót
 
 ## J. Estetyka „Apple-grade” (AES) — cel: co najmniej tak piękne jak GoodNotes / Apple Notes
 - [x] AES-001 Zakreślacz jak prawdziwy marker: `BlendMode.MULTIPLY` (API ≥ 29; poniżej: kolor wstępnie rozjaśniony + `PorterDuff.MULTIPLY`), końce okrągłe, ciemny papier → `SCREEN` (α·0,84), nowa pastelowa paleta 10 kolorów (OKLCH, w gamucie sRGB), łagodzenie zbyt ciemnych barw _(render/PageRenderer.styleHighlighter; SVG: mix-blend-mode multiply/screen; PDF wektorowy; **zweryfikowane na tablecie**: biały i ciemny papier, nakładanie, paleta)_
-- [ ] AES-002 Audyt jakości kreski: pióro/pędzel/ołówek (tekstura), kontrast i wygładzanie, końcówki
-- [ ] AES-003 Papier i siatka: delikatniejsze linie, proporcje, odcienie papieru (jak Apple Notes/GoodNotes)
+- [~] AES-002 Audyt jakości kreski: **zrobione** wygładzanie konturu kreski o zmiennej grubości (`StrokeOutline.smooth`: krzywe kwadratowe przez środki krawędzi — ekran, SVG, PDF; brak fasetek przy szybkim ruchu; zweryfikowane na tablecie). **Do zrobienia**: tekstura ołówka, charakter pędzla (blobowaty), końcówki
+- [x] AES-003 Papier i siatka: delikatniejsze linie (`Paper.autoLineColor` 0,30→0,22 jasny / 0,28→0,20 ciemny, linie wyróżnione ×1,5 zamiast ×1,7); zapisane strony z dawnym kolorem automatycznym są przy wczytaniu migrowane (`Paper.migrateLine`), kolory wybrane przez użytkownika zostają _(zweryfikowane na tablecie)_
 - [ ] AES-004 Pływający pasek narzędzi, ikony, animacje i haptyka na poziomie systemowych aplikacji
 - [ ] AES-005 Biblioteka: okładki zeszytów, typografia, odstępy, ciemny motyw
 - [ ] AES-006 Weryfikacja wizualna na emulatorze/urządzeniu (zrzuty porównawcze z GoodNotes/Apple Notes)

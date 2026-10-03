@@ -53,6 +53,24 @@ object StrokeOutline {
         cap(xs[0], ys[0], hs[0], nx[0], ny[0], out, end = false)
     }
 
+    /**
+     * Wygładza zamknięty wielokąt [poly] (x, y …) krzywymi kwadratowymi przez środki krawędzi: punkty wielokąta są
+     * punktami kontrolnymi, więc brzeg nie ma fasetek nawet przy rzadkich próbkach (szybki ruch). Wynik w [out]:
+     * x, y początku, potem czwórki (cx, cy, ex, ey) — po jednej na wierzchołek; krzywą zamyka się `close()`.
+     */
+    fun smooth(poly: FloatList, out: FloatList) {
+        out.clear()
+        val m = poly.size / 2
+        if (m < 3) return
+        val a = poly.a
+        out.add((a[2 * m - 2] + a[0]) * 0.5f, (a[2 * m - 1] + a[1]) * 0.5f)
+        for (i in 0 until m) {
+            val j = if (i + 1 == m) 0 else i + 1
+            out.add(a[2 * i], a[2 * i + 1])
+            out.add((a[2 * i] + a[2 * j]) * 0.5f, (a[2 * i + 1] + a[2 * j + 1]) * 0.5f)
+        }
+    }
+
     /** Półokrąg zamykający koniec. Styczna t = (ny, -nx), bo n = (-ty, tx). */
     private fun cap(x: Float, y: Float, h: Float, nx: Float, ny: Float, out: FloatList, end: Boolean) {
         val tx = ny; val ty = -nx

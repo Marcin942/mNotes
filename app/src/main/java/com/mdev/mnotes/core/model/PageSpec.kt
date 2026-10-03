@@ -90,7 +90,7 @@ data class PageSpec(
                 h = o.optDouble("h", PageFormat.A4.h.toDouble()).toFloat().coerceIn(MIN_SIZE, MAX_SIZE),
                 paper = paper,
                 template = t,
-                line = o.optInt("l", Paper.autoLineColor(paper)),
+                line = Paper.migrateLine(paper, o.optInt("l", Paper.autoLineColor(paper))),
                 spacing = o.optDouble("s", t.defaultSpacing.toDouble()).toFloat(),
                 lineWidth = o.optDouble("lw", 0.6).toFloat(),
                 opts = o.optInt("o", OPT_MARGIN),
@@ -132,7 +132,14 @@ object Paper {
 
     /** Delikatna linia o chłodnym odcieniu: ciemniejsza od jasnego papieru, jaśniejsza od ciemnego. */
     fun autoLineColor(paper: Int): Int =
+        if (isDark(paper)) mix(paper, 0xFFA7B4C8.toInt(), 0.20f) else mix(paper, 0xFF3F5F8F.toInt(), 0.22f)
+
+    /** Kolor automatyczny sprzed AES-003 (mocniejszy) — strony z nim zapisane trafiają przy wczytaniu na obecny. */
+    private fun legacyAutoLineColor(paper: Int): Int =
         if (isDark(paper)) mix(paper, 0xFFA7B4C8.toInt(), 0.28f) else mix(paper, 0xFF3F5F8F.toInt(), 0.30f)
+
+    /** Linia zapisana jako dawny kolor automatyczny = użytkownik jej nie ustawiał → delikatniejszy kolor obecny. */
+    fun migrateLine(paper: Int, line: Int): Int = if (line == legacyAutoLineColor(paper)) autoLineColor(paper) else line
 
     /** Mieszanie kolorów w ARGB; [t] = udział [b]. Alfa wyniku jest pełna. */
     fun mix(a: Int, b: Int, t: Float): Int {

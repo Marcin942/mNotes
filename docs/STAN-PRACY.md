@@ -1,6 +1,6 @@
 # mNotes — STAN PRACY (punkt startowy po wznowieniu sesji)
 
-Aktualizacja: 2026-10-03. Źródło prawdy o zakresie: `docs/features/BACKLOG.md` (73 × `[x]`, 13 × `[~]`, 1 × `[ ]` — zostało tylko EXT-002 audio).
+Wersja: **0.1.0** (tag `v0.1.0`, `versionName` w `app/build.gradle.kts`). Aktualizacja: 2026-10-03. Źródło prawdy o zakresie: `docs/features/BACKLOG.md` (73 × `[x]`, 13 × `[~]`, 1 × `[ ]` — zostało tylko EXT-002 audio).
 Katalog jest repozytorium git (gałąź `main`, od 2026-10-03) — „zapis do repo” = commit; aktualizuj ten plik i BACKLOG na końcu każdej partii.
 
 ## Cel i założenia

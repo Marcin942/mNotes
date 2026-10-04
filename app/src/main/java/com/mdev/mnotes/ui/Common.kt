@@ -1,5 +1,16 @@
 package com.mdev.mnotes.ui
 
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsHoveredAsState
+import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.semantics.Role
+import android.view.HapticFeedbackConstants
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -81,8 +92,70 @@ import androidx.compose.ui.draw.drawBehind
 fun dateText(ms: Long): String = DateFormat.getDateInstance(DateFormat.MEDIUM).format(Date(ms))
 fun dateTimeText(ms: Long): String = DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT).format(Date(ms))
 
-/** Przycisk-ikona z podpowiedzią (tooltip pokazuje też skrót klawiszowy — wygodne przy myszy). */
+/** Lekkie „tyknięcie” przy dotknięciu przycisku (wyłączane w ustawieniach). */
+@Composable
+fun rememberTick(): () -> Unit {
+    val view = LocalView.current
+    val on = LocalHaptics.current
+    return remember(view, on) { { if (on) view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP) } }
+}
+
+/**
+ * Przycisk narzędzia z dowolną treścią: tło płynnie przechodzi między stanami (spoczynek, najechanie, wciśnięcie,
+ * wybrany), przy wciśnięciu lekko się zapada (sprężyna), a dotknięcie daje subtelną haptykę. Treść dostaje kolor ikony.
+ */
 @OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun ToolBtn(
+    tip: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+    selected: Boolean = false,
+    tint: Color = Color.Unspecified,
+    size: Dp = 40.dp,
+    shortcut: String? = null,
+    content: @Composable (Color) -> Unit,
+) {
+    val m = mint
+    val src = remember { MutableInteractionSource() }
+    val pressed by src.collectIsPressedAsState()
+    val hovered by src.collectIsHoveredAsState()
+    val tick = rememberTick()
+    val bg by animateColorAsState(
+        when {
+            selected -> m.accentSoft
+            pressed -> m.hover.copy(alpha = (m.hover.alpha * 2f).coerceAtMost(1f))
+            hovered && enabled -> m.hover
+            else -> Color.Transparent
+        },
+        tween(110), label = "toolBg",
+    )
+    val scale by animateFloatAsState(if (pressed && enabled) 0.88f else 1f, spring(dampingRatio = 0.55f, stiffness = 700f), label = "toolScale")
+    val base = MaterialTheme.colorScheme.onSurface
+    val c by animateColorAsState(
+        when {
+            !enabled -> base.copy(alpha = 0.32f)
+            tint != Color.Unspecified -> tint
+            selected -> m.accentText
+            else -> base
+        },
+        tween(140), label = "toolTint",
+    )
+    TooltipBox(
+        positionProvider = TooltipDefaults.rememberPlainTooltipPositionProvider(),
+        tooltip = { PlainTooltip { Text(if (shortcut != null) "$tip  ($shortcut)" else tip) } },
+        state = rememberTooltipState(),
+    ) {
+        Box(
+            modifier.size(size).graphicsLayer { scaleX = scale; scaleY = scale }.clip(RoundedCornerShape(10.dp)).background(bg)
+                .clickable(interactionSource = src, indication = null, enabled = enabled, role = Role.Button) { tick(); onClick() },
+            contentAlignment = Alignment.Center,
+        ) { content(c) }
+    }
+}
+
+/** Przycisk-ikona z podpowiedzią (tooltip pokazuje też skrót klawiszowy — wygodne przy myszy). */
 @Composable
 fun IconBtn(
     icon: ImageVector,
@@ -96,25 +169,7 @@ fun IconBtn(
     iconSize: Dp = 22.dp,
     shortcut: String? = null,
 ) {
-    val m = mint
-    TooltipBox(
-        positionProvider = TooltipDefaults.rememberPlainTooltipPositionProvider(),
-        tooltip = { PlainTooltip { Text(if (shortcut != null) "$tip  ($shortcut)" else tip) } },
-        state = rememberTooltipState(),
-    ) {
-        val c = when {
-            !enabled -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.32f)
-            tint != Color.Unspecified -> tint
-            selected -> m.accentText
-            else -> MaterialTheme.colorScheme.onSurface
-        }
-        Box(
-            modifier.size(size).clip(RoundedCornerShape(8.dp))
-                .background(if (selected) m.accentSoft else Color.Transparent)
-                .clickable(enabled = enabled, onClick = onClick),
-            contentAlignment = Alignment.Center,
-        ) { Icon(icon, tip, tint = c, modifier = Modifier.size(iconSize)) }
-    }
+    ToolBtn(tip, onClick, modifier, enabled, selected, tint, size, shortcut) { c -> Icon(icon, tip, tint = c, modifier = Modifier.size(iconSize)) }
 }
 
 /**
@@ -242,16 +297,19 @@ fun Dot(color: Color, size: Dp = 22.dp, selected: Boolean = false, onClick: (() 
 private fun Color.luminanceLow() = (0.2126f * red + 0.7152f * green + 0.0722f * blue) < 0.5f
 
 @Composable
-fun Chip(text: String, selected: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier, icon: ImageVector? = null) {
+fun Chip(text: String, selected: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier, icon: ImageVector? = null, glyph: (@Composable (Color) -> Unit)? = null) {
     val m = mint
+    val tick = rememberTick()
+    val bg by animateColorAsState(if (selected) m.accentSoft else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f), tween(120), label = "chipBg")
+    val edge by animateColorAsState(if (selected) m.accent else Color.Transparent, tween(120), label = "chipEdge")
+    val fg = if (selected) m.accentText else MaterialTheme.colorScheme.onSurfaceVariant
     Row(
-        modifier.clip(RoundedCornerShape(8.dp))
-            .background(if (selected) m.accentSoft else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f))
-            .border(1.dp, if (selected) m.accent else Color.Transparent, RoundedCornerShape(8.dp))
-            .clickable(onClick = onClick).padding(horizontal = 12.dp, vertical = 7.dp),
+        modifier.clip(RoundedCornerShape(8.dp)).background(bg).border(1.dp, edge, RoundedCornerShape(8.dp))
+            .clickable(role = Role.Button) { tick(); onClick() }.padding(horizontal = 12.dp, vertical = 7.dp),
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        if (icon != null) Icon(icon, null, Modifier.size(16.dp), tint = if (selected) m.accentText else MaterialTheme.colorScheme.onSurfaceVariant)
+        if (glyph != null) glyph(fg)
+        else if (icon != null) Icon(icon, null, Modifier.size(16.dp), tint = fg)
         Text(text, style = MaterialTheme.typography.labelLarge, color = if (selected) m.accentText else MaterialTheme.colorScheme.onSurface)
     }
 }

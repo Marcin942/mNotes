@@ -57,6 +57,9 @@ class MintColors(
 
 val LocalMint = staticCompositionLocalOf<MintColors> { error("MNotesTheme missing") }
 
+/** Czy przyciski mają dawać delikatną wibrację (ustawienie „haptics”); domyślnie tak. */
+val LocalHaptics = staticCompositionLocalOf { true }
+
 private fun mix(a: Color, b: Color, t: Float) = Color(
     a.red + (b.red - a.red) * t, a.green + (b.green - a.green) * t, a.blue + (b.blue - a.blue) * t, 1f,
 )
@@ -115,7 +118,7 @@ fun MNotesTheme(settings: Settings, content: @Composable () -> Unit) {
     val shapes = Shapes(
         extraSmall = RoundedCornerShape(4), small = RoundedCornerShape(6), medium = RoundedCornerShape(8), large = RoundedCornerShape(12), extraLarge = RoundedCornerShape(16),
     )
-    CompositionLocalProvider(LocalMint provides mc, LocalDensity provides dens) {
+    CompositionLocalProvider(LocalMint provides mc, LocalDensity provides dens, LocalHaptics provides settings.haptics) {
         MaterialTheme(colorScheme = scheme, typography = tp, shapes = shapes) {
             // Bez Surface domyślny kolor treści to czerń — ustawiamy go globalnie, żeby tekst był czytelny w obu motywach.
             CompositionLocalProvider(androidx.compose.material3.LocalContentColor provides onSurface, content = content)

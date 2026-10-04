@@ -24,6 +24,16 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.semantics.Role
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
@@ -159,11 +169,6 @@ fun penName(k: PenKind) = when (k) {
     PenKind.BRUSH -> T.t("Pędzel", "Brush"); PenKind.HIGHLIGHTER -> T.t("Zakreślacz", "Highlighter"); PenKind.PENCIL -> T.t("Ołówek", "Pencil")
 }
 
-fun penIcon(k: PenKind): ImageVector = when (k) {
-    PenKind.BALLPOINT -> Icons.Rounded.Edit; PenKind.FOUNTAIN -> Icons.Rounded.Gesture
-    PenKind.BRUSH -> Icons.Rounded.Brush; PenKind.HIGHLIGHTER -> Icons.Rounded.Highlight; PenKind.PENCIL -> Icons.Rounded.Edit
-}
-
 /** Cały ekran edytora: widok notatnika + pływające paski i panele w stylu Mint. */
 @Composable
 fun EditorScreen(ed: Editor, onExit: () -> Unit, onSettings: () -> Unit, onShortcuts: () -> Unit) {
@@ -247,11 +252,11 @@ fun EditorScreen(ed: Editor, onExit: () -> Unit, onSettings: () -> Unit, onShort
                     val padBottom = if (pos == 1) 8.dp + 60.dp else 0.dp
                     val padStart = if (pos == 2) 8.dp + 60.dp else 0.dp
                     val padEnd = if (pos == 3) 8.dp + 60.dp else 0.dp
-                    Box(Modifier.align(pa).padding(top = padTop, bottom = padBottom, start = padStart, end = padEnd)) { ToolPanel(ed, set, p) { panel = null } }
+                    Box(Modifier.align(pa).padding(top = padTop, bottom = padBottom, start = padStart, end = padEnd).panelEnter()) { ToolPanel(ed, set, p) { panel = null } }
                 }
-                if (panel == Panel.STYLE) Box(Modifier.align(Alignment.TopEnd).padding(top = 58.dp, end = 8.dp)) { StylePanel(ed) { panel = null } }
-                if (panel == Panel.PAGES && !dock) Box(Modifier.align(Alignment.CenterEnd).padding(top = 58.dp)) { PagesPanel(ed, { panel = null }, ::pickImage) }
-                if (panel == Panel.MORE) Box(Modifier.align(Alignment.TopEnd).padding(top = 58.dp, end = 8.dp)) { MoreMenu(ed, set, { panel = null }, ::applyLayout, { panel = Panel.STYLE }, { palette = true }, onSettings) }
+                if (panel == Panel.STYLE) Box(Modifier.align(Alignment.TopEnd).padding(top = 58.dp, end = 8.dp).panelEnter()) { StylePanel(ed) { panel = null } }
+                if (panel == Panel.PAGES && !dock) Box(Modifier.align(Alignment.CenterEnd).padding(top = 58.dp).panelEnter()) { PagesPanel(ed, { panel = null }, ::pickImage) }
+                if (panel == Panel.MORE) Box(Modifier.align(Alignment.TopEnd).padding(top = 58.dp, end = 8.dp).panelEnter()) { MoreMenu(ed, set, { panel = null }, ::applyLayout, { panel = Panel.STYLE }, { palette = true }, onSettings) }
             } else {
                 IconBtn(
                     Icons.Rounded.Fullscreen, T.t("Pokaż pasek narzędzi", "Show toolbar"), { ed.chrome = true }, shortcut = "F11",
@@ -284,10 +289,23 @@ private fun textReq(ed: Editor) {
 @Composable
 internal fun FloatingCard(modifier: Modifier = Modifier, radius: Int = 14, content: @Composable () -> Unit) {
     val m = mint
+    val shape = RoundedCornerShape(radius.dp)
+    // Miękki, rozproszony cień (mocniejszy kierunkowy, słabszy otaczający) i włosowata ramka — unosi kartę nad papierem jak w systemowych aplikacjach.
     Box(
-        modifier.shadow(10.dp, RoundedCornerShape(radius.dp), ambientColor = Color.Black.copy(0.3f), spotColor = Color.Black.copy(0.3f))
-            .clip(RoundedCornerShape(radius.dp)).background(m.chrome).border(1.dp, m.line, RoundedCornerShape(radius.dp)),
+        modifier.shadow(14.dp, shape, ambientColor = Color.Black.copy(if (m.dark) 0.5f else 0.14f), spotColor = Color.Black.copy(if (m.dark) 0.6f else 0.26f))
+            .clip(shape).background(m.chrome).border(0.5.dp, m.line, shape),
     ) { content() }
+}
+
+/** Wejście panelu: krótkie rozjaśnienie z minimalnym „wyskoczeniem” spod paska (tylko przy pojawieniu się). */
+@Composable
+internal fun Modifier.panelEnter(): Modifier {
+    val t = remember { Animatable(0f) }
+    LaunchedEffect(Unit) { t.animateTo(1f, tween(170, easing = FastOutSlowInEasing)) }
+    return graphicsLayer {
+        val k = t.value
+        alpha = k; scaleX = 0.96f + 0.04f * k; scaleY = scaleX; translationY = (1f - k) * -6.dp.toPx()
+    }
 }
 
 @Composable
@@ -354,7 +372,9 @@ private fun ToolBar(ed: Editor, set: com.mdev.mnotes.data.Settings, vertical: Bo
             IconBtn(Icons.AutoMirrored.Rounded.Redo, T.t("Ponów", "Redo"), { ed.redo() }, enabled = ed.canRedo && !ro, size = sz, iconSize = isz, shortcut = "Ctrl+Y")
             BarSep(vertical)
             val pk = ed.preset.kind
-            IconBtn(penIcon(pk), penName(pk), { pickTool(Tool.PEN, Panel.PEN) }, enabled = !ro, selected = ed.tool == Tool.PEN, size = sz, iconSize = isz, shortcut = "P", tint = if (ed.tool == Tool.PEN) Color(ed.preset.color).let { if (it.alpha > 0f) it else Color.Unspecified } else Color.Unspecified)
+            ToolBtn(penName(pk), { pickTool(Tool.PEN, Panel.PEN) }, enabled = !ro, selected = ed.tool == Tool.PEN, size = sz, shortcut = "P") { c ->
+                PenGlyph(pk, Color(ed.preset.color).let { if (it.alpha > 0f) it else c }, c, Modifier.size(isz + 2.dp))
+            }
             IconBtn(MIcons.Eraser, T.t("Gumka", "Eraser"), { pickTool(Tool.ERASER, Panel.ERASER) }, enabled = !ro, selected = ed.tool == Tool.ERASER, size = sz, iconSize = isz, shortcut = "E")
             IconBtn(if (set.lassoRect) Icons.Rounded.HighlightAlt else Icons.Rounded.Gesture, T.t("Lasso", "Lasso"), { pickTool(Tool.LASSO, Panel.LASSO) }, enabled = !ro, selected = ed.tool == Tool.LASSO, size = sz, iconSize = isz, shortcut = "L")
             IconBtn(Icons.Rounded.TextFields, T.t("Tekst", "Text"), { pickTool(Tool.TEXT, null) }, enabled = !ro, selected = ed.tool == Tool.TEXT, size = sz, iconSize = isz, shortcut = "T")
@@ -376,11 +396,20 @@ private fun ToolBar(ed: Editor, set: com.mdev.mnotes.data.Settings, vertical: Bo
 @Composable
 private fun PresetDot(p: PenPreset, active: Boolean, size: androidx.compose.ui.unit.Dp, onClick: () -> Unit) {
     val m = mint
-    Box(Modifier.size(size).clip(CircleShape).clickable(onClick = onClick), contentAlignment = Alignment.Center) {
+    val src = remember { MutableInteractionSource() }
+    val pressed by src.collectIsPressedAsState()
+    val tick = rememberTick()
+    val ring by animateColorAsState(if (active) m.accent else Color.Transparent, tween(150), label = "presetRing")
+    val halo by animateColorAsState(if (active) m.accentSoft else Color.Transparent, tween(150), label = "presetHalo")
+    val scale by animateFloatAsState(if (pressed) 0.84f else if (active) 1.05f else 1f, spring(dampingRatio = 0.55f, stiffness = 700f), label = "presetScale")
+    Box(
+        Modifier.size(size).graphicsLayer { scaleX = scale; scaleY = scale }.clip(CircleShape)
+            .clickable(interactionSource = src, indication = null, role = Role.Button) { tick(); onClick() },
+        contentAlignment = Alignment.Center,
+    ) {
         val d = (14 + (p.width.coerceIn(0.5f, 14f) / 14f) * 8).dp
         Box(
-            Modifier.size(d + 8.dp).clip(CircleShape).background(if (active) m.accentSoft else Color.Transparent)
-                .border(if (active) 2.dp else 0.dp, if (active) m.accent else Color.Transparent, CircleShape),
+            Modifier.size(d + 8.dp).clip(CircleShape).background(halo).border(2.dp, ring, CircleShape),
             contentAlignment = Alignment.Center,
         ) { Box(Modifier.size(d).clip(CircleShape).background(Color(p.color)).border(1.dp, m.line, CircleShape)) }
     }
@@ -403,7 +432,7 @@ private fun ToolPanel(ed: Editor, set: com.mdev.mnotes.data.Settings, panel: Pan
                         for (k in PenKind.entries) Chip(penName(k), k == p.kind, {
                             val ns = PenSpec.of(k)
                             ed.updatePreset(i, p.copy(kind = k, color = if (k == PenKind.HIGHLIGHTER && p.kind != PenKind.HIGHLIGHTER) softenForHighlighter(p.color) else p.color, width = if (k == PenKind.HIGHLIGHTER || p.kind == PenKind.HIGHLIGHTER) ns.defaultWidth else p.width.coerceIn(ns.minWidth, ns.maxWidth)))
-                        }, icon = penIcon(k))
+                        }, glyph = { c -> PenGlyph(k, Color(p.color).let { if (it.alpha > 0f) it else c }, c, Modifier.size(20.dp)) })
                     }
                     Spacer(Modifier.height(4.dp))
                     PenTester(p, set.smoothing)

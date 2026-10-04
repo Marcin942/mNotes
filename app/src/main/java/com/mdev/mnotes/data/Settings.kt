@@ -51,6 +51,7 @@ class Settings(ctx: Context) {
     var theme by Pref("ui.theme", 0)                 // 0 system, 1 jasny, 2 ciemny, 3 AMOLED
     var accent by Pref("ui.accent", 0)               // indeks w Accents
     var compact by Pref("ui.compact", false)
+    var haptics by Pref("ui.haptics", true)          // delikatne wibracje przy dotknięciu przycisków paska narzędzi
     var toolbarPos by Pref("toolbar.position", 0)    // 0 góra, 1 dół, 2 lewo, 3 prawo
     var toolbarSize by Pref("toolbar.size", 1)       // 0 mały, 1 normalny, 2 duży
     var menuBar by Pref("ui.menubar", 1)             // pasek menu w edytorze: 0 nigdy, 1 na dużych ekranach, 2 zawsze

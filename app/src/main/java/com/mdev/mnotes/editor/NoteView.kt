@@ -97,8 +97,7 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
     private val lassoPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE; strokeWidth = 1.8f * dp; pathEffect = DashPathEffect(floatArrayOf(9f * dp, 6f * dp), 0f); strokeJoin = Paint.Join.ROUND }
     private val lassoFill = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
     private val ringPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE; strokeWidth = 1.3f * dp }
-    private val laserGlow = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE; strokeCap = Paint.Cap.ROUND; strokeWidth = 14f * dp }
-    private val laserCore = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE; strokeCap = Paint.Cap.ROUND; strokeWidth = 5f * dp }
+    private val laserPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
     private val tmpPath = Path()
     private val tmpRect = RectF()
     private val tmpMatrix = Matrix()
@@ -179,7 +178,8 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
     private var sbSel: Sel? = null; private var sbKey = -1; private var sbVal: Bounds? = null
 
     // laser
-    private var lasX = FloatArray(256); private var lasY = FloatArray(256); private var lasT = LongArray(256); private var lasN = 0
+    private val laser = LaserTrail()
+    private var lsX = FloatArray(256); private var lsY = FloatArray(256); private var lsNx = FloatArray(256); private var lsNy = FloatArray(256)
 
     private val holdRunnable = Runnable { if (mode == Mode.TOOL && activeTool == Tool.PEN && liveActive && !shapeSnapped) trySnapShape() }
     private val longPress = Runnable {
@@ -664,6 +664,7 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
                 ringPaint.color = ed.preset.color and 0x00FFFFFF or 0x99000000.toInt()
                 c.drawCircle(x, y, max(w / 2f, 2.5f * dp), ringPaint)
             }
+            Tool.LASER -> drawLaserDot(c, x, y, 1f)
             else -> {}
         }
     }
@@ -700,27 +701,66 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
         animateView(zoom, clampX(width / 2f - cx * zoom, zoom), clampY(height / 2f - cy * zoom, zoom), 260L)
     }
 
+    // Warstwy od zewnątrz: kolorowa poświata, korpus, biały rdzeń („prześwietlony” środek jak w GoodNotes).
+    private val laserHalfDp = floatArrayOf(11f, 7f, 3.8f, 1.7f)
+    private val laserAlpha = floatArrayOf(0.16f, 0.34f, 1f, 1f)
+    private val laserColor = intArrayOf(0xFF3B30, 0xFF3B30, 0xFF2A1F, 0xFFFFFF)
+
+    private fun laserFill(layer: Int, k: Float) {
+        laserPaint.color = (((laserAlpha[layer] * k * 255f).toInt().coerceIn(0, 255)) shl 24) or laserColor[layer]
+    }
+
     private fun drawLaser(c: Canvas) {
-        if (lasN == 0) return
         val now = System.currentTimeMillis()
-        var w = 0
-        for (i in 0 until lasN) if (now - lasT[i] < LASER_MS) { lasX[w] = lasX[i]; lasY[w] = lasY[i]; lasT[w] = lasT[i]; w++ }
-        lasN = w
-        if (w == 0) return
-        for (i in 1 until w) {
-            val a = 1f - (now - lasT[i]).toFloat() / LASER_MS
-            val x0 = lasX[i - 1] * zoom + tx; val y0 = lasY[i - 1] * zoom + ty
-            val x1 = lasX[i] * zoom + tx; val y1 = lasY[i] * zoom + ty
-            laserGlow.color = (((a * 70).toInt().coerceIn(0, 255)) shl 24) or 0xFF3B30
-            laserCore.color = (((a * 255).toInt().coerceIn(0, 255)) shl 24) or 0xFF3B30
-            c.drawLine(x0, y0, x1, y1, laserGlow)
-            c.drawLine(x0, y0, x1, y1, laserCore)
+        val k = laser.fade(now)
+        if (k <= 0f) { if (!laser.isEmpty) laser.clear(); return }
+        val widthK = 0.55f + 0.45f * k
+        for (run in laser.runs) {
+            val n = run.n
+            if (n == 0) continue
+            if (lsX.size < n) { val m = max(n, lsX.size * 2); lsX = FloatArray(m); lsY = FloatArray(m); lsNx = FloatArray(m); lsNy = FloatArray(m) }
+            for (i in 0 until n) { lsX[i] = run.x[i] * zoom + tx; lsY[i] = run.y[i] * zoom + ty }
+            if (n == 1) { for (l in laserHalfDp.indices) { laserFill(l, k); c.drawCircle(lsX[0], lsY[0], laserHalfDp[l] * dp * widthK, laserPaint) }; continue }
+            for (i in 0 until n) {
+                val a = max(i - 1, 0); val b = min(i + 1, n - 1)
+                var dx = lsX[b] - lsX[a]; var dy = lsY[b] - lsY[a]
+                val len = hypot(dx, dy)
+                if (len < 1e-3f) { dx = 1f; dy = 0f } else { dx /= len; dy /= len }
+                lsNx[i] = -dy; lsNy[i] = dx
+            }
+            for (l in laserHalfDp.indices) {
+                laserFill(l, k)
+                buildRibbon(n, laserHalfDp[l] * dp * widthK)
+                c.drawPath(tmpPath, laserPaint)
+            }
         }
-        val lx = lasX[w - 1] * zoom + tx; val ly = lasY[w - 1] * zoom + ty
-        laserCore.color = 0xFFFF3B30.toInt()
-        c.drawCircle(lx, ly, 6f * dp, laserCore.also { it.style = Paint.Style.FILL })
-        laserCore.style = Paint.Style.STROKE
-        postInvalidateOnAnimation()
+        if (laser.down) drawLaserDot(c, laser.runs.last().let { it.x[it.n - 1] * zoom + tx }, laser.runs.last().let { it.y[it.n - 1] * zoom + ty }, 1f)
+        val next = laser.nextFrameIn(now)
+        if (next == 0L) postInvalidateOnAnimation() else if (next > 0) postInvalidateDelayed(next)
+    }
+
+    /** Wstęga wzdłuż śladu: ogon zwęża się, głowa jest okrągła; jedna ścieżka = jedno równomierne nałożenie koloru. */
+    private fun buildRibbon(n: Int, half: Float) {
+        val p = tmpPath
+        p.reset()
+        fun w(i: Int) = half * (0.25f + 0.75f * min(1f, i / 14f))
+        fun lx(i: Int) = lsX[i] + lsNx[i] * w(i)
+        fun ly(i: Int) = lsY[i] + lsNy[i] * w(i)
+        fun rx(i: Int) = lsX[i] - lsNx[i] * w(i)
+        fun ry(i: Int) = lsY[i] - lsNy[i] * w(i)
+        p.moveTo(lx(0), ly(0))
+        for (i in 1 until n - 1) p.quadTo(lx(i), ly(i), (lx(i) + lx(i + 1)) / 2, (ly(i) + ly(i + 1)) / 2)
+        p.lineTo(lx(n - 1), ly(n - 1))
+        p.lineTo(rx(n - 1), ry(n - 1))
+        for (i in n - 2 downTo 1) p.quadTo(rx(i), ry(i), (rx(i) + rx(i - 1)) / 2, (ry(i) + ry(i - 1)) / 2)
+        p.lineTo(rx(0), ry(0))
+        p.close()
+        p.addCircle(lsX[n - 1], lsY[n - 1], w(n - 1), Path.Direction.CW)
+    }
+
+    private fun drawLaserDot(c: Canvas, x: Float, y: Float, k: Float) {
+        val r = floatArrayOf(14f, 9f, 5.5f, 2.6f)
+        for (l in r.indices) { laserFill(l, k); c.drawCircle(x, y, r[l] * dp, laserPaint) }
     }
 
     override fun computeScroll() {
@@ -812,6 +852,9 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
         moved()
     }
 
+    /** W trybie tylko do odczytu gest przewija, chyba że narzędziem jest laser (jedyne, które nic nie zmienia). */
+    private fun navOnly(ev: MotionEvent, idx: Int) = ed.readOnly && effectiveTool(ev, idx) != Tool.LASER
+
     private fun rejectFinger(now: Long) = settings.palmRejection && (stylusNear || now - lastStylusT < 450L)
 
     /** Narzędzie dla bieżącego gestu: gumka rysika, przycisk S Pen, albo wybrane w pasku. */
@@ -841,18 +884,18 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
                 when {
                     bs and MotionEvent.BUTTON_SECONDARY != 0 -> { openCtx(ev.x, ev.y); mode = Mode.IGNORE }
                     bs and MotionEvent.BUTTON_TERTIARY != 0 -> startNav(ev)
-                    ed.readOnly -> startNav(ev)
+                    navOnly(ev, 0) -> startNav(ev)
                     rh != 0 -> startRuler(ev, rh)
                     else -> beginTool(ev, 0)
                 }
             }
-            isStylus(t) -> if (ed.readOnly) startNav(ev) else beginTool(ev, 0)
+            isStylus(t) -> if (navOnly(ev, 0)) startNav(ev) else beginTool(ev, 0)
             else -> {
                 if (rejectFinger(ev.eventTime)) { mode = Mode.IGNORE; return }
                 if (rh != 0) { startRuler(ev, rh); return }
                 when (settings.fingerMode) {
                     0 -> startNav(ev)
-                    1 -> if (ed.readOnly) startNav(ev) else beginTool(ev, 0)
+                    1 -> if (navOnly(ev, 0)) startNav(ev) else beginTool(ev, 0)
                     else -> mode = Mode.IGNORE
                 }
             }
@@ -864,11 +907,11 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
         val t = ev.getToolType(idx)
         when (mode) {
             Mode.TOOL -> if (toolType == MotionEvent.TOOL_TYPE_FINGER && t == MotionEvent.TOOL_TYPE_FINGER) { cancelTool(); startNav(ev) }
-            Mode.NAV -> if (isStylus(t) && !ed.readOnly) { endNavQuiet(); beginTool(ev, idx) } else { navMax = max(navMax, ev.pointerCount); rebase(ev, -1) }
-            Mode.RULER -> if (isStylus(t) && !ed.readOnly) { mode = Mode.NONE; rulerGrab = 0; beginTool(ev, idx) } else rulerRebase(ev, -1)
+            Mode.NAV -> if (isStylus(t) && !navOnly(ev, idx)) { endNavQuiet(); beginTool(ev, idx) } else { navMax = max(navMax, ev.pointerCount); rebase(ev, -1) }
+            Mode.RULER -> if (isStylus(t) && !navOnly(ev, idx)) { mode = Mode.NONE; rulerGrab = 0; beginTool(ev, idx) } else rulerRebase(ev, -1)
             Mode.PICK -> {}
             Mode.IGNORE, Mode.NONE -> {
-                if (isStylus(t) && !ed.readOnly) { stylusNear = true; lastStylusT = ev.eventTime; beginTool(ev, idx) }
+                if (isStylus(t) && !navOnly(ev, idx)) { stylusNear = true; lastStylusT = ev.eventTime; beginTool(ev, idx) }
                 else if (t == MotionEvent.TOOL_TYPE_FINGER && ev.pointerCount >= 2 && !rejectFinger(ev.eventTime) && settings.fingerMode != 1) startNav(ev)
             }
         }
@@ -1312,7 +1355,7 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
             Tool.LASSO -> lassoDown()
             Tool.SPACE -> spaceDown()
             Tool.TAPE -> tapeDown()
-            Tool.LASER -> { lasN = 0; addLaser(curX, curY) }
+            Tool.LASER -> { laser.begin(System.currentTimeMillis()); addLaser(curX, curY) }
             else -> {}
         }
         invalidate()
@@ -1345,6 +1388,7 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
             Tool.SPACE -> spaceUp(cancel)
             Tool.TAPE -> tapeUp(cancel)
             Tool.TEXT -> if (!cancel && !toolMoved) textTap()
+            Tool.LASER -> laser.end(System.currentTimeMillis())
             else -> {}
         }
         predN = 0
@@ -1882,12 +1926,7 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
     }
 
     private fun addLaser(sx: Float, sy: Float) {
-        if (lasN == lasX.size) {
-            val h = lasN / 2
-            System.arraycopy(lasX, h, lasX, 0, lasN - h); System.arraycopy(lasY, h, lasY, 0, lasN - h); System.arraycopy(lasT, h, lasT, 0, lasN - h)
-            lasN -= h
-        }
-        lasX[lasN] = docX(sx); lasY[lasN] = docY(sy); lasT[lasN] = System.currentTimeMillis(); lasN++
+        laser.add(docX(sx), docY(sy), 1.2f * dp / zoom, System.currentTimeMillis())
     }
 
     // ───────────────────────── menu kontekstowe ─────────────────────────
@@ -1908,6 +1947,5 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
     }
 
     companion object {
-        private const val LASER_MS = 900L
     }
 }

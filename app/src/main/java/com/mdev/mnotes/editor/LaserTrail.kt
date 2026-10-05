@@ -30,11 +30,14 @@ class LaserTrail {
         down = true; lastActiveT = now
     }
 
-    /** Punkty bliższe niż [minDist] od poprzedniego tylko przesuwają jego koniec, żeby ślad nie puchł przy wolnym ruchu. */
+    /**
+     * Ostatni punkt to ruchoma głowa: dopóki jest bliżej niż [minDist] od ostatniego zatwierdzonego (przedostatniego),
+     * tylko go przesuwamy. Porównanie z samą głową prostowałoby ślad przy wolnym ruchu.
+     */
     fun add(px: Float, py: Float, minDist: Float, now: Long) {
         val r = runs.lastOrNull() ?: return
         lastActiveT = now
-        if (r.n >= 2 && hypot(px - r.x[r.n - 1], py - r.y[r.n - 1]) < minDist) { r.x[r.n - 1] = px; r.y[r.n - 1] = py; return }
+        if (r.n >= 2 && hypot(px - r.x[r.n - 2], py - r.y[r.n - 2]) < minDist) { r.x[r.n - 1] = px; r.y[r.n - 1] = py; return }
         r.push(px, py); total++
         if (total > MAX_POINTS) trim()
     }
@@ -73,8 +76,8 @@ class LaserTrail {
     }
 
     companion object {
-        const val HOLD_MS = 2500L
-        const val FADE_MS = 900L
+        const val HOLD_MS = 1625L
+        const val FADE_MS = 585L
         const val MAX_POINTS = 40_000
     }
 }

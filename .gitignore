@@ -19,3 +19,6 @@ __pycache__
 *.apk
 *.aab
 .idea/
+secrets.properties
+*.keystore
+*.jks

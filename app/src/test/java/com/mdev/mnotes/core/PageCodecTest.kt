@@ -103,6 +103,18 @@ class PageCodecTest {
     }
 
     @Test
+    fun polyFlagRoundTrips() {
+        val pts = floatArrayOf(0f, 0f, 1f, 10f, 0f, 1f, 10f, 10f, 1f, 0f, 0f, 1f)
+        val c = PageContent.of(listOf(
+            Stroke(Ids.next(), PenKind.BALLPOINT, 0xFF112233.toInt(), 2f, pts, locked = true, poly = true),
+            Stroke(Ids.next(), PenKind.BALLPOINT, 0xFF112233.toInt(), 2f, pts, locked = false, poly = false),
+        ))
+        val back = PageCodec.decode(PageCodec.encode(c)).elements.map { it as Stroke }
+        assertTrue(back[0].poly && back[0].locked && back[0].closed)
+        assertTrue(!back[1].poly && !back[1].locked)
+    }
+
+    @Test
     fun detectsCorruption() {
         val rnd = Random(1)
         val bytes = PageCodec.encode(PageContent.of(List(5) { randomStroke(rnd, PenKind.BALLPOINT) }))

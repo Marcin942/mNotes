@@ -124,6 +124,19 @@ class PdfPool(private val repo: Repository) {
         } catch (_: Throwable) { null }
     }
 
+    /** Kafelek strony PDF: fragment [w]×[h] px od ([ox], [oy]) px przy skali [scale] (px na pt). */
+    @Synchronized fun renderTile(nb: String, asset: String, page: Int, scale: Float, ox: Int, oy: Int, w: Int, h: Int): Bitmap? {
+        val d = open(nb, asset) ?: return null
+        if (page !in 0 until d.r.pageCount) return null
+        return try {
+            val bmp = Bitmap.createBitmap(w.coerceAtLeast(1), h.coerceAtLeast(1), Bitmap.Config.ARGB_8888)
+            bmp.eraseColor(0xFFFFFFFF.toInt())
+            val m = Matrix().apply { setScale(scale, scale); postTranslate(-ox.toFloat(), -oy.toFloat()) }
+            d.r.openPage(page).use { it.render(bmp, null, m, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY) }
+            bmp
+        } catch (_: Throwable) { null }
+    }
+
     @Synchronized fun closeAll() {
         docs.values.forEach { runCatching { it.r.close(); it.pfd.close() } }
         docs.clear()

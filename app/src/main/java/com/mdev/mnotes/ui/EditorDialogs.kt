@@ -95,7 +95,7 @@ class Cmd(val def: CmdDef, val keyText: String, private val isEnabled: () -> Boo
 fun commandList(
     ed: Editor, set: com.mdev.mnotes.data.Settings, pickTool: (Tool, Panel?) -> Unit, setPanel: (Panel?) -> Unit,
     pickImage: () -> Unit, goTo: () -> Unit, applyLayout: (Int) -> Unit, onSettings: () -> Unit, onShortcuts: () -> Unit,
-    openPalette: () -> Unit, onExit: () -> Unit,
+    openPalette: () -> Unit, onExit: () -> Unit, tabs: TabsCtl,
 ): List<Cmd> {
     val keys = Keymap.overrides(set)
     val acts: Map<String, Pair<() -> Boolean, () -> Unit>> = mapOf(
@@ -104,7 +104,9 @@ fun commandList(
         "newWindow" to ({ true } to { ed.ctx.openNewWindow(null) }),
         "zoomWindow" to ({ true } to { ed.toggleZoomWin() }),
         "pagesDock" to ({ true } to { set.dockPages = !set.dockPages }),
-        "close" to ({ true } to { onExit() }),
+        "close" to ({ true } to { if (tabs.on) tabs.close(ed.nbId) else onExit() }),
+        "tabNext" to ({ tabs.tabs.size > 1 } to { tabs.step(1) }),
+        "tabPrev" to ({ tabs.tabs.size > 1 } to { tabs.step(-1) }),
         "undo" to ({ ed.canUndo && !ed.readOnly } to { ed.undo() }),
         "redo" to ({ ed.canRedo && !ed.readOnly } to { ed.redo() }),
         "cut" to ({ ed.sel != null && !ed.readOnly } to { ed.cutSel() }),
@@ -219,7 +221,7 @@ fun PaletteDialog(cmds: List<Cmd>, onDismiss: () -> Unit) {
 private fun Modifier.widthMax(): Modifier = this.then(Modifier.widthIn480())
 private fun Modifier.widthIn480(): Modifier = this.width(480.dp)
 
-// ─────────────────────────────── Idź do strony / zmiana nazwy ───────────────────────────────
+// ─────────────────────────────── Idź do strony ───────────────────────────────
 
 @Composable
 fun GoToDialog(ed: Editor, onDismiss: () -> Unit) {
@@ -231,17 +233,6 @@ fun GoToDialog(ed: Editor, onDismiss: () -> Unit) {
     fun go() { if (ok) { ed.view?.goToPage(n!! - 1); onDismiss() } }
     MDialog(T.t("Idź do strony", "Go to page"), onDismiss, T.t("Idź", "Go"), ::go, ok) {
         MField(t, { t = it.filter(Char::isDigit) }, Modifier.fillMaxWidth().focusRequester(focus), hint = "1 – ${ed.pageCount}", number = true, onDone = ::go)
-    }
-}
-
-@Composable
-fun RenameDialog(ed: Editor, onDismiss: () -> Unit) {
-    var t by remember { mutableStateOf(ed.repo.meta(ed.nbId)?.title ?: "") }
-    val focus = remember { FocusRequester() }
-    LaunchedEffect(Unit) { runCatching { focus.requestFocus() } }
-    fun ok() { val s = t.trim(); if (s.isNotEmpty()) { ed.repo.update(ed.nbId) { it.copy(title = s) }; ed.structTick++ }; onDismiss() }
-    MDialog(T.t("Zmień nazwę zeszytu", "Rename notebook"), onDismiss, T.t("Zapisz", "Save"), ::ok, t.isNotBlank()) {
-        MField(t, { t = it }, Modifier.fillMaxWidth().focusRequester(focus), onDone = ::ok)
     }
 }
 
@@ -330,7 +321,7 @@ fun PagesPanel(ed: Editor, close: () -> Unit, pickImage: () -> Unit, docked: Boo
     var tab by remember { mutableIntStateOf(0) }
     val nb = ed.repo.meta(ed.nbId)
     ed.structTick; ed.undoTick
-    val pages = ed.doc.pages
+    val pages = ed.doc.pages.toList() // kopia: żywa lista kurczy się przy usuwaniu strony, a LazyColumn mierzy jeszcze po starym rozmiarze
     val ls = rememberLazyListState()
     LaunchedEffect(ed.pageIndex) { if (tab == 0) runCatching { ls.animateScrollToItem(ed.pageIndex.coerceIn(0, (pages.size - 1).coerceAtLeast(0))) } }
     Column(

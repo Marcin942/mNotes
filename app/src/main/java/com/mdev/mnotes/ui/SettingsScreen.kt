@@ -178,6 +178,7 @@ private fun Appearance(set: com.mdev.mnotes.data.Settings) {
         Opt(T.t("Pasek menu w edytorze (Plik, Edycja, Widok…)", "Editor menu bar (File, Edit, View…)")) {
             Choice(listOf(T.t("Nigdy", "Never"), T.t("Na dużych ekranach", "On large screens"), T.t("Zawsze", "Always")), set.menuBar) { set.menuBar = it }
         }
+        ToggleRow(T.t("Otwieraj zeszyty jako karty (pasek kart w nagłówku, bez dodatkowego miejsca; Ctrl+Tab przełącza)", "Open notebooks as tabs (tab strip inside the header, no extra space; Ctrl+Tab switches)"), set.tabs) { set.tabs = it }
         ToggleRow(T.t("Zadokuj panel stron z lewej na szerokim oknie (≥ 840 dp, DeX)", "Dock the page panel on the left in wide windows (≥ 840 dp, DeX)"), set.dockPages) { set.dockPages = it }
         Opt(T.t("Język", "Language")) { Choice(listOf(T.t("Systemowy", "System"), "Polski", "English"), set.lang) { set.lang = it } }
         Opt(T.t("Jednostki", "Units")) { Choice(listOf(T.t("Milimetry", "Millimeters"), T.t("Cale", "Inches")), if (set.unitsMm) 0 else 1) { set.unitsMm = it == 0 } }
@@ -189,6 +190,23 @@ private fun EditorPrefs(set: com.mdev.mnotes.data.Settings) {
     Group(T.t("Pasek narzędzi", "Toolbar")) {
         Opt(T.t("Położenie", "Position")) { Choice(listOf(T.t("Góra", "Top"), T.t("Dół", "Bottom"), T.t("Lewo", "Left"), T.t("Prawo", "Right")), set.toolbarPos) { set.toolbarPos = it } }
         Opt(T.t("Rozmiar", "Size")) { Choice(listOf(T.t("Mały", "Small"), T.t("Normalny", "Normal"), T.t("Duży", "Large")), set.toolbarSize) { set.toolbarSize = it } }
+    }
+    Group(T.t("Renderowanie", "Rendering")) {
+        Opt(T.t("Jakość wyświetlania strony", "Page display quality")) {
+            Choice(
+                listOf(T.t("Zrównoważona", "Balanced"), T.t("Ostra", "Sharp"), T.t("Oszczędna", "Economy"), T.t("Klasyczna (obraz)", "Classic (image)")),
+                set.renderQuality,
+            ) { set.renderQuality = it }
+            Text(
+                when (set.renderQuality) {
+                    1 -> T.t("Najostrzejsza kreska nawet przy maksymalnym powiększeniu; więcej pamięci i pracy w tle.", "Sharpest strokes even at maximum zoom; uses more memory and background work.")
+                    2 -> T.t("Najmniej pamięci i baterii. Przy dużym powiększeniu pismo jest mniej ostre.", "Least memory and battery. Strokes get softer at high zoom.")
+                    3 -> T.t("Cała strona jako jeden obraz, jak w pierwszych wersjach. Najprostsza i płynna, ale po mocnym przybliżeniu widać piksele.", "Whole page as a single image, like early versions. Simplest and smooth, but pixels show when zoomed in far.")
+                    else -> T.t("Ostry obraz w kafelkach dopasowanych do powiększenia, płynny zoom. Zalecana.", "Sharp tiled image matched to the zoom level with smooth zooming. Recommended.")
+                },
+                style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 6.dp),
+            )
+        }
     }
     Group(T.t("Pióro", "Pen")) {
         Opt(T.t("Wygładzanie: ${(set.smoothing * 100).toInt()}%", "Smoothing: ${(set.smoothing * 100).toInt()}%")) { MSlider(set.smoothing, 0f, 2f) { set.smoothing = it } }
@@ -211,6 +229,9 @@ private fun InputPrefs(set: com.mdev.mnotes.data.Settings) {
         ToggleRow(T.t("Odrzucanie dłoni (rysik ma pierwszeństwo)", "Palm rejection (stylus wins)"), set.palmRejection) { set.palmRejection = it }
         ToggleRow(T.t("Cofnij dotknięciem dwóch palców", "Two-finger tap to undo"), set.twoFingerUndo) { set.twoFingerUndo = it }
         ToggleRow(T.t("Odciągnij za ostatnią stroną, aby dodać nową", "Pull past the last page to add a new one"), set.pullAddPage) { set.pullAddPage = it }
+        Opt(T.t("Podwójne dotknięcie palcem", "Finger double tap")) {
+            Choice(listOf(T.t("Cofnij", "Undo"), T.t("Ponów", "Redo"), T.t("Przybliż / oddal", "Zoom in / out"), T.t("Brak", "None")), set.doubleTap) { set.doubleTap = it }
+        }
         Opt(T.t("Przycisk rysika", "Stylus button")) {
             Choice(listOf(T.t("Gumka", "Eraser"), "Lasso", T.t("Cofnij", "Undo"), T.t("Laser", "Laser"), T.t("Brak", "None")), set.penButton) { set.penButton = it }
         }

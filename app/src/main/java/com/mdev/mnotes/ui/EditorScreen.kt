@@ -23,7 +23,14 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.safeDrawingPadding
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.displayCutout
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.systemBars
+import androidx.compose.foundation.layout.union
+import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
@@ -48,6 +55,7 @@ import androidx.compose.material.icons.rounded.Straighten
 import androidx.compose.material.icons.rounded.UnfoldMore
 import androidx.compose.material.icons.rounded.VisibilityOff
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.automirrored.rounded.ArrowForward
 import androidx.compose.material.icons.automirrored.rounded.Redo
 import androidx.compose.material.icons.automirrored.rounded.Undo
 import androidx.compose.material.icons.rounded.Add
@@ -68,6 +76,7 @@ import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.FitScreen
 import androidx.compose.material.icons.rounded.FlipToBack
+import androidx.compose.material.icons.rounded.CropRotate
 import androidx.compose.material.icons.rounded.FlipToFront
 import androidx.compose.material.icons.rounded.Fullscreen
 import androidx.compose.material.icons.rounded.Gesture
@@ -104,6 +113,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
@@ -169,24 +179,29 @@ fun penName(k: PenKind) = when (k) {
     PenKind.BRUSH -> T.t("Pędzel", "Brush"); PenKind.HIGHLIGHTER -> T.t("Zakreślacz", "Highlighter"); PenKind.PENCIL -> T.t("Ołówek", "Pencil")
 }
 
-/** Cały ekran edytora: widok notatnika + pływające paski i panele w stylu Mint. */
+/**
+ * Cały ekran edytora. Paski są zadokowane (nie pływają): [pasek menu] → [nagłówek z kartami i narzędziami] → [strona] →
+ * [pasek dolny], a szyny boczne stoją obok strony. Strona jest mierzona, więc żaden pasek nie zasłania jej fragmentu
+ * (także górnego), a panele i okna kontekstowe kotwiczą się do krawędzi strony.
+ */
 @Composable
-fun EditorScreen(ed: Editor, onExit: () -> Unit, onSettings: () -> Unit, onShortcuts: () -> Unit) {
+fun EditorScreen(ed: Editor, tabs: TabsCtl, onExit: () -> Unit, onSettings: () -> Unit, onShortcuts: () -> Unit) {
     val ctx = LocalContext.current
     val set = ed.settings
     val m = mint
     var panel by remember { mutableStateOf<Panel?>(null) }
     var palette by remember { mutableStateOf(false) }
     var goTo by remember { mutableStateOf(false) }
-    var rename by remember { mutableStateOf(false) }
     val focus = remember { FocusRequester() }
-    val dialogOpen = palette || goTo || rename || ed.exportOpen || ed.textReq != null
+    val dialogOpen = palette || goTo || ed.exportOpen || ed.textReq != null
     val searchTyping = ed.searchOpen && fieldFocused
-    val showMenu = ed.chrome && menuBarVisible(set.menuBar, androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp)
-    val menuH = if (showMenu) MenuBarHeight else 0.dp
+    val widthDp = androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp
+    val showMenu = ed.chrome && menuBarVisible(set.menuBar, widthDp)
     // Układ „biurkowy” (LNX-016): przy szerokim oknie panel stron może być zadokowany z lewej, obok strony.
-    val dock = ed.chrome && set.dockPages && androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp >= 840
-    val dockW = if (dock) 244.dp else 0.dp
+    val dock = ed.chrome && set.dockPages && widthDp >= 840
+    val pos = set.toolbarPos
+    // Na szerokim ekranie narzędzia mieszczą się w jednej linii z nagłówkiem (i kartami); inaczej dostają własny wiersz.
+    val inlineBar = pos == 0 && widthDp - (if (dock) 244 else 0) >= 960
 
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
         if (uri != null) ed.insertFromUri(uri) else ed.imageAsBackground = false
@@ -201,8 +216,8 @@ fun EditorScreen(ed: Editor, onExit: () -> Unit, onSettings: () -> Unit, onShort
         if (ed.tool == t && p != null) toggle(p) else { ed.setToolKey(t); panel = null }
     }
 
-    val cmds = remember(set.keyMap) {
-        commandList(ed, set, ::pickTool, { panel = it }, ::pickImage, { goTo = true }, ::applyLayout, onSettings, onShortcuts, { palette = true }, onExit)
+    val cmds = remember(set.keyMap, tabs.on) {
+        commandList(ed, set, ::pickTool, { panel = it }, ::pickImage, { goTo = true }, ::applyLayout, onSettings, onShortcuts, { palette = true }, onExit, tabs)
     }
 
     BackHandler {
@@ -228,52 +243,51 @@ fun EditorScreen(ed: Editor, onExit: () -> Unit, onSettings: () -> Unit, onShort
         Modifier.fillMaxSize().background(m.canvasBg).fileDrop(onDrop).focusRequester(focus).focusable()
             .onPreviewKeyEvent { e -> if (e.type == KeyEventType.KeyDown && !dialogOpen) editorKey(e, ed, cmds) { palette = true } else false },
     ) {
-        AndroidView(
-            factory = { c -> NoteView(c, ed).apply { layoutParams = ViewGroup.LayoutParams(-1, -1) } },
-            update = { v -> v.accent = m.accent.toArgb(); v.viewBg = m.canvasBg.toArgb(); v.darkUi = m.dark },
-            modifier = Modifier.fillMaxSize().statusBarsPadding().padding(top = menuH, start = dockW),
-        )
-
-        // Pływające warstwy respektują wcięcia systemowe (pasek stanu, nawigacja, wycięcie).
-        if (dock) Box(Modifier.align(Alignment.TopStart).fillMaxHeight().statusBarsPadding().padding(top = menuH)) { PagesPanel(ed, { set.dockPages = false }, ::pickImage, docked = true) }
-        Box(Modifier.fillMaxSize().safeDrawingPadding().padding(top = menuH, start = dockW)) {
-            if (ed.chrome) {
-                EditorHeader(ed, panel, { toggle(it) }, { rename = true }, { goTo = true }, onExit, ::pickImage, { palette = true }, onSettings, ::applyLayout)
-                val pos = set.toolbarPos
-                val vertical = pos >= 2
-                val tbAlign = when (pos) { 1 -> Alignment.BottomCenter; 2 -> Alignment.CenterStart; 3 -> Alignment.CenterEnd; else -> Alignment.TopCenter }
-                Box(Modifier.align(tbAlign).padding(top = if (pos == 0) 58.dp else 0.dp, bottom = if (pos == 1) 8.dp else 0.dp, start = if (pos == 2) 8.dp else 0.dp, end = if (pos == 3) 8.dp else 0.dp)) {
-                    ToolBar(ed, set, vertical, panel, ::pickTool, { toggle(it) })
+        Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.systemBars.union(WindowInsets.displayCutout))) {
+            if (showMenu) MenuBar(ed, cmds, { runCatching { focus.requestFocus() } }, Modifier.fillMaxWidth())
+            if (ed.chrome) TopChrome(ed, set, tabs, panel, { toggle(it) }, { goTo = true }, onExit, ::pickImage, ::pickTool, inlineBar, widthDp)
+            Row(Modifier.weight(1f).fillMaxWidth()) {
+                if (dock) PagesPanel(ed, { set.dockPages = false }, ::pickImage, docked = true)
+                if (ed.chrome && pos == 2) SideRail(ed, set, panel, ::pickTool, { toggle(it) }, right = false)
+                Box(Modifier.weight(1f).fillMaxHeight()) {
+                    AndroidView(
+                        factory = { c -> NoteView(c, ed).apply { layoutParams = ViewGroup.LayoutParams(-1, -1) } },
+                        update = { v -> v.accent = m.accent.toArgb(); v.viewBg = m.canvasBg.toArgb(); v.darkUi = m.dark },
+                        // Pierwsze dotknięcie strony (pióro lub palec) zamyka otwarty panel, więc nigdy nie zasłania pisania.
+                        modifier = Modifier.fillMaxSize().clipToBounds().pointerInput(Unit) {
+                            awaitEachGesture { awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial); panel = null }
+                        },
+                    )
+                    // Panele i okienka kotwiczą się do krawędzi strony, tuż przy pasku, z którego wyszły.
+                    Box(Modifier.fillMaxSize().imePadding()) {
+                        if (ed.chrome) {
+                            panel?.takeIf { it == Panel.PEN || it == Panel.ERASER || it == Panel.LASSO || it == Panel.TAPE }?.let { p ->
+                                val pa = when (pos) { 1 -> Alignment.BottomCenter; 2 -> Alignment.CenterStart; 3 -> Alignment.CenterEnd; else -> Alignment.TopCenter }
+                                Box(Modifier.align(pa).padding(8.dp).panelEnter()) { ToolPanel(ed, set, p) { panel = null } }
+                            }
+                            if (panel == Panel.STYLE) Box(Modifier.align(Alignment.TopEnd).padding(8.dp).panelEnter()) { StylePanel(ed) { panel = null } }
+                            if (panel == Panel.PAGES && !dock) Box(Modifier.align(Alignment.CenterEnd).padding(vertical = 8.dp).panelEnter()) { PagesPanel(ed, { panel = null }, ::pickImage) }
+                            if (panel == Panel.MORE) Box(Modifier.align(Alignment.TopEnd).padding(8.dp).panelEnter()) { MoreMenu(ed, set, { panel = null }, ::applyLayout, { panel = Panel.STYLE }, { palette = true }, onSettings) }
+                        } else {
+                            IconBtn(
+                                Icons.Rounded.Fullscreen, T.t("Pokaż pasek narzędzi", "Show toolbar"), { ed.chrome = true }, shortcut = "F11",
+                                modifier = Modifier.align(Alignment.TopStart).padding(8.dp).clip(CircleShape).background(m.chrome.copy(alpha = 0.7f)),
+                            )
+                        }
+                        SelectionBar(ed, panel, { toggle(it) }, { textReq(ed) })
+                        if (ed.searchOpen) SearchBar(ed)
+                        EdToast(ed)
+                    }
+                    CtxMenuOverlay(ed, { panel = Panel.STYLE })
                 }
-                // Panel narzędzia: obok paska, po stronie wnętrza ekranu.
-                panel?.takeIf { it == Panel.PEN || it == Panel.ERASER || it == Panel.LASSO || it == Panel.TAPE }?.let { p ->
-                    val pa = when (pos) { 1 -> Alignment.BottomCenter; 2 -> Alignment.CenterStart; 3 -> Alignment.CenterEnd; else -> Alignment.TopCenter }
-                    val padTop = when (pos) { 0 -> 58.dp + 56.dp; else -> 0.dp }
-                    val padBottom = if (pos == 1) 8.dp + 60.dp else 0.dp
-                    val padStart = if (pos == 2) 8.dp + 60.dp else 0.dp
-                    val padEnd = if (pos == 3) 8.dp + 60.dp else 0.dp
-                    Box(Modifier.align(pa).padding(top = padTop, bottom = padBottom, start = padStart, end = padEnd).panelEnter()) { ToolPanel(ed, set, p) { panel = null } }
-                }
-                if (panel == Panel.STYLE) Box(Modifier.align(Alignment.TopEnd).padding(top = 58.dp, end = 8.dp).panelEnter()) { StylePanel(ed) { panel = null } }
-                if (panel == Panel.PAGES && !dock) Box(Modifier.align(Alignment.CenterEnd).padding(top = 58.dp).panelEnter()) { PagesPanel(ed, { panel = null }, ::pickImage) }
-                if (panel == Panel.MORE) Box(Modifier.align(Alignment.TopEnd).padding(top = 58.dp, end = 8.dp).panelEnter()) { MoreMenu(ed, set, { panel = null }, ::applyLayout, { panel = Panel.STYLE }, { palette = true }, onSettings) }
-            } else {
-                IconBtn(
-                    Icons.Rounded.Fullscreen, T.t("Pokaż pasek narzędzi", "Show toolbar"), { ed.chrome = true }, shortcut = "F11",
-                    modifier = Modifier.align(Alignment.TopStart).padding(8.dp).clip(CircleShape).background(m.chrome.copy(alpha = 0.7f)),
-                )
+                if (ed.chrome && pos == 3) SideRail(ed, set, panel, ::pickTool, { toggle(it) }, right = true)
             }
-            SelectionBar(ed, panel, { toggle(it) }, { textReq(ed) })
-            if (ed.searchOpen) SearchBar(ed, extraBottom = if (set.toolbarPos == 1 && ed.chrome) 68.dp else 0.dp)
-            EdToast(ed)
+            if (ed.chrome && pos == 1) BottomBar(ed, set, panel, ::pickTool) { toggle(it) }
         }
-        if (showMenu) MenuBar(ed, cmds, { runCatching { focus.requestFocus() } }, Modifier.align(Alignment.TopCenter))
-        CtxMenuOverlay(ed, { panel = Panel.STYLE })
 
         ed.textReq?.let { TextDialog(ed, it) }
         if (goTo) GoToDialog(ed) { goTo = false }
         if (ed.exportOpen) ExportDialog(ed.nbId, ed.pageIndex, { ed.doc.flush() }) { ed.exportOpen = false }
-        if (rename) RenameDialog(ed) { rename = false }
         if (palette) PaletteDialog(cmds) { palette = false }
     }
 }
@@ -309,39 +323,83 @@ internal fun Modifier.panelEnter(): Modifier {
 }
 
 @Composable
-private fun androidx.compose.foundation.layout.BoxScope.EditorHeader(
-    ed: Editor, panel: Panel?, toggle: (Panel) -> Unit, rename: () -> Unit, goTo: () -> Unit, onExit: () -> Unit,
-    pickImage: () -> Unit, palette: () -> Unit, onSettings: () -> Unit, applyLayout: (Int) -> Unit,
+private fun Hairline(vertical: Boolean = false) {
+    val m = mint
+    Box((if (vertical) Modifier.fillMaxHeight().width(0.5.dp) else Modifier.fillMaxWidth().height(0.5.dp)).background(m.line))
+}
+
+/**
+ * Zadokowany nagłówek: [biblioteka] [karty albo tytuł] ([narzędzia], jeśli się mieszczą) [strona/zoom/zakładka/więcej].
+ * Gdy narzędzia się nie mieszczą w linii (węższe okno), dostają własny wiersz poniżej.
+ */
+@Composable
+private fun TopChrome(
+    ed: Editor, set: com.mdev.mnotes.data.Settings, tabs: TabsCtl, panel: Panel?, toggle: (Panel) -> Unit, goTo: () -> Unit,
+    onExit: () -> Unit, pickImage: () -> Unit, pickTool: (Tool, Panel?) -> Unit, inlineBar: Boolean, widthDp: Int,
 ) {
+    val m = mint
     val title = ed.repo.meta(ed.nbId)?.title ?: ""
     ed.structTick
-    Row(Modifier.align(Alignment.TopStart).padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
-        FloatingCard {
-            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 4.dp)) {
-                IconBtn(Icons.AutoMirrored.Rounded.ArrowBack, T.t("Biblioteka", "Library"), onExit, shortcut = "Esc")
-                Text(
-                    title, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.titleMedium,
-                    modifier = Modifier.widthIn(max = 220.dp).clip(RoundedCornerShape(6.dp)).clickable { rename() }.padding(horizontal = 8.dp, vertical = 8.dp),
-                )
-                if (ed.readOnly) Icon(Icons.Rounded.Lock, null, Modifier.padding(end = 8.dp).size(16.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+    Column(Modifier.fillMaxWidth().background(m.chrome)) {
+        Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
+            IconBtn(Icons.AutoMirrored.Rounded.ArrowBack, T.t("Biblioteka", "Library"), onExit, shortcut = "Esc")
+            if (tabs.showStrip) {
+                TabStrip(tabs, Modifier.weight(if (inlineBar) 0.38f else 1f).padding(horizontal = 4.dp))
+            } else {
+                Row(Modifier.then(if (inlineBar) Modifier.widthIn(max = 220.dp) else Modifier.weight(1f)), verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        title, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.titleMedium,
+                        modifier = Modifier.weight(1f, fill = false).padding(horizontal = 8.dp, vertical = 8.dp),
+                    )
+                    if (ed.readOnly) Icon(Icons.Rounded.Lock, null, Modifier.padding(end = 8.dp).size(16.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                if (inlineBar) Spacer(Modifier.width(4.dp))
             }
+            if (inlineBar) Box(Modifier.weight(if (tabs.showStrip) 0.62f else 1f), contentAlignment = Alignment.Center) { ToolBar(ed, set, false, panel, pickTool, toggle) }
+            PageCluster(ed, panel, toggle, goTo, pickImage, widthDp >= 600)
         }
+        if (set.toolbarPos == 0 && !inlineBar) {
+            Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) { ToolBar(ed, set, false, panel, pickTool, toggle) }
+        }
+        Hairline()
     }
-    Row(Modifier.align(Alignment.TopEnd).padding(8.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        FloatingCard {
-            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 4.dp)) {
-                Text(
-                    "${ed.pageIndex + 1} / ${ed.pageCount}", style = MaterialTheme.typography.labelLarge,
-                    modifier = Modifier.clip(RoundedCornerShape(6.dp)).clickable { goTo() }.padding(horizontal = 8.dp, vertical = 8.dp),
-                )
-                Text("${ed.zoomPct}%", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(end = 6.dp))
-                val bm = ed.isBookmarked(ed.pageIndex)
-                IconBtn(if (bm) Icons.Rounded.Bookmark else Icons.Rounded.BookmarkBorder, T.t("Zakładka", "Bookmark"), { ed.toggleBookmark() }, selected = bm, shortcut = "Ctrl+B")
-                IconBtn(Icons.Rounded.ViewSidebar, T.t("Strony", "Pages"), { toggle(Panel.PAGES) }, selected = panel == Panel.PAGES, shortcut = "F9")
-                IconBtn(Icons.Rounded.Image, T.t("Wstaw obraz", "Insert image"), pickImage, enabled = !ed.readOnly)
-                IconBtn(Icons.Rounded.MoreVert, T.t("Więcej", "More"), { toggle(Panel.MORE) }, selected = panel == Panel.MORE)
-            }
-        }
+}
+
+/** Prawa strona nagłówka: strona n/N (klik → „Idź do”), powiększenie, zakładka, panel stron, obraz, „Więcej”. */
+@Composable
+private fun PageCluster(ed: Editor, panel: Panel?, toggle: (Panel) -> Unit, goTo: () -> Unit, pickImage: () -> Unit, showZoom: Boolean) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text(
+            "${ed.pageIndex + 1} / ${ed.pageCount}", style = MaterialTheme.typography.labelLarge,
+            modifier = Modifier.clip(RoundedCornerShape(6.dp)).clickable { goTo() }.padding(horizontal = 8.dp, vertical = 8.dp),
+        )
+        if (showZoom) Text("${ed.zoomPct}%", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(end = 6.dp))
+        val bm = ed.isBookmarked(ed.pageIndex)
+        IconBtn(if (bm) Icons.Rounded.Bookmark else Icons.Rounded.BookmarkBorder, T.t("Zakładka", "Bookmark"), { ed.toggleBookmark() }, selected = bm, shortcut = "Ctrl+B")
+        IconBtn(Icons.Rounded.ViewSidebar, T.t("Strony", "Pages"), { toggle(Panel.PAGES) }, selected = panel == Panel.PAGES, shortcut = "F9")
+        IconBtn(Icons.Rounded.Image, T.t("Wstaw obraz", "Insert image"), pickImage, enabled = !ed.readOnly)
+        IconBtn(Icons.Rounded.MoreVert, T.t("Więcej", "More"), { toggle(Panel.MORE) }, selected = panel == Panel.MORE)
+    }
+}
+
+/** Szyna narzędzi z boku strony (pozycje „lewo” i „prawo”): zadokowana, przewijana pionowo, nie zasłania strony. */
+@Composable
+private fun SideRail(ed: Editor, set: com.mdev.mnotes.data.Settings, panel: Panel?, pickTool: (Tool, Panel?) -> Unit, toggle: (Panel) -> Unit, right: Boolean) {
+    val m = mint
+    Row(Modifier.fillMaxHeight()) {
+        if (right) Hairline(vertical = true)
+        Box(Modifier.fillMaxHeight().background(m.chrome), contentAlignment = Alignment.Center) { ToolBar(ed, set, true, panel, pickTool, toggle) }
+        if (!right) Hairline(vertical = true)
+    }
+}
+
+/** Pasek narzędzi na dole (pozycja „dół”): zadokowany pod stroną. */
+@Composable
+private fun BottomBar(ed: Editor, set: com.mdev.mnotes.data.Settings, panel: Panel?, pickTool: (Tool, Panel?) -> Unit, toggle: (Panel) -> Unit) {
+    val m = mint
+    Column(Modifier.fillMaxWidth().background(m.chrome)) {
+        Hairline()
+        Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) { ToolBar(ed, set, false, panel, pickTool, toggle) }
     }
 }
 
@@ -366,8 +424,8 @@ private fun ToolBar(ed: Editor, set: com.mdev.mnotes.data.Settings, vertical: Bo
     val sz = when (set.toolbarSize) { 0 -> 36.dp; 2 -> 46.dp; else -> 40.dp }
     val isz = when (set.toolbarSize) { 0 -> 20.dp; 2 -> 26.dp; else -> 22.dp }
     val ro = ed.readOnly
-    FloatingCard {
-        Lin(vertical, Modifier.padding(4.dp).then(if (vertical) Modifier.verticalScroll(rememberScrollState()).heightIn(max = 560.dp) else Modifier)) {
+    run {
+        Lin(vertical, Modifier.padding(4.dp).then(if (vertical) Modifier.verticalScroll(rememberScrollState()) else Modifier.horizontalScroll(rememberScrollState()))) {
             IconBtn(Icons.AutoMirrored.Rounded.Undo, T.t("Cofnij", "Undo"), { ed.undo() }, enabled = ed.canUndo && !ro, size = sz, iconSize = isz, shortcut = "Ctrl+Z")
             IconBtn(Icons.AutoMirrored.Rounded.Redo, T.t("Ponów", "Redo"), { ed.redo() }, enabled = ed.canRedo && !ro, size = sz, iconSize = isz, shortcut = "Ctrl+Y")
             BarSep(vertical)
@@ -450,6 +508,10 @@ private fun ToolPanel(ed: Editor, set: com.mdev.mnotes.data.Settings, panel: Pan
                     }
                     MSlider(set.smoothing, 0f, 2f) { set.smoothing = it }
                     ToggleRow(T.t("Przytrzymaj, aby wyprostować kształt", "Hold to snap to shape"), set.holdToShape) { set.holdToShape = it }
+                    if (ed.presets.size > 1) FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        if (i > 0) Chip(T.t("Przesuń wcześniej", "Move earlier"), false, { ed.movePreset(i, i - 1) }, icon = Icons.AutoMirrored.Rounded.ArrowBack)
+                        if (i < ed.presets.size - 1) Chip(T.t("Przesuń później", "Move later"), false, { ed.movePreset(i, i + 1) }, icon = Icons.AutoMirrored.Rounded.ArrowForward)
+                    }
                     if (ed.presets.size > 1) Chip(T.t("Usuń to pióro", "Remove this pen"), false, { ed.removePreset(i) }, icon = Icons.Rounded.Delete)
                 }
                 Panel.ERASER -> {
@@ -584,7 +646,8 @@ private fun SelectionBar(ed: Editor, panel: Panel?, toggle: (Panel) -> Unit, edi
             val p = mm.measure(c.copy(minWidth = 0, minHeight = 0))
             layout(c.maxWidth, c.maxHeight) {
                 val x = (r.centerX() - p.width / 2f).toInt().coerceIn(0, (c.maxWidth - p.width).coerceAtLeast(0))
-                val above = r.top - p.height - 14 * dens
+                // przy włączonym skalowaniu/obrocie uchwyt obrotu wisi nad ramką — pasek leży nad nim
+                val above = r.top - p.height - (if (ed.transformMode && !locked) NoteView.ROTATE_OFFSET_DP + 22 else 14f) * dens
                 val y = (if (above > 4) above else r.bottom + 14 * dens).toInt().coerceIn(0, (c.maxHeight - p.height).coerceAtLeast(0))
                 p.place(x, y)
             }
@@ -598,6 +661,7 @@ private fun SelectionBar(ed: Editor, panel: Panel?, toggle: (Panel) -> Unit, edi
                     IconBtn(Icons.Rounded.ContentCopy, T.t("Duplikuj", "Duplicate"), { ed.duplicateSel() }, size = 36.dp, iconSize = 20.dp, shortcut = "Ctrl+D", tint = mint.accentText)
                     BarSep(false)
                     IconBtn(Icons.Rounded.Palette, T.t("Kolor i grubość", "Color & width"), { toggle(Panel.SELCOLOR) }, selected = panel == Panel.SELCOLOR, size = 36.dp, iconSize = 20.dp)
+                    if (!locked) IconBtn(Icons.Rounded.CropRotate, T.t("Skaluj i obracaj", "Resize & rotate"), { ed.transformMode = !ed.transformMode }, selected = ed.transformMode, size = 36.dp, iconSize = 20.dp)
                     IconBtn(Icons.Rounded.FlipToFront, T.t("Na wierzch", "Bring to front"), { ed.frontSel() }, size = 36.dp, iconSize = 20.dp)
                     IconBtn(Icons.Rounded.FlipToBack, T.t("Na spód", "Send to back"), { ed.backSel() }, size = 36.dp, iconSize = 20.dp)
                     IconBtn(if (locked) Icons.Rounded.LockOpen else Icons.Rounded.Lock, if (locked) T.t("Odblokuj", "Unlock") else T.t("Zablokuj", "Lock"), { ed.lockSel(!locked) }, size = 36.dp, iconSize = 20.dp)
@@ -609,11 +673,12 @@ private fun SelectionBar(ed: Editor, panel: Panel?, toggle: (Panel) -> Unit, edi
             }
             if (panel == Panel.SELCOLOR) FloatingCard(Modifier.width(300.dp)) {
                 Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    val first = els.firstOrNull()
+                    val colors = els.mapNotNull { colorOf(it) }.map { it and 0xFFFFFF }.distinct()
+                    val first = els.firstOrNull { colorOf(it) != null }
                     val hasStroke = els.any { it is InkStroke }
                     val img = els.firstOrNull { it is ImageEl } as? ImageEl
                     SectionLabel(T.t("Kolor", "Color"))
-                    ColorPicker(colorOf(first), { ed.recolorSel(it) }, recent = ed.presets.map { it.color }.distinct(), onPipette = { ed.startPipette { c -> ed.recolorSel(c) } })
+                    ColorPicker(first?.let { colorOf(it) } ?: 0xFF000000.toInt(), { ed.recolorSel(it) }, mixed = colors.size > 1, recent = ed.presets.map { it.color }.distinct(), onPipette = { ed.startPipette { c -> ed.recolorSel(c) } })
                     if (hasStroke) {
                         val w = (els.firstOrNull { it is InkStroke } as InkStroke).width
                         SectionLabel(T.t("Grubość", "Width"))
@@ -633,10 +698,11 @@ private fun SelectionBar(ed: Editor, panel: Panel?, toggle: (Panel) -> Unit, edi
     }
 }
 
-private fun colorOf(e: com.mdev.mnotes.core.model.Element?): Int = when (e) {
+/** Kolor elementu, albo null, gdy element nie ma koloru (obraz, taśma). */
+private fun colorOf(e: com.mdev.mnotes.core.model.Element?): Int? = when (e) {
     is InkStroke -> e.color
     is TextBox -> e.color
-    else -> 0xFF000000.toInt()
+    else -> null
 }
 
 // ─────────────────────────────── Menu kontekstowe, toast ───────────────────────────────
@@ -659,7 +725,7 @@ private fun CtxMenuOverlay(ed: Editor, openStyle: () -> Unit) {
                     Item(T.t("Kopiuj", "Copy"), "Ctrl+C") { ed.copySel() }
                     Item(T.t("Duplikuj", "Duplicate"), "Ctrl+D") { ed.duplicateSel() }
                 }
-                Item(T.t("Wklej", "Paste"), "Ctrl+V", Clip.els.isNotEmpty() && !ed.readOnly) { ed.paste() }
+                Item(T.t("Wklej", "Paste"), "Ctrl+V", ed.canPaste() && !ed.readOnly) { ed.paste(if (cm.pageIndex >= 0) Triple(cm.pageIndex, cm.lx, cm.ly) else null) }
                 if (cm.hasSel) {
                     Item(T.t("Na wierzch", "Bring to front")) { ed.frontSel() }
                     Item(T.t("Na spód", "Send to back")) { ed.backSel() }

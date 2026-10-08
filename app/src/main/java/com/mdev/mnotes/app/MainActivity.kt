@@ -26,6 +26,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -47,7 +48,9 @@ import com.mdev.mnotes.ui.CoverPalette
 import com.mdev.mnotes.editor.Editor
 import com.mdev.mnotes.editor.T
 import com.mdev.mnotes.ui.Chip
+import com.mdev.mnotes.core.nav.Tabs
 import com.mdev.mnotes.ui.EditorScreen
+import com.mdev.mnotes.ui.TabsCtl
 import com.mdev.mnotes.ui.LibState
 import com.mdev.mnotes.ui.LibraryScreen
 import com.mdev.mnotes.ui.MNotesTheme
@@ -66,24 +69,80 @@ class UiModel(application: Application) : AndroidViewModel(application) {
     var editor by mutableStateOf<Editor?>(null)
     var locked by mutableStateOf(app.settings.appLock)
 
+    /** Otwarte karty (tylko gdy włączone ustawienie „Otwieraj jako karty”). Edytor istnieje wyłącznie dla aktywnej. */
+    var tabs by mutableStateOf(Tabs())
+        private set
+
     fun open(id: String) {
         if (app.repo.meta(id) == null) return
-        if (editor?.nbId == id) { screen = Screen.EDITOR; return }
-        if (!app.openIds.add(id)) {
+        val useTabs = app.settings.tabs
+        if (!useTabs && tabs.size > 0) dropTabs(keep = editor?.nbId)
+        if (editor?.nbId == id) { if (useTabs) tabs = tabs.open(id); screen = Screen.EDITOR; return }
+        // Karta z tego okna jest już „nasza” w openIds; obcy zeszyt (inne okno) odpada.
+        if (!(tabs.has(id) || app.openIds.add(id))) {
             android.widget.Toast.makeText(app, T.t("Ten zeszyt jest otwarty w innym oknie", "This notebook is open in another window"), android.widget.Toast.LENGTH_SHORT).show()
             return
         }
-        editor?.let { app.openIds.remove(it.nbId); it.close() }
+        if (useTabs) {
+            var t = tabs.retain { app.repo.meta(it) != null }
+            editor?.nbId?.let { if (!t.has(it)) t = t.open(it) }
+            val next = t.open(id)
+            (t.ids - next.ids.toSet()).forEach { app.openIds.remove(it) }
+            tabs = next
+        }
+        editor?.let { it.close(); if (!tabs.has(it.nbId)) app.openIds.remove(it.nbId) }
         app.repo.update(id) { it.copy(opened = System.currentTimeMillis()) }
         editor = Editor(app, id)
         screen = Screen.EDITOR
     }
 
+    /** Zamyka edytor i wszystkie karty — powrót do biblioteki bez niczego w tle. */
     fun closeEditor() {
         editor?.let { app.openIds.remove(it.nbId) }
         editor?.close()
         editor = null
+        dropTabs(keep = null)
         screen = Screen.LIBRARY
+    }
+
+    /** Wyjście z edytora do biblioteki: w trybie kart karty zostają (biblioteka jest centrum), inaczej pełne zamknięcie. */
+    fun leave() {
+        if (app.settings.tabs && tabs.size > 0) {
+            editor?.close()
+            editor = null
+            screen = Screen.LIBRARY
+        } else closeEditor()
+    }
+
+    /** Zamyka kartę [id]; jeśli była aktywna w edytorze, przechodzi do sąsiedniej albo do biblioteki. */
+    fun closeTab(id: String) {
+        if (!tabs.has(id)) return
+        val wasActive = editor?.nbId == id
+        tabs = tabs.close(id)
+        app.openIds.remove(id)
+        if (wasActive) {
+            editor?.close()
+            editor = null
+            val next = tabs.activeId
+            if (next != null) open(next) else screen = Screen.LIBRARY
+        }
+    }
+
+    /** Następna / poprzednia karta (Ctrl+Tab). */
+    fun stepTab(delta: Int) {
+        val to = tabs.step(delta).activeId ?: return
+        if (to != editor?.nbId) open(to)
+    }
+
+    fun openTabNumber(n: Int) {
+        val to = tabs.activateNumber(n).activeId ?: return
+        if (to != editor?.nbId) open(to)
+    }
+
+    /** Zwalnia wszystkie karty poza [keep] (ten zeszyt zostaje otwarty w edytorze). */
+    private fun dropTabs(keep: String?) {
+        tabs.ids.forEach { if (it != keep) app.openIds.remove(it) }
+        tabs = Tabs()
     }
 
     /** Nowy zeszyt z domyślnymi ustawieniami (intencja CREATE_NOTE). */
@@ -94,7 +153,7 @@ class UiModel(application: Application) : AndroidViewModel(application) {
         open(n.id)
     }
 
-    override fun onCleared() { editor?.let { app.openIds.remove(it.nbId) }; editor?.close() }
+    override fun onCleared() { editor?.let { app.openIds.remove(it.nbId) }; tabs.ids.forEach { app.openIds.remove(it) }; editor?.close() }
 }
 
 open class MainActivity : FragmentActivity() {
@@ -163,12 +222,16 @@ open class MainActivity : FragmentActivity() {
             LockScreen(onUnlock = { ui.locked = false }, prompt = ::prompt)
             return
         }
+        val tabsCtl = TabsCtl(
+            ui.tabs, app.settings.tabs, ui::open, ui::closeTab, ui::stepTab, ui::leave,
+            { id -> app.repo.meta(id)?.title ?: "" },
+        )
         when (ui.screen) {
-            Screen.LIBRARY -> LibraryScreen(ui.lib, onOpen = ui::open, onSettings = { ui.settingsCat = 0; ui.screen = Screen.SETTINGS })
+            Screen.LIBRARY -> LibraryScreen(ui.lib, onOpen = ui::open, tabs = tabsCtl.takeIf { it.on }, onSettings = { ui.settingsCat = 0; ui.screen = Screen.SETTINGS })
             Screen.SETTINGS -> SettingsScreen(onBack = { ui.screen = if (ui.editor != null) Screen.EDITOR else Screen.LIBRARY }, startCat = ui.settingsCat)
             Screen.EDITOR -> {
                 val ed = ui.editor
-                if (ed == null) { ui.screen = Screen.LIBRARY } else EditorScreen(ed, onExit = ui::closeEditor, onSettings = { ui.settingsCat = 0; ui.screen = Screen.SETTINGS }, onShortcuts = { ui.settingsCat = SHORTCUTS_CAT; ui.screen = Screen.SETTINGS })
+                if (ed == null) { ui.screen = Screen.LIBRARY } else key(ed.nbId) { EditorScreen(ed, tabsCtl, onExit = ui::leave, onSettings = { ui.settingsCat = 0; ui.screen = Screen.SETTINGS }, onShortcuts = { ui.settingsCat = SHORTCUTS_CAT; ui.screen = Screen.SETTINGS }) }
             }
         }
         // Z ustawień wracamy do poprzedniego ekranu (biblioteki lub edytora).

@@ -35,10 +35,12 @@ object PageCodec {
     private const val TAG_TAPE = 4
 
     /**
-     * Flagi elementu (varint): bit0 zarezerwowany (mnożenie), bit1 zarezerwowany (kształt z autokorekty),
+     * Flagi elementu (varint): bit0 zarezerwowany (mnożenie), bit1 łamana z uchwytami wierzchołków (kształt z autokorekty),
      * bit2 zablokowany, bit3 „ma grupę” (varint na końcu rekordu — dopisywane bez zmiany wersji).
      */
+    private const val FLAG_POLY = 2
     private const val FLAG_LOCKED = 4
+    private const val FLAG_ELLIPSE = 8
     private const val Q = 100f
 
     fun encode(content: PageContent): ByteArray {
@@ -121,7 +123,7 @@ object PageCodec {
     private fun writeStroke(w: ByteWriter, s: Stroke) {
         w.u8(s.pen.code)
         w.i32(s.color)
-        w.varint(if (s.locked) FLAG_LOCKED else 0)
+        w.varint((if (s.locked) FLAG_LOCKED else 0) or (if (s.poly) FLAG_POLY else 0) or (if (s.ellipse) FLAG_ELLIPSE else 0))
         w.varint((s.width * Q).roundToInt().coerceAtLeast(1))
         val n = s.count
         w.varint(n)
@@ -153,7 +155,7 @@ object PageCodec {
             pts[3 * i + 1] = y / Q
             pts[3 * i + 2] = r.u8() / 255f
         }
-        return Stroke(Ids.next(), pen, color, width, pts, flags and FLAG_LOCKED != 0)
+        return Stroke(Ids.next(), pen, color, width, pts, flags and FLAG_LOCKED != 0, flags and FLAG_POLY != 0, flags and FLAG_ELLIPSE != 0)
     }
 
     private fun writeText(w: ByteWriter, t: TextBox) {

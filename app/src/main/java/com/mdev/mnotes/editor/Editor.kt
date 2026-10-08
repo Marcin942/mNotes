@@ -69,6 +69,8 @@ class Editor(val ctx: Context, val nbId: String) {
     var pipette by mutableStateOf<((Int) -> Unit)?>(null)
     var sel by mutableStateOf<Sel?>(null)
     var selTick by mutableIntStateOf(0)
+    /** Uchwyty skali i obrotu są widoczne i aktywne tylko po włączeniu przyciskiem na pasku zaznaczenia; nowe zaznaczenie je wyłącza. */
+    var transformMode by mutableStateOf(false)
     var undoTick by mutableIntStateOf(0)
     var structTick by mutableIntStateOf(0)
     var pageIndex by mutableIntStateOf(0)
@@ -148,6 +150,20 @@ class Editor(val ctx: Context, val nbId: String) {
         settings.activePreset = presets.size - 1
     }
 
+    /** Przenosi pióro z miejsca [from] na [to] (reszta się przesuwa); aktywne pozostaje tym samym piórem. */
+    fun movePreset(from: Int, to: Int) {
+        val n = presets.size
+        if (from !in 0 until n || to !in 0 until n || from == to) return
+        val active = presetIndex
+        settings.presets = presets.toMutableList().also { it.add(to, it.removeAt(from)) }
+        settings.activePreset = when {
+            active == from -> to
+            from < active && active <= to -> active - 1
+            to <= active && active < from -> active + 1
+            else -> active
+        }
+    }
+
     fun removePreset(i: Int) {
         if (presets.size <= 1) return
         settings.presets = presets.toMutableList().also { it.removeAt(i) }
@@ -165,9 +181,11 @@ class Editor(val ctx: Context, val nbId: String) {
     fun record(edit: DocEdit) { doc.record(edit); undoTick++ }
 
     // — Zaznaczenie —
-    fun clearSel() { if (sel != null) { sel = null; selTick++ } }
+    fun clearSel() { if (sel != null) { sel = null; transformMode = false; selTick++ } }
 
     fun select(pageId: String, ids: Set<Int>) {
+        val old = sel
+        if (old == null || old.pageId != pageId || old.ids != ids) transformMode = false
         sel = if (ids.isEmpty()) null else Sel(pageId, ids)
         selTick++
     }
@@ -204,10 +222,11 @@ class Editor(val ctx: Context, val nbId: String) {
 
     fun cutSel() { if (copySel()) deleteSel() }
 
-    fun paste() {
-        if (Clip.els.isEmpty()) { pasteSystem(); return }
+    /** [at] = (indeks strony, x, y) miejsca wklejenia (np. punkt przytrzymania); domyślnie środek widoku. */
+    fun paste(at: Triple<Int, Float, Float>? = null) {
+        if (Clip.els.isEmpty()) { pasteSystem(at); return }
         val v = view ?: return
-        val (pi, cx, cy) = v.viewCenterOnPage() ?: return
+        val (pi, cx, cy) = at ?: v.viewCenterOnPage() ?: return
         val page = doc.pages[pi]
         var b = Bounds.EMPTY
         for (e in Clip.els) b = b.union(e.bounds)
@@ -309,8 +328,12 @@ class Editor(val ctx: Context, val nbId: String) {
         }
     }
 
+    /** Czy jest co wkleić: schowek wewnętrzny albo systemowy. */
+    fun canPaste(): Boolean = Clip.els.isNotEmpty() ||
+        ((ctx.getSystemService(Context.CLIPBOARD_SERVICE) as? android.content.ClipboardManager)?.hasPrimaryClip() == true)
+
     /** Wkleja ze schowka systemu: obraz (URI) albo tekst jako nowe pole tekstowe — gdy schowek wewnętrzny jest pusty. */
-    private fun pasteSystem() {
+    private fun pasteSystem(at: Triple<Int, Float, Float>? = null) {
         val clip = (ctx.getSystemService(Context.CLIPBOARD_SERVICE) as? android.content.ClipboardManager)?.primaryClip
         val item = clip?.takeIf { it.itemCount > 0 }?.getItemAt(0)
         val uri = item?.uri
@@ -318,7 +341,7 @@ class Editor(val ctx: Context, val nbId: String) {
         if (isImage && uri != null) { if (insertFromUri(uri)) return }
         val text = runCatching { item?.coerceToText(ctx)?.toString() }.getOrNull()?.takeIf { it.isNotBlank() }
         val v = view
-        val target = v?.viewCenterOnPage()
+        val target = at ?: v?.viewCenterOnPage()
         if (text == null || target == null) { say(T.t("Schowek jest pusty", "Clipboard is empty")); return }
         val page = doc.pages.getOrNull(target.first) ?: return
         textReq = TextRequest(page.id, null, target.second - 120f, target.third - 10f, text)

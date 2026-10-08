@@ -28,6 +28,15 @@ class StrokeBuilder {
     private var rawP = 0f
     private var haveRaw = false
 
+    /**
+     * Surowe (niewygładzone) próbki x, y — wejście rozpoznawania kształtów: filtr kreski zaokrągla rogi i spóźnia się
+     * za piórem, a rozpoznanie potrzebuje ostrych rogów. Dopisywane co ≥ 0,4 pt, więc nie puchną przy staniu w miejscu.
+     */
+    var raw = FloatArray(2 * 256)
+        private set
+    var rawCount = 0
+        private set
+
     val penKind: PenKind get() = kind
     val penColor: Int get() = color
     val penSpec: PenSpec get() = spec
@@ -41,15 +50,17 @@ class StrokeBuilder {
         this.k = 1f - smoothing.coerceIn(0f, 1f) * 0.72f
         this.minDist = minDistPt
         count = 0
+        rawCount = 0
         haveRaw = false
         lastT = 0L
     }
 
-    fun reset() { count = 0; haveRaw = false }
+    fun reset() { count = 0; rawCount = 0; haveRaw = false }
 
     /** Zwraca true, gdy dopisano nowy punkt. */
     fun add(x: Float, y: Float, pressure: Float, tMs: Long): Boolean {
         rawX = x; rawY = y; rawP = pressure; haveRaw = true
+        pushRaw(x, y)
         if (count == 0) {
             push(x, y, spec.factor(pressure, 0f))
             lastT = tMs
@@ -68,6 +79,13 @@ class StrokeBuilder {
         val prev = pts[3 * count - 1]
         push(sx, sy, prev + (f - prev) * 0.5f)
         return true
+    }
+
+    private fun pushRaw(x: Float, y: Float) {
+        if (rawCount > 0 && hypot(x - raw[2 * rawCount - 2], y - raw[2 * rawCount - 1]) < 0.4f) return
+        if (2 * rawCount + 2 > raw.size) raw = raw.copyOf(raw.size * 2)
+        raw[2 * rawCount] = x; raw[2 * rawCount + 1] = y
+        rawCount++
     }
 
     private fun push(x: Float, y: Float, p: Float) {

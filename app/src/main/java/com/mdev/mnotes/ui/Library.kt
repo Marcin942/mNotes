@@ -1,5 +1,6 @@
 package com.mdev.mnotes.ui
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -233,7 +234,7 @@ private fun FolderArt(color: Int, modifier: Modifier = Modifier) {
 // ─────────────────────────────── Ekran biblioteki ───────────────────────────────
 
 @Composable
-fun LibraryScreen(st: LibState, onOpen: (String) -> Unit, onSettings: () -> Unit) {
+fun LibraryScreen(st: LibState, onOpen: (String) -> Unit, onSettings: () -> Unit, tabs: TabsCtl? = null) {
     val m = mint
     val scope = rememberCoroutineScope()
     val app = androidx.compose.ui.platform.LocalContext.current.app
@@ -248,7 +249,7 @@ fun LibraryScreen(st: LibState, onOpen: (String) -> Unit, onSettings: () -> Unit
             Row(Modifier.fillMaxSize()) {
                 Sidebar(st, onSettings, {}, Modifier.width(250.dp).fillMaxHeight())
                 Box(Modifier.width(1.dp).fillMaxHeight().background(m.line))
-                LibMain(st, true, onOpen, {}, Modifier.weight(1f))
+                LibMain(st, true, onOpen, {}, Modifier.weight(1f), tabs)
             }
         } else {
             ModalNavigationDrawer(
@@ -258,7 +259,16 @@ fun LibraryScreen(st: LibState, onOpen: (String) -> Unit, onSettings: () -> Unit
                         Sidebar(st, onSettings, { scope.launch { drawer.close() } }, Modifier.fillMaxSize())
                     }
                 },
-            ) { LibMain(st, false, onOpen, { scope.launch { drawer.open() } }, Modifier.fillMaxSize()) }
+            ) { LibMain(st, false, onOpen, { scope.launch { drawer.open() } }, Modifier.fillMaxSize(), tabs) }
+        }
+        // Wstecz: najpierw zamyka menu/zaznaczenie/wyszukiwanie, potem wychodzi folder wyżej; dopiero z korzenia zamyka aplikację.
+        val canStepBack = st.menu != null || st.selecting || st.query.isNotEmpty() || st.searchOpen || st.place != Place.LIB || st.folderId != null
+        BackHandler(enabled = canStepBack && !drawer.isOpen && st.dialog == null) {
+            when {
+                st.menu != null -> st.menu = null
+                st.selecting -> st.sel = emptySet()
+                else -> LibOps(st, app.repo, onOpen).up()
+            }
         }
         LibDialogs(st, onOpen)
         Toast(st)
@@ -363,7 +373,7 @@ private fun SideItem(
 // — Główna część —
 
 @Composable
-private fun LibMain(st: LibState, wide: Boolean, onOpen: (String) -> Unit, openDrawer: () -> Unit, modifier: Modifier) {
+private fun LibMain(st: LibState, wide: Boolean, onOpen: (String) -> Unit, openDrawer: () -> Unit, modifier: Modifier, tabs: TabsCtl? = null) {
     val ctx = LocalContext.current
     val app = ctx.app; val repo = app.repo; val set = app.settings
     val m = mint
@@ -539,6 +549,14 @@ private fun LibMain(st: LibState, wide: Boolean, onOpen: (String) -> Unit, openD
     ) {
         if (st.selecting) SelectionBar(st, ops, inTrash, order) else TopBar(st, wide, ops, openDrawer, searchFocus, doImport) { searchHasFocus = it }
         Box(Modifier.fillMaxWidth().height(1.dp).background(m.line))
+        // Otwarte karty: biblioteka jest ich centrum; dotknięcie wznawia zeszyt tam, gdzie go zostawiono.
+        if (tabs != null && !st.selecting) {
+            Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text(T.t("Otwarte karty", "Open tabs"), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(end = 10.dp))
+                TabStrip(tabs, Modifier.weight(1f), showNew = false)
+            }
+            Box(Modifier.fillMaxWidth().height(1.dp).background(m.line))
+        }
         Box(Modifier.weight(1f).fillMaxWidth()) {
             val empty = folders.isEmpty() && books.isEmpty()
             when {
@@ -768,6 +786,7 @@ private fun SelectionBar(st: LibState, ops: LibOps, inTrash: Boolean, order: Lis
                 IconBtn(Icons.Rounded.ContentCopy, T.t("Duplikuj", "Duplicate"), { ops.duplicate(st.sel) })
                 if (st.sel.size == 1) IconBtn(Icons.Rounded.Palette, T.t("Okładka", "Cover"), { st.dialog = LibDialog.Cover(ops.nbs(st.sel).first()) })
             }
+            if (st.sel.size == 1) IconBtn(Icons.Rounded.Edit, T.t("Zmień nazwę", "Rename"), { st.dialog = LibDialog.Rename(st.sel.first()) }, shortcut = "F2")
             IconBtn(Icons.Rounded.DriveFileMove, T.t("Przenieś", "Move"), { st.dialog = LibDialog.Move(st.sel) })
             IconBtn(Icons.Rounded.Delete, T.t("Do kosza", "Move to trash"), { ops.trash(st.sel) }, shortcut = "Del")
         }

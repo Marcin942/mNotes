@@ -282,10 +282,11 @@ fun MAreaField(value: TextFieldValue, onChange: (TextFieldValue) -> Unit, modifi
 }
 
 @Composable
-fun Dot(color: Color, size: Dp = 22.dp, selected: Boolean = false, onClick: (() -> Unit)? = null, modifier: Modifier = Modifier) {
+fun Dot(color: Color, size: Dp = 22.dp, selected: Boolean = false, onClick: (() -> Unit)? = null, modifier: Modifier = Modifier, mixed: Boolean = false) {
     val m = mint
+    val rainbow = remember { Brush.sweepGradient(List(7) { Color(android.graphics.Color.HSVToColor(floatArrayOf(it * 60f, 0.75f, 0.95f))) }) }
     Box(
-        modifier.size(size).clip(CircleShape).background(color)
+        modifier.size(size).clip(CircleShape).then(if (mixed) Modifier.background(rainbow) else Modifier.background(color))
             .border(if (selected) 2.5.dp else 1.dp, if (selected) m.accent else MaterialTheme.colorScheme.outline.copy(alpha = 0.7f), CircleShape)
             .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier),
         contentAlignment = Alignment.Center,
@@ -383,9 +384,11 @@ fun softenForHighlighter(c: Int): Int {
 fun ColorPicker(
     color: Int, onChange: (Int) -> Unit, modifier: Modifier = Modifier, recent: List<Int> = emptyList(), withAlpha: Boolean = false,
     onPipette: (() -> Unit)? = null, highlighter: Boolean = false,
+    /** Zaznaczono elementy o różnych kolorach: podgląd jest tęczowy, a żaden kolor z palety nie jest „wybrany”. */
+    mixed: Boolean = false,
 ) {
     val hsv = remember(color) { FloatArray(3).also { android.graphics.Color.colorToHSV(color, it) } }
-    var hex by remember(color) { mutableStateOf(String.format("%06X", color and 0xFFFFFF)) }
+    var hex by remember(color, mixed) { mutableStateOf(if (mixed) "" else String.format("%06X", color and 0xFFFFFF)) }
     val set: (Int) -> Unit = { c -> onChange(if (highlighter) softenForHighlighter(c) else c) }
     fun emit(h: Float, s: Float, v: Float) { set(android.graphics.Color.HSVToColor(floatArrayOf(h, s, v))) }
     // Zakreślacz: miniatury pokazują efekt na papierze, a nie zapisaną barwę.
@@ -395,7 +398,7 @@ fun ColorPicker(
         val per = if (highlighter) 5 else 8
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             for (row in pal.chunked(per)) Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                for (c in row) Dot(shown(c), 30.dp, selected = (c and 0xFFFFFF) == (color and 0xFFFFFF), onClick = { onChange(c) })
+                for (c in row) Dot(shown(c), 30.dp, selected = !mixed && (c and 0xFFFFFF) == (color and 0xFFFFFF), onClick = { onChange(c) })
             }
         }
         if (recent.isNotEmpty()) {
@@ -409,7 +412,7 @@ fun ColorPicker(
         GradientSlider(hsv[1], Brush.horizontalGradient(listOf(Color(android.graphics.Color.HSVToColor(floatArrayOf(hsv[0], 0f, hsv[2]))), Color(android.graphics.Color.HSVToColor(floatArrayOf(hsv[0], 1f, hsv[2]))))), { emit(hsv[0], it, hsv[2]) })
         GradientSlider(hsv[2], Brush.horizontalGradient(listOf(Color.Black, Color(android.graphics.Color.HSVToColor(floatArrayOf(hsv[0], hsv[1], 1f))))), { emit(hsv[0], hsv[1], it) })
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            Dot(shown(color), 32.dp)
+            Dot(shown(color), 32.dp, mixed = mixed)
             MField(hex, { s ->
                 val t = s.uppercase().filter { it in "0123456789ABCDEF" }.take(6)
                 hex = t

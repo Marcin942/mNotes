@@ -38,6 +38,9 @@ import com.mdev.mnotes.core.model.Stroke
 import com.mdev.mnotes.core.model.TextBox
 import com.mdev.mnotes.core.pen.PenSpec
 import com.mdev.mnotes.core.pen.StrokeBuilder
+import com.mdev.mnotes.core.shapes.ShapeBox
+import com.mdev.mnotes.core.shapes.ShapeFrame
+import com.mdev.mnotes.core.shapes.ShapeKind
 import com.mdev.mnotes.core.shapes.ShapeRecognizer
 import com.mdev.mnotes.data.DocListener
 import com.mdev.mnotes.data.PageState
@@ -47,12 +50,14 @@ import kotlin.math.PI
 import kotlin.math.abs
 import kotlin.math.atan2
 import kotlin.math.ceil
+import kotlin.math.cos
 import kotlin.math.exp
 import kotlin.math.hypot
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.pow
 import kotlin.math.roundToInt
+import kotlin.math.sin
 
 /**
  * Główny widok edytora: przewijanie/zoom wielu stron, rysowanie na żywo, gumka, lasso z uchwytami,
@@ -69,7 +74,7 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
     private val cfg = ViewConfiguration.get(ctx)
     private val slop = cfg.scaledTouchSlop.toFloat()
 
-    private val cache = PageCache(doc, ed.app.assets, ed.app.pdf) { postInvalidateOnAnimation() }
+    private val cache = PageCache(doc, ed.app.assets, ed.app.pdf, ed.app.settings.renderQuality) { postInvalidateOnAnimation() }
     private val renderer = PageRenderer(ed.app.assets)
     private val builder = StrokeBuilder()
     private val scroller = OverScroller(ctx)
@@ -90,12 +95,10 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
     // — farby —
     private val shadowPaint = Paint().apply { style = Paint.Style.FILL }
     private val borderPaint = Paint().apply { style = Paint.Style.STROKE }
-    private val bmpPaint = Paint(Paint.FILTER_BITMAP_FLAG)
     private val selPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE; strokeWidth = 1.6f * dp; pathEffect = DashPathEffect(floatArrayOf(7f * dp, 5f * dp), 0f) }
     private val handleFill = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL; color = 0xFFFFFFFF.toInt() }
     private val handleStroke = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE; strokeWidth = 2f * dp }
     private val lassoPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE; strokeWidth = 1.8f * dp; pathEffect = DashPathEffect(floatArrayOf(9f * dp, 6f * dp), 0f); strokeJoin = Paint.Join.ROUND }
-    private val lassoFill = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
     private val ringPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE; strokeWidth = 1.3f * dp }
     private val laserPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
     private val tmpPath = Path()
@@ -104,7 +107,7 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
 
     // — stan wejścia —
     private enum class Mode { NONE, IGNORE, NAV, TOOL, RULER, PICK }
-    private enum class LM { NONE, DRAW, MOVE, SCALE, ROTATE }
+    private enum class LM { NONE, DRAW, MOVE, SCALE, ROTATE, VERTEX, RESIZE }
 
     private var mode = Mode.NONE
     private var toolPid = -1
@@ -125,6 +128,7 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
     private var navTravel = 0f
     private var navT0 = 0L
     private var lastCx = 0f; private var lastCy = 0f; private var lastSpan = 0f
+    private var navSelect = false                  // czy dotknięcie (bez przesunięcia) tego gestu nawigacji zaznacza element
     private var lastTapT = 0L; private var lastTapX = 0f; private var lastTapY = 0f
 
     // pióro
@@ -133,6 +137,14 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
     private var shapeSnapped = false
     private var shapePts = FloatArray(0)
     private var holdX = 0f; private var holdY = 0f
+    private var holdRaw = 0                         // ile surowych próbek miało powstać do chwili osiadnięcia pióra (reszta to dryf)
+    private var shapeKind = ShapeKind.LINE
+    private var shapePoly = false
+    private var shapeBase = FloatArray(0)          // kształt tuż po rozpoznaniu (x, y …), baza regulacji
+    private var shapeDownX = 0f; private var shapeDownY = 0f   // pióro w chwili rozpoznania (współrzędne strony)
+    private var shapeCx = 0f; private var shapeCy = 0f; private var shapeRef = 0f
+    private var shapeSnapAng = Float.NaN
+    private var shapeLabel: String? = null
     private var predXY = FloatArray(24); private var predN = 0
     private var scratch = FloatArray(3 * 512)
 
@@ -175,13 +187,18 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
     private var lStartX = 0f; private var lStartY = 0f
     private var lAx = 0f; private var lAy = 0f; private var lHx = 0f; private var lHy = 0f
     private var lAngleStart = 0f
+    private var vIdx = 0; private var vBase: Stroke? = null; private var vDx = 0f; private var vDy = 0f
+    private var rFrame: ShapeFrame? = null; private var rHandle = 0
     private var sbSel: Sel? = null; private var sbKey = -1; private var sbVal: Bounds? = null
 
     // laser
     private val laser = LaserTrail()
     private var lsX = FloatArray(256); private var lsY = FloatArray(256); private var lsNx = FloatArray(256); private var lsNy = FloatArray(256)
 
-    private val holdRunnable = Runnable { if (mode == Mode.TOOL && activeTool == Tool.PEN && liveActive && !shapeSnapped) trySnapShape() }
+    private val holdRunnable = Runnable {
+        if (mode == Mode.TOOL && activeTool == Tool.PEN && liveActive && !shapeSnapped) trySnapShape()
+        else if (mode == Mode.TOOL && activeTool == Tool.LASSO) lassoHold()
+    }
     private val longPress = Runnable {
         if (mode == Mode.NAV && navMax == 1 && navTravel < slop * 1.5f) {
             performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
@@ -317,6 +334,11 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
         animateView(nz, clampX(cx - (cx - tx) * k, nz), clampY(cy - (cy - ty) * k, nz), 160L)
     }
 
+    /** Podwójne dotknięcie palcem — akcja wybrana w ustawieniach (domyślnie cofnij). */
+    private fun doubleTapAction(sx: Float, sy: Float) {
+        when (settings.doubleTap) { 0 -> ed.undo(); 1 -> ed.redo(); 2 -> toggleZoom(sx, sy) }
+    }
+
     private fun toggleZoom(sx: Float, sy: Float) {
         val base = baseZoom()
         val nz = if (zoom > base * 1.35f) base else min(base * 2.4f, maxZoom())
@@ -399,10 +421,18 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
     }
 
     override fun onDraw(c: Canvas) {
+        // Compose hostuje widok z clipChildren=false: bez własnego przycięcia tło zamalowałoby sąsiednie paski (nagłówek wyglądał na czarny).
+        c.clipRect(0, 0, width, height)
         c.drawColor(viewBg)
         if (doc.pages.isEmpty() || layout.count == 0) return
         val vb = Bounds(docX(0f), docY(0f), docX(width.toFloat()), docY(height.toFloat()))
         val range = layout.visibleRange(vb)
+        // Kafelki przygotowujemy z zapasem poza ekranem (w kierunku przewijania), żeby brzeg nie był chwilowo miękki.
+        val mx = width * 0.3f / zoom; val my = height * 0.3f / zoom
+        val rvb = Bounds(vb.l - mx, vb.t - my, vb.r + mx, vb.b + my)
+        val reqRange = if (mode == Mode.NAV) range else layout.visibleRange(rvb)
+        cache.configure(settings.renderQuality)
+        cache.beginFrame(zoom, (vb.l + vb.r) / 2f, (vb.t + vb.b) / 2f)
         shadowPaint.color = if (darkUi) 0x66000000 else 0x24000000
         borderPaint.color = if (darkUi) 0x33FFFFFF else 0x14000000
         borderPaint.strokeWidth = 1f / zoom
@@ -411,12 +441,9 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
         if (pullOff > 0f) { c.save(); if (settings.layoutMode == 1) c.translate(-pullOff, 0f) else c.translate(0f, -pullOff) }
         c.save()
         c.translate(tx, ty); c.scale(zoom, zoom)
-        for (i in range) drawPage(c, i, vb)
-        val pre = if (mode == Mode.NAV || anim != null) 0 else 1
-        if (pre > 0) {
-            val n0 = range.first - 1; val n1 = range.last + 1
-            if (n0 in 0 until layout.count) prefetch(n0)
-            if (n1 in 0 until layout.count) prefetch(n1)
+        for (i in range) drawPage(c, i, vb, rvb)
+        if (reqRange.first < range.first || reqRange.last > range.last) {
+            for (i in reqRange) if (i !in range) requestPage(i, rvb)
         }
         drawLive(c)
         c.restore()
@@ -427,6 +454,7 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
         drawPicker(c)
         drawLasso(c)
         drawSelection(c)
+        drawShapeLabel(c)
         drawRing(c)
         drawSearch(c)
         if (pullOff > 0f) { c.restore(); drawPullHint(c, pullOff) }
@@ -434,27 +462,29 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
         drawZoomWin(c)
     }
 
-    private fun prefetch(i: Int) {
-        val p = doc.pages[i]
-        cache.entry(p, cache.scaleFor(zoom, p.spec), true)
+    private fun requestPage(i: Int, rvb: Bounds) {
+        val page = doc.pages[i]; val r = layout.rect(i)
+        cache.request(page, Bounds(rvb.l - r.l, rvb.t - r.t, rvb.r - r.l, rvb.b - r.t), r.l, r.t)
     }
 
-    private fun drawPage(c: Canvas, i: Int, vb: Bounds) {
+    private fun drawPage(c: Canvas, i: Int, vb: Bounds, rvb: Bounds) {
         val page = doc.pages[i]; val spec = page.spec; val r = layout.rect(i)
         val o = 2f * dp / zoom
         c.drawRect(r.l - 0.5f * o, r.t, r.r + 0.5f * o, r.b + o, shadowPaint)
         c.save()
+        // Po ustaniu zoomu kafelki są w skali 1:1 — origo strony przycinamy do piksela, żeby nic nie było rozmyte filtrem.
+        if (cache.pixelExact) {
+            val sx = tx + r.l * zoom; val sy = ty + r.t * zoom
+            c.translate((Math.round(sx) - sx) / zoom, (Math.round(sy) - sy) / zoom)
+        }
         c.translate(r.l, r.t)
         c.clipRect(0f, 0f, spec.w, spec.h)
-        val e = cache.entry(page, cache.scaleFor(zoom, spec), true)
-        val bmp = e.bmp
-        if (bmp != null && (e.version == page.version || !cache.vectorMode(zoom, e.scale))) {
-            tmpRect.set(0f, 0f, spec.w, spec.h)
-            c.drawBitmap(bmp, null, tmpRect, bmpPaint)
-        } else {
-            renderer.drawPaper(c, spec, zoom, e.bg)
+        val vis = Bounds(vb.l - r.l, vb.t - r.t, vb.r - r.l, vb.b - r.t)
+        val req = Bounds(rvb.l - r.l, rvb.t - r.t, rvb.r - r.l, rvb.b - r.t)
+        if (!cache.draw(c, page, vis, req, r.l, r.t, zoom)) {
+            renderer.drawPaper(c, spec, zoom, null)
             val content = page.content
-            if (content != null) renderer.drawElements(c, doc.id, content, 0, Bounds(vb.l - r.l, vb.t - r.t, vb.r - r.l, vb.b - r.t), zoom, false, spec.darkPaper)
+            if (content != null) renderer.drawElements(c, doc.id, content, 0, vis, zoom, false, spec.darkPaper)
         }
         c.restore()
         c.drawRect(r.l, r.t, r.r, r.b, borderPaint)
@@ -466,7 +496,7 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
             c.save()
             c.translate(layout.left(livePage), layout.top(livePage))
             c.clipRect(0f, 0f, spec.w, spec.h)
-            if (shapeSnapped) renderer.drawStrokeData(c, builder.penKind, builder.penColor, builder.width, shapePts, shapePts.size / 3, zoom, spec.darkPaper)
+            if (shapeSnapped) renderer.drawStrokeData(c, builder.penKind, builder.penColor, builder.width, shapePts, shapePts.size / 3, zoom, spec.darkPaper, shapePoly)
             else {
                 val n = builder.count
                 var total = n
@@ -497,6 +527,20 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
             for (el in lEls) renderer.drawElement(c, doc.id, el, z, false, spec.darkPaper)
             c.restore()
         }
+    }
+
+    /** Etykieta regulacji kształtu (długość i kąt / wymiary) przy piórze. */
+    private fun drawShapeLabel(c: Canvas) {
+        val label = shapeLabel ?: return
+        if (!(liveActive && shapeSnapped) && !(lLifting && lm == LM.RESIZE)) return
+        rulerText.color = 0xFFFFFFFF.toInt()
+        val w = rulerText.measureText(label) + 18f * dp
+        val h = 22f * dp
+        val cx = curX.coerceIn(w / 2 + 4f * dp, max(w / 2 + 4f * dp, width - w / 2 - 4f * dp))
+        val cy = max(h, curY - 44f * dp)
+        rulerFill.color = rgbA(0xFF1F2933.toInt(), 0xE0)
+        c.drawRoundRect(cx - w / 2, cy - h / 2, cx + w / 2, cy + h / 2, h / 2, h / 2, rulerFill)
+        c.drawText(label, cx, cy + 3.4f * dp, rulerText)
     }
 
     private fun matrixOf(m: Affine): Matrix {
@@ -592,7 +636,6 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
         if (mode != Mode.TOOL || lm != LM.DRAW && !replaces || ln == 0 || lPage !in 0 until layout.count) return
         val col = if (replaces) 0xFFE5484D.toInt() else accent
         lassoPaint.color = col
-        lassoFill.color = (col and 0x00FFFFFF) or 0x22000000
         tmpPath.rewind()
         if (settings.lassoRect && !replaces) {
             val x0 = scrX(lPage, lp[0]); val y0 = scrY(lPage, lp[1])
@@ -603,7 +646,6 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
             for (i in 1 until ln) tmpPath.lineTo(scrX(lPage, lp[2 * i]), scrY(lPage, lp[2 * i + 1]))
             if (ln > 2) tmpPath.close()
         }
-        c.drawPath(tmpPath, lassoFill)
         c.drawPath(tmpPath, lassoPaint)
     }
 
@@ -616,14 +658,14 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
         val s = ed.sel ?: return
         val pi = doc.indexOf(s.pageId); if (pi < 0) return
         val cs: FloatArray
-        if (lLifting) {
+        if (lLifting && lm != LM.RESIZE) {
             val b = lBounds
             val m = lM
             cs = floatArrayOf(
                 scrX(pi, m.mapX(b.l, b.t)), scrY(pi, m.mapY(b.l, b.t)), scrX(pi, m.mapX(b.r, b.t)), scrY(pi, m.mapY(b.r, b.t)),
                 scrX(pi, m.mapX(b.r, b.b)), scrY(pi, m.mapY(b.r, b.b)), scrX(pi, m.mapX(b.l, b.b)), scrY(pi, m.mapY(b.l, b.b)),
             )
-        } else cs = cornersScreen(pi, selBounds() ?: return)
+        } else cs = selQuad(pi, selBounds() ?: (if (lLifting) lBounds else return))
         selPaint.color = accent
         handleStroke.color = accent
         tmpPath.rewind()
@@ -632,19 +674,47 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
         val locked = ed.selElements().let { it.isNotEmpty() && it.all { e -> e.locked } }
         if (locked) return
         val r = 6.5f * dp
-        for (k in 0..3) { c.drawCircle(cs[2 * k], cs[2 * k + 1], r, handleFill); c.drawCircle(cs[2 * k], cs[2 * k + 1], r, handleStroke) }
-        val rot = rotateHandle(cs)
-        val mx = (cs[0] + cs[2]) / 2; val my = (cs[1] + cs[3]) / 2
-        c.drawLine(mx, my, rot[0], rot[1], handleStroke)
-        c.drawCircle(rot[0], rot[1], r, handleFill); c.drawCircle(rot[0], rot[1], r, handleStroke)
+        val poly = polySel()
+        val shape = shapeSel()
+        if (ed.transformMode) {
+            if (poly == null && shape == null) for (k in 0..3) { c.drawCircle(cs[2 * k], cs[2 * k + 1], r, handleFill); c.drawCircle(cs[2 * k], cs[2 * k + 1], r, handleStroke) }
+            val rot = rotateHandle(cs, topmost = !(lLifting && lm == LM.ROTATE))
+            c.drawLine(rot[2], rot[3], rot[0], rot[1], handleStroke)
+            c.drawCircle(rot[0], rot[1], r, handleFill); c.drawCircle(rot[0], rot[1], r, handleStroke)
+        }
+        if (poly != null) for (i in 0 until poly.vertexCount) {
+            val vx = scrX(pi, poly.pts[3 * i]); val vy = scrY(pi, poly.pts[3 * i + 1])
+            c.drawCircle(vx, vy, r * 1.15f, handleFill); c.drawCircle(vx, vy, r * 1.15f, handleStroke)
+        }
+        val sf = shape?.let { ShapeBox.frameOf(it) }
+        if (sf != null) for (h in 0 until ShapeBox.HANDLES) {
+            val hx = scrX(pi, ShapeBox.handleX(sf, h)); val hy = scrY(pi, ShapeBox.handleY(sf, h))
+            val hr = if (ShapeBox.isCorner(h)) r * 1.15f else r * 0.95f
+            c.drawCircle(hx, hy, hr, handleFill); c.drawCircle(hx, hy, hr, handleStroke)
+        }
     }
 
-    private fun rotateHandle(cs: FloatArray): FloatArray {
-        val mx = (cs[0] + cs[2]) / 2; val my = (cs[1] + cs[3]) / 2
-        var nx = cs[1] - cs[3]; var ny = cs[2] - cs[0]   // normalna na zewnątrz górnej krawędzi
-        val l = hypot(nx, ny).coerceAtLeast(0.001f)
-        nx /= l; ny /= l
-        return floatArrayOf(mx + nx * 34f * dp, my + ny * 34f * dp)
+    /** Uchwyt obrotu: nad najwyżej leżącą krawędzią ramki (cztery rogi [cs]); zwraca (x, y) uchwytu i (x, y) środka krawędzi. */
+    private fun rotateHandle(cs: FloatArray, topmost: Boolean = true): FloatArray {
+        val gx = (cs[0] + cs[2] + cs[4] + cs[6]) / 4; val gy = (cs[1] + cs[3] + cs[5] + cs[7]) / 4
+        var bx = 0f; var by = 0f; var bnx = 0f; var bny = 1f
+        for (k in 0..3) {
+            val k2 = (k + 1) % 4
+            val mx = (cs[2 * k] + cs[2 * k2]) / 2; val my = (cs[2 * k + 1] + cs[2 * k2 + 1]) / 2
+            var nx = mx - gx; var ny = my - gy
+            val l = hypot(nx, ny).coerceAtLeast(0.001f)
+            nx /= l; ny /= l
+            if (k == 0 || (topmost && ny < bny)) { bx = mx; by = my; bnx = nx; bny = ny }
+        }
+        return floatArrayOf(bx + bnx * ROTATE_OFFSET_DP * dp, by + bny * ROTATE_OFFSET_DP * dp, bx, by)
+    }
+
+    /** Ramka zaznaczenia na ekranie (4 rogi): dla kształtu z uchwytami zorientowana, inaczej prostokąt osiowy [b]. */
+    private fun selQuad(pi: Int, b: Bounds): FloatArray {
+        val f = shapeSel()?.let { ShapeBox.frameOf(it) } ?: return cornersScreen(pi, b)
+        val cs = FloatArray(8)
+        for (k in 0..3) { cs[2 * k] = scrX(pi, ShapeBox.handleX(f, 2 * k)); cs[2 * k + 1] = scrY(pi, ShapeBox.handleY(f, 2 * k)) }
+        return cs
     }
 
     private fun drawRing(c: Canvas) {
@@ -894,7 +964,7 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
                 if (rejectFinger(ev.eventTime)) { mode = Mode.IGNORE; return }
                 if (rh != 0) { startRuler(ev, rh); return }
                 when (settings.fingerMode) {
-                    0 -> startNav(ev)
+                    0 -> if (!ed.readOnly && selGrab(ev.x, ev.y, false)) beginTool(ev, 0, Tool.LASSO) else { startNav(ev); navSelect = true }
                     1 -> if (navOnly(ev, 0)) startNav(ev) else beginTool(ev, 0)
                     else -> mode = Mode.IGNORE
                 }
@@ -953,7 +1023,7 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
     // ───────────────────────── nawigacja (palec / mysz) ─────────────────────────
 
     private fun startNav(ev: MotionEvent) {
-        mode = Mode.NAV
+        mode = Mode.NAV; navSelect = false
         stopAnim()
         vt?.recycle(); vt = VelocityTracker.obtain().also { it.addMovement(ev) }
         navMax = ev.pointerCount; navTravel = 0f; navT0 = ev.eventTime
@@ -1008,8 +1078,8 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
                 when (navMax) {
                     1 -> {
                         val now = ev.eventTime
-                        if (now - lastTapT < 320L && hypot(ev.x - lastTapX, ev.y - lastTapY) < 48f * dp) { toggleZoom(ev.x, ev.y); lastTapT = 0L }
-                        else { lastTapT = now; lastTapX = ev.x; lastTapY = ev.y }
+                        if (now - lastTapT < 320L && hypot(ev.x - lastTapX, ev.y - lastTapY) < 48f * dp) { doubleTapAction(ev.x, ev.y); lastTapT = 0L }
+                        else { lastTapT = now; lastTapX = ev.x; lastTapY = ev.y; if (navSelect) tapSelect(ev.x, ev.y) }
                     }
                     2 -> if (settings.twoFingerUndo) ed.undo()
                     3 -> if (settings.twoFingerUndo) ed.redo()
@@ -1284,12 +1354,8 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
         val pi = pageIdxAt(sx, sy)
         if (pi < 0) return 0
         val page = doc.pages[pi]; val spec = page.spec
-        val b = cache.entry(page, cache.scaleFor(zoom, spec), false).bmp ?: return 0
-        return runCatching {
-            val px = (pgX(pi, sx) / spec.w * b.width).toInt().coerceIn(0, b.width - 1)
-            val py = (pgY(pi, sy) / spec.h * b.height).toInt().coerceIn(0, b.height - 1)
-            b.getPixel(px, py) or 0xFF000000.toInt()
-        }.getOrDefault(0)
+        val col = cache.pixel(page, pgX(pi, sx), pgY(pi, sy))
+        return if (col == 0) 0 else col or 0xFF000000.toInt()
     }
 
     private fun pickDone() {
@@ -1337,22 +1403,25 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
 
     // ───────────────────────── narzędzia: wspólne ─────────────────────────
 
-    private fun beginTool(ev: MotionEvent, idx: Int) {
+    private fun beginTool(ev: MotionEvent, idx: Int, forced: Tool? = null) {
         toolPid = ev.getPointerId(idx); toolType = ev.getToolType(idx)
         if (toolType == MotionEvent.TOOL_TYPE_STYLUS && ev.buttonState and MotionEvent.BUTTON_STYLUS_PRIMARY != 0 && settings.penButton == 2) {
             ed.undo(); mode = Mode.IGNORE; return
         }
-        val tool = effectiveTool(ev, idx)
+        var tool = forced ?: effectiveTool(ev, idx)
+        // Ręka z zaznaczeniem: uchwyty i wnętrze ramki (rysikiem) działają jak lasso, reszta nadal przewija.
+        if (tool == Tool.HAND && !ed.readOnly && selGrab(ev.getX(idx), ev.getY(idx), toolType != MotionEvent.TOOL_TYPE_FINGER)) tool = Tool.LASSO
         activeTool = tool
-        if (tool == Tool.HAND) { startNav(ev); return }
+        if (tool == Tool.HAND) { startNav(ev); navSelect = true; return }
         mode = Mode.TOOL
         curX = ev.getX(idx); curY = ev.getY(idx)
         downX = curX; downY = curY; downT = ev.eventTime; toolMoved = false
         lm = LM.NONE; ln = 0
+        if ((tool == Tool.PEN || tool == Tool.LASSO) && (resizeDown() || vertexDown())) { activeTool = Tool.LASSO; invalidate(); return }
         when (tool) {
             Tool.PEN -> penDown(ev, idx)
             Tool.ERASER -> eraseDown()
-            Tool.LASSO -> lassoDown()
+            Tool.LASSO -> { lassoDown(); if (mode == Mode.TOOL) postDelayed(holdRunnable, 520L) }
             Tool.SPACE -> spaceDown()
             Tool.TAPE -> tapeDown()
             Tool.LASER -> { laser.begin(System.currentTimeMillis()); addLaser(curX, curY) }
@@ -1413,7 +1482,7 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
         val sp = PenSpec.of(p.kind)
         builder.begin(p.kind, p.color, p.width, (sp.smoothing * settings.smoothing).coerceIn(0f, 1f), (0.5f / zoom).coerceIn(0.05f, 0.9f))
         liveActive = true; shapeSnapped = false; predN = 0
-        holdX = curX; holdY = curY
+        holdX = curX; holdY = curY; holdRaw = 0
         if (ed.sel != null) ed.clearSel()
         rulerSide = 0
         if (ed.ruler) {
@@ -1443,9 +1512,11 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
     }
 
     private fun penMove(ev: MotionEvent, idx: Int) {
-        if (!liveActive || shapeSnapped) return
+        if (!liveActive) return
+        if (shapeSnapped) { adjustSnapped(); return }
         feedPen(ev, idx)
-        if (hypot(curX - holdX, curY - holdY) > 3f * dp) { holdX = curX; holdY = curY; armHold() }
+        // Ślizgający się rysik dryfuje: licznik przytrzymania zeruje dopiero wyraźny ruch poza promieniem dryfu wokół punktu osiadnięcia.
+        if (hypot(curX - holdX, curY - holdY) > HOLD_DRIFT_DP * dp) { holdX = curX; holdY = curY; holdRaw = builder.rawCount; armHold() }
         updatePrediction()
     }
 
@@ -1466,16 +1537,76 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
     }
 
     private fun trySnapShape() {
-        val n = builder.count
-        if (n < 8) return
-        val xy = FloatArray(2 * n)
-        for (i in 0 until n) { xy[2 * i] = builder.pts[3 * i]; xy[2 * i + 1] = builder.pts[3 * i + 1] }
-        val shape = ShapeRecognizer.recognize(xy, n) ?: return
+        // Rozpoznajemy z surowych próbek (wygładzony filtr zaokrągla rogi) i bez ogona dryfu po osiadnięciu pióra.
+        val total = builder.rawCount
+        if (total < 8) return
+        val n = if (holdRaw >= 8) holdRaw.coerceAtMost(total) else total
+        val shape = ShapeRecognizer.recognize(builder.raw, n) ?: return
         val m = shape.xy.size / 2
         shapePts = FloatArray(3 * m)
         for (i in 0 until m) { shapePts[3 * i] = shape.xy[2 * i]; shapePts[3 * i + 1] = shape.xy[2 * i + 1]; shapePts[3 * i + 2] = 1f }
+        shapeKind = shape.kind; shapePoly = shape.poly; shapeBase = shape.xy
+        shapeDownX = builder.raw[2 * total - 2]; shapeDownY = builder.raw[2 * total - 1]
+        var sx = 0f; var sy = 0f
+        for (i in 0 until m) { sx += shape.xy[2 * i]; sy += shape.xy[2 * i + 1] }
+        shapeCx = sx / m; shapeCy = sy / m
+        shapeRef = hypot(shapeDownX - shapeCx, shapeDownY - shapeCy)
+        shapeSnapAng = Float.NaN; shapeLabel = null
         shapeSnapped = true; predN = 0
         performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
+        invalidate()
+    }
+
+    /**
+     * Po rozpoznaniu kształtu pióro nadal trzymane reguluje go na żywo: koniec linii podąża za piórem (długość i kąt,
+     * kąt przyciąga co 15°), pozostałe kształty skalują się względem środka.
+     */
+    private fun adjustSnapped() {
+        val pi = livePage
+        if (pi !in 0 until layout.count) return
+        val px = pgX(pi, curX); val py = pgY(pi, curY)
+        // Martwa strefa: drobny dryf pióra tuż po rozpoznaniu nie rusza kształtu, dopiero świadome przesunięcie.
+        val dead = SNAP_DEAD_DP * dp / zoom
+        var dx = px - shapeDownX; var dy = py - shapeDownY
+        val dm = hypot(dx, dy)
+        if (dm <= dead) { dx = 0f; dy = 0f } else { val f = (dm - dead) / dm; dx *= f; dy *= f }
+        val b = shapeBase
+        val mm = settings.unitsMm
+        fun fmt(pt: Float) = if (mm) "%.1f mm".format(pt * 25.4f / 72f) else "%.2f in".format(pt / 72f)
+        if (shapeKind == ShapeKind.LINE) {
+            val x1 = b[0]; val y1 = b[1]
+            var x2 = b[2] + dx; var y2 = b[3] + dy
+            val len = hypot(x2 - x1, y2 - y1)
+            var ang = atan2(y2 - y1, x2 - x1)
+            val step = (PI / 12).toFloat()
+            val snapped = (ang / step).roundToInt() * step
+            val onStep = abs(ang - snapped) < Math.toRadians(3.0)
+            if (onStep) { ang = snapped; x2 = x1 + cos(ang) * len; y2 = y1 + sin(ang) * len }
+            if (onStep && shapeSnapAng != snapped) { performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK) }
+            shapeSnapAng = if (onStep) snapped else Float.NaN
+            shapePts[3] = x2; shapePts[4] = y2
+            val deg = ((Math.toDegrees((-ang).toDouble()) % 180.0) + 180.0) % 180.0
+            shapeLabel = "${fmt(len)} · ${"%.0f".format(deg)}°"
+        } else if (shapeKind == ShapeKind.RECT && ShapeBox.frameOfCorners(b) != null) {
+            // Prostokąt: ruch pióra w poziomie zmienia szerokość, w pionie wysokość (niezależnie).
+            val f0 = ShapeBox.frameOfCorners(b)!!
+            val f = ShapeBox.dragged(f0, shapeDownX, shapeDownY, shapeDownX + dx, shapeDownY + dy, SNAP_EQ_DP * dp / zoom)
+            val ca = floatArrayOf(-1f, 1f, 1f, -1f, -1f); val cb = floatArrayOf(-1f, -1f, 1f, 1f, -1f)
+            for (i in 0 until 5) { shapePts[3 * i] = f.x(ca[i], cb[i]); shapePts[3 * i + 1] = f.y(ca[i], cb[i]) }
+            shapeLabel = "${fmt(2f * f.hw)} × ${fmt(2f * f.hh)}" + if (f.hw == f.hh) " =" else ""
+        } else {
+            val moved = dm > dead
+            val k = if (moved && shapeRef > 6f) (hypot(px - shapeCx, py - shapeCy) / shapeRef).coerceIn(0.2f, 8f) else 1f
+            val m = b.size / 2
+            var l = Float.MAX_VALUE; var t = Float.MAX_VALUE; var r = -Float.MAX_VALUE; var bt = -Float.MAX_VALUE
+            for (i in 0 until m) {
+                val x = shapeCx + (b[2 * i] - shapeCx) * k; val y = shapeCy + (b[2 * i + 1] - shapeCy) * k
+                shapePts[3 * i] = x; shapePts[3 * i + 1] = y
+                l = min(l, x); r = max(r, x); t = min(t, y); bt = max(bt, y)
+            }
+            shapeLabel = "${fmt(r - l)} × ${fmt(bt - t)}"
+        }
+        ed.viewTick++
         invalidate()
     }
 
@@ -1483,11 +1614,115 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
         if (!liveActive) return
         liveActive = false; rulerSide = 0
         val pi = livePage
-        val stroke = if (cancel) null else if (shapeSnapped) Stroke(Ids.next(), builder.penKind, builder.penColor, builder.width, shapePts, false) else builder.finish(Ids.next())
-        shapeSnapped = false
+        val snapped = shapeSnapped
+        val stroke = if (cancel) null else if (snapped) Stroke(Ids.next(), builder.penKind, builder.penColor, builder.width, shapePts.copyOf(), false, shapePoly, shapeKind == ShapeKind.ELLIPSE) else builder.finish(Ids.next())
+        shapeSnapped = false; shapeLabel = null
         if (stroke == null || pi !in doc.pages.indices) return
         val page = doc.pages[pi]
         ed.exec(DocEdit.Elements(page.id, ElementsEdit.add(doc.content(page), listOf(stroke))))
+        // Kształt z uchwytami od razu zaznaczony — niebieskie punkty pozwalają go przekształcić.
+        if (snapped) ed.select(page.id, setOf(stroke.id))
+    }
+
+    // ───────────────────────── uchwyty wierzchołków łamanej ─────────────────────────
+
+    /** Jedyny zaznaczony element, jeśli jest łamaną z uchwytami (nie zablokowaną); w trakcie przeciągania — jej bieżąca wersja. */
+    private fun polySel(): Stroke? {
+        if (lLifting && lm == LM.VERTEX) return lEls.firstOrNull() as? Stroke
+        val s = ed.sel ?: return null
+        if (s.ids.size != 1 || lLifting) return null
+        val e = ed.selElements().singleOrNull() as? Stroke ?: return null
+        return if (e.poly && !e.locked && e.count >= 2 && ShapeBox.frameOf(e) == null) e else null
+    }
+
+    /** Jedyny zaznaczony kwadrat, prostokąt lub elipsa z autokorekty (8 uchwytów szerokości i wysokości); w trakcie zmiany — jej bieżąca wersja. */
+    private fun shapeSel(): Stroke? {
+        if (lLifting) return if (lm == LM.RESIZE) lEls.firstOrNull() as? Stroke else null
+        val s = ed.sel ?: return null
+        if (s.ids.size != 1) return null
+        val e = ed.selElements().singleOrNull() as? Stroke ?: return null
+        return if (ShapeBox.frameOf(e) != null) e else null
+    }
+
+    /** Promień chwytu uchwytów kształtu: najwyżej 24 dp, a przy małym kształcie mniejszy, by środek zostawał do przesuwania. */
+    private fun resizeHitRadius(f: ShapeFrame) = min(24f * dp, max(12f * dp, 0.7f * min(f.hw, f.hh) * zoom))
+
+    /** Numer uchwytu kształtu pod punktem ekranu albo -1. */
+    private fun resizeHit(st: Stroke, pi: Int, sx: Float, sy: Float): Int {
+        val f = ShapeBox.frameOf(st) ?: return -1
+        var best = -1; var bd = resizeHitRadius(f)
+        for (h in 0 until ShapeBox.HANDLES) {
+            val d = hypot(sx - scrX(pi, ShapeBox.handleX(f, h)), sy - scrY(pi, ShapeBox.handleY(f, h)))
+            if (d < bd) { bd = d; best = h }
+        }
+        return best
+    }
+
+    private fun resizeDown(): Boolean {
+        val st = shapeSel() ?: return false
+        val s = ed.sel ?: return false
+        val pi = doc.indexOf(s.pageId); if (pi < 0) return false
+        val h = resizeHit(st, pi, curX, curY)
+        if (h < 0) return false
+        val f = ShapeBox.frameOf(st) ?: return false
+        lPage = pi; lm = LM.RESIZE; lIds = s.ids; vBase = st; rFrame = f; rHandle = h
+        lBounds = st.bounds; lM = Affine.IDENTITY; lLifting = false
+        // Uchwyt zostaje pod piórem tam, gdzie go chwycono (bez skoku do środka kropki).
+        vDx = ShapeBox.handleX(f, h) - pgX(pi, curX); vDy = ShapeBox.handleY(f, h) - pgY(pi, curY)
+        return true
+    }
+
+    /** Przeciąga uchwyt kształtu: przeciwległa krawędź stoi, kwadrat i koło łapią się same, opcjonalnie siatka. */
+    private fun resizeDrag(px: Float, py: Float) {
+        val b = vBase ?: return; val f = rFrame ?: return
+        var x = px + vDx; var y = py + vDy
+        if (settings.snapGrid || ed.gridSnap) { val g = 14.17f; x = (x / g).roundToInt() * g; y = (y / g).roundToInt() * g }
+        val g = ShapeBox.resized(f, rHandle, x, y, 6f * dp / zoom)
+        val cur = ShapeBox.applyTo(b, f, g)
+        lEls = listOf(cur); lBounds = cur.bounds
+        val mm = settings.unitsMm
+        fun fmt(pt: Float) = if (mm) "%.1f mm".format(pt * 25.4f / 72f) else "%.2f in".format(pt / 72f)
+        val equal = abs(g.hw - g.hh) < 1e-3f
+        shapeLabel = "${fmt(2 * g.hw)} × ${fmt(2 * g.hh)}" + if (equal) " · =" else ""
+        ed.viewTick++
+    }
+
+    private fun vertexDown(): Boolean {
+        val st = polySel() ?: return false
+        val s = ed.sel ?: return false
+        val pi = doc.indexOf(s.pageId); if (pi < 0) return false
+        var best = -1; var bd = 24f * dp
+        for (i in 0 until st.vertexCount) {
+            val d = hypot(curX - scrX(pi, st.pts[3 * i]), curY - scrY(pi, st.pts[3 * i + 1]))
+            if (d < bd) { bd = d; best = i }
+        }
+        if (best < 0) return false
+        lPage = pi; lm = LM.VERTEX; lIds = s.ids; vIdx = best; vBase = st
+        lBounds = st.bounds; lM = Affine.IDENTITY; lLifting = false
+        vDx = st.pts[3 * best] - pgX(pi, curX); vDy = st.pts[3 * best + 1] - pgY(pi, curY)
+        return true
+    }
+
+    /** Przesuwa uchwyt: przyciąga do osi pozostałych wierzchołków (poziom/pion) i opcjonalnie do siatki. */
+    private fun vertexDrag(px: Float, py: Float) {
+        val b = vBase ?: return
+        var x = px + vDx; var y = py + vDy
+        if (settings.snapGrid || ed.gridSnap) { val g = 14.17f; x = (x / g).roundToInt() * g; y = (y / g).roundToInt() * g }
+        else {
+            val tol = 5f * dp / zoom
+            var bx = tol; var by = tol
+            var sx = x; var sy = y
+            for (j in 0 until b.vertexCount) {
+                if (j == vIdx) continue
+                val dxj = abs(b.pts[3 * j] - x); val dyj = abs(b.pts[3 * j + 1] - y)
+                if (dxj < bx) { bx = dxj; sx = b.pts[3 * j] }
+                if (dyj < by) { by = dyj; sy = b.pts[3 * j + 1] }
+            }
+            x = sx; y = sy
+        }
+        val cur = b.withVertex(vIdx, x, y)
+        lEls = listOf(cur); lBounds = cur.bounds
+        ed.viewTick++
     }
 
     // ───────────────────────── okno powiększenia (EXT-003) ─────────────────────────
@@ -1513,7 +1748,7 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
     private fun zwLayout() {
         val w = min(width - 16f * dp, 640f * dp)
         val h = (height * 0.30f).coerceIn(150f * dp, 260f * dp)
-        val bottom = height - (if (settings.toolbarPos == 1 && ed.chrome) 76f * dp else 8f * dp)
+        val bottom = height - 8f * dp
         val l = (width - w) / 2f
         zwRect.set(l, max(8f * dp, bottom - h), l + w, bottom)
     }
@@ -1651,11 +1886,10 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
         c.scale(z, z)
         c.translate(-zw.x, -zw.y)
         c.clipRect(0f, 0f, spec.w, spec.h)
-        val e = cache.entry(page, cache.scaleFor(zoom, spec), true)
-        renderer.drawPaper(c, spec, z, e.bg)
+        renderer.drawPaper(c, spec, z, cache.backdrop(page))
         renderer.drawElements(c, doc.id, doc.content(page), 0, Bounds(zw.x, zw.y, zw.x + rw, zw.y + rh), z, false, spec.darkPaper)
         if (liveActive && livePage == zwPage) {
-            if (shapeSnapped) renderer.drawStrokeData(c, builder.penKind, builder.penColor, builder.width, shapePts, shapePts.size / 3, z, spec.darkPaper)
+            if (shapeSnapped) renderer.drawStrokeData(c, builder.penKind, builder.penColor, builder.width, shapePts, shapePts.size / 3, z, spec.darkPaper, shapePoly)
             else renderer.drawStrokeData(c, builder.penKind, builder.penColor, builder.width, builder.pts, builder.count, z, spec.darkPaper)
         }
         c.restore()
@@ -1777,16 +2011,17 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
             if (pi >= 0 && b != null) {
                 lPage = pi
                 val locked = ed.selElements().any { it.locked }
-                val cs = cornersScreen(pi, b)
+                val cs = selQuad(pi, b)
                 val rot = rotateHandle(cs)
                 val hr = 24f * dp
                 val px = pgX(pi, curX); val py = pgY(pi, curY)
-                if (!locked) {
-                    if (hypot(curX - rot[0], curY - rot[1]) < hr) {
+                if (!locked && ed.transformMode) {
+                    if (hypot(curX - rot[0], curY - rot[1]) < ROTATE_HIT_DP * dp) {
                         prepareTransform(LM.ROTATE, s, b, px, py)
                         lAngleStart = atan2(py - b.cy, px - b.cx); return
                     }
-                    for (k in 0..3) if (hypot(curX - cs[2 * k], curY - cs[2 * k + 1]) < hr) {
+                    val noScale = polySel() != null || shapeSel() != null
+                    for (k in 0..3) if (!noScale && hypot(curX - cs[2 * k], curY - cs[2 * k + 1]) < hr) {
                         prepareTransform(LM.SCALE, s, b, px, py)
                         val ox = cs[(2 * ((k + 2) % 4))]; val oy = cs[2 * ((k + 2) % 4) + 1]
                         lAx = pgX(pi, ox); lAy = pgY(pi, oy)
@@ -1802,6 +2037,17 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
         if (pi < 0) { mode = Mode.IGNORE; return }
         lPage = pi; lm = LM.DRAW; ln = 0
         addLasso(pgX(pi, curX), pgY(pi, curY))
+    }
+
+    /** Przytrzymanie lassa w miejscu (bez ruchu) otwiera menu kontekstowe — tam jest „Wklej” (jak w GoodNotes). */
+    private fun lassoHold() {
+        if (toolMoved || lLifting) return
+        if (lm != LM.DRAW && lm != LM.MOVE && lm != LM.NONE) return
+        if (lm == LM.DRAW && hypot(curX - downX, curY - downY) > slop) return
+        performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+        ln = 0; lm = LM.NONE
+        openCtx(downX, downY)
+        mode = Mode.IGNORE
     }
 
     private fun prepareTransform(kind: LM, s: Sel, b: Bounds, px: Float, py: Float) {
@@ -1848,6 +2094,14 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
                 }
                 ed.viewTick++
             }
+            LM.VERTEX -> {
+                if (!lLifting) { if (!toolMoved) return; liftSelection() }
+                vertexDrag(px, py)
+            }
+            LM.RESIZE -> {
+                if (!lLifting) { if (!toolMoved) return; liftSelection() }
+                resizeDrag(px, py)
+            }
             LM.NONE -> {}
         }
     }
@@ -1869,7 +2123,7 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
                 val ids = doc.content(page).elements.filter { !it.locked && EraseMath.selectedByLasso(it, poly) }.map { it.id }.toSet()
                 ed.select(page.id, ids)
             }
-            LM.MOVE, LM.SCALE, LM.ROTATE, LM.NONE -> if (!toolMoved) lassoTap(page, pgX(pi, curX), pgY(pi, curY))
+            LM.MOVE, LM.SCALE, LM.ROTATE, LM.VERTEX, LM.RESIZE, LM.NONE -> if (!toolMoved) lassoTap(page, pgX(pi, curX), pgY(pi, curY))
         }
         ln = 0; lm = LM.NONE
     }
@@ -1877,15 +2131,17 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
     private fun commitTransform(cancel: Boolean) {
         val page = doc.pages.getOrNull(lPage)
         val orig = lOrig; val lifted = lLifted
+        val vertex = lm == LM.VERTEX || lm == LM.RESIZE
         lLifting = false
         lm = LM.NONE; ln = 0
+        vBase = null; rFrame = null; shapeLabel = null
         if (page == null || orig == null || lifted == null) return
         val m = lM
-        if (cancel || m.isIdentity) {
+        if (cancel || (m.isIdentity && !vertex)) {
             doc.applyElements(page.id, ElementsEdit.diff(lifted, orig))
         } else {
             val map = HashMap<Int, Element>()
-            for (e in lEls) map[e.id] = e.transformed(m)
+            for (e in lEls) map[e.id] = if (vertex) e else e.transformed(m)
             val final = PageContent.of(orig.elements.map { map[it.id] ?: it })
             doc.applyElements(page.id, ElementsEdit.diff(lifted, final))
             ed.record(DocEdit.Elements(page.id, ElementsEdit.diff(orig, final)))
@@ -1894,11 +2150,12 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
         ed.selTick++
     }
 
-    private fun hitTop(page: PageState, px: Float, py: Float): Element? {
+    private fun hitTop(page: PageState, px: Float, py: Float, slopDp: Float = 8f, skipLocked: Boolean = false): Element? {
         val els = doc.content(page).elements
-        val slop = 8f * dp / zoom
+        val slop = slopDp * dp / zoom
         for (i in els.indices.reversed()) {
             val e = els[i]
+            if (skipLocked && e.locked) continue
             if (!e.bounds.inflate(slop + 2f).contains(px, py)) continue
             if (e is BoxElement) { if (e.containsPoint(px, py, slop)) return e }
             else if (EraseMath.hitsElement(e, px, py, slop)) return e
@@ -1906,8 +2163,56 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
         return null
     }
 
+    /** Element pod dotknięciem: najpierw ścisłe trafienie, potem coraz szerszy margines (cienka kreska pod rysikiem/palcem). */
+    private fun pickAt(page: PageState, px: Float, py: Float, skipLocked: Boolean = false): Element? {
+        for (slopDp in TAP_SLOPS_DP) hitTop(page, px, py, slopDp, skipLocked)?.let { return it }
+        return null
+    }
+
+    /** Dotknięcie w trybie ręki (rysik) lub palcem: zaznacza element pod spodem, puste miejsce zdejmuje zaznaczenie. */
+    private fun tapSelect(sx: Float, sy: Float) {
+        if (ed.readOnly) return
+        val pi = pageIdxAt(sx, sy)
+        if (pi < 0) { if (ed.sel != null) ed.clearSel(); return }
+        val page = doc.pages[pi]
+        val hit = pickAt(page, pgX(pi, sx), pgY(pi, sy), skipLocked = true)
+        val s = ed.sel
+        when {
+            hit == null -> if (s != null) ed.clearSel()
+            hit is TextBox && s != null && s.ids.size == 1 && hit.id in s.ids -> ed.editText(page.id, hit)
+            else -> ed.select(page.id, setOf(hit.id))
+        }
+        performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
+    }
+
+    /**
+     * Czy dotyk w (sx, sy) łapie zaznaczenie: uchwyt wierzchołka łamanej, uchwyt obrotu, róg ramki, a przy [interior] także wnętrze ramki.
+     * Nic nie zmienia — sam gest przejmuje potem lasso.
+     */
+    private fun selGrab(sx: Float, sy: Float, interior: Boolean): Boolean {
+        val s = ed.sel ?: return false
+        val pi = doc.indexOf(s.pageId); if (pi < 0) return false
+        val els = ed.selElements()
+        if (els.isEmpty() || els.any { it.locked }) return false
+        val st = polySel()
+        if (st != null) {
+            for (i in 0 until st.vertexCount) if (hypot(sx - scrX(pi, st.pts[3 * i]), sy - scrY(pi, st.pts[3 * i + 1])) < 24f * dp) return true
+        }
+        val sh = shapeSel()
+        if (sh != null && resizeHit(sh, pi, sx, sy) >= 0) return true
+        val b = selBounds() ?: return false
+        val cs = selQuad(pi, b)
+        val rot = rotateHandle(cs)
+        val hr = 24f * dp
+        if (ed.transformMode) {
+            if (hypot(sx - rot[0], sy - rot[1]) < ROTATE_HIT_DP * dp) return true
+            if (st == null && sh == null) for (k in 0..3) if (hypot(sx - cs[2 * k], sy - cs[2 * k + 1]) < hr) return true
+        }
+        return interior && b.inflate(10f * dp / zoom).contains(pgX(pi, sx), pgY(pi, sy))
+    }
+
     private fun lassoTap(page: PageState, px: Float, py: Float) {
-        val hit = hitTop(page, px, py)
+        val hit = pickAt(page, px, py)
         val s = ed.sel
         when {
             hit == null -> ed.clearSel()
@@ -1947,5 +2252,12 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
     }
 
     companion object {
+        private const val HOLD_DRIFT_DP = 10f   // promień dryfu, w którym przytrzymanie nie jest zerowane
+        private const val SNAP_EQ_DP = 6f       // przyciąganie boków prostokąta do równych (kwadrat)
+        private const val SNAP_DEAD_DP = 6f     // martwa strefa regulacji kształtu po rozpoznaniu
+        /** Uchwyt obrotu leży daleko nad ramką, a jego strefa dotyku (20 dp) nie sięga strefy przesuwania (ramka + 10 dp). */
+        const val ROTATE_OFFSET_DP = 52f
+        private const val ROTATE_HIT_DP = 20f
+        private val TAP_SLOPS_DP = floatArrayOf(8f, 14f, 22f)
     }
 }

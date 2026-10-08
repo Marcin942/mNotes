@@ -95,7 +95,7 @@ class PageRenderer(private val assets: Assets?) {
 
     fun drawElement(c: Canvas, nb: String, e: Element, scale: Float, decodeImages: Boolean, dark: Boolean = false) {
         when (e) {
-            is Stroke -> drawStrokeData(c, e.pen, e.color, e.width, e.pts, e.count, scale, dark)
+            is Stroke -> drawStrokeData(c, e.pen, e.color, e.width, e.pts, e.count, scale, dark, e.poly)
             is TextBox -> drawText(c, e)
             is ImageEl -> drawImage(c, nb, e, decodeImages)
             is TapeEl -> drawTape(c, e)
@@ -147,8 +147,11 @@ class PageRenderer(private val assets: Assets?) {
         }
     }
 
-    /** Kreska z surowych danych (trójki x,y,p) — używana też do podglądu na żywo. [dark] = ciemny papier. */
-    fun drawStrokeData(c: Canvas, pen: PenKind, color: Int, width: Float, pts: FloatArray, n: Int, scale: Float, dark: Boolean = false) {
+    /**
+     * Kreska z surowych danych (trójki x,y,p) — używana też do podglądu na żywo. [dark] = ciemny papier.
+     * [sharp] = łamana z rozpoznanego kształtu: wierzchołki są rogami, więc rysujemy odcinki, a nie krzywą przez środki krawędzi.
+     */
+    fun drawStrokeData(c: Canvas, pen: PenKind, color: Int, width: Float, pts: FloatArray, n: Int, scale: Float, dark: Boolean = false, sharp: Boolean = false) {
         if (n <= 0) return
         val spec = PenSpec.of(pen)
         paint.reset(); paint.isAntiAlias = true
@@ -176,6 +179,7 @@ class PageRenderer(private val assets: Assets?) {
             path.rewind()
             path.moveTo(pts[0], pts[1])
             if (n == 2) path.lineTo(pts[3], pts[4])
+            else if (sharp) for (i in 1 until n) path.lineTo(pts[3 * i], pts[3 * i + 1])
             else {
                 for (i in 1 until n - 1) {
                     val x0 = pts[3 * i]; val y0 = pts[3 * i + 1]

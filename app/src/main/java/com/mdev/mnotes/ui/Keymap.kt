@@ -93,7 +93,9 @@ object CmdDefs {
         CmdDef("newWindow", 0, "Nowe okno (biblioteka)", "New window (library)", "Ctrl+Alt+N"),
         CmdDef("zoomWindow", 2, "Okno powiększenia", "Zoom window", "Ctrl+Alt+Z"),
         CmdDef("pagesDock", 2, "Zadokuj panel stron (szerokie okno)", "Dock page panel (wide window)", "Ctrl+F9"),
-        CmdDef("close", 0, "Zamknij zeszyt", "Close notebook", "Ctrl+W"),
+        CmdDef("close", 0, "Zamknij zeszyt (kartę)", "Close notebook (tab)", "Ctrl+W"),
+        CmdDef("tabNext", 0, "Następna karta", "Next tab", "Ctrl+Tab"),
+        CmdDef("tabPrev", 0, "Poprzednia karta", "Previous tab", "Ctrl+Shift+Tab"),
 
         CmdDef("undo", 1, "Cofnij", "Undo", "Ctrl+Z", true),
         CmdDef("redo", 1, "Ponów", "Redo", "Ctrl+Y", true),

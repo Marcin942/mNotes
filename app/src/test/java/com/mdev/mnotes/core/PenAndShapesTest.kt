@@ -168,4 +168,63 @@ class PenAndShapesTest {
         assertNull(ShapeRecognizer.recognize(scribble))
         assertNull(ShapeRecognizer.recognize(floatArrayOf(0f, 0f, 1f, 1f)))
     }
+
+    @Test fun recognizesSquareAndCircleAsRegular() {
+        val sq = ShapeRecognizer.recognize(poly(30f to 30f, 150f to 33f, 148f to 152f, 31f to 150f, 30f to 30f))
+        assertEquals(ShapeKind.RECT, sq?.kind)
+        val side0 = kotlin.math.hypot(sq!!.xy[2] - sq.xy[0], sq.xy[3] - sq.xy[1])
+        val side1 = kotlin.math.hypot(sq.xy[4] - sq.xy[2], sq.xy[5] - sq.xy[3])
+        assertEquals(side0, side1, 0.01f)
+        val el = FloatArray(2 * 80)
+        for (i in 0 until 80) { val a = 2 * PI.toFloat() * i / 79f; el[2 * i] = 100f + 60f * cos(a); el[2 * i + 1] = 100f + 57f * sin(a) }
+        val c = ShapeRecognizer.recognize(el)
+        assertEquals(ShapeKind.ELLIPSE, c?.kind)
+        assertFalse(c!!.poly)
+    }
+
+    @Test fun recognizesAngularOpenAndClosedPolylines() {
+        val z = ShapeRecognizer.recognize(poly(20f to 20f, 160f to 20f, 30f to 120f, 170f to 120f))
+        assertEquals(ShapeKind.POLYLINE, z?.kind); assertTrue(z!!.poly)
+        assertEquals(4, z.xy.size / 2)
+        val l = ShapeRecognizer.recognize(poly(20f to 20f, 20f to 140f, 150f to 140f))
+        assertEquals(ShapeKind.POLYLINE, l?.kind); assertEquals(3, l!!.xy.size / 2)
+        val pent = FloatList()
+        val corners = List(5) { val a = 2 * PI.toFloat() * it / 5f - PI.toFloat() / 2f; (100f + 80f * cos(a)) to (100f + 80f * sin(a)) }
+        val pp = poly(*(corners + corners[0]).toTypedArray())
+        val pe = ShapeRecognizer.recognize(pp)
+        assertEquals(ShapeKind.POLYLINE, pe?.kind)
+        assertEquals(6, pe!!.xy.size / 2) // 5 wierzchołków + domknięcie
+        assertEquals(pe.xy[0], pe.xy[10], 0f)
+        assertNotNull(pent)
+    }
+
+    @Test fun smoothClosedCurvesStayEllipses() {
+        for ((rx, ry) in listOf(60f to 60f, 90f to 40f, 30f to 70f, 140f to 100f)) {
+            for (pts in listOf(24, 60, 140)) {
+                val el = FloatArray(2 * pts)
+                for (i in 0 until pts) { val a = 2 * PI.toFloat() * i / (pts - 1f); el[2 * i] = 200f + rx * cos(a); el[2 * i + 1] = 200f + ry * sin(a) }
+                assertEquals("rx=$rx ry=$ry n=$pts", ShapeKind.ELLIPSE, ShapeRecognizer.recognize(el)?.kind)
+            }
+        }
+    }
+
+    @Test fun rejectsSmoothWavesAndArcs() {
+        // Łagodna fala (≈1,5 okresu, mała amplituda). Fala o stromych zboczach to w praktyce zygzak i może zostać łamaną.
+        val wave = FloatArray(2 * 100) { if (it % 2 == 0) it / 2 * 2f else 15f * sin(it / 2 * 0.1f) }
+        assertNull(ShapeRecognizer.recognize(wave))
+        val arc = FloatArray(2 * 60)
+        for (i in 0 until 60) { val a = PI.toFloat() * i / 59f; arc[2 * i] = 100f + 80f * cos(a); arc[2 * i + 1] = 100f - 80f * sin(a) }
+        assertNull(ShapeRecognizer.recognize(arc))
+    }
+
+    @Test fun withVertexKeepsClosedPolylineClosed() {
+        val s = Stroke(Ids.next(), PenKind.BALLPOINT, 0xFF000000.toInt(), 2f,
+            floatArrayOf(0f, 0f, 1f, 10f, 0f, 1f, 10f, 10f, 1f, 0f, 0f, 1f), false, true)
+        assertTrue(s.closed); assertEquals(3, s.vertexCount)
+        val m = s.withVertex(0, -5f, -5f)
+        assertTrue(m.closed); assertTrue(m.poly)
+        assertEquals(-5f, m.pts[9], 0f); assertEquals(-5f, m.pts[10], 0f)
+        val open = Stroke(Ids.next(), PenKind.BALLPOINT, 0, 2f, floatArrayOf(0f, 0f, 1f, 5f, 5f, 1f), false, true)
+        assertFalse(open.closed); assertEquals(2, open.vertexCount)
+    }
 }

@@ -54,7 +54,8 @@ class Settings(ctx: Context) {
     var haptics by Pref("ui.haptics", true)          // delikatne wibracje przy dotknięciu przycisków paska narzędzi
     var toolbarPos by Pref("toolbar.position", 0)    // 0 góra, 1 dół, 2 lewo, 3 prawo
     var toolbarSize by Pref("toolbar.size", 1)       // 0 mały, 1 normalny, 2 duży
-    var menuBar by Pref("ui.menubar", 1)             // pasek menu w edytorze: 0 nigdy, 1 na dużych ekranach, 2 zawsze
+    var tabs by Pref("ui.tabs", false)               // otwieraj zeszyty jako karty (pasek kart pojawia się dopiero przy ≥ 2 kartach)
+    var menuBar by Pref("ui.menubar", 1)            // pasek menu w edytorze: 0 nigdy, 1 na dużych ekranach, 2 zawsze
     var keyMap by Pref("keys.map", "")               // własne skróty: JSON {id polecenia: „Ctrl+J”}, pusty tekst = bez skrótu
     var unitsMm by Pref("units.mm", true)
     private var langPref by Pref("ui.lang", 0)           // 0 system, 1 polski, 2 angielski
@@ -70,10 +71,12 @@ class Settings(ctx: Context) {
     var fingerMode by Pref("input.finger", 0)        // 0 przewijaj, 1 rysuj, 2 ignoruj
     var palmRejection by Pref("input.palm_rejection", true)
     var penButton by Pref("input.pen_button", 0)     // 0 gumka, 1 lasso, 2 cofnij, 3 laser, 4 brak
+    var doubleTap by Pref("input.double_tap", 0)     // podwójne dotknięcie palcem: 0 cofnij, 1 ponów, 2 przybliż/oddal, 3 brak
     var holdToShape by Pref("input.hold_to_shape", true)
     var holdMs by Pref("input.hold_ms", 550)
     var twoFingerUndo by Pref("input.two_finger_undo", true)
     var pullAddPage by Pref("input.pull_add_page", true)
+    var renderQuality by Pref("render.quality", 0)   // jakość renderowania strony: 0 zrównoważona, 1 ostra, 2 oszczędna, 3 klasyczna (obraz) — patrz RenderProfile
     var smoothing by Pref("pen.smoothing", 1f)       // mnożnik wygładzania piór 0..2
 
     // — Narzędzia —

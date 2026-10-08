@@ -56,9 +56,32 @@ class Stroke(
      */
     val pts: FloatArray,
     override val locked: Boolean = false,
+    /**
+     * Łamana z uchwytami: każdy punkt [pts] to wierzchołek, odcinki są proste (kształt z „rysuj i przytrzymaj”).
+     * Zamknięta, gdy pierwszy punkt = ostatni. Wierzchołki można po fakcie przesuwać (NoteView).
+     */
+    val poly: Boolean = false,
+    /**
+     * Elipsa z „rysuj i przytrzymaj” (49 punktów, punkt 0 na osi głównej, co 1/4 kolejna oś): kształt zachowuje
+     * proporcje do zmiany szerokości i wysokości, a uchwyty ramki (NoteView) rozciągają go niezależnie po osiach.
+     */
+    val ellipse: Boolean = false,
 ) : Element() {
 
     val count: Int get() = pts.size / 3
+
+    /** Liczba przesuwalnych wierzchołków: zamknięta łamana nie liczy powtórzonego pierwszego punktu. */
+    val vertexCount: Int get() = if (closed) count - 1 else count
+
+    val closed: Boolean get() = poly && count > 3 && pts[0] == pts[3 * count - 3] && pts[1] == pts[3 * count - 2]
+
+    /** Kopia z wierzchołkiem [i] przesuniętym na (x, y); w zamkniętej łamanej przesuwa też powtórzony pierwszy punkt. */
+    fun withVertex(i: Int, x: Float, y: Float): Stroke {
+        val out = pts.copyOf()
+        out[3 * i] = x; out[3 * i + 1] = y
+        if (closed && i == 0) { out[3 * count - 3] = x; out[3 * count - 2] = y }
+        return Stroke(id, pen, color, width, out, locked, poly, ellipse)
+    }
 
     override val bounds: Bounds = run {
         var l = Float.POSITIVE_INFINITY; var t = Float.POSITIVE_INFINITY
@@ -78,11 +101,11 @@ class Stroke(
     /** Zakreślacz leży we własnej warstwie i miesza się z papierem mnożeniem (patrz renderer). */
     val multiply: Boolean get() = pen == PenKind.HIGHLIGHTER
 
-    override fun withId(newId: Int): Stroke = Stroke(newId, pen, color, width, pts, locked)
-    override fun withLocked(value: Boolean): Stroke = Stroke(id, pen, color, width, pts, value)
+    override fun withId(newId: Int): Stroke = Stroke(newId, pen, color, width, pts, locked, poly, ellipse)
+    override fun withLocked(value: Boolean): Stroke = Stroke(id, pen, color, width, pts, value, poly, ellipse)
 
     fun withStyle(color: Int = this.color, width: Float = this.width, pen: PenKind = this.pen): Stroke =
-        Stroke(id, pen, color, width, pts, locked)
+        Stroke(id, pen, color, width, pts, locked, poly, ellipse)
 
     override fun transformed(m: Affine): Stroke {
         val out = FloatArray(pts.size)
@@ -94,7 +117,7 @@ class Stroke(
             out[i + 2] = pts[i + 2]
             i += 3
         }
-        return Stroke(id, pen, color, width * m.scaleFactor, out, locked)
+        return Stroke(id, pen, color, width * m.scaleFactor, out, locked, poly, ellipse)
     }
 }
 

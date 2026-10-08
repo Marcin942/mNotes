@@ -202,6 +202,7 @@ class Exporter(private val repo: Repository, private val assets: Assets, private
             if (n == 1) { sb.append("<circle cx=\"${f(pts[0])}\" cy=\"${f(pts[1])}\" r=\"${f(w / 2)}\" fill=\"${hex(s.color)}\"$common/>\n"); return }
             sb.append("<path fill=\"none\" stroke=\"${hex(s.color)}\" stroke-width=\"${f(w)}\" stroke-linecap=\"round\" stroke-linejoin=\"round\"$common d=\"M${f(pts[0])} ${f(pts[1])}")
             if (n == 2) sb.append("L${f(pts[3])} ${f(pts[4])}")
+            else if (s.poly) for (i in 1 until n) sb.append("L${f(pts[3 * i])} ${f(pts[3 * i + 1])}")
             else {
                 for (i in 1 until n - 1) {
                     val x0 = pts[3 * i]; val y0 = pts[3 * i + 1]; val x1 = pts[3 * i + 3]; val y1 = pts[3 * i + 4]

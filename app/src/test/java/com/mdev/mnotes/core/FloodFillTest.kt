@@ -30,6 +30,25 @@ class FloodFillTest {
         return Stroke(id, PenKind.BALLPOINT, black, width, pts)
     }
 
+    private fun line(id: Int, vararg xy: Float): Stroke {
+        val n = xy.size / 2
+        val pts = FloatArray(n * 3)
+        for (i in 0 until n) { pts[3 * i] = xy[2 * i]; pts[3 * i + 1] = xy[2 * i + 1]; pts[3 * i + 2] = 1f }
+        return Stroke(id, PenKind.BALLPOINT, black, 2f, pts)
+    }
+
+    /** Okrąg ze szparą na prawej stronie: końce kreski są [gap] pt od siebie (licząc grubość kreski). */
+    private fun gappedCircle(cx: Float, cy: Float, r: Float, gap: Float): Stroke {
+        val a0 = kotlin.math.asin((gap + 2f) / 2f / r)
+        val n = 200
+        val pts = FloatArray(n * 3)
+        for (i in 0 until n) {
+            val a = a0 + (2 * PI - 2 * a0) * i / (n - 1)
+            pts[3 * i] = cx + r * cos(a).toFloat(); pts[3 * i + 1] = cy + r * sin(a).toFloat(); pts[3 * i + 2] = 1f
+        }
+        return Stroke(1, PenKind.BALLPOINT, black, 2f, pts)
+    }
+
     private fun fillOf(rings: List<FloatArray>) = FillEl(1, 0xFFFF0000.toInt(), false, rings)
 
     @Test
@@ -98,5 +117,36 @@ class FloodFillTest {
         assertFalse(EraseMath.selectedByLasso(f, floatArrayOf(300f, 0f, 400f, 0f, 400f, 100f)))
         assertTrue(EraseMath.hitsElement(f, 30f, 20f, 1f))
         assertFalse(EraseMath.hitsElement(f, 55f, 33f, 1f))
+    }
+
+    @Test
+    fun sharpCornerFilledToTheTipAlsoWithClosedGaps() {
+        // Klin o kącie ~14° z wierzchołkiem w (100, 700), domknięty pionową linią x = 500.
+        val els = listOf(line(1, 100f, 700f, 500f, 600f), line(2, 100f, 700f, 500f, 700f), line(3, 500f, 590f, 500f, 710f))
+        val half = kotlin.math.atan(100f / 400f) / 2
+        for (close in listOf(false, true)) {
+            val f = fillOf(FloodFill.fill(els, 600f, 800f, 400f, 680f, closeGaps = close)!!)
+            // 12 pt od wierzchołka klin ma ~3 pt szerokości: kreski zajmują 2 pt, pogrubione ściany zakryłyby resztę.
+            val d = 12f
+            assertTrue("czubek klina, domykanie=$close", f.containsPoint(100f + d * cos(half), 700f - d * sin(half)))
+            assertFalse(f.containsPoint(300f, 300f))
+        }
+    }
+
+    @Test
+    fun smallGapLeaksOnlyWithoutGapClosing() {
+        val els = listOf(gappedCircle(300f, 400f, 100f, 1.5f))
+        val open = fillOf(FloodFill.fill(els, 600f, 800f, 300f, 400f)!!)
+        assertTrue("bez domykania szpara przecieka", open.containsPoint(20f, 20f))
+        val closed = fillOf(FloodFill.fill(els, 600f, 800f, 300f, 400f, closeGaps = true)!!)
+        assertFalse(closed.containsPoint(20f, 20f))
+        assertTrue(closed.containsPoint(300f + 95f, 400f + 25f))
+        // Bez otoczki na zewnątrz kształtu: pas zapasu za linią należy do obszaru zewnętrznego.
+        assertFalse(closed.containsPoint(300f - 101.6f, 400f))
+        assertTrue(closed.containsPoint(300f - 99f, 400f))
+        // Dotknięcie z zewnątrz wypełnia stronę bez wnętrza okręgu.
+        val outside = fillOf(FloodFill.fill(els, 600f, 800f, 20f, 20f, closeGaps = true)!!)
+        assertFalse(outside.containsPoint(300f, 400f))
+        assertTrue(outside.containsPoint(300f - 101.6f, 400f))
     }
 }

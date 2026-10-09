@@ -82,6 +82,7 @@ class Settings(ctx: Context) {
     // — Narzędzia —
     var eraserMode by Pref("eraser.mode", 0)         // 0 obiektowa, 1 pikselowa
     var painterMode by Pref("painter.mode", 0)       // pędzel formatu: 0 obiekty pod rysikiem, 1 lasso
+    var fillCloseGaps by Pref("fill.close_gaps", false) // wiaderko domyka szpary węższe niż ok. 2 pt
     var eraserSize by Pref("eraser.size", 14f)       // promień w pt
     var eraserKeepHighlighter by Pref("eraser.ignore_highlighter", false)
     var lassoRect by Pref("lasso.rect", false)

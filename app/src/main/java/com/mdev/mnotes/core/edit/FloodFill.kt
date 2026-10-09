@@ -18,6 +18,11 @@ import kotlin.math.sqrt
  * kreski i ramki są ścianami, a obszar spójny z punktem dotknięcia zamienia się z powrotem w kontury
  * (pierścienie do reguły parzysto-nieparzystej: wyspy wewnątrz obszaru wychodzą jako dziury).
  * Krawędź strony też jest ścianą, więc dotknięcie w nieograniczonym miejscu wypełnia całą stronę poza zamkniętymi kształtami.
+ *
+ * Z domykaniem szpar ściany są pogrubione o [wallPad], więc drobne niedomknięcia nie przeciekają. Pogrubione ściany
+ * wyznaczają tylko, KTÓRY obszar dotknięto; pas zapasu (wolny od prawdziwych linii, zajęty przez pogrubienie) jest
+ * potem rozdzielany między sąsiednie obszary według odległości. Dzięki temu wypełnienie dochodzi do samych linii także
+ * w ostrych kątach i zakamarkach, a przez szparę nie wychodzi otoczka na zewnątrz kształtu.
  */
 object FloodFill {
 
@@ -26,25 +31,32 @@ object FloodFill {
     const val MAX_CELLS = 2_000_000
 
 
+    /** O tyle komórek wypełnienie wchodzi pod linie, żeby między nim a kreską nie było szczeliny (kreska leży nad nim). */
+    private const val UNDERLAP = 3
+
     /**
-     * Kontury obszaru wokół (x, y) na stronie [pageW]×[pageH] (pt). Null, gdy punkt leży poza stroną albo na ścianie
+     * Kontury obszaru wokół (x, y) na stronie [pageW]×[pageH] (pt). Null, gdy punkt leży poza stroną albo na linii
      * (na linii nie ma czego wypełniać). Istniejące wypełnienia i zablokowane obrazy (tło strony) nie są ścianami.
+     * [closeGaps] domyka szpary węższe niż ok. 2 pt.
      */
-    fun fill(elements: List<Element>, pageW: Float, pageH: Float, x: Float, y: Float, maxCells: Int = MAX_CELLS): List<FloatArray>? {
+    fun fill(elements: List<Element>, pageW: Float, pageH: Float, x: Float, y: Float, closeGaps: Boolean = false, maxCells: Int = MAX_CELLS): List<FloatArray>? {
         if (pageW <= 0f || pageH <= 0f || x < 0f || y < 0f || x >= pageW || y >= pageH) return null
         var cell = max(pageW, pageH) / CELLS_LONG_SIDE
         cell = max(cell, sqrt(pageW * pageH / maxCells))
         val gw = ceil(pageW / cell).toInt().coerceAtLeast(1)
         val gh = ceil(pageH / cell).toInt().coerceAtLeast(1)
         val wall = BooleanArray(gw * gh)
-        for (e in elements) rasterize(e, wall, gw, gh, cell)
+        for (e in elements) rasterize(e, wall, gw, gh, cell, 0f)
 
         val sx = min(gw - 1, (x / cell).toInt()); val sy = min(gh - 1, (y / cell).toInt())
-        if (wall[sy * gw + sx]) return null
-        val region = flood(wall, gw, gh, sx, sy)
-        // Ściana jest grubsza od kreski o zapas [wallPad]; wypełnienie wchodzi pod linię o ten zapas i jeszcze dwie komórki
-        // (do środka kreski), żeby między nim a kreską nie było szczeliny. Kreska leży nad wypełnieniem, więc tego nie widać.
-        repeat(ceil(wallPad(cell) / cell).toInt() + 2) { grow(region, wall, gw, gh) }
+        val s = sy * gw + sx
+        if (wall[s]) return null
+        val region = if (!closeGaps) flood(wall, gw, gh, s) else {
+            val thick = wall.copyOf()
+            for (e in elements) rasterize(e, thick, gw, gh, cell, wallPad(cell))
+            bridged(wall, thick, gw, gh, s)
+        }
+        repeat(UNDERLAP) { grow(region, wall, gw, gh) }
         return trace(region, gw, gh).mapNotNull { ring ->
             for (i in ring.indices step 2) {
                 ring[i] = min(ring[i] * cell, pageW)
@@ -58,7 +70,7 @@ object FloodFill {
     /** O tyle ściana jest szersza od kreski, żeby wąskie szpary między liniami (np. niedomknięty rysunek) nie przeciekały. */
     private fun wallPad(cell: Float) = max(cell, 1f)
 
-    private fun rasterize(e: Element, wall: BooleanArray, gw: Int, gh: Int, cell: Float) {
+    private fun rasterize(e: Element, wall: BooleanArray, gw: Int, gh: Int, cell: Float, pad: Float) {
         when (e) {
             is FillEl -> return
             is Stroke -> {
@@ -66,8 +78,9 @@ object FloodFill {
                 val n = e.count
                 if (n == 0) return
                 val half = e.width * 0.5f
-                val tol = wallPad(cell)
-                fun rad(i: Int) = max(half * p[3 * i + 2], 0.5f) + tol
+                // Co najmniej 0,75 komórki: cieńsza kreska ukośna zostawiałaby dziury między komórkami, przez które przecieka wypełnienie.
+                val minR = max(0.5f, cell * 0.75f)
+                fun rad(i: Int) = max(half * p[3 * i + 2], minR) + pad
                 if (n == 1) { segment(wall, gw, gh, cell, p[0], p[1], p[0], p[1], rad(0)); return }
                 for (i in 0 until n - 1) {
                     segment(wall, gw, gh, cell, p[3 * i], p[3 * i + 1], p[3 * i + 3], p[3 * i + 4], max(rad(i), rad(i + 1)))
@@ -97,8 +110,69 @@ object FloodFill {
         }
     }
 
-    /** Wypełnienie 4-spójne od komórki (sx, sy) po komórkach bez ścian. */
-    private fun flood(wall: BooleanArray, gw: Int, gh: Int, sx: Int, sy: Int): BooleanArray {
+    /**
+     * Obszar przy domkniętych szparach. [thin] to prawdziwe linie, [thick] pogrubione. Rdzeń to obszar wolny od [thick]
+     * spójny z dotknięciem; komórki pasa zapasu (wolne w [thin], zajęte w [thick]) dostaje ten obszar, który jest do nich
+     * najbliżej (BFS z wielu źródeł naraz), więc ostry kąt należy do obszaru, w którym leży, a szpara dzieli się po połowie.
+     */
+    private fun bridged(thin: BooleanArray, thick: BooleanArray, gw: Int, gh: Int, s0: Int): BooleanArray {
+        val n = thin.size
+        var s = s0
+        if (thick[s]) {
+            // Dotknięcie w samym zakamarku (w pasie zapasu): bierzemy najbliższy obszar osiągalny bez przekraczania linii.
+            s = nearestFree(thin, thick, gw, gh, s)
+            // Malutki zamknięty obszar, cały węższy od zapasu: wypełniamy go po prawdziwych liniach.
+            if (s < 0) return flood(thin, gw, gh, s0)
+        }
+        val core = flood(thick, gw, gh, s)
+        // 1 = nasz obszar, 2 = inny, 0 = jeszcze nieprzydzielona komórka pasa zapasu.
+        val own = ByteArray(n)
+        val queue = IntArray(n)
+        var tail = 0
+        for (i in 0 until n) if (!thick[i]) own[i] = if (core[i]) 1 else 2
+        fun isBand(j: Int) = thick[j] && !thin[j]
+        for (i in 0 until n) {
+            if (own[i].toInt() == 0) continue
+            val cx = i % gw; val cy = i / gw
+            if ((cx > 0 && isBand(i - 1)) || (cx < gw - 1 && isBand(i + 1)) || (cy > 0 && isBand(i - gw)) || (cy < gh - 1 && isBand(i + gw))) queue[tail++] = i
+        }
+        var head = 0
+        while (head < tail) {
+            val i = queue[head++]
+            val o = own[i]
+            val cx = i % gw; val cy = i / gw
+            fun visit(j: Int) { if (own[j].toInt() == 0 && isBand(j)) { own[j] = o; queue[tail++] = j } }
+            if (cx > 0) visit(i - 1)
+            if (cx < gw - 1) visit(i + 1)
+            if (cy > 0) visit(i - gw)
+            if (cy < gh - 1) visit(i + gw)
+        }
+        val region = BooleanArray(n)
+        for (i in 0 until n) if (own[i].toInt() == 1) region[i] = true
+        return region
+    }
+
+    /** Najbliższa (BFS po komórkach wolnych od prawdziwych linii) komórka wolna także od pogrubionych ścian; -1, gdy brak. */
+    private fun nearestFree(thin: BooleanArray, thick: BooleanArray, gw: Int, gh: Int, s: Int): Int {
+        val seen = BooleanArray(thin.size)
+        val queue = IntArray(thin.size)
+        var head = 0; var tail = 0
+        queue[tail++] = s; seen[s] = true
+        while (head < tail) {
+            val i = queue[head++]
+            if (!thick[i]) return i
+            val cx = i % gw; val cy = i / gw
+            fun visit(j: Int) { if (!seen[j] && !thin[j]) { seen[j] = true; queue[tail++] = j } }
+            if (cx > 0) visit(i - 1)
+            if (cx < gw - 1) visit(i + 1)
+            if (cy > 0) visit(i - gw)
+            if (cy < gh - 1) visit(i + gw)
+        }
+        return -1
+    }
+
+    /** Wypełnienie 4-spójne od komórki [s] po komórkach bez ścian. */
+    private fun flood(wall: BooleanArray, gw: Int, gh: Int, s: Int): BooleanArray {
         val region = BooleanArray(gw * gh)
         var stack = IntArray(1024)
         var top = 0
@@ -106,7 +180,6 @@ object FloodFill {
             if (top == stack.size) stack = stack.copyOf(stack.size * 2)
             stack[top++] = i
         }
-        val s = sy * gw + sx
         region[s] = true
         push(s)
         while (top > 0) {

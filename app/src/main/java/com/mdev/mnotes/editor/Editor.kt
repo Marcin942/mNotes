@@ -548,9 +548,10 @@ class Editor(val ctx: Context, val nbId: String) {
         val els = doc.content(page).elements
         val w = page.spec.w; val h = page.spec.h
         val p = preset
+        val closeGaps = settings.fillCloseGaps
         filling = true
         repo.io.execute {
-            val rings = runCatching { FloodFill.fill(els, w, h, x, y) }.getOrNull()
+            val rings = runCatching { FloodFill.fill(els, w, h, x, y, closeGaps) }.getOrNull()
             v.post {
                 filling = false
                 if (rings.isNullOrEmpty()) { say(T.t("Dotknij wolnego miejsca między liniami", "Tap an empty spot between lines")); return@post }

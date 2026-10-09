@@ -213,6 +213,10 @@ private fun EditorPrefs(set: com.mdev.mnotes.data.Settings) {
         ToggleRow(T.t("Przytrzymaj, aby wyprostować kształt", "Hold to snap to shape"), set.holdToShape) { set.holdToShape = it }
         if (set.holdToShape) Opt(T.t("Czas przytrzymania: ${set.holdMs} ms", "Hold time: ${set.holdMs} ms")) { MSlider(set.holdMs.toFloat(), 250f, 1200f) { set.holdMs = (it / 50).toInt() * 50 } }
     }
+    Group(T.t("Pędzel formatu i wypełnienie", "Format painter & fill")) {
+        Opt(T.t("Tryb pędzla formatu", "Format painter mode")) { Choice(listOf(T.t("Obiektowo", "Object"), "Lasso"), set.painterMode) { set.painterMode = it } }
+        ToggleRow(T.t("Wiaderko domyka małe szpary w liniach", "Fill closes small gaps in lines"), set.fillCloseGaps) { set.fillCloseGaps = it }
+    }
     Group(T.t("Gumka i lasso", "Eraser & lasso")) {
         Opt(T.t("Domyślny tryb gumki", "Default eraser mode")) { Choice(listOf(T.t("Obiektowa", "Object"), T.t("Pikselowa", "Pixel"), "Lasso"), set.eraserMode) { set.eraserMode = it } }
         Opt(T.t("Rozmiar gumki: ${set.eraserSize.toInt()} pt", "Eraser size: ${set.eraserSize.toInt()} pt")) { MSlider(set.eraserSize, 3f, 60f) { set.eraserSize = it } }

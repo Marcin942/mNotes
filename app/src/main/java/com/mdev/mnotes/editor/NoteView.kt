@@ -967,7 +967,7 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
                 if (rejectFinger(ev.eventTime)) { mode = Mode.IGNORE; return }
                 if (rh != 0) { startRuler(ev, rh); return }
                 when (settings.fingerMode) {
-                    0 -> if (!ed.readOnly && selGrab(ev.x, ev.y, false)) beginTool(ev, 0, Tool.LASSO) else { startNav(ev); navSelect = true }
+                    0 -> if (!ed.readOnly && selGrab(ev.x, ev.y)) beginTool(ev, 0, Tool.LASSO) else { startNav(ev); navSelect = true }
                     1 -> if (navOnly(ev, 0)) startNav(ev) else beginTool(ev, 0)
                     else -> mode = Mode.IGNORE
                 }
@@ -1412,8 +1412,8 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
             ed.undo(); mode = Mode.IGNORE; return
         }
         var tool = forced ?: effectiveTool(ev, idx)
-        // Ręka z zaznaczeniem: uchwyty i wnętrze ramki (rysikiem) działają jak lasso, reszta nadal przewija.
-        if (tool == Tool.HAND && !ed.readOnly && selGrab(ev.getX(idx), ev.getY(idx), toolType != MotionEvent.TOOL_TYPE_FINGER)) tool = Tool.LASSO
+        // Ręka z zaznaczeniem: uchwyty i wnętrze ramki (rysikiem i palcem) działają jak lasso, reszta nadal przewija.
+        if (tool == Tool.HAND && !ed.readOnly && selGrab(ev.getX(idx), ev.getY(idx))) tool = Tool.LASSO
         activeTool = tool
         if (tool == Tool.HAND) { startNav(ev); navSelect = true; return }
         mode = Mode.TOOL
@@ -2205,7 +2205,7 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
      * Czy dotyk w (sx, sy) łapie zaznaczenie: uchwyt wierzchołka łamanej, uchwyt obrotu, róg ramki, a przy [interior] także wnętrze ramki.
      * Nic nie zmienia — sam gest przejmuje potem lasso.
      */
-    private fun selGrab(sx: Float, sy: Float, interior: Boolean): Boolean {
+    private fun selGrab(sx: Float, sy: Float): Boolean {
         val s = ed.sel ?: return false
         val pi = doc.indexOf(s.pageId); if (pi < 0) return false
         val els = ed.selElements()
@@ -2224,7 +2224,7 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
             if (hypot(sx - rot[0], sy - rot[1]) < ROTATE_HIT_DP * dp) return true
             if (st == null && sh == null) for (k in 0..3) if (hypot(sx - cs[2 * k], sy - cs[2 * k + 1]) < hr) return true
         }
-        return interior && b.inflate(10f * dp / zoom).contains(pgX(pi, sx), pgY(pi, sy))
+        return b.inflate(10f * dp / zoom).contains(pgX(pi, sx), pgY(pi, sy))
     }
 
     private fun lassoTap(page: PageState, px: Float, py: Float) {

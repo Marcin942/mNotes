@@ -24,6 +24,7 @@ import com.mdev.mnotes.core.geom.Bounds
 import com.mdev.mnotes.core.geom.Ruler
 import com.mdev.mnotes.core.layout.DocLayout
 import com.mdev.mnotes.core.layout.LayoutMode
+import com.mdev.mnotes.core.layout.PageDrop
 import com.mdev.mnotes.core.layout.ZoomRegion
 import com.mdev.mnotes.core.model.BoxElement
 import com.mdev.mnotes.core.model.DocEdit
@@ -518,10 +519,12 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
             c.restore()
         }
         if (lLifting && lPage in 0 until layout.count) {
-            val spec = doc.pages[lPage].spec
+            val tgt = dropPage()
+            val spec = doc.pages[tgt].spec
             c.save()
-            c.translate(layout.left(lPage), layout.top(lPage))
+            c.translate(layout.left(tgt), layout.top(tgt))
             c.clipRect(0f, 0f, spec.w, spec.h)
+            c.translate(layout.left(lPage) - layout.left(tgt), layout.top(lPage) - layout.top(tgt))
             c.concat(matrixOf(lM))
             val z = zoom * lM.scaleFactor
             for (el in lEls) renderer.drawElement(c, doc.id, el, z, false, spec.darkPaper)
@@ -2128,10 +2131,15 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
         ln = 0; lm = LM.NONE
     }
 
+    /** Strona, na którą wyląduje przesuwany element (przeniesienie między stronami); przy innych przekształceniach — źródłowa. */
+    private fun dropPage(): Int =
+        if (lm == LM.MOVE) PageDrop.target(layout, lPage, lM.mapBounds(lBounds)) else lPage
+
     private fun commitTransform(cancel: Boolean) {
         val page = doc.pages.getOrNull(lPage)
         val orig = lOrig; val lifted = lLifted
         val vertex = lm == LM.VERTEX || lm == LM.RESIZE
+        val tgt = if (cancel) lPage else dropPage()
         lLifting = false
         lm = LM.NONE; ln = 0
         vBase = null; rFrame = null; shapeLabel = null
@@ -2139,6 +2147,14 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
         val m = lM
         if (cancel || (m.isIdentity && !vertex)) {
             doc.applyElements(page.id, ElementsEdit.diff(lifted, orig))
+        } else if (tgt != lPage) {
+            val target = doc.pages[tgt]
+            val moved = lEls.map { it.transformed(PageDrop.inTarget(layout, lPage, tgt, m)) }
+            val remove = DocEdit.Elements(page.id, ElementsEdit.remove(orig, lIds))
+            val add = DocEdit.Elements(target.id, ElementsEdit.add(doc.content(target), moved))
+            add.apply(doc)
+            ed.record(DocEdit.Group(listOf(remove, add)))
+            ed.select(target.id, moved.map { it.id }.toSet())
         } else {
             val map = HashMap<Int, Element>()
             for (e in lEls) map[e.id] = if (vertex) e else e.transformed(m)

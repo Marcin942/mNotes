@@ -79,6 +79,7 @@ Założenie projektowe: „Linux Mint user” = osoba ceniąca kontrolę, skrót
 - [x] EDT-064 Taśma (ukrywanie treści) — `TapeEl`, narzędzie K; bez testu na urządzeniu
 - [x] EDT-065 Wstaw odstęp (przesunięcie treści w dół) _(narzędzie X: przeciągnij od linii w dół = wstaw, w górę = usuń puste miejsce; ogranicza do strony i do treści nad linią; zablokowane stoją; `core/model/PageSpace.kt` + test; bez testu na urządzeniu)_
 - [x] EDT-090 Warstwy/rejestr typów elementów (model)
+- [x] EDT-091 Przenoszenie elementów między stronami _(przeciągnięcie zaznaczenia lassem na inną widoczną stronę: element ląduje na stronie, na której po puszczeniu leży środek jego obwiedni, a podgląd w trakcie ciągnięcia jest przycinany do tej strony; środek w przerwie lub poza stronami = zostaje na źródłowej; tylko przesuwanie, skala/obrót nie zmieniają strony; jedno cofnięcie przenosi z powrotem (`DocEdit.Group`). `core/layout/PageDrop.kt` + `PageDropTest`; bez testu na urządzeniu; brak autoprzewijania przy krawędzi ekranu)_
 - [x] Undo/redo bez limitu praktycznego (500), ponawianie, grupy
 
 ## E. Nawigacja i widok (NAV)

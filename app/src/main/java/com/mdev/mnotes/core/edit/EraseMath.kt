@@ -3,6 +3,7 @@ package com.mdev.mnotes.core.edit
 import com.mdev.mnotes.core.geom.GeomMath
 import com.mdev.mnotes.core.model.BoxElement
 import com.mdev.mnotes.core.model.Element
+import com.mdev.mnotes.core.model.FillEl
 import com.mdev.mnotes.core.model.Stroke
 import kotlin.math.hypot
 import kotlin.math.max
@@ -28,6 +29,7 @@ object EraseMath {
     fun hitsElement(e: Element, cx: Float, cy: Float, r: Float): Boolean = when (e) {
         is Stroke -> hitsStroke(e, cx, cy, r)
         is BoxElement -> e.containsPoint(cx, cy, r)
+        is FillEl -> e.containsPoint(cx, cy)
     }
 
     /**
@@ -88,7 +90,7 @@ object EraseMath {
         return inside
     }
 
-    /** Kreska wpada do zaznaczenia, gdy co najmniej połowa jej punktów leży w wielokącie; ramki — gdy środek. */
+    /** Kreska i wypełnienie wpadają do zaznaczenia, gdy co najmniej połowa ich punktów leży w wielokącie; ramki — gdy środek. */
     fun selectedByLasso(e: Element, poly: FloatArray): Boolean = when (e) {
         is Stroke -> {
             var inside = 0
@@ -104,5 +106,15 @@ object EraseMath {
             inside * 2 >= cnt
         }
         is BoxElement -> polygonContains(poly, e.cx, e.cy)
+        is FillEl -> {
+            var inside = 0; var cnt = 0
+            for (ring in e.rings) {
+                val n = ring.size / 2
+                val step = max(1, n / 48)
+                var i = 0
+                while (i < n) { if (polygonContains(poly, ring[2 * i], ring[2 * i + 1])) inside++; cnt++; i += step }
+            }
+            cnt > 0 && inside * 2 >= cnt
+        }
     }
 }

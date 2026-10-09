@@ -10,6 +10,7 @@ import com.mdev.mnotes.core.model.PageContent
 import com.mdev.mnotes.core.model.PenKind
 import com.mdev.mnotes.core.model.Stroke
 import com.mdev.mnotes.core.model.TextBox
+import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Assert.fail
@@ -40,6 +41,7 @@ class PageCodecTest {
         list.add(TextBox(Ids.next(), 120.5f, 300f, 200f, 40f, 0.3f, "Zażółć gęślą jaźń ✓", 14f, 0xFF00AA00.toInt(),
             TextBox.FAMILY_SERIF, TextBox.STYLE_BOLD or TextBox.STYLE_UNDERLINE, TextBox.ALIGN_CENTER, 0x33FFFF00, true))
         list.add(ImageEl(Ids.next(), "img-1.webp", 250f, 400f, 120f, 80f, -0.2f, 0.5f, false))
+        list.add(com.mdev.mnotes.core.model.FillEl(Ids.next(), 0xFF3366CC.toInt(), false, listOf(floatArrayOf(0f, 0f, 600f, 0f, 600f, 800f, 0f, 800f), floatArrayOf(100.5f, 100f, 200f, 100f, 150f, 180.25f))))
         val src = PageContent.of(list)
 
         val back = PageCodec.decode(PageCodec.encode(src))
@@ -77,6 +79,13 @@ class PageCodecTest {
                     assertEquals(a.asset, b.asset)
                     assertEquals(a.w, b.w, 0f)
                     assertEquals(a.alpha, b.alpha, 0.003f)
+                }
+                is com.mdev.mnotes.core.model.FillEl -> {
+                    b as com.mdev.mnotes.core.model.FillEl
+                    assertEquals(a.color, b.color)
+                    assertEquals(a.hl, b.hl)
+                    assertEquals(a.rings.size, b.rings.size)
+                    for (k in a.rings.indices) assertArrayEquals(a.rings[k], b.rings[k], 0.006f)
                 }
                 is com.mdev.mnotes.core.model.TapeEl -> {
                     b as com.mdev.mnotes.core.model.TapeEl

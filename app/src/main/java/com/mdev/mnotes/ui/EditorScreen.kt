@@ -50,6 +50,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.FormatColorFill
+import androidx.compose.material.icons.rounded.FormatPaint
 import androidx.compose.material.icons.rounded.IosShare
 import androidx.compose.material.icons.rounded.Straighten
 import androidx.compose.material.icons.rounded.UnfoldMore
@@ -161,7 +163,7 @@ import com.mdev.mnotes.editor.T
 import com.mdev.mnotes.editor.Tool
 import kotlinx.coroutines.delay
 
-enum class Panel { PEN, ERASER, LASSO, TAPE, PAGES, STYLE, MORE, SELCOLOR, ALIGN }
+enum class Panel { PEN, ERASER, LASSO, TAPE, PAINTER, PAGES, STYLE, MORE, SELCOLOR, ALIGN }
 
 /** Własne ikony tam, gdzie Material Icons nie ma odpowiednika (gumka). */
 object MIcons {
@@ -261,7 +263,7 @@ fun EditorScreen(ed: Editor, tabs: TabsCtl, onExit: () -> Unit, onSettings: () -
                     // Panele i okienka kotwiczą się do krawędzi strony, tuż przy pasku, z którego wyszły.
                     Box(Modifier.fillMaxSize().imePadding()) {
                         if (ed.chrome) {
-                            panel?.takeIf { it == Panel.PEN || it == Panel.ERASER || it == Panel.LASSO || it == Panel.TAPE }?.let { p ->
+                            panel?.takeIf { it == Panel.PEN || it == Panel.ERASER || it == Panel.LASSO || it == Panel.TAPE || it == Panel.PAINTER }?.let { p ->
                                 val pa = when (pos) { 1 -> Alignment.BottomCenter; 2 -> Alignment.CenterStart; 3 -> Alignment.CenterEnd; else -> Alignment.TopCenter }
                                 Box(Modifier.align(pa).padding(8.dp).panelEnter()) { ToolPanel(ed, set, p) { panel = null } }
                             }
@@ -434,6 +436,8 @@ private fun ToolBar(ed: Editor, set: com.mdev.mnotes.data.Settings, vertical: Bo
                 PenGlyph(pk, Color(ed.preset.color).let { if (it.alpha > 0f) it else c }, c, Modifier.size(isz + 2.dp))
             }
             IconBtn(MIcons.Eraser, T.t("Gumka", "Eraser"), { pickTool(Tool.ERASER, Panel.ERASER) }, enabled = !ro, selected = ed.tool == Tool.ERASER, size = sz, iconSize = isz, shortcut = "E")
+            IconBtn(Icons.Rounded.FormatPaint, T.t("Pędzel formatu — przenosi kolor i styl aktywnego pióra", "Format painter — applies the active pen's colour and style"), { pickTool(Tool.PAINTER, Panel.PAINTER) }, enabled = !ro, selected = ed.tool == Tool.PAINTER, size = sz, iconSize = isz, shortcut = "B")
+            IconBtn(Icons.Rounded.FormatColorFill, T.t("Wypełnienie (wiaderko)", "Fill (paint bucket)"), { pickTool(Tool.FILL, null) }, enabled = !ro, selected = ed.tool == Tool.FILL, size = sz, iconSize = isz, shortcut = "F")
             IconBtn(if (set.lassoRect) Icons.Rounded.HighlightAlt else Icons.Rounded.Gesture, T.t("Lasso", "Lasso"), { pickTool(Tool.LASSO, Panel.LASSO) }, enabled = !ro, selected = ed.tool == Tool.LASSO, size = sz, iconSize = isz, shortcut = "L")
             IconBtn(Icons.Rounded.TextFields, T.t("Tekst", "Text"), { pickTool(Tool.TEXT, null) }, enabled = !ro, selected = ed.tool == Tool.TEXT, size = sz, iconSize = isz, shortcut = "T")
             IconBtn(Icons.Rounded.TrackChanges, T.t("Laser", "Laser"), { pickTool(Tool.LASER, null) }, selected = ed.tool == Tool.LASER, size = sz, iconSize = isz, shortcut = "O")
@@ -443,8 +447,9 @@ private fun ToolBar(ed: Editor, set: com.mdev.mnotes.data.Settings, vertical: Bo
             IconBtn(Icons.Rounded.Straighten, T.t("Linijka", "Ruler"), { ed.toggleRuler() }, enabled = !ro, selected = ed.ruler, size = sz, iconSize = isz, shortcut = "R")
             BarSep(vertical)
             ed.presets.forEachIndexed { i, p ->
-                val active = i == ed.presetIndex && ed.tool == Tool.PEN
-                PresetDot(p, active, sz) { if (!ro) { if (active) toggle(Panel.PEN) else { ed.selectPreset(i); if (ed.tool != Tool.PEN) ed.setToolKey(Tool.PEN) } } }
+                // Pędzel formatu i wiaderko biorą kolor z aktywnego pióra, więc wybór pióra ich nie wyłącza.
+                val active = i == ed.presetIndex && ed.presetTool
+                PresetDot(p, active, sz) { if (!ro) { if (active) toggle(Panel.PEN) else { ed.selectPreset(i); if (!ed.presetTool) ed.setToolKey(Tool.PEN) } } }
             }
             IconBtn(Icons.Rounded.Add, T.t("Dodaj pióro", "Add pen"), { ed.addPreset(ed.preset); toggle(Panel.PEN) }, enabled = !ro && ed.presets.size < 10, size = sz, iconSize = isz)
         }
@@ -538,6 +543,14 @@ private fun ToolPanel(ed: Editor, set: com.mdev.mnotes.data.Settings, panel: Pan
                     }
                     Chip(T.t("Zakryj / odkryj wszystkie", "Cover / reveal all"), false, { ed.toggleAllTapes() }, icon = Icons.Rounded.VisibilityOff)
                     Text(T.t("Taśma zakrywa to, co pod nią. Dotknij jej, by odkryć lub zakryć. Gumka jej nie usuwa — zaznacz lassem i usuń.", "A tape hides what is under it. Tap it to reveal or cover. The eraser leaves it alone — select with lasso and delete."), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                Panel.PAINTER -> {
+                    SectionLabel(T.t("Pędzel formatu", "Format painter"))
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Chip(T.t("Obiektowo", "Object"), set.painterMode == 0, { set.painterMode = 0 }, icon = Icons.Rounded.FormatPaint)
+                        Chip(T.t("Lasso", "Lasso"), set.painterMode == 1, { set.painterMode = 1 }, icon = Icons.Rounded.Gesture)
+                    }
+                    Text(T.t("Kolor i styl bierze z aktywnego pióra — wybierz je kropką na pasku. Obiektowo: przeciągnij po obiektach. Lasso: obrysuj je.", "Colour and style come from the active pen — pick it with a dot on the toolbar. Object: drag over objects. Lasso: circle them."), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 else -> {
                     SectionLabel(T.t("Kształt lassa", "Lasso shape"))
@@ -702,6 +715,7 @@ private fun SelectionBar(ed: Editor, panel: Panel?, toggle: (Panel) -> Unit, edi
 private fun colorOf(e: com.mdev.mnotes.core.model.Element?): Int? = when (e) {
     is InkStroke -> e.color
     is TextBox -> e.color
+    is com.mdev.mnotes.core.model.FillEl -> e.color
     else -> null
 }
 

@@ -32,6 +32,7 @@ Kotlin + Jetpack Compose (Material3) nad `NoteView` (Android View). Pakiet `app/
 - Dane na urządzeniu: `files/library/nb/<id>/meta.json` + `p/*.mnp`; zapis atomowy (`writeAtomic`, `.bak`).
 
 ## Zrobione w ostatnich sesjach (kod + kompilacja + testy jednostkowe; BEZ testu na urządzeniu)
+- EDT-092 pędzel formatu (`Tool.PAINTER`, `Editor.painted`, `NoteView.paintDown/To/Up`, `settings.painterMode`) i EDT-093 wypełnienie/wiaderko (`Tool.FILL`, `FillEl`, `core/edit/FloodFill.kt`, `Editor.fillAt`). Interpretacja „jak w Paincie”: krawędź strony jest ścianą; gumka przeciągana pomija wypełnienia (usuwa je lasso gumki, lasso + Usuń albo cofnij). Bez testu na urządzeniu.
 - Przesuwanie zaznaczonych obiektów palcem (`NoteView.selGrab`: wnętrze ramki łapie też palec, w trybie palca „przewijaj” i w ręce); drugi palec w trakcie przeciągania anuluje przesunięcie i przewija. Bez testu na urządzeniu.
 - Nazwy bez enterów (`core/text/NameText.kt` + `NameTextTest`): `MField` jednowierszowy zamienia łamanie linii na spację przy wpisywaniu/wklejaniu; `Repository` i dialogi czyszczą nazwy zeszytów, folderów i tagów przy zapisie; odczyt `meta.json`/`folders.json` naprawia już zapisane (powód: tytuł „WEJ⏎:” po wklejeniu).
 - Audyt BACKLOG i poprawa statusów.

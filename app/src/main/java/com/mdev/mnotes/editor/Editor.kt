@@ -10,6 +10,8 @@ import com.mdev.mnotes.core.geom.Bounds
 import com.mdev.mnotes.core.model.DocEdit
 import com.mdev.mnotes.core.model.Element
 import com.mdev.mnotes.core.model.ElementsEdit
+import com.mdev.mnotes.core.model.FillEl
+import com.mdev.mnotes.core.edit.FloodFill
 import com.mdev.mnotes.core.model.ImageEl
 import com.mdev.mnotes.core.model.PageContent
 import com.mdev.mnotes.core.model.PageSnapshot
@@ -33,7 +35,7 @@ import java.io.InputStream
 import kotlin.math.max
 import kotlin.math.min
 
-enum class Tool { PEN, ERASER, LASSO, TEXT, LASER, HAND, SPACE, TAPE }
+enum class Tool { PEN, ERASER, LASSO, TEXT, LASER, HAND, SPACE, TAPE, PAINTER, FILL }
 
 class Sel(val pageId: String, val ids: Set<Int>)
 
@@ -138,8 +140,11 @@ class Editor(val ctx: Context, val nbId: String) {
 
     fun selectPreset(i: Int) {
         settings.activePreset = i.coerceIn(0, presets.size - 1)
-        if (tool != Tool.PEN) tool = Tool.PEN
+        if (!presetTool) tool = Tool.PEN
     }
+
+    /** Narzędzia, które biorą kolor i styl z aktywnego pióra (pióro, pędzel formatu, wypełnienie). */
+    val presetTool: Boolean get() = tool == Tool.PEN || tool == Tool.PAINTER || tool == Tool.FILL
 
     fun updatePreset(i: Int, p: PenPreset) {
         settings.presets = presets.toMutableList().also { it[i] = p }
@@ -258,7 +263,7 @@ class Editor(val ctx: Context, val nbId: String) {
     }
 
     fun recolorSel(color: Int) = replaceSel { e ->
-        when (e) { is Stroke -> e.withStyle(color = if (e.pen == PenKind.HIGHLIGHTER) com.mdev.mnotes.ui.softenForHighlighter(color) else color); is TextBox -> e.copy(color = color); else -> e }
+        when (e) { is Stroke -> e.withStyle(color = if (e.pen == PenKind.HIGHLIGHTER) com.mdev.mnotes.ui.softenForHighlighter(color) else color); is TextBox -> e.copy(color = color); is FillEl -> e.copy(color = if (e.hl) com.mdev.mnotes.ui.softenForHighlighter(color) else color); else -> e }
     }
 
     fun setSelWidth(w: Float) = replaceSel { e -> if (e is Stroke) e.withStyle(width = w) else e }
@@ -418,7 +423,7 @@ class Editor(val ctx: Context, val nbId: String) {
     /** Pipeta z paska/skrótu: kolor trafia do zaznaczenia albo do aktywnego pióra. */
     fun pipetteForCurrent() = startPipette { c ->
         if (sel != null && !readOnly) recolorSel(c)
-        else { updatePreset(presetIndex, preset.copy(color = c)); if (tool != Tool.PEN && tool != Tool.TEXT) tool = Tool.PEN }
+        else { updatePreset(presetIndex, preset.copy(color = c)); if (!presetTool && tool != Tool.TEXT) tool = Tool.PEN }
     }
 
     fun toggleRuler() { ruler = !ruler; if (ruler) view?.rulerShown() else view?.invalidate() }
@@ -509,7 +514,56 @@ class Editor(val ctx: Context, val nbId: String) {
     fun setToolKey(t: Tool) {
         tool = t; clearSelIfNotLasso()
         if (t == Tool.TAPE) toast = T.t("Przeciągnij, aby zakryć fragment · dotknij taśmy, aby odkryć", "Drag to cover an area · tap a tape to reveal it")
+        if (t == Tool.PAINTER) toast = if (settings.painterMode == 1) T.t("Obrysuj obiekty — przejmą kolor i styl aktywnego pióra", "Circle objects to give them the active pen's colour and style")
+            else T.t("Przeciągnij po obiektach — przejmą kolor i styl aktywnego pióra", "Swipe over objects to give them the active pen's colour and style")
+        if (t == Tool.FILL) toast = T.t("Dotknij obszaru ograniczonego liniami, aby go wypełnić kolorem aktywnego pióra", "Tap an area enclosed by lines to fill it with the active pen's colour")
         if (t == Tool.SPACE) toast = T.t("Przeciągnij od linii w dół — wstawisz odstęp, w górę — usuniesz puste miejsce", "Drag down from a line to insert space, up to remove empty space")
+    }
+
+    /**
+     * Pędzel formatu: kopia elementu w kolorze i stylu pióra [p]; null, gdy nie ma czego zmienić (obraz, taśma,
+     * element zablokowany, ten sam styl). Zakreślacz nie przefarbowuje tekstu (byłby nieczytelny).
+     */
+    fun painted(e: Element, p: PenPreset = preset): Element? {
+        if (e.locked) return null
+        val hl = p.kind == PenKind.HIGHLIGHTER
+        return when (e) {
+            is Stroke -> if (e.pen == p.kind && e.color == p.color && e.width == p.width) null else e.withStyle(p.color, p.width, p.kind)
+            is FillEl -> if (e.color == p.color && e.hl == hl) null else e.copy(color = p.color, hl = hl)
+            is TextBox -> if (hl || e.color == p.color) null else e.copy(color = p.color)
+            else -> null
+        }
+    }
+
+    private var filling = false
+
+    /**
+     * Wiaderko: liczy obszar wokół (x, y) poza wątkiem UI i wstawia wypełnienie w kolorze aktywnego pióra na spód
+     * strony — nad zablokowanym obrazem tła i starszymi wypełnieniami, pod całym pismem.
+     */
+    fun fillAt(pageId: String, x: Float, y: Float) {
+        if (readOnly || filling) return
+        val v = view ?: return
+        val page = doc.pages.firstOrNull { it.id == pageId } ?: return
+        val els = doc.content(page).elements
+        val w = page.spec.w; val h = page.spec.h
+        val p = preset
+        filling = true
+        repo.io.execute {
+            val rings = runCatching { FloodFill.fill(els, w, h, x, y) }.getOrNull()
+            v.post {
+                filling = false
+                if (rings.isNullOrEmpty()) { say(T.t("Dotknij wolnego miejsca między liniami", "Tap an empty spot between lines")); return@post }
+                val pg = doc.pages.firstOrNull { it.id == pageId } ?: return@post
+                val cur = doc.content(pg).elements
+                var at = 0
+                while (at < cur.size && (cur[at] is FillEl || (cur[at] is ImageEl && cur[at].locked))) at++
+                val hl = p.kind == PenKind.HIGHLIGHTER
+                val el = FillEl(Ids.next(), if (hl) p.color else p.color or (0xFF shl 24), hl, rings)
+                val after = cur.subList(0, at) + el + cur.subList(at, cur.size)
+                exec(DocEdit.Elements(pg.id, ElementsEdit.diff(doc.content(pg), PageContent.of(after))))
+            }
+        }
     }
 
     /** Przesuwa treść strony poniżej linii [y] o [dy] pt (EDT-065); [dy] jest już ograniczone przez [PageSpace.clamp]. */

@@ -31,6 +31,7 @@ import com.mdev.mnotes.core.model.DocEdit
 import com.mdev.mnotes.core.model.Element
 import com.mdev.mnotes.core.model.TapeEl
 import com.mdev.mnotes.core.model.ElementsEdit
+import com.mdev.mnotes.core.model.FillEl
 import com.mdev.mnotes.core.model.Ids
 import com.mdev.mnotes.core.model.PageContent
 import com.mdev.mnotes.core.model.PageSpace
@@ -635,9 +636,10 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
     }
 
     private fun drawLasso(c: Canvas) {
-        val replaces = (activeTool == Tool.ERASER && settings.eraserMode == 2)
+        val eraser = activeTool == Tool.ERASER && settings.eraserMode == 2
+        val replaces = eraser || (activeTool == Tool.PAINTER && settings.painterMode == 1)
         if (mode != Mode.TOOL || lm != LM.DRAW && !replaces || ln == 0 || lPage !in 0 until layout.count) return
-        val col = if (replaces) 0xFFE5484D.toInt() else accent
+        val col = if (eraser) 0xFFE5484D.toInt() else if (replaces) ed.preset.color or (0xFF shl 24) else accent
         lassoPaint.color = col
         tmpPath.rewind()
         if (settings.lassoRect && !replaces) {
@@ -722,7 +724,7 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
 
     private fun drawRing(c: Canvas) {
         val t: Tool; val x: Float; val y: Float
-        if (mode == Mode.TOOL && (activeTool == Tool.ERASER || activeTool == Tool.PEN) && toolType != MotionEvent.TOOL_TYPE_FINGER) { t = activeTool; x = curX; y = curY }
+        if (mode == Mode.TOOL && (activeTool == Tool.ERASER || activeTool == Tool.PEN || activeTool == Tool.PAINTER) && toolType != MotionEvent.TOOL_TYPE_FINGER) { t = activeTool; x = curX; y = curY }
         else if (hoverOn && mode == Mode.NONE) { t = hoverTool; x = hoverX; y = hoverY }
         else return
         when (t) {
@@ -736,6 +738,11 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
                 val w = ed.preset.width * zoom
                 ringPaint.color = ed.preset.color and 0x00FFFFFF or 0x99000000.toInt()
                 c.drawCircle(x, y, max(w / 2f, 2.5f * dp), ringPaint)
+            }
+            Tool.PAINTER -> {
+                if (settings.painterMode == 1) return
+                ringPaint.color = ed.preset.color and 0x00FFFFFF or 0xCC000000.toInt()
+                c.drawCircle(x, y, PAINT_R_DP * dp, ringPaint)
             }
             Tool.LASER -> drawLaserDot(c, x, y, 1f)
             else -> {}
@@ -1427,6 +1434,8 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
             Tool.LASSO -> { lassoDown(); if (mode == Mode.TOOL) postDelayed(holdRunnable, 520L) }
             Tool.SPACE -> spaceDown()
             Tool.TAPE -> tapeDown()
+            Tool.PAINTER -> paintDown()
+            Tool.FILL -> if (ed.readOnly || pageIdxAt(curX, curY) < 0) mode = Mode.IGNORE
             Tool.LASER -> { laser.begin(System.currentTimeMillis()); addLaser(curX, curY) }
             else -> {}
         }
@@ -1445,6 +1454,10 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
             Tool.LASSO -> lassoMove()
             Tool.SPACE -> spaceMove()
             Tool.TAPE -> tapeMove()
+            Tool.PAINTER -> {
+                for (h in 0 until ev.historySize) paintTo(ev.getHistoricalX(idx, h), ev.getHistoricalY(idx, h))
+                paintTo(curX, curY)
+            }
             Tool.LASER -> { for (h in 0 until ev.historySize) addLaser(ev.getHistoricalX(idx, h), ev.getHistoricalY(idx, h)); addLaser(curX, curY) }
             else -> {}
         }
@@ -1459,6 +1472,8 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
             Tool.LASSO -> lassoUp(cancel)
             Tool.SPACE -> spaceUp(cancel)
             Tool.TAPE -> tapeUp(cancel)
+            Tool.PAINTER -> paintUp(cancel)
+            Tool.FILL -> if (!cancel && !toolMoved) fillTap()
             Tool.TEXT -> if (!cancel && !toolMoved) textTap()
             Tool.LASER -> laser.end(System.currentTimeMillis())
             else -> {}
@@ -1962,7 +1977,8 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
         val out = ArrayList<Element>(cur.size)
         var changed = false
         for (e in cur.elements) {
-            if (e.locked || e is TapeEl || (keepHl && e is Stroke && e.pen == PenKind.HIGHLIGHTER) || !e.bounds.inflate(r + 1f).contains(px, py)) { out.add(e); continue }
+            // Wypełnienie leży pod pismem: gumka przeciągana po zamalowanym obszarze ściera tylko kreski (usunąć je można lassem gumki).
+            if (e.locked || e is TapeEl || e is FillEl || (keepHl && e is Stroke && e.pen == PenKind.HIGHLIGHTER) || !e.bounds.inflate(r + 1f).contains(px, py)) { out.add(e); continue }
             if (pixel) {
                 if (e is Stroke) {
                     val pieces = EraseMath.erasePartial(e, px, py, r)
@@ -1994,6 +2010,73 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
             if (!d.isEmpty) ed.record(DocEdit.Elements(pid, d))
         }
         eraseStart.clear(); eraseLastPage = -1
+    }
+
+    // ───────────────────────── pędzel formatu i wypełnienie ─────────────────────────
+
+    /** Pędzel formatu: jak gumka (obiektowa albo lasso), tylko zamiast usuwać nadaje styl aktywnego pióra. */
+    private fun paintDown() {
+        eraseStart.clear(); eraseLastPage = -1
+        if (ed.sel != null) ed.clearSel()
+        if (ed.readOnly) { mode = Mode.IGNORE; return }
+        if (settings.painterMode == 1) { val pi = pageIdxAt(curX, curY); if (pi < 0) { mode = Mode.IGNORE; return }; lPage = pi; ln = 0; addLasso(pgX(pi, curX), pgY(pi, curY)) }
+        else paintTo(curX, curY)
+    }
+
+    private fun paintTo(sx: Float, sy: Float) {
+        if (settings.painterMode == 1) { if (lPage >= 0) addLasso(pgX(lPage, sx), pgY(lPage, sy)); return }
+        val pi = pageIdxAt(sx, sy)
+        if (pi < 0) { eraseLastPage = -1; return }
+        val px = pgX(pi, sx); val py = pgY(pi, sy)
+        val r = PAINT_R_DP * dp / zoom
+        if (eraseLastPage == pi) {
+            val steps = ceil(hypot(px - eraseLx, py - eraseLy) / (r * 0.6f)).toInt().coerceAtLeast(1)
+            for (k in 1..steps) { val f = k.toFloat() / steps; paintAt(pi, eraseLx + (px - eraseLx) * f, eraseLy + (py - eraseLy) * f, r) }
+        } else paintAt(pi, px, py, r)
+        eraseLastPage = pi; eraseLx = px; eraseLy = py
+    }
+
+    private fun paintAt(pi: Int, px: Float, py: Float, r: Float) {
+        val page = doc.pages[pi]
+        val cur = doc.content(page)
+        val hits = cur.elements.filter { it.bounds.inflate(r + 1f).contains(px, py) && EraseMath.hitsElement(it, px, py, r) }
+        if (hits.isEmpty()) return
+        // Wypełnienie przejmuje styl tylko wtedy, gdy rysik jest na nim samym, a nie na linii leżącej na nim.
+        val onInk = hits.any { it !is FillEl }
+        val repl = HashMap<Element, Element>()
+        for (e in hits) if (!(onInk && e is FillEl)) ed.painted(e)?.let { repl[e] = it }
+        if (repl.isEmpty()) return
+        eraseStart.getOrPut(page.id) { cur }
+        doc.applyElements(page.id, ElementsEdit.diff(cur, PageContent.of(cur.elements.map { repl[it] ?: it })))
+    }
+
+    private fun paintUp(cancel: Boolean) {
+        if (settings.painterMode == 1) {
+            val pi = lPage
+            if (!cancel && ln >= 3 && pi in doc.pages.indices) {
+                val page = doc.pages[pi]
+                val poly = lp.copyOf(2 * ln)
+                val cur = doc.content(page)
+                var changed = false
+                val out = cur.elements.map { e -> if (EraseMath.selectedByLasso(e, poly)) ed.painted(e)?.also { changed = true } ?: e else e }
+                if (changed) ed.exec(DocEdit.Elements(page.id, ElementsEdit.diff(cur, PageContent.of(out))))
+            }
+            ln = 0; lPage = -1
+            return
+        }
+        for ((pid, start) in eraseStart) {
+            val page = doc.page(pid) ?: continue
+            val d = ElementsEdit.diff(start, doc.content(page))
+            if (!d.isEmpty) ed.record(DocEdit.Elements(pid, d))
+        }
+        eraseStart.clear(); eraseLastPage = -1
+    }
+
+    /** Wiaderko: dotknięcie (bez przeciągania) wypełnia obszar wokół punktu. */
+    private fun fillTap() {
+        val pi = pageIdxAt(curX, curY)
+        if (pi < 0 || ed.readOnly) return
+        ed.fillAt(doc.pages[pi].id, pgX(pi, curX), pgY(pi, curY))
     }
 
     // ───────────────────────── lasso / zaznaczenie ─────────────────────────
@@ -2275,5 +2358,7 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
         const val ROTATE_OFFSET_DP = 52f
         private const val ROTATE_HIT_DP = 20f
         private val TAP_SLOPS_DP = floatArrayOf(8f, 14f, 22f)
+        /** Promień pędzla formatu w trybie obiektowym (dp ekranu). */
+        private const val PAINT_R_DP = 7f
     }
 }

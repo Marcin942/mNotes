@@ -17,6 +17,7 @@ import android.text.TextPaint
 import com.mdev.mnotes.core.geom.Bounds
 import com.mdev.mnotes.core.geom.FloatList
 import com.mdev.mnotes.core.model.Element
+import com.mdev.mnotes.core.model.FillEl
 import com.mdev.mnotes.core.model.ImageEl
 import com.mdev.mnotes.core.model.PageContent
 import com.mdev.mnotes.core.model.PageSpec
@@ -99,6 +100,7 @@ class PageRenderer(private val assets: Assets?) {
             is TextBox -> drawText(c, e)
             is ImageEl -> drawImage(c, nb, e, decodeImages)
             is TapeEl -> drawTape(c, e)
+            is FillEl -> drawFill(c, e, dark)
         }
     }
 
@@ -117,6 +119,25 @@ class PageRenderer(private val assets: Assets?) {
         paint.color = if (t.hidden) darken(rgb) else rgb or (0xB0 shl 24)
         c.drawRoundRect(t.cx - t.w / 2, t.cy - t.h / 2, t.cx + t.w / 2, t.cy + t.h / 2, rad, rad, paint)
         c.restore()
+    }
+
+    /** Wypełnienie z wiaderka: kontury parzysto-nieparzyście, jako zakreślacz albo kolor jednolity. */
+    fun drawFill(c: Canvas, f: FillEl, dark: Boolean) {
+        paint.reset(); paint.isAntiAlias = true
+        paint.style = Paint.Style.FILL
+        if (f.hl) styleHighlighter(f.color, PenSpec.of(PenKind.HIGHLIGHTER).alpha, dark) else paint.color = f.color or (0xFF shl 24)
+        path.rewind()
+        path.fillType = Path.FillType.EVEN_ODD
+        for (ring in f.rings) {
+            if (ring.size < 6) continue
+            path.moveTo(ring[0], ring[1])
+            var i = 2
+            while (i < ring.size) { path.lineTo(ring[i], ring[i + 1]); i += 2 }
+            path.close()
+        }
+        c.drawPath(path, paint)
+        path.rewind()
+        path.fillType = Path.FillType.WINDING
     }
 
     private fun darken(rgb: Int): Int {

@@ -121,6 +121,74 @@ class Stroke(
     }
 }
 
+/**
+ * Wypełnienie z narzędzia „Wypełnienie” (wiaderko): obszar ograniczony konturami [rings] (pary x, y w pt strony),
+ * wypełniany regułą parzysto-nieparzystą, więc pierścień wewnątrz pierścienia to dziura. [hl] = jak zakreślacz
+ * (półprzezroczyste, mnożenie z papierem); inaczej kolor jednolity.
+ */
+class FillEl(
+    override val id: Int,
+    val color: Int,
+    val hl: Boolean,
+    val rings: List<FloatArray>,
+    override val locked: Boolean = false,
+) : Element() {
+
+    override val bounds: Bounds = run {
+        var l = Float.POSITIVE_INFINITY; var t = Float.POSITIVE_INFINITY
+        var r = Float.NEGATIVE_INFINITY; var b = Float.NEGATIVE_INFINITY
+        for (ring in rings) {
+            var i = 0
+            while (i < ring.size) {
+                val x = ring[i]; val y = ring[i + 1]
+                if (x < l) l = x
+                if (x > r) r = x
+                if (y < t) t = y
+                if (y > b) b = y
+                i += 2
+            }
+        }
+        if (l > r) Bounds.EMPTY else Bounds(l, t, r, b)
+    }
+
+    /** Liczba wszystkich wierzchołków (do lasso i limitów). */
+    val vertexCount: Int get() = rings.sumOf { it.size / 2 }
+
+    /** Czy punkt leży w wypełnieniu (parzysto-nieparzyście po wszystkich pierścieniach). */
+    fun containsPoint(x: Float, y: Float): Boolean {
+        if (!bounds.contains(x, y)) return false
+        var inside = false
+        for (ring in rings) {
+            val n = ring.size / 2
+            var j = n - 1
+            for (i in 0 until n) {
+                val xi = ring[2 * i]; val yi = ring[2 * i + 1]
+                val xj = ring[2 * j]; val yj = ring[2 * j + 1]
+                if ((yi > y) != (yj > y) && x < (xj - xi) * (y - yi) / (yj - yi) + xi) inside = !inside
+                j = i
+            }
+        }
+        return inside
+    }
+
+    fun copy(id: Int = this.id, color: Int = this.color, hl: Boolean = this.hl, rings: List<FloatArray> = this.rings, locked: Boolean = this.locked) =
+        FillEl(id, color, hl, rings, locked)
+
+    override fun withId(newId: Int): FillEl = copy(id = newId)
+    override fun withLocked(value: Boolean): FillEl = copy(locked = value)
+
+    override fun transformed(m: Affine): FillEl = copy(rings = rings.map { ring ->
+        val out = FloatArray(ring.size)
+        var i = 0
+        while (i < ring.size) {
+            val x = ring[i]; val y = ring[i + 1]
+            out[i] = m.mapX(x, y); out[i + 1] = m.mapY(x, y)
+            i += 2
+        }
+        out
+    })
+}
+
 /** Wspólna geometria elementów-ramek (tekst, obraz): środek, rozmiar, obrót. */
 sealed class BoxElement : Element() {
     abstract val cx: Float

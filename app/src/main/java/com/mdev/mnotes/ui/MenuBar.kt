@@ -59,6 +59,8 @@ private fun checked(ed: Editor, set: com.mdev.mnotes.data.Settings, id: String):
     "tbRight" -> set.toolbarPos == 3
     "toolPen" -> ed.tool == Tool.PEN
     "toolEraser" -> ed.tool == Tool.ERASER
+    "toolPainter" -> ed.tool == Tool.PAINTER
+    "toolFill" -> ed.tool == Tool.FILL
     "toolLasso" -> ed.tool == Tool.LASSO
     "toolText" -> ed.tool == Tool.TEXT
     "toolLaser" -> ed.tool == Tool.LASER

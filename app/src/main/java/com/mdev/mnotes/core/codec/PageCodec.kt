@@ -1,6 +1,7 @@
 package com.mdev.mnotes.core.codec
 
 import com.mdev.mnotes.core.model.Element
+import com.mdev.mnotes.core.model.FillEl
 import com.mdev.mnotes.core.model.Ids
 import com.mdev.mnotes.core.model.ImageEl
 import com.mdev.mnotes.core.model.PageContent
@@ -33,11 +34,13 @@ object PageCodec {
     private const val TAG_TEXT = 2
     private const val TAG_IMAGE = 3
     private const val TAG_TAPE = 4
+    private const val TAG_FILL = 5
 
     /**
      * Flagi elementu (varint): bit0 zarezerwowany (mnożenie), bit1 łamana z uchwytami wierzchołków (kształt z autokorekty),
-     * bit2 zablokowany, bit3 „ma grupę” (varint na końcu rekordu — dopisywane bez zmiany wersji).
+     * bit2 zablokowany (w wypełnieniu bit0 = jak zakreślacz), bit3 „ma grupę” (varint na końcu rekordu — dopisywane bez zmiany wersji).
      */
+    private const val FLAG_MULTIPLY = 1
     private const val FLAG_POLY = 2
     private const val FLAG_LOCKED = 4
     private const val FLAG_ELLIPSE = 8
@@ -54,6 +57,7 @@ object PageCodec {
                 is TextBox -> { writeText(body, e); TAG_TEXT }
                 is ImageEl -> { writeImage(body, e); TAG_IMAGE }
                 is TapeEl -> { writeTape(body, e); TAG_TAPE }
+                is FillEl -> { writeFill(body, e); TAG_FILL }
             }
             raw.u8(tag)
             raw.varint(body.size)
@@ -114,6 +118,7 @@ object PageCodec {
                 TAG_TEXT -> list.add(readText(sub))
                 TAG_IMAGE -> list.add(readImage(sub))
                 TAG_TAPE -> list.add(readTape(sub))
+                TAG_FILL -> list.add(readFill(sub))
             }
             r.pos = start + len
         }
@@ -207,6 +212,43 @@ object PageCodec {
         val color = r.i32()
         val hidden = r.u8() != 0
         return TapeEl(Ids.next(), cx, cy, w, h, rot, color, hidden, flags and FLAG_LOCKED != 0)
+    }
+
+    private fun writeFill(w: ByteWriter, f: FillEl) {
+        w.varint((if (f.locked) FLAG_LOCKED else 0) or (if (f.hl) FLAG_MULTIPLY else 0))
+        w.i32(f.color)
+        w.varint(f.rings.size)
+        var px = 0; var py = 0
+        for (ring in f.rings) {
+            val n = ring.size / 2
+            w.varint(n)
+            for (i in 0 until n) {
+                val x = (ring[2 * i] * Q).roundToInt()
+                val y = (ring[2 * i + 1] * Q).roundToInt()
+                w.zigzag(x - px); w.zigzag(y - py)
+                px = x; py = y
+            }
+        }
+    }
+
+    private fun readFill(r: ByteReader): FillEl {
+        val flags = r.varint()
+        val color = r.i32()
+        val count = r.varint()
+        if (count < 0 || count > r.remaining) throw CodecException("Zła liczba konturów")
+        val rings = ArrayList<FloatArray>(count)
+        var x = 0; var y = 0
+        repeat(count) {
+            val n = r.varint()
+            if (n < 0 || n > r.remaining) throw CodecException("Zła liczba punktów")
+            val ring = FloatArray(n * 2)
+            for (i in 0 until n) {
+                x += r.zigzag(); y += r.zigzag()
+                ring[2 * i] = x / Q; ring[2 * i + 1] = y / Q
+            }
+            rings.add(ring)
+        }
+        return FillEl(Ids.next(), color, flags and FLAG_MULTIPLY != 0, rings, flags and FLAG_LOCKED != 0)
     }
 
     private fun deflate(src: ByteArray, len: Int): ByteArray {

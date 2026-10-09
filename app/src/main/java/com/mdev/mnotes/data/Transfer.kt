@@ -4,6 +4,7 @@ import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.pdf.PdfDocument
 import android.util.Base64
+import com.mdev.mnotes.core.model.FillEl
 import com.mdev.mnotes.core.model.ImageEl
 import com.mdev.mnotes.core.model.PageContent
 import com.mdev.mnotes.core.model.PageSpec
@@ -156,6 +157,17 @@ class Exporter(private val repo: Repository, private val assets: Assets, private
                 val tr = if (e.rot != 0f) " transform=\"rotate(${f(Math.toDegrees(e.rot.toDouble()).toFloat())} ${f(e.cx)} ${f(e.cy)})\"" else ""
                 val rad = f(minOf(e.w, e.h) * 0.12f)
                 sb.append("<rect x=\"${f(e.cx - e.w / 2)}\" y=\"${f(e.cy - e.h / 2)}\" width=\"${f(e.w)}\" height=\"${f(e.h)}\" rx=\"$rad\" fill=\"${hex(e.color)}\" fill-opacity=\"${if (e.hidden) "1" else "0.18"}\"$tr/>\n")
+            }
+            is FillEl -> {
+                val hl = if (e.hl) " opacity=\"${f(PenSpec.of(PenKind.HIGHLIGHTER).alpha * (if (spec.darkPaper) 0.84f else 1f))}\" style=\"mix-blend-mode:${if (spec.darkPaper) "screen" else "multiply"}\"" else ""
+                sb.append("<path fill=\"${hex(e.color)}\" fill-rule=\"evenodd\"$hl d=\"")
+                for (ring in e.rings) if (ring.size >= 6) {
+                    sb.append("M${f(ring[0])} ${f(ring[1])}")
+                    var i = 2
+                    while (i < ring.size) { sb.append("L${f(ring[i])} ${f(ring[i + 1])}"); i += 2 }
+                    sb.append('Z')
+                }
+                sb.append("\"/>\n")
             }
             is ImageEl -> assets.load(nb, e.asset)?.let { b ->
                 val tr = if (e.rot != 0f) " transform=\"rotate(${f(Math.toDegrees(e.rot.toDouble()).toFloat())} ${f(e.cx)} ${f(e.cy)})\"" else ""

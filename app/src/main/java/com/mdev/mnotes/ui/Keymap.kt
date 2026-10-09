@@ -143,6 +143,8 @@ object CmdDefs {
 
         CmdDef("toolPen", 5, "Narzędzie: pióro", "Tool: pen", "P"),
         CmdDef("toolEraser", 5, "Narzędzie: gumka", "Tool: eraser", "E"),
+        CmdDef("toolPainter", 5, "Narzędzie: pędzel formatu", "Tool: format painter", "B"),
+        CmdDef("toolFill", 5, "Narzędzie: wypełnienie (wiaderko)", "Tool: fill (paint bucket)", "F"),
         CmdDef("toolLasso", 5, "Narzędzie: lasso", "Tool: lasso", "L"),
         CmdDef("toolText", 5, "Narzędzie: tekst", "Tool: text", "T"),
         CmdDef("toolLaser", 5, "Narzędzie: laser", "Tool: laser", "O"),

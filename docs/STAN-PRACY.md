@@ -32,6 +32,7 @@ Kotlin + Jetpack Compose (Material3) nad `NoteView` (Android View). Pakiet `app/
 - Dane na urządzeniu: `files/library/nb/<id>/meta.json` + `p/*.mnp`; zapis atomowy (`writeAtomic`, `.bak`).
 
 ## Zrobione w ostatnich sesjach (kod + kompilacja + testy jednostkowe; BEZ testu na urządzeniu)
+- Nazwy bez enterów (`core/text/NameText.kt` + `NameTextTest`): `MField` jednowierszowy zamienia łamanie linii na spację przy wpisywaniu/wklejaniu; `Repository` i dialogi czyszczą nazwy zeszytów, folderów i tagów przy zapisie; odczyt `meta.json`/`folders.json` naprawia już zapisane (powód: tytuł „WEJ⏎:” po wklejeniu).
 - Audyt BACKLOG i poprawa statusów.
 - LNX-015 rejestr poleceń i edytowalne skróty; LNX-012 pasek menu (render potwierdzony zrzutem).
 - EDT-054 wklej obraz/tekst ze schowka systemu (`Editor.pasteSystem`, `insertFromUri`).

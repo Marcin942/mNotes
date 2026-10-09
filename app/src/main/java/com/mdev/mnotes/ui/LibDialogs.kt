@@ -41,6 +41,7 @@ import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.mdev.mnotes.core.text.NameText
 import com.mdev.mnotes.app.app
 import com.mdev.mnotes.core.model.PageFormat
 import com.mdev.mnotes.core.model.PageSpec
@@ -100,11 +101,11 @@ fun LibDialogs(st: LibState, onOpen: (String) -> Unit) {
             var color by remember { mutableStateOf(0xFF87CF3E.toInt()) }
             MDialog(
                 T.t("Nowy folder", "New folder"), { st.dialog = null }, T.t("Utwórz", "Create"),
-                { repo.createFolder(name.trim(), if (st.place == Place.LIB) st.folderId else null, color); st.dialog = null },
+                { repo.createFolder(NameText.oneLine(name), if (st.place == Place.LIB) st.folderId else null, color); st.dialog = null },
                 confirmEnabled = name.isNotBlank(),
             ) {
                 MField(name, { name = it }, Modifier.fillMaxWidth(), hint = T.t("Nazwa folderu", "Folder name"), onDone = {
-                    if (name.isNotBlank()) { repo.createFolder(name.trim(), if (st.place == Place.LIB) st.folderId else null, color); st.dialog = null }
+                    if (name.isNotBlank()) { repo.createFolder(NameText.oneLine(name), if (st.place == Place.LIB) st.folderId else null, color); st.dialog = null }
                 })
                 Spacer(Modifier.height(14.dp))
                 SectionLabel(T.t("Kolor", "Color"))
@@ -118,7 +119,7 @@ fun LibDialogs(st: LibState, onOpen: (String) -> Unit) {
             if (cur == null) { st.dialog = null; return }
             var name by remember { mutableStateOf(cur) }
             fun apply() {
-                val n = name.trim()
+                val n = NameText.oneLine(name)
                 if (n.isNotEmpty()) { if (isFolder) repo.updateFolder(id) { it.copy(name = n) } else repo.update(id) { it.copy(title = n) } }
                 st.dialog = null
             }
@@ -231,7 +232,7 @@ private fun TagsDialog(st: LibState, d: LibDialog.Tags) {
         d.nb.forEach { id -> repo.update(id) { n -> n.copy(tags = if (has) n.tags - tag else (n.tags + tag).distinct()) } }
     }
     fun add() {
-        val n = newName.trim().removePrefix("#")
+        val n = NameText.oneLine(newName).removePrefix("#")
         if (n.isEmpty()) return
         if (repo.tagColors[n] == null) repo.setTag(n, newColor)
         d.nb.forEach { id -> repo.update(id) { x -> x.copy(tags = (x.tags + n).distinct()) } }
@@ -290,7 +291,7 @@ fun NewNotebookDialog(onDismiss: () -> Unit, onCreate: (String, PageSpec, Int, I
 
     fun create() {
         set.newFormat = format.id; set.newLandscape = landscape; set.newTemplate = template.code; set.newPaper = paper
-        onCreate(title.trim(), spec, cover, style)
+        onCreate(NameText.oneLine(title), spec, cover, style)
     }
 
     MDialog(T.t("Nowy zeszyt", "New notebook"), onDismiss, T.t("Utwórz", "Create"), ::create) {

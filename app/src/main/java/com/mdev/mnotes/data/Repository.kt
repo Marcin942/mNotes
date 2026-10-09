@@ -1,5 +1,6 @@
 package com.mdev.mnotes.data
 
+import com.mdev.mnotes.core.text.NameText
 import com.mdev.mnotes.editor.T
 import android.content.Context
 import android.os.Handler
@@ -84,14 +85,14 @@ class Repository(ctx: Context) {
 
     fun update(id: String, f: (NotebookMeta) -> NotebookMeta) {
         var updated: NotebookMeta? = null
-        notebooks = notebooks.map { if (it.id == id) f(it).also { n -> updated = n } else it }
+        notebooks = notebooks.map { if (it.id == id) f(it).let { n -> n.copy(title = NameText.oneLine(n.title)) }.also { n -> updated = n } else it }
         updated?.let { m -> val json = m.toJson(); io.execute { writeAtomic(File(dir(id), "meta.json"), json.toByteArray(), true) } }
     }
 
     fun createNotebook(title: String, spec: PageSpec, cover: Int, coverStyle: Int, folderId: String?, pageCount: Int = 1): NotebookMeta {
         val now = System.currentTimeMillis()
         val pages = List(pageCount.coerceAtLeast(1)) { PageMeta(newId(), spec) }
-        return addNotebook(NotebookMeta(newId(), title, folderId, now, now, now, cover, coverStyle, pages = pages))
+        return addNotebook(NotebookMeta(newId(), NameText.oneLine(title), folderId, now, now, now, cover, coverStyle, pages = pages))
     }
 
     fun addNotebook(m: NotebookMeta): NotebookMeta {
@@ -145,14 +146,14 @@ class Repository(ctx: Context) {
     // — Foldery i tagi —
 
     fun createFolder(name: String, parentId: String?, color: Int): Folder {
-        val f = Folder(newId(), name, parentId, color)
+        val f = Folder(newId(), NameText.oneLine(name), parentId, color)
         folders = folders + f
         saveFolders()
         return f
     }
 
     fun updateFolder(id: String, f: (Folder) -> Folder) {
-        folders = folders.map { if (it.id == id) f(it) else it }
+        folders = folders.map { if (it.id == id) f(it).let { x -> x.copy(name = NameText.oneLine(x.name)) } else it }
         saveFolders()
     }
 
@@ -172,7 +173,8 @@ class Repository(ctx: Context) {
         io.execute { writeAtomic(File(root, "folders.json"), s.toByteArray(), true) }
     }
 
-    fun setTag(name: String, color: Int?) {
+    fun setTag(rawName: String, color: Int?) {
+        val name = NameText.oneLine(rawName)
         tagColors = if (color == null) tagColors - name else tagColors + (name to color)
         val o = JSONObject(); tagColors.forEach { (k, v) -> o.put(k, v) }
         val s = o.toString()

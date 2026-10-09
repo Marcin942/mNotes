@@ -68,6 +68,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.mdev.mnotes.core.text.NameText
 import com.mdev.mnotes.editor.T
 import java.text.DateFormat
 import java.util.Date
@@ -258,7 +259,7 @@ fun MField(
     val m = mint
     var focus by remember { mutableStateOf(false) }
     BasicTextField(
-        value = value, onValueChange = onChange, singleLine = singleLine,
+        value = value, onValueChange = { onChange(if (singleLine) NameText.noBreaks(it) else it) }, singleLine = singleLine,
         textStyle = MaterialTheme.typography.bodyLarge.copy(color = MaterialTheme.colorScheme.onSurface),
         cursorBrush = SolidColor(m.accent),
         keyboardOptions = KeyboardOptions(keyboardType = if (number) KeyboardType.Decimal else KeyboardType.Text),

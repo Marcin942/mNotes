@@ -1,5 +1,6 @@
 package com.mdev.mnotes.data
 
+import com.mdev.mnotes.core.text.NameText
 import com.mdev.mnotes.core.model.PageSpec
 import org.json.JSONArray
 import org.json.JSONObject
@@ -34,7 +35,7 @@ data class Folder(
         .also { if (parentId != null) it.put("p", parentId) }
 
     companion object {
-        fun fromJson(o: JSONObject) = Folder(o.getString("id"), o.optString("n", "?"), o.optString("p", "").ifEmpty { null }, o.optInt("c", 0xFF87CF3E.toInt()), o.optLong("t", 0L))
+        fun fromJson(o: JSONObject) = Folder(o.getString("id"), NameText.oneLine(o.optString("n", "?")), o.optString("p", "").ifEmpty { null }, o.optInt("c", 0xFF87CF3E.toInt()), o.optLong("t", 0L))
     }
 }
 
@@ -94,7 +95,7 @@ data class NotebookMeta(
             val created = o.optLong("cr", 0L)
             val modified = o.optLong("mod", created)
             return NotebookMeta(
-                id = o.getString("id"), title = o.optString("title", ""), folderId = o.optString("f", "").ifEmpty { null },
+                id = o.getString("id"), title = NameText.oneLine(o.optString("title", "")), folderId = o.optString("f", "").ifEmpty { null },
                 created = created, modified = modified, opened = o.optLong("op", modified),
                 cover = o.optInt("cov", 0xFF4C9A6A.toInt()), coverStyle = o.optInt("cs", 0),
                 favorite = o.optBoolean("fav"), trashedAt = o.optLong("tr"), tags = tags, locked = o.optBoolean("lock"),

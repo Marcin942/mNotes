@@ -5,6 +5,7 @@ import android.content.SharedPreferences
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import com.mdev.mnotes.core.layout.BarConfig
 import com.mdev.mnotes.core.model.PenKind
 import com.mdev.mnotes.core.pen.ActivePen
 import com.mdev.mnotes.core.pen.PenKit
@@ -54,6 +55,13 @@ class Settings(ctx: Context) {
     var toolbarPos by Pref("toolbar.position", 0)    // 0 góra, 1 dół, 2 lewo, 3 prawo
     var toolbarSize by Pref("toolbar.size", 1)       // 0 mały, 1 normalny, 2 duży
     var optionsPos by Pref("toolbar.options", 0)     // listwa grubości i kolorów: 0 z lewej, 1 z prawej, 2 przy pasku narzędzi
+    private var barOrder by Pref("toolbar.order", "")   // własna kolejność pozycji paska: id po przecinku
+    private var barModes by Pref("toolbar.modes", "")   // tryby pozycji: „id:1” zawsze na pasku, „id:2” tylko pod „⋯”
+
+    /** Układ paska narzędzi wybrany przez użytkownika (kolejność i tryby pozycji). */
+    var barConfig: BarConfig
+        get() = BarConfig.parse(barOrder, barModes)
+        set(v) { barOrder = if (v.isDefault) "" else v.orderString(); barModes = v.modesString() }
     var tabs by Pref("ui.tabs", false)               // otwieraj zeszyty jako karty (pasek kart pojawia się dopiero przy ≥ 2 kartach)
     var menuBar by Pref("ui.menubar", 1)            // pasek menu w edytorze: 0 nigdy, 1 na dużych ekranach, 2 zawsze
     var keyMap by Pref("keys.map", "")               // własne skróty: JSON {id polecenia: „Ctrl+J”}, pusty tekst = bez skrótu

@@ -2,6 +2,7 @@ package com.mdev.mnotes.core
 
 import com.mdev.mnotes.core.layout.BarEntry
 import com.mdev.mnotes.core.layout.BarFit
+import com.mdev.mnotes.core.layout.BarMode
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -50,5 +51,29 @@ class BarFitTest {
         val mixed = listOf(BarEntry(0, 5), BarEntry(0, 0), BarEntry(0, 3), BarEntry(0, 1))
         val r = BarFit.fit(mixed, BarFit.length(3, 1, btn, false), btn)
         assertEquals(setOf(0, 2), r.hidden)
+    }
+
+    @Test fun menuModeAlwaysHidesAndReservesMoreButton() {
+        val withMenu = items.mapIndexed { i, e -> if (i == 8) BarEntry(e.group, e.rank, BarMode.MENU) else e }
+        val room = BarFit.length(items.size, 3, btn, false)
+        val r = BarFit.fit(withMenu, room, btn)
+        assertEquals(setOf(8), r.hidden)
+        // Z jedną pozycją mniej i przyciskiem „⋯” długość jest taka sama, więc jeszcze się mieści bez ścieśniania.
+        assertFalse(r.tight)
+        assertTrue(BarFit.fit(withMenu, Float.POSITIVE_INFINITY, btn).hidden == setOf(8))
+    }
+
+    @Test fun alwaysModeIsNeverEvicted() {
+        val pinnedLast = items.mapIndexed { i, e -> if (i == 8) BarEntry(e.group, e.rank, BarMode.ALWAYS) else e }
+        val r = BarFit.fit(pinnedLast, 200f, btn)
+        assertFalse(8 in r.hidden)
+        assertTrue(7 in r.hidden)
+    }
+
+    @Test fun groupsAreCountedByTransitionsWhenOrderIsCustom() {
+        // Grupy 0,1,0: dwa separatory, mimo że różnych grup jest tylko dwie.
+        val zig = listOf(BarEntry(0, 0), BarEntry(1, 1), BarEntry(0, 2))
+        assertTrue(BarFit.fit(zig, BarFit.length(3, 3, btn, false) - 1f, btn).tight)
+        assertFalse(BarFit.fit(zig, BarFit.length(3, 3, btn, false), btn).tight)
     }
 }

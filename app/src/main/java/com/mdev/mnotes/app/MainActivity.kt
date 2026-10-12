@@ -54,6 +54,7 @@ import com.mdev.mnotes.ui.TabsCtl
 import com.mdev.mnotes.ui.LibState
 import com.mdev.mnotes.ui.LibraryScreen
 import com.mdev.mnotes.ui.MNotesTheme
+import com.mdev.mnotes.ui.COLORS_CAT
 import com.mdev.mnotes.ui.SHORTCUTS_CAT
 import com.mdev.mnotes.ui.SettingsScreen
 import com.mdev.mnotes.ui.mint
@@ -231,7 +232,7 @@ open class MainActivity : FragmentActivity() {
             Screen.SETTINGS -> SettingsScreen(onBack = { ui.screen = if (ui.editor != null) Screen.EDITOR else Screen.LIBRARY }, startCat = ui.settingsCat)
             Screen.EDITOR -> {
                 val ed = ui.editor
-                if (ed == null) { ui.screen = Screen.LIBRARY } else key(ed.nbId) { EditorScreen(ed, tabsCtl, onExit = ui::leave, onSettings = { ui.settingsCat = 0; ui.screen = Screen.SETTINGS }, onShortcuts = { ui.settingsCat = SHORTCUTS_CAT; ui.screen = Screen.SETTINGS }) }
+                if (ed == null) { ui.screen = Screen.LIBRARY } else key(ed.nbId) { EditorScreen(ed, tabsCtl, onExit = ui::leave, onSettings = { ui.settingsCat = 0; ui.screen = Screen.SETTINGS }, onShortcuts = { ui.settingsCat = SHORTCUTS_CAT; ui.screen = Screen.SETTINGS }, onColorSets = { ui.settingsCat = COLORS_CAT; ui.screen = Screen.SETTINGS }) }
             }
         }
         // Z ustawień wracamy do poprzedniego ekranu (biblioteki lub edytora).

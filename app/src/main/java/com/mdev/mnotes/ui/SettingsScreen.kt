@@ -28,6 +28,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.rounded.ColorLens
 import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.Keyboard
 import androidx.compose.material.icons.rounded.Lock
@@ -70,7 +71,10 @@ import androidx.compose.ui.input.key.type
 private class Cat(val icon: ImageVector, val title: String)
 
 /** Indeks kategorii „Skróty klawiszowe” — otwierany bezpośrednio z palety poleceń. */
-const val SHORTCUTS_CAT = 5
+const val SHORTCUTS_CAT = 6
+
+/** Indeks kategorii „Kolory narzędzi” — otwierany z listwy w edytorze. */
+const val COLORS_CAT = 2
 
 @Composable
 fun SettingsScreen(onBack: () -> Unit, startCat: Int = 0) {
@@ -81,6 +85,7 @@ fun SettingsScreen(onBack: () -> Unit, startCat: Int = 0) {
     val cats = listOf(
         Cat(Icons.Rounded.Palette, T.t("Wygląd", "Appearance")),
         Cat(Icons.Rounded.Edit, T.t("Edytor i pióro", "Editor & pen")),
+        Cat(Icons.Rounded.ColorLens, T.t("Kolory narzędzi", "Tool colours")),
         Cat(Icons.Rounded.TouchApp, T.t("Wejście", "Input")),
         Cat(Icons.Rounded.NoteAdd, T.t("Nowe notatki", "New notes")),
         Cat(Icons.Rounded.Lock, T.t("Prywatność i kopie", "Privacy & backup")),
@@ -122,10 +127,11 @@ fun SettingsScreen(onBack: () -> Unit, startCat: Int = 0) {
                             when (cat) {
                                 0 -> Appearance(set)
                                 1 -> EditorPrefs(set)
-                                2 -> InputPrefs(set)
-                                3 -> NewNotePrefs(set)
-                                4 -> PrivacyPrefs(set)
-                                5 -> ShortcutsTable(set)
+                                2 -> ColorSetsPrefs(set)
+                                3 -> InputPrefs(set)
+                                4 -> NewNotePrefs(set)
+                                5 -> PrivacyPrefs(set)
+                                6 -> ShortcutsTable(set)
                                 else -> About()
                             }
                             Spacer(Modifier.height(32.dp))
@@ -138,7 +144,7 @@ fun SettingsScreen(onBack: () -> Unit, startCat: Int = 0) {
 }
 
 @Composable
-private fun Group(title: String? = null, content: @Composable () -> Unit) {
+internal fun Group(title: String? = null, content: @Composable () -> Unit) {
     val m = mint
     if (title != null) SectionLabel(title)
     Column(
@@ -157,7 +163,7 @@ private fun Opt(label: String, content: @Composable () -> Unit) {
 }
 
 @Composable
-private fun Choice(options: List<String>, selected: Int, onSelect: (Int) -> Unit) {
+internal fun Choice(options: List<String>, selected: Int, onSelect: (Int) -> Unit) {
     FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         options.forEachIndexed { i, t -> Chip(t, i == selected, { onSelect(i) }) }
     }

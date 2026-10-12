@@ -8,7 +8,9 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -109,6 +111,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -190,7 +193,7 @@ object MIcons {
 fun setName(s: ColorSet) = s.name.ifEmpty {
     when (s.id) {
         PenKit.SET_INK -> T.t("Atramenty", "Inks"); PenKit.SET_BRUSH -> T.t("Pędzel", "Brush")
-        PenKit.SET_HL -> T.t("Zakreślacze", "Highlighters"); else -> s.id
+        PenKit.SET_HL -> T.t("Zakreślacze", "Highlighters"); else -> T.t("Własny zestaw", "Own set")
     }
 }
 
@@ -205,7 +208,7 @@ fun penName(k: PenKind) = when (k) {
  * (także górnego), a panele i okna kontekstowe kotwiczą się do krawędzi strony.
  */
 @Composable
-fun EditorScreen(ed: Editor, tabs: TabsCtl, onExit: () -> Unit, onSettings: () -> Unit, onShortcuts: () -> Unit) {
+fun EditorScreen(ed: Editor, tabs: TabsCtl, onExit: () -> Unit, onSettings: () -> Unit, onShortcuts: () -> Unit, onColorSets: () -> Unit) {
     val ctx = LocalContext.current
     val set = ed.settings
     val m = mint
@@ -285,11 +288,11 @@ fun EditorScreen(ed: Editor, tabs: TabsCtl, onExit: () -> Unit, onSettings: () -
         Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.systemBars.union(WindowInsets.displayCutout))) {
             if (showMenu) MenuBar(ed, cmds, { runCatching { focus.requestFocus() } }, Modifier.fillMaxWidth())
             if (ed.chrome) TopChrome(ed, set, tabs, panel, { toggle(it) }, { goTo = true }, onExit, ::pickImage, ::pickTool, ::pickPen, inlineBar, widthDp)
-            if (strip == 2 && pos != 1) PenStrip(ed, set, 2, pos, panel) { toggle(it) }
+            if (strip == 2 && pos != 1) PenStrip(ed, set, 2, pos, panel, onColorSets) { toggle(it) }
             Row(Modifier.weight(1f).fillMaxWidth()) {
                 if (dock) PagesPanel(ed, { set.dockPages = false }, ::pickImage, docked = true)
                 if (ed.chrome && pos == 2) SideRail(ed, set, panel, ::pickTool, ::pickPen, right = false)
-                if (strip == 0) PenStrip(ed, set, 0, pos, panel) { toggle(it) }
+                if (strip == 0) PenStrip(ed, set, 0, pos, panel, onColorSets) { toggle(it) }
                 Box(Modifier.weight(1f).fillMaxHeight()) {
                     AndroidView(
                         factory = { c -> NoteView(c, ed).apply { layoutParams = ViewGroup.LayoutParams(-1, -1) } },
@@ -312,7 +315,7 @@ fun EditorScreen(ed: Editor, tabs: TabsCtl, onExit: () -> Unit, onSettings: () -
                                     pos == 3 -> Alignment.CenterEnd
                                     else -> Alignment.TopCenter
                                 }
-                                Box(Modifier.align(pa).padding(8.dp).panelEnter()) { ToolPanel(ed, set, p) { panel = null } }
+                                Box(Modifier.align(pa).padding(8.dp).panelEnter()) { ToolPanel(ed, set, p, onColorSets) { panel = null } }
                             }
                             if (panel == Panel.STYLE) Box(Modifier.align(Alignment.TopEnd).padding(8.dp).panelEnter()) { StylePanel(ed) { panel = null } }
                             if (panel == Panel.PAGES && !dock) Box(Modifier.align(Alignment.CenterEnd).padding(vertical = 8.dp).panelEnter()) { PagesPanel(ed, { panel = null }, ::pickImage) }
@@ -329,10 +332,10 @@ fun EditorScreen(ed: Editor, tabs: TabsCtl, onExit: () -> Unit, onSettings: () -
                     }
                     CtxMenuOverlay(ed, { panel = Panel.STYLE })
                 }
-                if (strip == 1) PenStrip(ed, set, 1, pos, panel) { toggle(it) }
+                if (strip == 1) PenStrip(ed, set, 1, pos, panel, onColorSets) { toggle(it) }
                 if (ed.chrome && pos == 3) SideRail(ed, set, panel, ::pickTool, ::pickPen, right = true)
             }
-            if (strip == 2 && pos == 1) PenStrip(ed, set, 3, pos, panel) { toggle(it) }
+            if (strip == 2 && pos == 1) PenStrip(ed, set, 3, pos, panel, onColorSets) { toggle(it) }
             if (ed.chrome && pos == 1) BottomBar(ed, set, panel, ::pickTool, ::pickPen)
         }
 
@@ -579,23 +582,23 @@ private fun ToolBar(ed: Editor, set: com.mdev.mnotes.data.Settings, vertical: Bo
  * 2 pod górnym paskiem, 3 nad dolnym.
  */
 @Composable
-private fun PenStrip(ed: Editor, set: com.mdev.mnotes.data.Settings, side: Int, toolbarPos: Int, panel: Panel?, toggle: (Panel) -> Unit) {
+private fun PenStrip(ed: Editor, set: com.mdev.mnotes.data.Settings, side: Int, toolbarPos: Int, panel: Panel?, onColorSets: () -> Unit, toggle: (Panel) -> Unit) {
     val m = mint
     if (side < 2) Row(Modifier.fillMaxHeight()) {
         if (side == 1) Hairline(vertical = true)
         // Opcje trzymają się paska narzędzi, żeby ręka nie wędrowała po całej wysokości ekranu.
         val at = when (toolbarPos) { 0 -> Alignment.TopCenter; 1 -> Alignment.BottomCenter; else -> Alignment.Center }
-        Box(Modifier.fillMaxHeight().background(m.chrome), contentAlignment = at) { PenStripItems(ed, set, true, panel, toggle) }
+        Box(Modifier.fillMaxHeight().background(m.chrome), contentAlignment = at) { PenStripItems(ed, set, true, panel, onColorSets, toggle) }
         if (side == 0) Hairline(vertical = true)
     } else Column(Modifier.fillMaxWidth().background(m.chrome)) {
         if (side == 3) Hairline()
-        Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) { PenStripItems(ed, set, false, panel, toggle) }
+        Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) { PenStripItems(ed, set, false, panel, onColorSets, toggle) }
         if (side == 2) Hairline()
     }
 }
 
 @Composable
-private fun PenStripItems(ed: Editor, set: com.mdev.mnotes.data.Settings, vertical: Boolean, panel: Panel?, toggle: (Panel) -> Unit) {
+private fun PenStripItems(ed: Editor, set: com.mdev.mnotes.data.Settings, vertical: Boolean, panel: Panel?, onColorSets: () -> Unit, toggle: (Panel) -> Unit) {
     val sz = barSize(set)
     val isz = barIcon(set)
     val kit = ed.kit
@@ -606,6 +609,7 @@ private fun PenStripItems(ed: Editor, set: com.mdev.mnotes.data.Settings, vertic
     // pozycji otwiera panel, w którym zmienia się jej wartość.
     val live = ed.penTool
     val scroll = rememberScrollState()
+    var menuFor by remember { mutableStateOf<Int?>(null) }
     Lin(vertical, Modifier.padding(4.dp).then(if (vertical) Modifier.verticalScroll(scroll) else Modifier.horizontalScroll(scroll)).graphicsLayer { alpha = if (live) 1f else 0.55f }) {
         for (i in 0 until PenKit.WIDTHS) {
             val on = i == slot.widthIndex
@@ -624,13 +628,77 @@ private fun PenStripItems(ed: Editor, set: com.mdev.mnotes.data.Settings, vertic
         BarSep(vertical)
         for (c in kit.strip(kind)) {
             val on = c == slot.color
-            StripDot(Color(InkColor.onPaper(c, cs.hl, kind)), on, sz) { if (on && live) toggle(Panel.PEN) else ed.tunePen { it.withColor(kind, c) } }
+            // Długie przytrzymanie otwiera menu koloru (przestaw, schowaj, przenieś); menu wisi pod kropką, nie pod paskiem.
+            androidx.compose.runtime.key(c) {
+                Box {
+                    StripDot(Color(InkColor.onPaper(c, cs.hl, kind)), on, sz, onLong = { menuFor = c }) { if (on && live) toggle(Panel.PEN) else ed.tunePen { it.withColor(kind, c) } }
+                    if (menuFor == c) ColorMenu(ed, kind, c, { menuFor = null }, onColorSets)
+                }
+            }
         }
         BarSep(vertical)
         IconBtn(
             Icons.Rounded.Palette, T.t("Kolory i ustawienia pióra", "Colours and pen settings"),
             { if (!live) ed.setToolKey(Tool.PEN); toggle(Panel.PEN) }, selected = panel == Panel.PEN, size = sz, iconSize = isz,
         )
+    }
+}
+
+/**
+ * Menu koloru z listwy. Przestawianie nie zamyka go, żeby dało się przesunąć kolor o kilka miejsc; przenoszenie
+ * między zestawami idzie na osobnych stronach tego samego okna, żeby nie piętrzyć okienek.
+ */
+@Composable
+private fun ColorMenu(ed: Editor, kind: PenKind, c: Int, close: () -> Unit, onColorSets: () -> Unit) {
+    var page by remember { mutableIntStateOf(0) }
+    val kit = ed.kit
+    val cs = kit.setOf(kind)
+    val at = cs.colors.indexOf(c)
+    val others = kit.sets.filter { it.id != cs.id }
+    val full = cs.colors.size >= PenKit.MAX_COLORS
+    DropdownMenu(true, close) {
+        if (page != 0) {
+            DropdownMenuItem(text = { Text(T.t("‹ Wstecz", "‹ Back")) }, onClick = { page = 0 })
+            HorizontalDivider()
+        }
+        when (page) {
+            0 -> {
+                if (at >= 0) {
+                    DropdownMenuItem(text = { Text(T.t("Przesuń wcześniej", "Move earlier")) }, enabled = at > 0, onClick = { ed.editKit { it.moveColor(cs.id, at, at - 1) } })
+                    DropdownMenuItem(text = { Text(T.t("Przesuń później", "Move later")) }, enabled = at < cs.colors.size - 1, onClick = { ed.editKit { it.moveColor(cs.id, at, at + 1) } })
+                    if (at >= cs.visible) DropdownMenuItem(text = { Text(T.t("Pokaż na listwie", "Show on strip")) }, onClick = { close(); ed.editKit { it.showColor(cs.id, c) } })
+                    else DropdownMenuItem(text = { Text(T.t("Schowaj z listwy", "Hide from strip")) }, enabled = cs.visible > 1, onClick = { close(); ed.editKit { it.hideColor(cs.id, c) } })
+                    if (others.isNotEmpty()) {
+                        DropdownMenuItem(text = { Text(T.t("Kopiuj do zestawu ▸", "Copy to set ▸")) }, onClick = { page = 1 })
+                        if (cs.colors.size > 1) DropdownMenuItem(text = { Text(T.t("Przenieś do zestawu ▸", "Move to set ▸")) }, onClick = { page = 2 })
+                    }
+                    if (cs.colors.size > 1) DropdownMenuItem(text = { Text(T.t("Usuń z zestawu", "Remove from set")) }, leadingIcon = { Icon(Icons.Rounded.Delete, null) }, onClick = { close(); ed.editKit { it.removeColor(cs.id, c) } })
+                } else {
+                    DropdownMenuItem(
+                        text = { Text(T.t("Dodaj do zestawu „${setName(cs)}”", "Add to set “${setName(cs)}”")) }, enabled = !full,
+                        leadingIcon = { Icon(Icons.Rounded.Add, null) }, onClick = { close(); ed.editKit { it.addColor(cs.id, c) } },
+                    )
+                }
+                if (others.isNotEmpty()) {
+                    HorizontalDivider()
+                    DropdownMenuItem(text = { Text(T.t("Kolory z innego zestawu ▸", "Colours from another set ▸")) }, onClick = { page = 3 })
+                }
+                DropdownMenuItem(text = { Text(T.t("Zestawy kolorów…", "Colour sets…")) }, leadingIcon = { Icon(Icons.Rounded.Settings, null) }, onClick = { close(); onColorSets() })
+            }
+            1, 2 -> for (o in others) {
+                // Cel może już mieć tę barwę (po przeliczeniu atrament ↔ zakreślacz) albo być pełny.
+                val conv = InkColor.between(c, cs.hl, o.hl) or (0xFF shl 24)
+                DropdownMenuItem(
+                    text = { Text(setName(o)) }, enabled = conv !in o.colors && o.colors.size < PenKit.MAX_COLORS,
+                    leadingIcon = { SetGlyph(o) },
+                    onClick = { close(); ed.editKit { if (page == 1) it.copyColor(cs.id, c, o.id) else it.moveColorTo(cs.id, c, o.id) } },
+                )
+            }
+            else -> for (o in others) DropdownMenuItem(
+                text = { Text(setName(o)) }, leadingIcon = { SetGlyph(o) },
+                onClick = { close(); ed.editKit { it.withSet(kind, o.id) } },
+            )
+        }
     }
 }
 
@@ -681,7 +749,8 @@ private fun LineStyleRow(current: LineStyle?, onPick: (LineStyle) -> Unit) {
 }
 
 @Composable
-private fun StripDot(color: Color, active: Boolean, size: Dp, onClick: () -> Unit) {
+@OptIn(ExperimentalFoundationApi::class)
+private fun StripDot(color: Color, active: Boolean, size: Dp, onLong: (() -> Unit)? = null, onClick: () -> Unit) {
     val m = mint
     val src = remember { MutableInteractionSource() }
     val pressed by src.collectIsPressedAsState()
@@ -691,7 +760,10 @@ private fun StripDot(color: Color, active: Boolean, size: Dp, onClick: () -> Uni
     val scale by animateFloatAsState(if (pressed) 0.84f else if (active) 1.05f else 1f, spring(dampingRatio = 0.55f, stiffness = 700f), label = "dotScale")
     Box(
         Modifier.size(size).graphicsLayer { scaleX = scale; scaleY = scale }.clip(CircleShape)
-            .clickable(interactionSource = src, indication = null, role = Role.Button) { tick(); onClick() },
+            .combinedClickable(
+                interactionSource = src, indication = null, role = Role.Button,
+                onLongClick = onLong?.let { f -> { tick(); f() } }, onClick = { tick(); onClick() },
+            ),
         contentAlignment = Alignment.Center,
     ) {
         val d = size * 0.5f
@@ -705,12 +777,12 @@ private fun StripDot(color: Color, active: Boolean, size: Dp, onClick: () -> Uni
 // ─────────────────────────────── Panele narzędzi ───────────────────────────────
 
 @Composable
-private fun ToolPanel(ed: Editor, set: com.mdev.mnotes.data.Settings, panel: Panel, close: () -> Unit) {
+private fun ToolPanel(ed: Editor, set: com.mdev.mnotes.data.Settings, panel: Panel, onColorSets: () -> Unit, close: () -> Unit) {
     val m = mint
     FloatingCard(Modifier.width(320.dp)) {
         Column(Modifier.heightIn(max = 560.dp).verticalScroll(rememberScrollState()).padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             when (panel) {
-                Panel.PEN -> PenPanel(ed, set)
+                Panel.PEN -> PenPanel(ed, set, onColorSets)
                 Panel.ERASER -> {
                     SectionLabel(T.t("Tryb gumki", "Eraser mode"))
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -763,7 +835,7 @@ private fun ToolPanel(ed: Editor, set: com.mdev.mnotes.data.Settings, panel: Pan
  * i kolejność zestawu kolorów, wybór zestawu (także cudzego) oraz kolor spoza listy.
  */
 @Composable
-private fun PenPanel(ed: Editor, set: com.mdev.mnotes.data.Settings) {
+private fun PenPanel(ed: Editor, set: com.mdev.mnotes.data.Settings, onColorSets: () -> Unit) {
     val m = mint
     val kit = ed.kit
     val kind = kit.active
@@ -831,6 +903,8 @@ private fun PenPanel(ed: Editor, set: com.mdev.mnotes.data.Settings) {
         else T.t("Z tego zestawu korzystają też: $sharing. Zmiany w zestawie widać w każdym z nich.", "Also used by: $sharing. Changes to the set show up in each of them."),
         style = MaterialTheme.typography.bodySmall, color = dim,
     )
+    Chip(T.t("Zestawy kolorów…", "Colour sets…"), false, onColorSets, icon = Icons.Rounded.Settings)
+    Text(T.t("Przytrzymaj kolor na listwie, żeby go przestawić, schować albo przenieść do innego zestawu.", "Hold a colour on the strip to move, hide or transfer it to another set."), style = MaterialTheme.typography.bodySmall, color = dim)
 
     SectionLabel(T.t("Inny kolor", "Another colour"))
     ColorPicker(

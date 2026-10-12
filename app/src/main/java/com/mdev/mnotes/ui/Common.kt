@@ -15,6 +15,7 @@ import android.view.HapticFeedbackConstants
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.waitForUpOrCancellation
@@ -117,6 +118,7 @@ fun ToolBtn(
     tint: Color = Color.Unspecified,
     size: Dp = 40.dp,
     shortcut: String? = null,
+    onLong: (() -> Unit)? = null,
     content: @Composable (Color) -> Unit,
 ) {
     val m = mint
@@ -151,7 +153,11 @@ fun ToolBtn(
     ) {
         Box(
             modifier.size(size).graphicsLayer { scaleX = scale; scaleY = scale }.clip(RoundedCornerShape(10.dp)).background(bg)
-                .clickable(interactionSource = src, indication = null, enabled = enabled, role = Role.Button) { tick(); onClick() },
+                .then(
+                    // Przytrzymanie działa też na wyszarzonym przycisku: o jego miejscu na pasku wolno decydować zawsze.
+                    if (onLong == null) Modifier.clickable(interactionSource = src, indication = null, enabled = enabled, role = Role.Button) { tick(); onClick() }
+                    else Modifier.combinedClickable(interactionSource = src, indication = null, role = Role.Button, onLongClick = { tick(); onLong() }, onClick = { if (enabled) { tick(); onClick() } }),
+                ),
             contentAlignment = Alignment.Center,
         ) { content(c) }
     }

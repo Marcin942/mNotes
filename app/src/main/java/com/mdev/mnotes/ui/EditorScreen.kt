@@ -97,6 +97,9 @@ import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material.icons.rounded.TextFields
 import androidx.compose.material.icons.rounded.TrackChanges
 import androidx.compose.material.icons.rounded.ViewSidebar
+import androidx.compose.material.icons.rounded.ArrowDownward
+import androidx.compose.material.icons.rounded.ArrowUpward
+import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -163,7 +166,9 @@ import androidx.compose.material.icons.rounded.MoreHoriz
 import androidx.compose.material.icons.rounded.Remove
 import androidx.compose.ui.unit.Dp
 import com.mdev.mnotes.core.layout.BarEntry
+import com.mdev.mnotes.core.layout.BarConfig
 import com.mdev.mnotes.core.layout.BarFit
+import com.mdev.mnotes.core.layout.BarMode
 import com.mdev.mnotes.core.pen.ActivePen
 import com.mdev.mnotes.core.pen.ColorSet
 import com.mdev.mnotes.core.pen.InkColor
@@ -397,7 +402,7 @@ private fun TopChrome(
     BoxWithConstraints(Modifier.fillMaxWidth().background(m.chrome)) {
         // Przy jednym dokumencie pasek ma być cały na wierzchu: tytuł oddaje mu miejsce, a gdy i tak się nie mieści,
         // pasek dostaje własny wiersz. Przy kartach zostaje w linii i sam zwija najmniej ważne narzędzia pod „⋯”.
-        val spare = maxWidth.value - HEADER_FIXED - (BarFit.length(BAR_ITEMS, 3, barSize(set).value, true) + 8f)
+        val spare = maxWidth.value - HEADER_FIXED - (BarFit.length(barItemCount(set.barConfig), 3, barSize(set).value, true) + 8f)
         val inline = inlineBar && (tabs.showStrip || spare >= TITLE_MIN)
         Column(Modifier.fillMaxWidth()) {
             Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -485,12 +490,15 @@ private fun barIcon(set: com.mdev.mnotes.data.Settings) = when (set.toolbarSize)
 
 /** Pozycja paska. [rank]: co pierwsze trafia pod „⋯” (patrz [BarFit]); [pin]: narzędzie w ręku, zawsze na wierzchu. */
 private class BarItem(
-    val group: Int, val rank: Int, val tip: String, val shortcut: String?, val enabled: Boolean, val selected: Boolean, val pin: Boolean,
+    val id: String, val group: Int, val rank: Int, val tip: String, val shortcut: String?, val enabled: Boolean, val selected: Boolean, val pin: Boolean,
     val onClick: () -> Unit, val glyph: @Composable (Color, Dp) -> Unit,
 )
 
-/** Liczba pozycji paska (cofanie, pióra, narzędzia): nagłówek ocenia nią, czy pasek zmieści się obok tytułu. */
-private const val BAR_ITEMS = 17
+/** Liczba przycisków paska w układzie [cfg]: nagłówek ocenia nią, czy pasek zmieści się obok tytułu. */
+private fun barItemCount(cfg: BarConfig): Int {
+    val shown = cfg.order.count { cfg.mode(it) != BarMode.MENU }
+    return if (shown < cfg.order.size) shown + 1 else shown
+}
 
 /** Stała część nagłówka poza tytułem i paskiem: powrót, marginesy i prawa grupa (strona, powiększenie, cztery przyciski). */
 private const val HEADER_FIXED = 352f
@@ -511,56 +519,68 @@ private fun ToolBar(ed: Editor, set: com.mdev.mnotes.data.Settings, vertical: Bo
     val ro = ed.readOnly
     val kit = ed.kit
     val items = ArrayList<BarItem>()
-    fun icon(group: Int, rank: Int, icon: ImageVector, tip: String, key: String, enabled: Boolean, selected: Boolean, pin: Boolean = selected, onClick: () -> Unit) {
-        items += BarItem(group, rank, tip, key, enabled, selected, pin, onClick) { c, s -> Icon(icon, null, Modifier.size(s), tint = c) }
+    fun icon(id: String, group: Int, rank: Int, icon: ImageVector, tip: String, key: String, enabled: Boolean, selected: Boolean, pin: Boolean = selected, onClick: () -> Unit) {
+        items += BarItem(id, group, rank, tip, key, enabled, selected, pin, onClick) { c, s -> Icon(icon, null, Modifier.size(s), tint = c) }
     }
-    fun tool(rank: Int, icon: ImageVector, tip: String, key: String, t: Tool, p: Panel?, enabled: Boolean = !ro) =
-        icon(2, rank, icon, tip, key, enabled, ed.tool == t) { pickTool(t, p) }
+    fun tool(id: String, rank: Int, icon: ImageVector, tip: String, key: String, t: Tool, p: Panel?, enabled: Boolean = !ro) =
+        icon(id, 2, rank, icon, tip, key, enabled, ed.tool == t) { pickTool(t, p) }
 
-    icon(0, 0, Icons.AutoMirrored.Rounded.Undo, T.t("Cofnij", "Undo"), "Ctrl+Z", ed.canUndo && !ro, false) { ed.undo() }
-    icon(0, 1, Icons.AutoMirrored.Rounded.Redo, T.t("Ponów", "Redo"), "Ctrl+Y", ed.canRedo && !ro, false) { ed.redo() }
+    icon("undo", 0, 0, Icons.AutoMirrored.Rounded.Undo, T.t("Cofnij", "Undo"), "Ctrl+Z", ed.canUndo && !ro, false) { ed.undo() }
+    icon("redo", 0, 1, Icons.AutoMirrored.Rounded.Redo, T.t("Ponów", "Redo"), "Ctrl+Y", ed.canRedo && !ro, false) { ed.redo() }
     for ((k, rank) in BAR_PENS) {
         val mine = kit.active == k
         val on = mine && ed.tool == Tool.PEN
         // Pędzel formatu i wiaderko biorą kolor z aktywnego pióra, więc zostaje ono oznaczone kropką.
         val lent = mine && !on && ed.penTool
         val ink = Color(kit.pen(k).color)
-        items += BarItem(1, rank, penName(k), if (mine) "P" else null, !ro, on, on, { pickPen(k) }) { c, s ->
+        items += BarItem(k.name.lowercase(), 1, rank, penName(k), if (mine) "P" else null, !ro, on, on, { pickPen(k) }) { c, s ->
             Box(contentAlignment = Alignment.Center) {
                 PenGlyph(k, ink, c, Modifier.size(s + 2.dp))
                 if (lent) Box(Modifier.align(Alignment.BottomCenter).offset(y = 5.dp).size(4.dp).clip(CircleShape).background(m.accent))
             }
         }
     }
-    tool(3, MIcons.Eraser, T.t("Gumka", "Eraser"), "E", Tool.ERASER, Panel.ERASER)
-    tool(11, Icons.Rounded.FormatPaint, T.t("Pędzel formatu — przenosi kolor i styl aktywnego pióra", "Format painter — applies the active pen's colour and style"), "B", Tool.PAINTER, Panel.PAINTER)
-    tool(12, Icons.Rounded.FormatColorFill, T.t("Wypełnienie (wiaderko)", "Fill (paint bucket)"), "F", Tool.FILL, null)
-    tool(4, if (set.lassoRect) Icons.Rounded.HighlightAlt else Icons.Rounded.Gesture, T.t("Lasso", "Lasso"), "L", Tool.LASSO, Panel.LASSO)
-    tool(7, Icons.Rounded.TextFields, T.t("Tekst", "Text"), "T", Tool.TEXT, null)
-    tool(14, Icons.Rounded.TrackChanges, T.t("Laser", "Laser"), "O", Tool.LASER, null, enabled = true)
-    tool(10, Icons.Rounded.PanTool, T.t("Ręka (przewijanie)", "Hand (pan)"), "H", Tool.HAND, null, enabled = true)
-    tool(15, Icons.Rounded.VisibilityOff, T.t("Taśma — zakryj fragment (do nauki)", "Tape — cover an area (for study)"), "K", Tool.TAPE, Panel.TAPE)
-    tool(16, Icons.Rounded.UnfoldMore, T.t("Wstaw / usuń odstęp", "Insert / remove space"), "X", Tool.SPACE, null)
-    icon(2, 13, Icons.Rounded.Straighten, T.t("Linijka", "Ruler"), "R", !ro, ed.ruler, pin = false) { ed.toggleRuler() }
+    tool("eraser", 3, MIcons.Eraser, T.t("Gumka", "Eraser"), "E", Tool.ERASER, Panel.ERASER)
+    tool("painter", 11, Icons.Rounded.FormatPaint, T.t("Pędzel formatu — przenosi kolor i styl aktywnego pióra", "Format painter — applies the active pen's colour and style"), "B", Tool.PAINTER, Panel.PAINTER)
+    tool("fill", 12, Icons.Rounded.FormatColorFill, T.t("Wypełnienie (wiaderko)", "Fill (paint bucket)"), "F", Tool.FILL, null)
+    tool("lasso", 4, if (set.lassoRect) Icons.Rounded.HighlightAlt else Icons.Rounded.Gesture, T.t("Lasso", "Lasso"), "L", Tool.LASSO, Panel.LASSO)
+    tool("text", 7, Icons.Rounded.TextFields, T.t("Tekst", "Text"), "T", Tool.TEXT, null)
+    tool("laser", 14, Icons.Rounded.TrackChanges, T.t("Laser", "Laser"), "O", Tool.LASER, null, enabled = true)
+    tool("hand", 10, Icons.Rounded.PanTool, T.t("Ręka (przewijanie)", "Hand (pan)"), "H", Tool.HAND, null, enabled = true)
+    tool("tape", 15, Icons.Rounded.VisibilityOff, T.t("Taśma — zakryj fragment (do nauki)", "Tape — cover an area (for study)"), "K", Tool.TAPE, Panel.TAPE)
+    tool("space", 16, Icons.Rounded.UnfoldMore, T.t("Wstaw / usuń odstęp", "Insert / remove space"), "X", Tool.SPACE, null)
+    icon("ruler", 2, 13, Icons.Rounded.Straighten, T.t("Linijka", "Ruler"), "R", !ro, ed.ruler, pin = false) { ed.toggleRuler() }
 
+    // Kolejność i tryby wybiera użytkownik (Ustawienia albo przytrzymanie przycisku); pozycje zbudowane wyżej mają
+    // kolejność domyślną, więc tu tylko się je układa.
+    val cfg = set.barConfig
+    val shown = items.sortedBy { cfg.order.indexOf(it.id) }
+    val openSettings = LocalBarSettings.current
     BoxWithConstraints(contentAlignment = Alignment.Center) {
-        val fit = BarFit.fit(items.map { BarEntry(it.group, it.rank) }, (if (vertical) maxHeight else maxWidth).value - 8f, sz.value, items.indexOfFirst { it.pin })
+        val fit = BarFit.fit(
+            shown.map { BarEntry(it.group, it.rank, cfg.mode(it.id)) }, (if (vertical) maxHeight else maxWidth).value - 8f, sz.value,
+            shown.indexOfFirst { it.pin },
+        )
         var more by remember { mutableStateOf(false) }
+        var menuFor by remember { mutableStateOf<String?>(null) }
         Lin(vertical, Modifier.padding(4.dp), if (fit.tight) 0.dp else 2.dp) {
             var group = -1
-            items.forEachIndexed { i, b ->
+            shown.forEachIndexed { i, b ->
                 if (i !in fit.hidden) {
                     if (group >= 0 && b.group != group) BarSep(vertical, fit.tight)
                     group = b.group
-                    ToolBtn(b.tip, b.onClick, enabled = b.enabled, selected = b.selected, size = sz, shortcut = b.shortcut) { c -> b.glyph(c, isz) }
+                    Box {
+                        ToolBtn(b.tip, b.onClick, enabled = b.enabled, selected = b.selected, size = sz, shortcut = b.shortcut, onLong = { menuFor = b.id }) { c -> b.glyph(c, isz) }
+                        if (menuFor == b.id) BarItemMenu(b.id, cfg, vertical, { set.barConfig = it }, { menuFor = null }, openSettings)
+                    }
                 }
             }
             if (fit.hidden.isNotEmpty()) Box {
                 // Włączone narzędzie spod „⋯” (np. linijka) zaznacza sam przycisk, żeby było widać, że coś działa.
-                IconBtn(Icons.Rounded.MoreHoriz, T.t("Więcej narzędzi", "More tools"), { more = true }, selected = more || fit.hidden.any { items[it].selected }, size = sz, iconSize = isz)
+                IconBtn(Icons.Rounded.MoreHoriz, T.t("Więcej narzędzi", "More tools"), { more = true }, selected = more || fit.hidden.any { shown[it].selected }, size = sz, iconSize = isz)
                 DropdownMenu(more, { more = false }) {
                     for (i in fit.hidden.sorted()) {
-                        val b = items[i]
+                        val b = shown[i]
                         DropdownMenuItem(
                             text = { Text(b.tip.substringBefore(" — ")) }, enabled = b.enabled,
                             leadingIcon = { b.glyph(if (b.selected) m.accentText else MaterialTheme.colorScheme.onSurface.copy(alpha = if (b.enabled) 1f else 0.32f), 22.dp) },
@@ -568,9 +588,37 @@ private fun ToolBar(ed: Editor, set: com.mdev.mnotes.data.Settings, vertical: Bo
                             onClick = { more = false; b.onClick() },
                         )
                     }
+                    HorizontalDivider()
+                    DropdownMenuItem(text = { Text(T.t("Dostosuj pasek…", "Customise toolbar…")) }, leadingIcon = { Icon(Icons.Rounded.Tune, null) }, onClick = { more = false; openSettings() })
                 }
             }
         }
+    }
+}
+
+/**
+ * Menu przytrzymanego przycisku paska: gdzie ma stać (zawsze, gdy jest miejsce, pod „⋯”) i o jedno miejsce dalej.
+ * Zmiana działa od razu, bez wchodzenia w Ustawienia.
+ */
+@Composable
+private fun BarItemMenu(id: String, cfg: BarConfig, vertical: Boolean, save: (BarConfig) -> Unit, close: () -> Unit, openSettings: () -> Unit) {
+    DropdownMenu(true, close) {
+        @Composable
+        fun mode(label: String, v: Int) = DropdownMenuItem(
+            text = { Text(label) },
+            leadingIcon = { if (cfg.mode(id) == v) Icon(Icons.Rounded.Check, null) else Spacer(Modifier.size(24.dp)) },
+            onClick = { close(); save(cfg.withMode(id, v)) },
+        )
+        mode(T.t("Zawsze na pasku", "Always on the bar"), BarMode.ALWAYS)
+        mode(T.t("Gdy jest miejsce", "When there is room"), BarMode.AUTO)
+        mode(T.t("Tylko pod „⋯”", "Only under “⋯”"), BarMode.MENU)
+        HorizontalDivider()
+        val back = if (vertical) T.t("Przesuń w górę", "Move up") else T.t("Przesuń w lewo", "Move left")
+        val fwd = if (vertical) T.t("Przesuń w dół", "Move down") else T.t("Przesuń w prawo", "Move right")
+        DropdownMenuItem(text = { Text(back) }, leadingIcon = { Icon(if (vertical) Icons.Rounded.ArrowUpward else Icons.AutoMirrored.Rounded.ArrowBack, null) }, onClick = { close(); save(cfg.move(id, -1)) })
+        DropdownMenuItem(text = { Text(fwd) }, leadingIcon = { Icon(if (vertical) Icons.Rounded.ArrowDownward else Icons.AutoMirrored.Rounded.ArrowForward, null) }, onClick = { close(); save(cfg.move(id, 1)) })
+        HorizontalDivider()
+        DropdownMenuItem(text = { Text(T.t("Dostosuj pasek…", "Customise toolbar…")) }, leadingIcon = { Icon(Icons.Rounded.Tune, null) }, onClick = { close(); openSettings() })
     }
 }
 

@@ -76,6 +76,9 @@ const val SHORTCUTS_CAT = 6
 /** Indeks kategorii „Kolory narzędzi” — otwierany z listwy w edytorze. */
 const val COLORS_CAT = 2
 
+/** Indeks kategorii „Edytor i pióro” — otwierany z menu paska narzędzi („Dostosuj pasek…”). */
+const val EDITOR_CAT = 1
+
 @Composable
 fun SettingsScreen(onBack: () -> Unit, startCat: Int = 0) {
     val ctx = LocalContext.current
@@ -198,6 +201,7 @@ private fun EditorPrefs(set: com.mdev.mnotes.data.Settings) {
         Opt(T.t("Rozmiar", "Size")) { Choice(listOf(T.t("Mały", "Small"), T.t("Normalny", "Normal"), T.t("Duży", "Large")), set.toolbarSize) { set.toolbarSize = it } }
         Opt(T.t("Listwa grubości i kolorów", "Width and colour strip")) { Choice(listOf(T.t("Z lewej", "Left"), T.t("Z prawej", "Right"), T.t("Przy pasku", "By the toolbar")), set.optionsPos) { set.optionsPos = it } }
     }
+    BarLayoutPrefs(set)
     Group(T.t("Renderowanie", "Rendering")) {
         Opt(T.t("Jakość wyświetlania strony", "Page display quality")) {
             Choice(

@@ -1,5 +1,6 @@
 package com.mdev.mnotes.ui
 
+import com.mdev.mnotes.core.pen.InkColor
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
@@ -359,25 +360,11 @@ val HIGHLIGHTER_PALETTE: List<Int> = listOf(
     0xFF5F97FF, 0xFF85CFFD, 0xFF57F3C1, 0xFF71DF77, 0xFFC7AD85,
 ).map { it.toInt() }
 
-/** Jak zakreślacz o danej barwie wygląda na białym papierze (multiply, krycie 0,5). */
-fun highlighterLook(c: Int): Int {
-    fun ch(sh: Int) = (255 + ((c shr sh and 0xFF) - 255) / 2)
-    return (0xFF shl 24) or (ch(16) shl 16) or (ch(8) shl 8) or ch(0)
-}
+/** Jak zakreślacz o danej barwie wygląda na białym papierze; liczy [InkColor.look]. */
+fun highlighterLook(c: Int): Int = InkColor.look(c)
 
-/**
- * Dla dowolnej barwy (suwaki, hex, pipeta) pilnuje, by efekt na papierze pozostał jasnym pastelem: barwy tak
- * ciemne, że po multiply miałyby jasność poniżej ~0,68 (zasłaniałyby tekst), są rozjaśniane ku bieli.
- */
-fun softenForHighlighter(c: Int): Int {
-    val r = c shr 16 and 0xFF; val g = c shr 8 and 0xFF; val b = c and 0xFF
-    val lum = 0.2126f * r + 0.7152f * g + 0.0722f * b
-    val min = 92f
-    if (lum >= min) return c or (0xFF shl 24)
-    val t = (min - lum) / (255f - lum)
-    fun up(v: Int) = (v + (255 - v) * t + 0.5f).toInt().coerceIn(0, 255)
-    return (0xFF shl 24) or (up(r) shl 16) or (up(g) shl 8) or up(b)
-}
+/** Rozjaśnia barwę zbyt ciemną na zakreślacz (suwaki, hex, pipeta); liczy [InkColor.soften]. */
+fun softenForHighlighter(c: Int): Int = InkColor.soften(c)
 
 /** Wybór koloru: paleta + HSV + hex. */
 @OptIn(ExperimentalLayoutApi::class)

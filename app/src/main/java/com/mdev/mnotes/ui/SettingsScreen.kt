@@ -190,6 +190,7 @@ private fun EditorPrefs(set: com.mdev.mnotes.data.Settings) {
     Group(T.t("Pasek narzędzi", "Toolbar")) {
         Opt(T.t("Położenie", "Position")) { Choice(listOf(T.t("Góra", "Top"), T.t("Dół", "Bottom"), T.t("Lewo", "Left"), T.t("Prawo", "Right")), set.toolbarPos) { set.toolbarPos = it } }
         Opt(T.t("Rozmiar", "Size")) { Choice(listOf(T.t("Mały", "Small"), T.t("Normalny", "Normal"), T.t("Duży", "Large")), set.toolbarSize) { set.toolbarSize = it } }
+        Opt(T.t("Listwa grubości i kolorów", "Width and colour strip")) { Choice(listOf(T.t("Z lewej", "Left"), T.t("Z prawej", "Right"), T.t("Przy pasku", "By the toolbar")), set.optionsPos) { set.optionsPos = it } }
     }
     Group(T.t("Renderowanie", "Rendering")) {
         Opt(T.t("Jakość wyświetlania strony", "Page display quality")) {

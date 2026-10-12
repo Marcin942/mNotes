@@ -639,7 +639,7 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
         val eraser = activeTool == Tool.ERASER && settings.eraserMode == 2
         val replaces = eraser || (activeTool == Tool.PAINTER && settings.painterMode == 1)
         if (mode != Mode.TOOL || lm != LM.DRAW && !replaces || ln == 0 || lPage !in 0 until layout.count) return
-        val col = if (eraser) 0xFFE5484D.toInt() else if (replaces) ed.preset.color or (0xFF shl 24) else accent
+        val col = if (eraser) 0xFFE5484D.toInt() else if (replaces) ed.pen.color or (0xFF shl 24) else accent
         lassoPaint.color = col
         tmpPath.rewind()
         if (settings.lassoRect && !replaces) {
@@ -735,13 +735,13 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
             }
             Tool.PEN -> {
                 if (mode == Mode.TOOL) return
-                val w = ed.preset.width * zoom
-                ringPaint.color = ed.preset.color and 0x00FFFFFF or 0x99000000.toInt()
+                val w = ed.pen.width * zoom
+                ringPaint.color = ed.pen.color and 0x00FFFFFF or 0x99000000.toInt()
                 c.drawCircle(x, y, max(w / 2f, 2.5f * dp), ringPaint)
             }
             Tool.PAINTER -> {
                 if (settings.painterMode == 1) return
-                ringPaint.color = ed.preset.color and 0x00FFFFFF or 0xCC000000.toInt()
+                ringPaint.color = ed.pen.color and 0x00FFFFFF or 0xCC000000.toInt()
                 c.drawCircle(x, y, PAINT_R_DP * dp, ringPaint)
             }
             Tool.LASER -> drawLaserDot(c, x, y, 1f)
@@ -1496,7 +1496,7 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
         val pi = pageIdxAt(curX, curY)
         if (pi < 0) { mode = Mode.IGNORE; return }
         livePage = pi
-        val p = ed.preset
+        val p = ed.pen
         val sp = PenSpec.of(p.kind)
         builder.begin(p.kind, p.color, p.width, (sp.smoothing * settings.smoothing).coerceIn(0f, 1f), (0.5f / zoom).coerceIn(0.05f, 0.9f))
         liveActive = true; shapeSnapped = false; predN = 0

@@ -155,7 +155,16 @@ import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.awaitEachGesture
-import com.mdev.mnotes.data.PenPreset
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.material.icons.rounded.MoreHoriz
+import androidx.compose.material.icons.rounded.Remove
+import androidx.compose.ui.unit.Dp
+import com.mdev.mnotes.core.layout.BarEntry
+import com.mdev.mnotes.core.layout.BarFit
+import com.mdev.mnotes.core.pen.ActivePen
+import com.mdev.mnotes.core.pen.ColorSet
+import com.mdev.mnotes.core.pen.InkColor
+import com.mdev.mnotes.core.pen.PenKit
 import com.mdev.mnotes.editor.Clip
 import com.mdev.mnotes.editor.Editor
 import com.mdev.mnotes.editor.NoteView
@@ -173,6 +182,14 @@ object MIcons {
 
     val Eraser: ImageVector by lazy {
         make("Eraser", "M16.24 3.56l4.95 4.94c.78.79.78 2.05 0 2.84L12 20.53a4.008 4.008 0 0 1-5.66 0L2.81 17c-.78-.79-.78-2.05 0-2.84l10.6-10.6c.79-.78 2.05-.78 2.83 0zM4.22 15.58l3.54 3.53c.78.79 2.04.79 2.83 0l3.53-3.53-4.95-4.95-4.95 4.95z")
+    }
+}
+
+/** Nazwa zestawu kolorów: wbudowane mają ją w tłumaczeniach, własne noszą tę nadaną przez użytkownika. */
+fun setName(s: ColorSet) = s.name.ifEmpty {
+    when (s.id) {
+        PenKit.SET_INK -> T.t("Atramenty", "Inks"); PenKit.SET_BRUSH -> T.t("Pędzel", "Brush")
+        PenKit.SET_HL -> T.t("Zakreślacze", "Highlighters"); else -> s.id
     }
 }
 
@@ -217,6 +234,25 @@ fun EditorScreen(ed: Editor, tabs: TabsCtl, onExit: () -> Unit, onSettings: () -
     fun pickTool(t: Tool, p: Panel?) {
         if (ed.tool == t && p != null) toggle(p) else { ed.setToolKey(t); panel = null }
     }
+    // Inne pióro przy otwartym panelu pióra zostawia panel na wierzchu: pokazuje wtedy ustawienia nowego.
+    fun pickPen(k: PenKind) {
+        when {
+            // Pędzel formatu i wiaderko biorą styl z pióra, więc inne pióro tylko zmienia ich barwę; dopiero
+            // dotknięcie tego, które już jest w użyciu, wraca do pisania.
+            (ed.tool == Tool.PAINTER || ed.tool == Tool.FILL) && ed.kit.active != k -> ed.editKit { it.withActive(k) }
+            ed.tool == Tool.PEN && ed.kit.active == k -> toggle(Panel.PEN)
+            else -> { ed.selectPen(k); if (panel != Panel.PEN) panel = null }
+        }
+    }
+    // Listwa pióra stoi obok strony; na wąskim ekranie szyna boczna zabrałaby za dużo kartki, więc leży przy pasku.
+    // „Przy pasku” dla paska bocznego znaczy obok niego, po tej samej stronie kartki.
+    val strip = when {
+        !ed.chrome || ed.readOnly -> -1
+        widthDp < 600 -> 2
+        set.optionsPos == 2 && pos == 2 -> 0
+        set.optionsPos == 2 && pos == 3 -> 1
+        else -> set.optionsPos
+    }
 
     val cmds = remember(set.keyMap, tabs.on) {
         commandList(ed, set, ::pickTool, { panel = it }, ::pickImage, { goTo = true }, ::applyLayout, onSettings, onShortcuts, { palette = true }, onExit, tabs)
@@ -247,10 +283,12 @@ fun EditorScreen(ed: Editor, tabs: TabsCtl, onExit: () -> Unit, onSettings: () -
     ) {
         Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.systemBars.union(WindowInsets.displayCutout))) {
             if (showMenu) MenuBar(ed, cmds, { runCatching { focus.requestFocus() } }, Modifier.fillMaxWidth())
-            if (ed.chrome) TopChrome(ed, set, tabs, panel, { toggle(it) }, { goTo = true }, onExit, ::pickImage, ::pickTool, inlineBar, widthDp)
+            if (ed.chrome) TopChrome(ed, set, tabs, panel, { toggle(it) }, { goTo = true }, onExit, ::pickImage, ::pickTool, ::pickPen, inlineBar, widthDp)
+            if (strip == 2 && pos != 1) PenStrip(ed, set, 2, pos, panel) { toggle(it) }
             Row(Modifier.weight(1f).fillMaxWidth()) {
                 if (dock) PagesPanel(ed, { set.dockPages = false }, ::pickImage, docked = true)
-                if (ed.chrome && pos == 2) SideRail(ed, set, panel, ::pickTool, { toggle(it) }, right = false)
+                if (ed.chrome && pos == 2) SideRail(ed, set, panel, ::pickTool, ::pickPen, right = false)
+                if (strip == 0) PenStrip(ed, set, 0, pos, panel) { toggle(it) }
                 Box(Modifier.weight(1f).fillMaxHeight()) {
                     AndroidView(
                         factory = { c -> NoteView(c, ed).apply { layoutParams = ViewGroup.LayoutParams(-1, -1) } },
@@ -264,7 +302,15 @@ fun EditorScreen(ed: Editor, tabs: TabsCtl, onExit: () -> Unit, onSettings: () -
                     Box(Modifier.fillMaxSize().imePadding()) {
                         if (ed.chrome) {
                             panel?.takeIf { it == Panel.PEN || it == Panel.ERASER || it == Panel.LASSO || it == Panel.TAPE || it == Panel.PAINTER }?.let { p ->
-                                val pa = when (pos) { 1 -> Alignment.BottomCenter; 2 -> Alignment.CenterStart; 3 -> Alignment.CenterEnd; else -> Alignment.TopCenter }
+                                val pa = when {
+                                    // Panel pióra otwiera się przy listwie, z której go wywołano.
+                                    p == Panel.PEN && strip == 0 -> if (pos == 1) Alignment.BottomStart else Alignment.TopStart
+                                    p == Panel.PEN && strip == 1 -> if (pos == 1) Alignment.BottomEnd else Alignment.TopEnd
+                                    pos == 1 -> Alignment.BottomCenter
+                                    pos == 2 -> Alignment.CenterStart
+                                    pos == 3 -> Alignment.CenterEnd
+                                    else -> Alignment.TopCenter
+                                }
                                 Box(Modifier.align(pa).padding(8.dp).panelEnter()) { ToolPanel(ed, set, p) { panel = null } }
                             }
                             if (panel == Panel.STYLE) Box(Modifier.align(Alignment.TopEnd).padding(8.dp).panelEnter()) { StylePanel(ed) { panel = null } }
@@ -282,9 +328,11 @@ fun EditorScreen(ed: Editor, tabs: TabsCtl, onExit: () -> Unit, onSettings: () -
                     }
                     CtxMenuOverlay(ed, { panel = Panel.STYLE })
                 }
-                if (ed.chrome && pos == 3) SideRail(ed, set, panel, ::pickTool, { toggle(it) }, right = true)
+                if (strip == 1) PenStrip(ed, set, 1, pos, panel) { toggle(it) }
+                if (ed.chrome && pos == 3) SideRail(ed, set, panel, ::pickTool, ::pickPen, right = true)
             }
-            if (ed.chrome && pos == 1) BottomBar(ed, set, panel, ::pickTool) { toggle(it) }
+            if (strip == 2 && pos == 1) PenStrip(ed, set, 3, pos, panel) { toggle(it) }
+            if (ed.chrome && pos == 1) BottomBar(ed, set, panel, ::pickTool, ::pickPen)
         }
 
         ed.textReq?.let { TextDialog(ed, it) }
@@ -337,33 +385,39 @@ private fun Hairline(vertical: Boolean = false) {
 @Composable
 private fun TopChrome(
     ed: Editor, set: com.mdev.mnotes.data.Settings, tabs: TabsCtl, panel: Panel?, toggle: (Panel) -> Unit, goTo: () -> Unit,
-    onExit: () -> Unit, pickImage: () -> Unit, pickTool: (Tool, Panel?) -> Unit, inlineBar: Boolean, widthDp: Int,
+    onExit: () -> Unit, pickImage: () -> Unit, pickTool: (Tool, Panel?) -> Unit, pickPen: (PenKind) -> Unit, inlineBar: Boolean, widthDp: Int,
 ) {
     val m = mint
     val title = ed.repo.meta(ed.nbId)?.title ?: ""
     ed.structTick
-    Column(Modifier.fillMaxWidth().background(m.chrome)) {
-        Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
-            IconBtn(Icons.AutoMirrored.Rounded.ArrowBack, T.t("Biblioteka", "Library"), onExit, shortcut = "Esc")
-            if (tabs.showStrip) {
-                TabStrip(tabs, Modifier.weight(if (inlineBar) 0.38f else 1f).padding(horizontal = 4.dp))
-            } else {
-                Row(Modifier.then(if (inlineBar) Modifier.widthIn(max = 220.dp) else Modifier.weight(1f)), verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        title, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.titleMedium,
-                        modifier = Modifier.weight(1f, fill = false).padding(horizontal = 8.dp, vertical = 8.dp),
-                    )
-                    if (ed.readOnly) Icon(Icons.Rounded.Lock, null, Modifier.padding(end = 8.dp).size(16.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+    BoxWithConstraints(Modifier.fillMaxWidth().background(m.chrome)) {
+        // Przy jednym dokumencie pasek ma być cały na wierzchu: tytuł oddaje mu miejsce, a gdy i tak się nie mieści,
+        // pasek dostaje własny wiersz. Przy kartach zostaje w linii i sam zwija najmniej ważne narzędzia pod „⋯”.
+        val spare = maxWidth.value - HEADER_FIXED - (BarFit.length(BAR_ITEMS, 3, barSize(set).value, true) + 8f)
+        val inline = inlineBar && (tabs.showStrip || spare >= TITLE_MIN)
+        Column(Modifier.fillMaxWidth()) {
+            Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
+                IconBtn(Icons.AutoMirrored.Rounded.ArrowBack, T.t("Biblioteka", "Library"), onExit, shortcut = "Esc")
+                if (tabs.showStrip) {
+                    TabStrip(tabs, Modifier.weight(if (inline) 0.38f else 1f).padding(horizontal = 4.dp))
+                } else {
+                    Row(Modifier.then(if (inline) Modifier.widthIn(max = spare.coerceIn(TITLE_MIN, 220f).dp) else Modifier.weight(1f)), verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            title, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.titleMedium,
+                            modifier = Modifier.weight(1f, fill = false).padding(horizontal = 8.dp, vertical = 8.dp),
+                        )
+                        if (ed.readOnly) Icon(Icons.Rounded.Lock, null, Modifier.padding(end = 8.dp).size(16.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    if (inline) Spacer(Modifier.width(4.dp))
                 }
-                if (inlineBar) Spacer(Modifier.width(4.dp))
+                if (inline) Box(Modifier.weight(if (tabs.showStrip) 0.62f else 1f), contentAlignment = Alignment.Center) { ToolBar(ed, set, false, panel, pickTool, pickPen) }
+                PageCluster(ed, panel, toggle, goTo, pickImage, widthDp >= 600)
             }
-            if (inlineBar) Box(Modifier.weight(if (tabs.showStrip) 0.62f else 1f), contentAlignment = Alignment.Center) { ToolBar(ed, set, false, panel, pickTool, toggle) }
-            PageCluster(ed, panel, toggle, goTo, pickImage, widthDp >= 600)
+            if (set.toolbarPos == 0 && !inline) {
+                Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) { ToolBar(ed, set, false, panel, pickTool, pickPen) }
+            }
+            Hairline()
         }
-        if (set.toolbarPos == 0 && !inlineBar) {
-            Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) { ToolBar(ed, set, false, panel, pickTool, toggle) }
-        }
-        Hairline()
     }
 }
 
@@ -384,97 +438,222 @@ private fun PageCluster(ed: Editor, panel: Panel?, toggle: (Panel) -> Unit, goTo
     }
 }
 
-/** Szyna narzędzi z boku strony (pozycje „lewo” i „prawo”): zadokowana, przewijana pionowo, nie zasłania strony. */
+/** Szyna narzędzi z boku strony (pozycje „lewo” i „prawo”): zadokowana, nie zasłania strony. */
 @Composable
-private fun SideRail(ed: Editor, set: com.mdev.mnotes.data.Settings, panel: Panel?, pickTool: (Tool, Panel?) -> Unit, toggle: (Panel) -> Unit, right: Boolean) {
+private fun SideRail(ed: Editor, set: com.mdev.mnotes.data.Settings, panel: Panel?, pickTool: (Tool, Panel?) -> Unit, pickPen: (PenKind) -> Unit, right: Boolean) {
     val m = mint
     Row(Modifier.fillMaxHeight()) {
         if (right) Hairline(vertical = true)
-        Box(Modifier.fillMaxHeight().background(m.chrome), contentAlignment = Alignment.Center) { ToolBar(ed, set, true, panel, pickTool, toggle) }
+        Box(Modifier.fillMaxHeight().background(m.chrome), contentAlignment = Alignment.Center) { ToolBar(ed, set, true, panel, pickTool, pickPen) }
         if (!right) Hairline(vertical = true)
     }
 }
 
 /** Pasek narzędzi na dole (pozycja „dół”): zadokowany pod stroną. */
 @Composable
-private fun BottomBar(ed: Editor, set: com.mdev.mnotes.data.Settings, panel: Panel?, pickTool: (Tool, Panel?) -> Unit, toggle: (Panel) -> Unit) {
+private fun BottomBar(ed: Editor, set: com.mdev.mnotes.data.Settings, panel: Panel?, pickTool: (Tool, Panel?) -> Unit, pickPen: (PenKind) -> Unit) {
     val m = mint
     Column(Modifier.fillMaxWidth().background(m.chrome)) {
         Hairline()
-        Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) { ToolBar(ed, set, false, panel, pickTool, toggle) }
+        Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) { ToolBar(ed, set, false, panel, pickTool, pickPen) }
     }
 }
 
 // ─────────────────────────────── Pasek narzędzi ───────────────────────────────
 
 @Composable
-private fun Lin(vertical: Boolean, modifier: Modifier = Modifier, content: @Composable () -> Unit) {
-    if (vertical) Column(modifier, horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(2.dp)) { content() }
-    else Row(modifier, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(2.dp)) { content() }
+private fun Lin(vertical: Boolean, modifier: Modifier = Modifier, gap: Dp = 2.dp, content: @Composable () -> Unit) {
+    if (vertical) Column(modifier, horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(gap)) { content() }
+    else Row(modifier, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(gap)) { content() }
 }
 
+/** [tight]: węższy margines, gdy pasek ściska się, żeby zmieścić wszystkie narzędzia (szerokości jak w [BarFit]). */
 @Composable
-private fun BarSep(vertical: Boolean) {
+private fun BarSep(vertical: Boolean, tight: Boolean = false) {
     val m = mint
-    if (vertical) Box(Modifier.padding(vertical = 4.dp).width(24.dp).height(1.dp).background(m.line))
-    else Box(Modifier.padding(horizontal = 4.dp).height(24.dp).width(1.dp).background(m.line))
+    val pad = if (tight) 3.dp else 4.dp
+    if (vertical) Box(Modifier.padding(vertical = pad).width(24.dp).height(1.dp).background(m.line))
+    else Box(Modifier.padding(horizontal = pad).height(24.dp).width(1.dp).background(m.line))
 }
 
+private fun barSize(set: com.mdev.mnotes.data.Settings) = when (set.toolbarSize) { 0 -> 36.dp; 2 -> 46.dp; else -> 40.dp }
+private fun barIcon(set: com.mdev.mnotes.data.Settings) = when (set.toolbarSize) { 0 -> 20.dp; 2 -> 26.dp; else -> 22.dp }
+
+/** Pozycja paska. [rank]: co pierwsze trafia pod „⋯” (patrz [BarFit]); [pin]: narzędzie w ręku, zawsze na wierzchu. */
+private class BarItem(
+    val group: Int, val rank: Int, val tip: String, val shortcut: String?, val enabled: Boolean, val selected: Boolean, val pin: Boolean,
+    val onClick: () -> Unit, val glyph: @Composable (Color, Dp) -> Unit,
+)
+
+/** Liczba pozycji paska (cofanie, pióra, narzędzia): nagłówek ocenia nią, czy pasek zmieści się obok tytułu. */
+private const val BAR_ITEMS = 17
+
+/** Stała część nagłówka poza tytułem i paskiem: powrót, marginesy i prawa grupa (strona, powiększenie, cztery przyciski). */
+private const val HEADER_FIXED = 352f
+private const val TITLE_MIN = 96f
+
+/** Pióra w kolejności na pasku (trzy pierwsze dzielą domyślnie kolory) z ważnością przy zwijaniu pod „⋯”. */
+private val BAR_PENS = listOf(PenKind.BALLPOINT to 2, PenKind.FOUNTAIN to 6, PenKind.PENCIL to 8, PenKind.BRUSH to 9, PenKind.HIGHLIGHTER to 5)
+
+/**
+ * Pasek narzędzi: cofanie, pięć narzędzi piszących i reszta. Nie przewija się: gdy brakuje miejsca, najpierw znikają
+ * odstępy, a potem najmniej ważne narzędzia przechodzą pod „⋯” (kolejność i rachunek: [BarFit]).
+ */
 @Composable
-private fun ToolBar(ed: Editor, set: com.mdev.mnotes.data.Settings, vertical: Boolean, panel: Panel?, pickTool: (Tool, Panel?) -> Unit, toggle: (Panel) -> Unit) {
+private fun ToolBar(ed: Editor, set: com.mdev.mnotes.data.Settings, vertical: Boolean, panel: Panel?, pickTool: (Tool, Panel?) -> Unit, pickPen: (PenKind) -> Unit) {
     val m = mint
-    val sz = when (set.toolbarSize) { 0 -> 36.dp; 2 -> 46.dp; else -> 40.dp }
-    val isz = when (set.toolbarSize) { 0 -> 20.dp; 2 -> 26.dp; else -> 22.dp }
+    val sz = barSize(set)
+    val isz = barIcon(set)
     val ro = ed.readOnly
-    run {
-        Lin(vertical, Modifier.padding(4.dp).then(if (vertical) Modifier.verticalScroll(rememberScrollState()) else Modifier.horizontalScroll(rememberScrollState()))) {
-            IconBtn(Icons.AutoMirrored.Rounded.Undo, T.t("Cofnij", "Undo"), { ed.undo() }, enabled = ed.canUndo && !ro, size = sz, iconSize = isz, shortcut = "Ctrl+Z")
-            IconBtn(Icons.AutoMirrored.Rounded.Redo, T.t("Ponów", "Redo"), { ed.redo() }, enabled = ed.canRedo && !ro, size = sz, iconSize = isz, shortcut = "Ctrl+Y")
-            BarSep(vertical)
-            val pk = ed.preset.kind
-            ToolBtn(penName(pk), { pickTool(Tool.PEN, Panel.PEN) }, enabled = !ro, selected = ed.tool == Tool.PEN, size = sz, shortcut = "P") { c ->
-                PenGlyph(pk, Color(ed.preset.color).let { if (it.alpha > 0f) it else c }, c, Modifier.size(isz + 2.dp))
+    val kit = ed.kit
+    val items = ArrayList<BarItem>()
+    fun icon(group: Int, rank: Int, icon: ImageVector, tip: String, key: String, enabled: Boolean, selected: Boolean, pin: Boolean = selected, onClick: () -> Unit) {
+        items += BarItem(group, rank, tip, key, enabled, selected, pin, onClick) { c, s -> Icon(icon, null, Modifier.size(s), tint = c) }
+    }
+    fun tool(rank: Int, icon: ImageVector, tip: String, key: String, t: Tool, p: Panel?, enabled: Boolean = !ro) =
+        icon(2, rank, icon, tip, key, enabled, ed.tool == t) { pickTool(t, p) }
+
+    icon(0, 0, Icons.AutoMirrored.Rounded.Undo, T.t("Cofnij", "Undo"), "Ctrl+Z", ed.canUndo && !ro, false) { ed.undo() }
+    icon(0, 1, Icons.AutoMirrored.Rounded.Redo, T.t("Ponów", "Redo"), "Ctrl+Y", ed.canRedo && !ro, false) { ed.redo() }
+    for ((k, rank) in BAR_PENS) {
+        val mine = kit.active == k
+        val on = mine && ed.tool == Tool.PEN
+        // Pędzel formatu i wiaderko biorą kolor z aktywnego pióra, więc zostaje ono oznaczone kropką.
+        val lent = mine && !on && ed.penTool
+        val ink = Color(kit.pen(k).color)
+        items += BarItem(1, rank, penName(k), if (mine) "P" else null, !ro, on, on, { pickPen(k) }) { c, s ->
+            Box(contentAlignment = Alignment.Center) {
+                PenGlyph(k, ink, c, Modifier.size(s + 2.dp))
+                if (lent) Box(Modifier.align(Alignment.BottomCenter).offset(y = 5.dp).size(4.dp).clip(CircleShape).background(m.accent))
             }
-            IconBtn(MIcons.Eraser, T.t("Gumka", "Eraser"), { pickTool(Tool.ERASER, Panel.ERASER) }, enabled = !ro, selected = ed.tool == Tool.ERASER, size = sz, iconSize = isz, shortcut = "E")
-            IconBtn(Icons.Rounded.FormatPaint, T.t("Pędzel formatu — przenosi kolor i styl aktywnego pióra", "Format painter — applies the active pen's colour and style"), { pickTool(Tool.PAINTER, Panel.PAINTER) }, enabled = !ro, selected = ed.tool == Tool.PAINTER, size = sz, iconSize = isz, shortcut = "B")
-            IconBtn(Icons.Rounded.FormatColorFill, T.t("Wypełnienie (wiaderko)", "Fill (paint bucket)"), { pickTool(Tool.FILL, null) }, enabled = !ro, selected = ed.tool == Tool.FILL, size = sz, iconSize = isz, shortcut = "F")
-            IconBtn(if (set.lassoRect) Icons.Rounded.HighlightAlt else Icons.Rounded.Gesture, T.t("Lasso", "Lasso"), { pickTool(Tool.LASSO, Panel.LASSO) }, enabled = !ro, selected = ed.tool == Tool.LASSO, size = sz, iconSize = isz, shortcut = "L")
-            IconBtn(Icons.Rounded.TextFields, T.t("Tekst", "Text"), { pickTool(Tool.TEXT, null) }, enabled = !ro, selected = ed.tool == Tool.TEXT, size = sz, iconSize = isz, shortcut = "T")
-            IconBtn(Icons.Rounded.TrackChanges, T.t("Laser", "Laser"), { pickTool(Tool.LASER, null) }, selected = ed.tool == Tool.LASER, size = sz, iconSize = isz, shortcut = "O")
-            IconBtn(Icons.Rounded.PanTool, T.t("Ręka (przewijanie)", "Hand (pan)"), { pickTool(Tool.HAND, null) }, selected = ed.tool == Tool.HAND, size = sz, iconSize = isz, shortcut = "H")
-            IconBtn(Icons.Rounded.VisibilityOff, T.t("Taśma — zakryj fragment (do nauki)", "Tape — cover an area (for study)"), { pickTool(Tool.TAPE, Panel.TAPE) }, enabled = !ro, selected = ed.tool == Tool.TAPE, size = sz, iconSize = isz, shortcut = "K")
-            IconBtn(Icons.Rounded.UnfoldMore, T.t("Wstaw / usuń odstęp", "Insert / remove space"), { pickTool(Tool.SPACE, null) }, enabled = !ro, selected = ed.tool == Tool.SPACE, size = sz, iconSize = isz, shortcut = "X")
-            IconBtn(Icons.Rounded.Straighten, T.t("Linijka", "Ruler"), { ed.toggleRuler() }, enabled = !ro, selected = ed.ruler, size = sz, iconSize = isz, shortcut = "R")
-            BarSep(vertical)
-            ed.presets.forEachIndexed { i, p ->
-                // Pędzel formatu i wiaderko biorą kolor z aktywnego pióra, więc wybór pióra ich nie wyłącza.
-                val active = i == ed.presetIndex && ed.presetTool
-                PresetDot(p, active, sz) { if (!ro) { if (active) toggle(Panel.PEN) else { ed.selectPreset(i); if (!ed.presetTool) ed.setToolKey(Tool.PEN) } } }
+        }
+    }
+    tool(3, MIcons.Eraser, T.t("Gumka", "Eraser"), "E", Tool.ERASER, Panel.ERASER)
+    tool(11, Icons.Rounded.FormatPaint, T.t("Pędzel formatu — przenosi kolor i styl aktywnego pióra", "Format painter — applies the active pen's colour and style"), "B", Tool.PAINTER, Panel.PAINTER)
+    tool(12, Icons.Rounded.FormatColorFill, T.t("Wypełnienie (wiaderko)", "Fill (paint bucket)"), "F", Tool.FILL, null)
+    tool(4, if (set.lassoRect) Icons.Rounded.HighlightAlt else Icons.Rounded.Gesture, T.t("Lasso", "Lasso"), "L", Tool.LASSO, Panel.LASSO)
+    tool(7, Icons.Rounded.TextFields, T.t("Tekst", "Text"), "T", Tool.TEXT, null)
+    tool(14, Icons.Rounded.TrackChanges, T.t("Laser", "Laser"), "O", Tool.LASER, null, enabled = true)
+    tool(10, Icons.Rounded.PanTool, T.t("Ręka (przewijanie)", "Hand (pan)"), "H", Tool.HAND, null, enabled = true)
+    tool(15, Icons.Rounded.VisibilityOff, T.t("Taśma — zakryj fragment (do nauki)", "Tape — cover an area (for study)"), "K", Tool.TAPE, Panel.TAPE)
+    tool(16, Icons.Rounded.UnfoldMore, T.t("Wstaw / usuń odstęp", "Insert / remove space"), "X", Tool.SPACE, null)
+    icon(2, 13, Icons.Rounded.Straighten, T.t("Linijka", "Ruler"), "R", !ro, ed.ruler, pin = false) { ed.toggleRuler() }
+
+    BoxWithConstraints(contentAlignment = Alignment.Center) {
+        val fit = BarFit.fit(items.map { BarEntry(it.group, it.rank) }, (if (vertical) maxHeight else maxWidth).value - 8f, sz.value, items.indexOfFirst { it.pin })
+        var more by remember { mutableStateOf(false) }
+        Lin(vertical, Modifier.padding(4.dp), if (fit.tight) 0.dp else 2.dp) {
+            var group = -1
+            items.forEachIndexed { i, b ->
+                if (i !in fit.hidden) {
+                    if (group >= 0 && b.group != group) BarSep(vertical, fit.tight)
+                    group = b.group
+                    ToolBtn(b.tip, b.onClick, enabled = b.enabled, selected = b.selected, size = sz, shortcut = b.shortcut) { c -> b.glyph(c, isz) }
+                }
             }
-            IconBtn(Icons.Rounded.Add, T.t("Dodaj pióro", "Add pen"), { ed.addPreset(ed.preset); toggle(Panel.PEN) }, enabled = !ro && ed.presets.size < 10, size = sz, iconSize = isz)
+            if (fit.hidden.isNotEmpty()) Box {
+                // Włączone narzędzie spod „⋯” (np. linijka) zaznacza sam przycisk, żeby było widać, że coś działa.
+                IconBtn(Icons.Rounded.MoreHoriz, T.t("Więcej narzędzi", "More tools"), { more = true }, selected = more || fit.hidden.any { items[it].selected }, size = sz, iconSize = isz)
+                DropdownMenu(more, { more = false }) {
+                    for (i in fit.hidden.sorted()) {
+                        val b = items[i]
+                        DropdownMenuItem(
+                            text = { Text(b.tip.substringBefore(" — ")) }, enabled = b.enabled,
+                            leadingIcon = { b.glyph(if (b.selected) m.accentText else MaterialTheme.colorScheme.onSurface.copy(alpha = if (b.enabled) 1f else 0.32f), 22.dp) },
+                            trailingIcon = b.shortcut?.let { k -> { Text(k, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant) } },
+                            onClick = { more = false; b.onClick() },
+                        )
+                    }
+                }
+            }
         }
     }
 }
 
+// ─────────────────────────────── Listwa pióra ───────────────────────────────
+
+/**
+ * Listwa aktywnego pióra: trzy grubości i kolory z jego zestawu, wybierane jednym dotknięciem, bez otwierania panelu.
+ * Zadokowana jak paski narzędzi, więc nie zasłania strony. [side]: 0 z lewej strony kartki, 1 z prawej,
+ * 2 pod górnym paskiem, 3 nad dolnym.
+ */
 @Composable
-private fun PresetDot(p: PenPreset, active: Boolean, size: androidx.compose.ui.unit.Dp, onClick: () -> Unit) {
+private fun PenStrip(ed: Editor, set: com.mdev.mnotes.data.Settings, side: Int, toolbarPos: Int, panel: Panel?, toggle: (Panel) -> Unit) {
+    val m = mint
+    if (side < 2) Row(Modifier.fillMaxHeight()) {
+        if (side == 1) Hairline(vertical = true)
+        // Opcje trzymają się paska narzędzi, żeby ręka nie wędrowała po całej wysokości ekranu.
+        val at = when (toolbarPos) { 0 -> Alignment.TopCenter; 1 -> Alignment.BottomCenter; else -> Alignment.Center }
+        Box(Modifier.fillMaxHeight().background(m.chrome), contentAlignment = at) { PenStripItems(ed, set, true, panel, toggle) }
+        if (side == 0) Hairline(vertical = true)
+    } else Column(Modifier.fillMaxWidth().background(m.chrome)) {
+        if (side == 3) Hairline()
+        Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) { PenStripItems(ed, set, false, panel, toggle) }
+        if (side == 2) Hairline()
+    }
+}
+
+@Composable
+private fun PenStripItems(ed: Editor, set: com.mdev.mnotes.data.Settings, vertical: Boolean, panel: Panel?, toggle: (Panel) -> Unit) {
+    val sz = barSize(set)
+    val isz = barIcon(set)
+    val kit = ed.kit
+    val kind = kit.active
+    val slot = kit.slot(kind)
+    val cs = kit.setOf(kind)
+    // Z gumką albo lassem w ręku listwa przygasa, a dotknięcie jej wraca do pisania; ponowne dotknięcie wybranej
+    // pozycji otwiera panel, w którym zmienia się jej wartość.
+    val live = ed.penTool
+    val scroll = rememberScrollState()
+    Lin(vertical, Modifier.padding(4.dp).then(if (vertical) Modifier.verticalScroll(scroll) else Modifier.horizontalScroll(scroll)).graphicsLayer { alpha = if (live) 1f else 0.55f }) {
+        for (i in 0 until PenKit.WIDTHS) {
+            val on = i == slot.widthIndex
+            ToolBtn(
+                T.t("Grubość", "Width") + String.format(" %.1f pt", slot.widths[i]),
+                { if (on && live) toggle(Panel.PEN) else ed.tunePen { it.withWidthIndex(kind, i) } }, selected = on, size = sz,
+            ) { c -> WidthGlyph(slot.widths[i], c, Modifier.size(isz + 2.dp)) }
+        }
+        BarSep(vertical)
+        for (c in kit.strip(kind)) {
+            val on = c == slot.color
+            StripDot(Color(InkColor.onPaper(c, cs.hl, kind)), on, sz) { if (on && live) toggle(Panel.PEN) else ed.tunePen { it.withColor(kind, c) } }
+        }
+        BarSep(vertical)
+        IconBtn(
+            Icons.Rounded.Palette, T.t("Kolory i ustawienia pióra", "Colours and pen settings"),
+            { if (!live) ed.setToolKey(Tool.PEN); toggle(Panel.PEN) }, selected = panel == Panel.PEN, size = sz, iconSize = isz,
+        )
+    }
+}
+
+/** Próbka grubości: kreska rośnie wolniej niż sama grubość, żeby 0,5 pt i 40 pt dały się porównać w jednym przycisku. */
+@Composable
+private fun WidthGlyph(width: Float, color: Color, modifier: Modifier = Modifier) {
+    Canvas(modifier) {
+        val d = (1.3f * Math.pow(2.2 * width, 0.62).toFloat()).coerceIn(1.5f, 16f).dp.toPx()
+        drawLine(color, Offset(d / 2f, size.height / 2f), Offset(size.width - d / 2f, size.height / 2f), d, StrokeCap.Round)
+    }
+}
+
+@Composable
+private fun StripDot(color: Color, active: Boolean, size: Dp, onClick: () -> Unit) {
     val m = mint
     val src = remember { MutableInteractionSource() }
     val pressed by src.collectIsPressedAsState()
     val tick = rememberTick()
-    val ring by animateColorAsState(if (active) m.accent else Color.Transparent, tween(150), label = "presetRing")
-    val halo by animateColorAsState(if (active) m.accentSoft else Color.Transparent, tween(150), label = "presetHalo")
-    val scale by animateFloatAsState(if (pressed) 0.84f else if (active) 1.05f else 1f, spring(dampingRatio = 0.55f, stiffness = 700f), label = "presetScale")
+    val ring by animateColorAsState(if (active) m.accent else Color.Transparent, tween(150), label = "dotRing")
+    val halo by animateColorAsState(if (active) m.accentSoft else Color.Transparent, tween(150), label = "dotHalo")
+    val scale by animateFloatAsState(if (pressed) 0.84f else if (active) 1.05f else 1f, spring(dampingRatio = 0.55f, stiffness = 700f), label = "dotScale")
     Box(
         Modifier.size(size).graphicsLayer { scaleX = scale; scaleY = scale }.clip(CircleShape)
             .clickable(interactionSource = src, indication = null, role = Role.Button) { tick(); onClick() },
         contentAlignment = Alignment.Center,
     ) {
-        val d = (14 + (p.width.coerceIn(0.5f, 14f) / 14f) * 8).dp
+        val d = size * 0.5f
         Box(
             Modifier.size(d + 8.dp).clip(CircleShape).background(halo).border(2.dp, ring, CircleShape),
             contentAlignment = Alignment.Center,
-        ) { Box(Modifier.size(d).clip(CircleShape).background(Color(p.color)).border(1.dp, m.line, CircleShape)) }
+        ) { Box(Modifier.size(d).clip(CircleShape).background(color).border(1.dp, m.line, CircleShape)) }
     }
 }
 
@@ -486,39 +665,7 @@ private fun ToolPanel(ed: Editor, set: com.mdev.mnotes.data.Settings, panel: Pan
     FloatingCard(Modifier.width(320.dp)) {
         Column(Modifier.heightIn(max = 560.dp).verticalScroll(rememberScrollState()).padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             when (panel) {
-                Panel.PEN -> {
-                    val i = ed.presetIndex
-                    val p = ed.preset
-                    val spec = PenSpec.of(p.kind)
-                    SectionLabel(T.t("Pióro", "Pen"))
-                    FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        for (k in PenKind.entries) Chip(penName(k), k == p.kind, {
-                            val ns = PenSpec.of(k)
-                            ed.updatePreset(i, p.copy(kind = k, color = if (k == PenKind.HIGHLIGHTER && p.kind != PenKind.HIGHLIGHTER) softenForHighlighter(p.color) else p.color, width = if (k == PenKind.HIGHLIGHTER || p.kind == PenKind.HIGHLIGHTER) ns.defaultWidth else p.width.coerceIn(ns.minWidth, ns.maxWidth)))
-                        }, glyph = { c -> PenGlyph(k, Color(p.color).let { if (it.alpha > 0f) it else c }, c, Modifier.size(20.dp)) })
-                    }
-                    Spacer(Modifier.height(4.dp))
-                    PenTester(p, set.smoothing)
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        SectionLabel(T.t("Grubość", "Width")); Spacer(Modifier.weight(1f))
-                        Text(String.format("%.1f pt", p.width), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                    MSlider(p.width, spec.minWidth, spec.maxWidth) { ed.updatePreset(i, p.copy(width = it)) }
-                    SectionLabel(T.t("Kolor", "Color"))
-                    ColorPicker(p.color, { ed.updatePreset(i, p.copy(color = it)) }, highlighter = p.kind == PenKind.HIGHLIGHTER, recent = ed.presets.filter { (it.kind == PenKind.HIGHLIGHTER) == (p.kind == PenKind.HIGHLIGHTER) }.map { it.color }.distinct(), onPipette = { ed.startPipette { c -> ed.presets.getOrNull(i)?.let { q -> ed.updatePreset(i, q.copy(color = c)) } } })
-                    HorizontalDivider(Modifier.padding(vertical = 6.dp), color = m.line)
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        SectionLabel(T.t("Wygładzanie", "Smoothing")); Spacer(Modifier.weight(1f))
-                        Text("${(set.smoothing * 100).toInt()}%", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                    MSlider(set.smoothing, 0f, 2f) { set.smoothing = it }
-                    ToggleRow(T.t("Przytrzymaj, aby wyprostować kształt", "Hold to snap to shape"), set.holdToShape) { set.holdToShape = it }
-                    if (ed.presets.size > 1) FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        if (i > 0) Chip(T.t("Przesuń wcześniej", "Move earlier"), false, { ed.movePreset(i, i - 1) }, icon = Icons.AutoMirrored.Rounded.ArrowBack)
-                        if (i < ed.presets.size - 1) Chip(T.t("Przesuń później", "Move later"), false, { ed.movePreset(i, i + 1) }, icon = Icons.AutoMirrored.Rounded.ArrowForward)
-                    }
-                    if (ed.presets.size > 1) Chip(T.t("Usuń to pióro", "Remove this pen"), false, { ed.removePreset(i) }, icon = Icons.Rounded.Delete)
-                }
+                Panel.PEN -> PenPanel(ed, set)
                 Panel.ERASER -> {
                     SectionLabel(T.t("Tryb gumki", "Eraser mode"))
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -550,7 +697,7 @@ private fun ToolPanel(ed: Editor, set: com.mdev.mnotes.data.Settings, panel: Pan
                         Chip(T.t("Obiektowo", "Object"), set.painterMode == 0, { set.painterMode = 0 }, icon = Icons.Rounded.FormatPaint)
                         Chip(T.t("Lasso", "Lasso"), set.painterMode == 1, { set.painterMode = 1 }, icon = Icons.Rounded.Gesture)
                     }
-                    Text(T.t("Kolor i styl bierze z aktywnego pióra — wybierz je kropką na pasku. Obiektowo: przeciągnij po obiektach. Lasso: obrysuj je.", "Colour and style come from the active pen — pick it with a dot on the toolbar. Object: drag over objects. Lasso: circle them."), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(T.t("Kolor i styl bierze z aktywnego pióra — wybierz pióro na pasku, a kolor i grubość na listwie. Obiektowo: przeciągnij po obiektach. Lasso: obrysuj je.", "Colour and style come from the active pen — pick the pen on the toolbar, the colour and width on the strip. Object: drag over objects. Lasso: circle them."), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 else -> {
                     SectionLabel(T.t("Kształt lassa", "Lasso shape"))
@@ -564,6 +711,92 @@ private fun ToolPanel(ed: Editor, set: com.mdev.mnotes.data.Settings, panel: Pan
             }
         }
     }
+}
+
+/**
+ * Panel aktywnego pióra: to, czego nie robi się jednym dotknięciem listwy, czyli wartości trzech grubości, skład
+ * i kolejność zestawu kolorów, wybór zestawu (także cudzego) oraz kolor spoza listy.
+ */
+@Composable
+private fun PenPanel(ed: Editor, set: com.mdev.mnotes.data.Settings) {
+    val m = mint
+    val kit = ed.kit
+    val kind = kit.active
+    val slot = kit.slot(kind)
+    val cs = kit.setOf(kind)
+    val spec = PenSpec.of(kind)
+    val pen = kit.current
+    val dim = MaterialTheme.colorScheme.onSurfaceVariant
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        PenGlyph(kind, Color(pen.color), MaterialTheme.colorScheme.onSurface, Modifier.size(24.dp))
+        Text(penName(kind), style = MaterialTheme.typography.titleSmall)
+    }
+    PenTester(pen, set.smoothing)
+
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        SectionLabel(T.t("Grubość", "Width")); Spacer(Modifier.weight(1f))
+        Text(String.format("%.1f pt", slot.width), style = MaterialTheme.typography.labelMedium, color = dim)
+    }
+    // Te same trzy grubości co na listwie; suwak ustawia wybraną.
+    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        for (i in 0 until PenKit.WIDTHS) Chip(
+            String.format("%.1f", slot.widths[i]), i == slot.widthIndex, { ed.editKit { it.withWidthIndex(kind, i) } },
+            glyph = { c -> WidthGlyph(slot.widths[i], c, Modifier.size(20.dp)) },
+        )
+    }
+    MSlider(slot.width, spec.minWidth, spec.maxWidth) { v -> ed.editKit { it.withWidth(kind, slot.widthIndex, v) } }
+
+    @Composable
+    fun Swatches(colors: List<Int>) = FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        for (c in colors) Dot(Color(InkColor.onPaper(c, cs.hl, kind)), 30.dp, selected = c == slot.color, onClick = { ed.editKit { it.withColor(kind, c) } })
+    }
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        SectionLabel(T.t("Kolory na listwie", "Colours on the strip")); Spacer(Modifier.weight(1f))
+        IconBtn(Icons.Rounded.Remove, T.t("Mniej kolorów na listwie", "Fewer colours on the strip"), { ed.editKit { it.withVisible(cs.id, cs.visible - 1) } }, enabled = cs.visible > 1, size = 30.dp, iconSize = 18.dp)
+        Text("${cs.visible}", style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(horizontal = 4.dp))
+        IconBtn(Icons.Rounded.Add, T.t("Więcej kolorów na listwie", "More colours on the strip"), { ed.editKit { it.withVisible(cs.id, cs.visible + 1) } }, enabled = cs.visible < minOf(PenKit.MAX_VISIBLE, cs.colors.size), size = 30.dp, iconSize = 18.dp)
+    }
+    Swatches(cs.colors.take(cs.visible))
+    if (cs.colors.size > cs.visible) {
+        SectionLabel(T.t("Pozostałe w zestawie", "Others in the set"))
+        Swatches(cs.colors.drop(cs.visible))
+    }
+    // Działania na wybranym kolorze: spoza zestawu można go dopisać, a ten z zestawu przestawić albo wyrzucić.
+    val at = cs.colors.indexOf(slot.color)
+    FlowRow(Modifier.padding(top = 4.dp), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        if (at < 0) {
+            if (cs.colors.size < PenKit.MAX_COLORS) Chip(T.t("Dodaj do zestawu", "Add to the set"), false, { ed.editKit { it.addColor(cs.id, slot.color) } }, icon = Icons.Rounded.Add)
+        } else {
+            if (at > 0) Chip(T.t("Przesuń wcześniej", "Move earlier"), false, { ed.editKit { it.moveColor(cs.id, at, at - 1) } }, icon = Icons.AutoMirrored.Rounded.ArrowBack)
+            if (at < cs.colors.size - 1) Chip(T.t("Przesuń później", "Move later"), false, { ed.editKit { it.moveColor(cs.id, at, at + 1) } }, icon = Icons.AutoMirrored.Rounded.ArrowForward)
+            if (cs.colors.size > 1) Chip(T.t("Usuń z zestawu", "Remove from the set"), false, { ed.editKit { it.removeColor(cs.id, slot.color) } }, icon = Icons.Rounded.Delete)
+        }
+    }
+
+    SectionLabel(T.t("Zestaw kolorów", "Colour set"))
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        for (s in kit.sets) Chip(setName(s), s.id == cs.id, { ed.editKit { it.withSet(kind, s.id) } })
+    }
+    val sharing = PenKind.entries.filter { it != kind && kit.slot(it).setId == cs.id }.joinToString(", ") { penName(it).lowercase() }
+    Text(
+        if (sharing.isEmpty()) T.t("Z tego zestawu korzysta tylko to narzędzie.", "Only this tool uses this set.")
+        else T.t("Z tego zestawu korzystają też: $sharing. Zmiany w zestawie widać w każdym z nich.", "Also used by: $sharing. Changes to the set show up in each of them."),
+        style = MaterialTheme.typography.bodySmall, color = dim,
+    )
+
+    SectionLabel(T.t("Inny kolor", "Another colour"))
+    ColorPicker(
+        slot.color, { c -> ed.editKit { it.withColor(kind, c) } }, highlighter = cs.hl,
+        onPipette = { ed.startPipette { c -> ed.setPenColor(if (cs.hl) softenForHighlighter(c) else c) } },
+    )
+
+    HorizontalDivider(Modifier.padding(vertical = 6.dp), color = m.line)
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        SectionLabel(T.t("Wygładzanie", "Smoothing")); Spacer(Modifier.weight(1f))
+        Text("${(set.smoothing * 100).toInt()}%", style = MaterialTheme.typography.labelMedium, color = dim)
+    }
+    MSlider(set.smoothing, 0f, 2f) { set.smoothing = it }
+    ToggleRow(T.t("Przytrzymaj, aby wyprostować kształt", "Hold to snap to shape"), set.holdToShape) { set.holdToShape = it }
 }
 
 @Composable
@@ -592,7 +825,7 @@ fun ToggleRow(label: String, checked: Boolean, onChange: (Boolean) -> Unit) {
  * kształt kreski co na stronie) bez dotykania zeszytu. Ślady zostają do wyczyszczenia lub zamknięcia panelu.
  */
 @Composable
-private fun PenTester(p: PenPreset, smoothing: Float) {
+private fun PenTester(p: ActivePen, smoothing: Float) {
     val m = mint
     val dens = androidx.compose.ui.platform.LocalDensity.current.density
     val renderer = remember { PageRenderer(null) }
@@ -691,7 +924,7 @@ private fun SelectionBar(ed: Editor, panel: Panel?, toggle: (Panel) -> Unit, edi
                     val hasStroke = els.any { it is InkStroke }
                     val img = els.firstOrNull { it is ImageEl } as? ImageEl
                     SectionLabel(T.t("Kolor", "Color"))
-                    ColorPicker(first?.let { colorOf(it) } ?: 0xFF000000.toInt(), { ed.recolorSel(it) }, mixed = colors.size > 1, recent = ed.presets.map { it.color }.distinct(), onPipette = { ed.startPipette { c -> ed.recolorSel(c) } })
+                    ColorPicker(first?.let { colorOf(it) } ?: 0xFF000000.toInt(), { ed.recolorSel(it) }, mixed = colors.size > 1, recent = ed.kit.sets.filter { !it.hl }.flatMap { it.colors.take(it.visible) }.distinct(), onPipette = { ed.startPipette { c -> ed.recolorSel(c) } })
                     if (hasStroke) {
                         val w = (els.firstOrNull { it is InkStroke } as InkStroke).width
                         SectionLabel(T.t("Grubość", "Width"))

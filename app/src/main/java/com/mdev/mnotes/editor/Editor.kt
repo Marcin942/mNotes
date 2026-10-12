@@ -18,6 +18,8 @@ import com.mdev.mnotes.core.model.PageSnapshot
 import com.mdev.mnotes.core.model.PageSpace
 import com.mdev.mnotes.core.model.PageSpec
 import com.mdev.mnotes.core.model.PenKind
+import com.mdev.mnotes.core.pen.ActivePen
+import com.mdev.mnotes.core.pen.PenKit
 import com.mdev.mnotes.core.model.Stroke
 import com.mdev.mnotes.core.model.Template
 import com.mdev.mnotes.core.model.TextBox
@@ -27,7 +29,6 @@ import com.mdev.mnotes.data.Bookmark
 import com.mdev.mnotes.core.search.TextSearch
 import com.mdev.mnotes.data.NotebookDoc
 import com.mdev.mnotes.data.PageState
-import com.mdev.mnotes.data.PenPreset
 import com.mdev.mnotes.data.newId
 import com.mdev.mnotes.render.Assets
 import java.io.File
@@ -134,45 +135,28 @@ class Editor(val ctx: Context, val nbId: String) {
     val canRedo: Boolean get() { undoTick; return doc.undo.canRedo }
 
     // — Pióra —
-    val presets: List<PenPreset> get() = settings.presets
-    val presetIndex: Int get() = settings.activePreset.coerceIn(0, presets.size - 1)
-    val preset: PenPreset get() = presets[presetIndex]
+    val kit: PenKit get() = settings.penKit
 
-    fun selectPreset(i: Int) {
-        settings.activePreset = i.coerceIn(0, presets.size - 1)
-        if (!presetTool) tool = Tool.PEN
-    }
+    /** Pióro, którym się teraz pisze: aktywne narzędzie ze swoim kolorem, grubością i stylem. */
+    val pen: ActivePen get() = kit.current
+
+    fun editKit(f: (PenKit) -> PenKit) { settings.penKit = f(kit) }
 
     /** Narzędzia, które biorą kolor i styl z aktywnego pióra (pióro, pędzel formatu, wypełnienie). */
-    val presetTool: Boolean get() = tool == Tool.PEN || tool == Tool.PAINTER || tool == Tool.FILL
+    val penTool: Boolean get() = tool == Tool.PEN || tool == Tool.PAINTER || tool == Tool.FILL
 
-    fun updatePreset(i: Int, p: PenPreset) {
-        settings.presets = presets.toMutableList().also { it[i] = p }
+    /** Wybór narzędzia piszącego z paska: staje się aktywnym piórem i narzędziem, a zaznaczenie znika. */
+    fun selectPen(kind: PenKind) {
+        editKit { it.withActive(kind) }
+        tool = Tool.PEN; clearSelIfNotLasso()
     }
 
-    fun addPreset(p: PenPreset) {
-        settings.presets = presets + p
-        settings.activePreset = presets.size - 1
-    }
+    fun setPenColor(c: Int) = editKit { it.withColor(it.active, c) }
 
-    /** Przenosi pióro z miejsca [from] na [to] (reszta się przesuwa); aktywne pozostaje tym samym piórem. */
-    fun movePreset(from: Int, to: Int) {
-        val n = presets.size
-        if (from !in 0 until n || to !in 0 until n || from == to) return
-        val active = presetIndex
-        settings.presets = presets.toMutableList().also { it.add(to, it.removeAt(from)) }
-        settings.activePreset = when {
-            active == from -> to
-            from < active && active <= to -> active - 1
-            to <= active && active < from -> active + 1
-            else -> active
-        }
-    }
-
-    fun removePreset(i: Int) {
-        if (presets.size <= 1) return
-        settings.presets = presets.toMutableList().also { it.removeAt(i) }
-        settings.activePreset = settings.activePreset.coerceAtMost(presets.size - 1)
+    /** Zmiana z listwy (grubość, kolor): gdy w ręku jest gumka albo lasso, wraca do pisania, bo po to się ją dotyka. */
+    fun tunePen(f: (PenKit) -> PenKit) {
+        editKit(f)
+        if (!penTool) { tool = Tool.PEN; clearSelIfNotLasso() }
     }
 
     fun say(msg: String) { toast = msg }
@@ -423,7 +407,7 @@ class Editor(val ctx: Context, val nbId: String) {
     /** Pipeta z paska/skrótu: kolor trafia do zaznaczenia albo do aktywnego pióra. */
     fun pipetteForCurrent() = startPipette { c ->
         if (sel != null && !readOnly) recolorSel(c)
-        else { updatePreset(presetIndex, preset.copy(color = c)); if (!presetTool && tool != Tool.TEXT) tool = Tool.PEN }
+        else { setPenColor(c); if (!penTool && tool != Tool.TEXT) tool = Tool.PEN }
     }
 
     fun toggleRuler() { ruler = !ruler; if (ruler) view?.rulerShown() else view?.invalidate() }
@@ -524,7 +508,7 @@ class Editor(val ctx: Context, val nbId: String) {
      * Pędzel formatu: kopia elementu w kolorze i stylu pióra [p]; null, gdy nie ma czego zmienić (obraz, taśma,
      * element zablokowany, ten sam styl). Zakreślacz nie przefarbowuje tekstu (byłby nieczytelny).
      */
-    fun painted(e: Element, p: PenPreset = preset): Element? {
+    fun painted(e: Element, p: ActivePen = pen): Element? {
         if (e.locked) return null
         val hl = p.kind == PenKind.HIGHLIGHTER
         return when (e) {
@@ -547,7 +531,7 @@ class Editor(val ctx: Context, val nbId: String) {
         val page = doc.pages.firstOrNull { it.id == pageId } ?: return
         val els = doc.content(page).elements
         val w = page.spec.w; val h = page.spec.h
-        val p = preset
+        val p = pen
         val closeGaps = settings.fillCloseGaps
         filling = true
         repo.io.execute {
@@ -609,12 +593,9 @@ class Editor(val ctx: Context, val nbId: String) {
     }
     private fun clearSelIfNotLasso() { if (tool != Tool.LASSO && tool != Tool.TEXT) clearSel() }
 
-    fun nextPreset(d: Int) { val n = presets.size; selectPreset(((presetIndex + d) % n + n) % n) }
-
-    fun bumpWidth(f: Float) {
-        val p = preset
-        val spec = com.mdev.mnotes.core.pen.PenSpec.of(p.kind)
-        updatePreset(presetIndex, p.copy(width = (p.width * f).coerceIn(spec.minWidth, spec.maxWidth)))
+    fun stepColor(d: Int) {
+        editKit { it.stepColor(it.active, d) }
+        if (!penTool) tool = Tool.PEN
     }
 
     fun fileFor(name: String): File = repo.assetFile(nbId, name)

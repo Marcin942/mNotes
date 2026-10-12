@@ -6,13 +6,12 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import com.mdev.mnotes.core.model.PenKind
+import com.mdev.mnotes.core.pen.ActivePen
+import com.mdev.mnotes.core.pen.PenKit
 import org.json.JSONArray
 import org.json.JSONObject
 import kotlin.properties.ReadWriteProperty
 import kotlin.reflect.KProperty
-
-/** Gotowe pióro w pasku (preset): rodzaj, kolor ARGB, grubość w pt. */
-data class PenPreset(val kind: PenKind, val color: Int, val width: Float)
 
 /**
  * Ustawienia aplikacji. Klucze płaskie `przestrzeń.nazwa` w SharedPreferences (zgodnie z README specyfikacji),
@@ -54,6 +53,7 @@ class Settings(ctx: Context) {
     var haptics by Pref("ui.haptics", true)          // delikatne wibracje przy dotknięciu przycisków paska narzędzi
     var toolbarPos by Pref("toolbar.position", 0)    // 0 góra, 1 dół, 2 lewo, 3 prawo
     var toolbarSize by Pref("toolbar.size", 1)       // 0 mały, 1 normalny, 2 duży
+    var optionsPos by Pref("toolbar.options", 0)     // listwa grubości i kolorów: 0 z lewej, 1 z prawej, 2 przy pasku narzędzi
     var tabs by Pref("ui.tabs", false)               // otwieraj zeszyty jako karty (pasek kart pojawia się dopiero przy ≥ 2 kartach)
     var menuBar by Pref("ui.menubar", 1)            // pasek menu w edytorze: 0 nigdy, 1 na dużych ekranach, 2 zawsze
     var keyMap by Pref("keys.map", "")               // własne skróty: JSON {id polecenia: „Ctrl+J”}, pusty tekst = bez skrótu
@@ -117,26 +117,34 @@ class Settings(ctx: Context) {
     var syncMd by Pref("sync.md", false)             // …i Markdown
     var lastSync by Pref("sync.last_min", 0)         // minuty od epoki (Int wystarczy do roku 6000+)
 
-    private var presetsJson by Pref("pen.presets", "")
+    private var kitJson by Pref("pen.kit", "")
 
-    var presets: List<PenPreset>
-        get() = parsePresets(presetsJson)
+    // Dawne „zapisane pióra”: tylko do odczytu, żeby przy pierwszym uruchomieniu przenieść je do kompletu piór.
+    private val oldPresets by Pref("pen.presets", "")
+    private val oldActive by Pref("pen.active", 0)
+    private var kitCache: Pair<String, PenKit>? = null
+
+    /** Komplet piór: zestawy kolorów oraz kolor, trzy grubości i styl każdego narzędzia piszącego. */
+    var penKit: PenKit
+        get() {
+            val j = kitJson
+            kitCache?.let { if (it.first == j) return it.second }
+            val k = (if (j.isEmpty()) null else PenKit.fromJson(j)) ?: PenKit.migrate(parseOldPresets(oldPresets), oldActive)
+            kitCache = j to k
+            return k
+        }
         set(v) {
-            val a = JSONArray()
-            for (p in v) a.put(JSONObject().put("k", p.kind.code).put("c", p.color).put("w", p.width.toDouble()))
-            presetsJson = a.toString()
+            val j = v.toJson()
+            kitCache = j to v
+            kitJson = j
         }
 
-    /** Ostatnio używany preset (indeks) — po restarcie wracamy do tego samego pióra. */
-    var activePreset by Pref("pen.active", 0)
-
-    private fun parsePresets(s: String): List<PenPreset> {
-        if (s.isEmpty()) return DEFAULT_PRESETS
+    private fun parseOldPresets(s: String): List<ActivePen> {
+        if (s.isEmpty()) return emptyList()
         return try {
             val a = JSONArray(s)
-            List(a.length()) { i -> a.getJSONObject(i).let { PenPreset(PenKind.fromCode(it.getInt("k")), it.getInt("c"), it.getDouble("w").toFloat()) } }
-                .ifEmpty { DEFAULT_PRESETS }
-        } catch (_: Exception) { DEFAULT_PRESETS }
+            List(a.length()) { i -> a.getJSONObject(i).let { ActivePen(PenKind.fromCode(it.getInt("k")), it.getInt("c"), it.getDouble("w").toFloat()) } }
+        } catch (_: Exception) { emptyList() }
     }
 
     /** Klucze związane z urządzeniem (uprawnienia do folderu, blokada) nie wędrują w pliku ustawień. */
@@ -161,17 +169,5 @@ class Settings(ctx: Context) {
             is Double -> e.putFloat(k, v.toFloat())
         }
         e.apply()
-    }
-
-    companion object {
-        val DEFAULT_PRESETS = listOf(
-            PenPreset(PenKind.BALLPOINT, 0xFF1B1D21.toInt(), 1.42f),
-            PenPreset(PenKind.FOUNTAIN, 0xFF24407E.toInt(), 2.83f),
-            PenPreset(PenKind.BALLPOINT, 0xFFC8433F.toInt(), 1.42f),
-            PenPreset(PenKind.PENCIL, 0xFF454A52.toInt(), 1.98f),
-            PenPreset(PenKind.BRUSH, 0xFF3E8E5A.toInt(), 8.5f),
-            PenPreset(PenKind.HIGHLIGHTER, 0xFFF5CF17.toInt(), 14.17f),
-            PenPreset(PenKind.HIGHLIGHTER, 0xFF71DF77.toInt(), 14.17f),
-        )
     }
 }

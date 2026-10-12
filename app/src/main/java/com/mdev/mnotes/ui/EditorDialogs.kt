@@ -160,8 +160,8 @@ fun commandList(
         "toolTape" to ({ !ed.readOnly } to { pickTool(Tool.TAPE, Panel.TAPE) }),
         "tapesToggle" to ({ !ed.readOnly } to { ed.toggleAllTapes() }),
         "pipette" to ({ !ed.readOnly } to { ed.pipetteForCurrent() }),
-        "presetNext" to ({ true } to { ed.nextPreset(1) }),
-        "presetPrev" to ({ true } to { ed.nextPreset(-1) }),
+        "presetNext" to ({ !ed.readOnly } to { ed.stepColor(1) }),
+        "presetPrev" to ({ !ed.readOnly } to { ed.stepColor(-1) }),
         "penSettings" to ({ true } to { pickTool(Tool.PEN, null); setPanel(Panel.PEN) }),
         "eraserSettings" to ({ true } to { pickTool(Tool.ERASER, null); setPanel(Panel.ERASER) }),
         "eraserObject" to ({ true } to { set.eraserMode = 0; pickTool(Tool.ERASER, null) }),
@@ -307,7 +307,7 @@ fun TextDialog(ed: Editor, req: TextRequest) {
         }
         MSlider(size, 8f, 96f) { size = it }
         SectionLabel(T.t("Kolor", "Color"))
-        ColorPicker(color, { color = it }, recent = ed.presets.map { it.color }.distinct())
+        ColorPicker(color, { color = it }, recent = ed.kit.sets.filter { !it.hl }.flatMap { it.colors.take(it.visible) }.distinct())
         ToggleRow(T.t("Tło pola", "Box background"), fill != 0) { fill = if (it) 0xFFFFF59D.toInt() else 0 }
         if (fill != 0) ColorPicker(fill, { fill = it }, withAlpha = true)
     }

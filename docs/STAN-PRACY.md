@@ -1,6 +1,6 @@
 # mNotes — STAN PRACY (punkt startowy po wznowieniu sesji)
 
-Wersja: **0.1.0** (tag `v0.1.0`, `versionName` w `app/build.gradle.kts`). Aktualizacja: 2026-10-12. Źródło prawdy o zakresie: `docs/features/BACKLOG.md` (95 × `[x]`, 17 × `[~]`, 3 × `[ ]`).
+Wersja: **0.1.0** (tag `v0.1.0`, `versionName` w `app/build.gradle.kts`). Aktualizacja: 2026-10-12. Źródło prawdy o zakresie: `docs/features/BACKLOG.md` (96 × `[x]`, 17 × `[~]`, 2 × `[ ]`).
 Katalog jest repozytorium git (gałąź `main`, od 2026-10-03) — „zapis do repo” = commit; aktualizuj ten plik i BACKLOG na końcu każdej partii.
 
 ## Cel i założenia

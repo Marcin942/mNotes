@@ -164,6 +164,7 @@ import com.mdev.mnotes.core.layout.BarFit
 import com.mdev.mnotes.core.pen.ActivePen
 import com.mdev.mnotes.core.pen.ColorSet
 import com.mdev.mnotes.core.pen.InkColor
+import com.mdev.mnotes.core.pen.LineStyle
 import com.mdev.mnotes.core.pen.PenKit
 import com.mdev.mnotes.editor.Clip
 import com.mdev.mnotes.editor.Editor
@@ -614,6 +615,13 @@ private fun PenStripItems(ed: Editor, set: com.mdev.mnotes.data.Settings, vertic
             ) { c -> WidthGlyph(slot.widths[i], c, Modifier.size(isz + 2.dp)) }
         }
         BarSep(vertical)
+        for (s in LineStyle.entries) {
+            val on = s == slot.style
+            ToolBtn(lineName(s), { if (on && live) toggle(Panel.PEN) else ed.tunePen { it.withStyle(kind, s) } }, selected = on, size = sz) { c ->
+                LineGlyph(s, c, Modifier.size(isz + 2.dp))
+            }
+        }
+        BarSep(vertical)
         for (c in kit.strip(kind)) {
             val on = c == slot.color
             StripDot(Color(InkColor.onPaper(c, cs.hl, kind)), on, sz) { if (on && live) toggle(Panel.PEN) else ed.tunePen { it.withColor(kind, c) } }
@@ -632,6 +640,43 @@ private fun WidthGlyph(width: Float, color: Color, modifier: Modifier = Modifier
     Canvas(modifier) {
         val d = (1.3f * Math.pow(2.2 * width, 0.62).toFloat()).coerceIn(1.5f, 16f).dp.toPx()
         drawLine(color, Offset(d / 2f, size.height / 2f), Offset(size.width - d / 2f, size.height / 2f), d, StrokeCap.Round)
+    }
+}
+
+/** Próbka stylu linii: ciągła, trzy kreski albo cztery kropki, zawsze poziomo, żeby czytała się tak samo na listwie bocznej. */
+@Composable
+private fun LineGlyph(style: LineStyle, color: Color, modifier: Modifier = Modifier) {
+    Canvas(modifier) {
+        val d = 2.4f.dp.toPx()
+        val y = size.height / 2f
+        val a = d / 2f
+        val b = size.width - d / 2f
+        when (style) {
+            LineStyle.SOLID -> drawLine(color, Offset(a, y), Offset(b, y), d, StrokeCap.Round)
+            LineStyle.DASHED -> {
+                // Trzy kreski i dwie przerwy tej samej długości co kreska bez okrągłych końców.
+                val u = (b - a) / 5f
+                for (i in 0 until 3) drawLine(color, Offset(a + 2f * i * u + d * 0.25f, y), Offset(a + (2f * i + 1f) * u - d * 0.25f, y), d, StrokeCap.Round)
+            }
+            LineStyle.DOTTED -> for (i in 0 until 4) drawCircle(color, d * 0.62f, Offset(a + (b - a) * i / 3f, y))
+        }
+    }
+}
+
+private fun lineName(s: LineStyle): String = when (s) {
+    LineStyle.SOLID -> T.t("Linia ciągła", "Solid line")
+    LineStyle.DASHED -> T.t("Linia przerywana", "Dashed line")
+    LineStyle.DOTTED -> T.t("Linia kropkowana", "Dotted line")
+}
+
+/** Trzy style linii jako rząd przycisków w panelu; [current] = null, gdy zaznaczenie miesza style. */
+@Composable
+private fun LineStyleRow(current: LineStyle?, onPick: (LineStyle) -> Unit) {
+    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        for (s in LineStyle.entries) Chip(
+            when (s) { LineStyle.SOLID -> T.t("Ciągła", "Solid"); LineStyle.DASHED -> T.t("Przerywana", "Dashed"); LineStyle.DOTTED -> T.t("Kropkowana", "Dotted") },
+            s == current, { onPick(s) }, glyph = { c -> LineGlyph(s, c, Modifier.size(20.dp)) },
+        )
     }
 }
 
@@ -746,6 +791,9 @@ private fun PenPanel(ed: Editor, set: com.mdev.mnotes.data.Settings) {
     }
     MSlider(slot.width, spec.minWidth, spec.maxWidth) { v -> ed.editKit { it.withWidth(kind, slot.widthIndex, v) } }
 
+    SectionLabel(T.t("Styl linii", "Line style"))
+    LineStyleRow(slot.style) { s -> ed.editKit { it.withStyle(kind, s) } }
+
     @Composable
     fun Swatches(colors: List<Int>) = FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         for (c in colors) Dot(Color(InkColor.onPaper(c, cs.hl, kind)), 30.dp, selected = c == slot.color, onClick = { ed.editKit { it.withColor(kind, c) } })
@@ -836,12 +884,12 @@ private fun PenTester(p: ActivePen, smoothing: Float) {
         T.t("Wypróbuj pióro tutaj", "Try the pen here") else null
     Box(Modifier.fillMaxWidth().height(104.dp).clip(RoundedCornerShape(8.dp)).background(Color(0xFFFDFDFB)).border(1.dp, m.line, RoundedCornerShape(8.dp))) {
         Canvas(
-            Modifier.matchParentSize().pointerInput(p.kind, p.color, p.width, smoothing) {
+            Modifier.matchParentSize().pointerInput(p.kind, p.color, p.width, p.style, smoothing) {
                 awaitEachGesture {
                     val down = awaitFirstDown()
                     down.consume()
                     val spec = PenSpec.of(p.kind)
-                    builder.begin(p.kind, p.color, p.width, (spec.smoothing * smoothing).coerceIn(0f, 1f), 0.5f)
+                    builder.begin(p.kind, p.color, p.width, (spec.smoothing * smoothing).coerceIn(0f, 1f), 0.5f, p.style)
                     fun pr(c: androidx.compose.ui.input.pointer.PointerInputChange) =
                         if (c.type == androidx.compose.ui.input.pointer.PointerType.Stylus) c.pressure else 0.5f
                     fun feed(c: androidx.compose.ui.input.pointer.PointerInputChange) {
@@ -865,8 +913,8 @@ private fun PenTester(p: ActivePen, smoothing: Float) {
             drawIntoCanvas { cv ->
                 val c = cv.nativeCanvas
                 c.save(); c.scale(dens, dens)
-                for (st in strokes) renderer.drawStrokeData(c, st.pen, st.color, st.width, st.pts, st.count, dens)
-                if (builder.count > 0) renderer.drawStrokeData(c, builder.penKind, builder.penColor, builder.width, builder.pts, builder.count, dens)
+                for (st in strokes) renderer.drawStrokeData(c, st.pen, st.color, st.width, st.pts, st.count, dens, line = st.line)
+                if (builder.count > 0) renderer.drawStrokeData(c, builder.penKind, builder.penColor, builder.width, builder.pts, builder.count, dens, line = builder.line)
                 c.restore()
             }
         }
@@ -906,7 +954,7 @@ private fun SelectionBar(ed: Editor, panel: Panel?, toggle: (Panel) -> Unit, edi
                     IconBtn(Icons.Rounded.ContentCopy, T.t("Kopiuj", "Copy"), { ed.copySel() }, size = 36.dp, iconSize = 20.dp, shortcut = "Ctrl+C")
                     IconBtn(Icons.Rounded.ContentCopy, T.t("Duplikuj", "Duplicate"), { ed.duplicateSel() }, size = 36.dp, iconSize = 20.dp, shortcut = "Ctrl+D", tint = mint.accentText)
                     BarSep(false)
-                    IconBtn(Icons.Rounded.Palette, T.t("Kolor i grubość", "Color & width"), { toggle(Panel.SELCOLOR) }, selected = panel == Panel.SELCOLOR, size = 36.dp, iconSize = 20.dp)
+                    IconBtn(Icons.Rounded.Palette, T.t("Kolor, grubość i styl linii", "Color, width & line style"), { toggle(Panel.SELCOLOR) }, selected = panel == Panel.SELCOLOR, size = 36.dp, iconSize = 20.dp)
                     if (!locked) IconBtn(Icons.Rounded.CropRotate, T.t("Skaluj i obracaj", "Resize & rotate"), { ed.transformMode = !ed.transformMode }, selected = ed.transformMode, size = 36.dp, iconSize = 20.dp)
                     IconBtn(Icons.Rounded.FlipToFront, T.t("Na wierzch", "Bring to front"), { ed.frontSel() }, size = 36.dp, iconSize = 20.dp)
                     IconBtn(Icons.Rounded.FlipToBack, T.t("Na spód", "Send to back"), { ed.backSel() }, size = 36.dp, iconSize = 20.dp)
@@ -929,6 +977,8 @@ private fun SelectionBar(ed: Editor, panel: Panel?, toggle: (Panel) -> Unit, edi
                         val w = (els.firstOrNull { it is InkStroke } as InkStroke).width
                         SectionLabel(T.t("Grubość", "Width"))
                         MSlider(w, 0.3f, 24f) { ed.setSelWidth(it) }
+                        SectionLabel(T.t("Styl linii", "Line style"))
+                        LineStyleRow(els.filterIsInstance<InkStroke>().map { it.line }.distinct().singleOrNull()) { ed.setSelLine(it) }
                     }
                     if (img != null) { SectionLabel(T.t("Krycie obrazu", "Image opacity")); MSlider(img.alpha, 0.1f, 1f) { ed.setSelAlpha(it) } }
                 }

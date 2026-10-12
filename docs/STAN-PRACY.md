@@ -1,6 +1,6 @@
 # mNotes — STAN PRACY (punkt startowy po wznowieniu sesji)
 
-Wersja: **0.1.0** (tag `v0.1.0`, `versionName` w `app/build.gradle.kts`). Aktualizacja: 2026-10-03. Źródło prawdy o zakresie: `docs/features/BACKLOG.md` (73 × `[x]`, 13 × `[~]`, 1 × `[ ]` — zostało tylko EXT-002 audio).
+Wersja: **0.1.0** (tag `v0.1.0`, `versionName` w `app/build.gradle.kts`). Aktualizacja: 2026-10-12. Źródło prawdy o zakresie: `docs/features/BACKLOG.md` (93 × `[x]`, 17 × `[~]`, 5 × `[ ]`).
 Katalog jest repozytorium git (gałąź `main`, od 2026-10-03) — „zapis do repo” = commit; aktualizuj ten plik i BACKLOG na końcu każdej partii.
 
 ## Cel i założenia
@@ -14,7 +14,7 @@ cd /home/mdev/AndroidStudioProjects/mNotes
 ./gradlew --offline :app:compileDebugKotlin -q 2>&1 | grep -E "^e:|error:|FAIL"        # sama kompilacja (brak wyjścia = OK)
 ./gradlew --offline :app:testDebugUnitTest :app:assembleDebug -q 2>&1 | grep -E "^e:|error:|FAIL|BUILD"
 ```
-Wyniki testów: `app/build/test-results/testDebugUnitTest/*.xml`. Stan: **99 testów, 0 błędów** (m.in. `RulerTest`, `PageSpaceTest`, `TapeTest`, `ListTextTest`, `ZoomRegionTest`). Używać ścieżek absolutnych.
+Wyniki testów: `app/build/test-results/testDebugUnitTest/*.xml`. Stan: **210 testów, 0 błędów** (2026-10-12) (m.in. `RulerTest`, `PageSpaceTest`, `TapeTest`, `ListTextTest`, `ZoomRegionTest`). Używać ścieżek absolutnych.
 
 ## ⚠ Tablet użytkownika (adb `R5GL12C1HMT`, Galaxy Tab S10+) jest REALNIE używany
 Nie jest sprzętem testowym. Przed `install -r` / `am start` / `input …`:
@@ -32,6 +32,7 @@ Kotlin + Jetpack Compose (Material3) nad `NoteView` (Android View). Pakiet `app/
 - Dane na urządzeniu: `files/library/nb/<id>/meta.json` + `p/*.mnp`; zapis atomowy (`writeAtomic`, `.bak`).
 
 ## Zrobione w ostatnich sesjach (kod + kompilacja + testy jednostkowe; BEZ testu na urządzeniu)
+- **CUS-006 komplet piór + CUS-007 pasek z „⋯”** (2026-10-12, gałąź `feat/pasek-narzedzi`; tablet podłączony, ale bez zgody na test, więc tylko kompilacja i testy): zapisane pióra (`PenPreset`, `Settings.presets`) usunięte na życzenie właściciela. `core/pen/PenKit.kt` trzyma zestawy kolorów i po jednym `PenSlot` na `PenKind` (trzy grubości, wybrana grubość, kolor, zestaw, styl linii); `Settings.penKit` (`pen.kit`, migracja z `pen.presets`, których nie kasuje); `Editor.kit/pen/editKit/selectPen/tunePen/stepColor`. `ui/EditorScreen.kt`: `ToolBar` z 17 pozycjami i `BarFit`, `PenStrip` (listwa, `Settings.optionsPos`), `PenPanel`. Decyzje podjęte bez właściciela, do potwierdzenia: listwa domyślnie z lewej; kolejność piór długopis, pióro, ołówek, pędzel, zakreślacz; kolejność zwijania pod „⋯”; „[” i „]” zmieniają kolor; dotknięcie listwy przy gumce albo lassie wraca do pisania. **Do sprawdzenia na tablecie**: czy przy jednym dokumencie (ok. 1205 dp szerokości) pasek mieści się bez „⋯” (`HEADER_FIXED = 352` to szacunek), wygląd listwy przy każdym położeniu paska, panel pióra, migracja dawnych piór. Następne kroki: CUS-008 styl linii, CUS-009 zestawy w Ustawieniach, CUS-010 edycja paska.
 - Wiaderko: kolor dochodzi do ostrych kątów (zrzut właściciela pokazał puste kliny przez pogrubione ściany); domykanie szpar przeniesione do opcji `fill.close_gaps` (domyślnie wyłączone, Ustawienia → Pędzel formatu i wypełnienie), z rozdziałem pasa zapasu wg odległości (`FloodFill.bridged`). Bez testu na urządzeniu.
 - EDT-092 pędzel formatu (`Tool.PAINTER`, `Editor.painted`, `NoteView.paintDown/To/Up`, `settings.painterMode`) i EDT-093 wypełnienie/wiaderko (`Tool.FILL`, `FillEl`, `core/edit/FloodFill.kt`, `Editor.fillAt`). Interpretacja „jak w Paincie”: krawędź strony jest ścianą; gumka przeciągana pomija wypełnienia (usuwa je lasso gumki, lasso + Usuń albo cofnij). Bez testu na urządzeniu.
 - Przesuwanie zaznaczonych obiektów palcem (`NoteView.selGrab`: wnętrze ramki łapie też palec, w trybie palca „przewijaj” i w ręce); drugi palec w trakcie przeciągania anuluje przesunięcie i przewija. Bez testu na urządzeniu.

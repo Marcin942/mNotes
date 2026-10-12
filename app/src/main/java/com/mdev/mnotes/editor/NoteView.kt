@@ -1036,6 +1036,9 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
         // Dłoń i palec poza stroną nie biorą udziału w gestach, więc nie psują dotknięcia ani nie blokują paska.
         if (outside(ev, idx)) { palm.add(ev.getPointerId(idx)); return }
         if (palmTouch(ev, idx)) { palm.add(ev.getPointerId(idx)); if (mode != Mode.TOOL) rescueStart(ev, idx); return }
+        // Pierwszy palec leży dłużej i nie rusza się (oparta dłoń): krótkie dotknięcie drugim to zwykłe kliknięcie, nie szczypanie.
+        if (t == MotionEvent.TOOL_TYPE_FINGER && ev.eventTime - ev.downTime > 350L &&
+            (mode == Mode.TOOL || (mode == Mode.NAV && navTravel < 10f * dp))) rescueStart(ev, idx)
         when (mode) {
             Mode.TOOL -> if (toolType == MotionEvent.TOOL_TYPE_FINGER && t == MotionEvent.TOOL_TYPE_FINGER) { cancelTool(); startNav(ev) }
             Mode.NAV -> if (isStylus(t) && !navOnly(ev, idx)) { endNavQuiet(); beginTool(ev, idx) } else { navMax = max(navMax, liveCount(ev)); rebase(ev, -1) }

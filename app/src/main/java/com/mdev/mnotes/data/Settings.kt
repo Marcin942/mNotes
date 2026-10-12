@@ -62,6 +62,7 @@ class Settings(ctx: Context) {
     var barConfig: BarConfig
         get() = BarConfig.parse(barOrder, barModes)
         set(v) { barOrder = if (v.isDefault) "" else v.orderString(); barModes = v.modesString() }
+    var undoDock by Pref("ui.undo_dock", 0)         // gdzie stoją Cofnij i Ponów: 0 na pasku narzędzi, 1–4 kapsuła w rogu strony (lewy górny, prawy górny, lewy dolny, prawy dolny)
     var tabs by Pref("ui.tabs", false)               // otwieraj zeszyty jako karty (pasek kart pojawia się dopiero przy ≥ 2 kartach)
     var menuBar by Pref("ui.menubar", 1)            // pasek menu w edytorze: 0 nigdy, 1 na dużych ekranach, 2 zawsze
     var keyMap by Pref("keys.map", "")               // własne skróty: JSON {id polecenia: „Ctrl+J”}, pusty tekst = bez skrótu
@@ -80,6 +81,7 @@ class Settings(ctx: Context) {
     var palmRejection by Pref("input.palm_rejection", true)
     var penButton by Pref("input.pen_button", 0)     // 0 gumka, 1 lasso, 2 cofnij, 3 laser, 4 brak
     var doubleTap by Pref("input.double_tap", 0)     // podwójne dotknięcie palcem: 0 cofnij, 1 ponów, 2 przybliż/oddal, 3 brak
+    var tripleTap by Pref("input.triple_tap", 1)     // potrójne dotknięcie palcem: te same wartości co przy podwójnym
     var holdToShape by Pref("input.hold_to_shape", true)
     var holdMs by Pref("input.hold_ms", 550)
     var twoFingerUndo by Pref("input.two_finger_undo", true)

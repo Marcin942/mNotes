@@ -244,9 +244,14 @@ private fun InputPrefs(set: com.mdev.mnotes.data.Settings) {
         ToggleRow(T.t("Odrzucanie dłoni (rysik ma pierwszeństwo)", "Palm rejection (stylus wins)"), set.palmRejection) { set.palmRejection = it }
         ToggleRow(T.t("Cofnij dotknięciem dwóch palców", "Two-finger tap to undo"), set.twoFingerUndo) { set.twoFingerUndo = it }
         ToggleRow(T.t("Odciągnij za ostatnią stroną, aby dodać nową", "Pull past the last page to add a new one"), set.pullAddPage) { set.pullAddPage = it }
-        Opt(T.t("Podwójne dotknięcie palcem", "Finger double tap")) {
-            Choice(listOf(T.t("Cofnij", "Undo"), T.t("Ponów", "Redo"), T.t("Przybliż / oddal", "Zoom in / out"), T.t("Brak", "None")), set.doubleTap) { set.doubleTap = it }
-        }
+        val tapActions = listOf(T.t("Cofnij", "Undo"), T.t("Ponów", "Redo"), T.t("Przybliż / oddal", "Zoom in / out"), T.t("Brak", "None"))
+        Opt(T.t("Podwójne dotknięcie palcem", "Finger double tap")) { Choice(tapActions, set.doubleTap) { set.doubleTap = it } }
+        Opt(T.t("Potrójne dotknięcie palcem", "Finger triple tap")) { Choice(tapActions, set.tripleTap) { set.tripleTap = it } }
+        if (set.tripleTap != 3) Text(
+            T.t("Gdy potrójne dotknięcie coś robi, podwójne czeka ułamek sekundy na trzecie dotknięcie. Ustaw „Brak”, aby podwójne działało od razu.",
+                "While triple tap does something, double tap waits a fraction of a second for the third tap. Set it to “None” to make double tap instant."),
+            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(bottom = 6.dp),
+        )
         Opt(T.t("Przycisk rysika", "Stylus button")) {
             Choice(listOf(T.t("Gumka", "Eraser"), "Lasso", T.t("Cofnij", "Undo"), T.t("Laser", "Laser"), T.t("Brak", "None")), set.penButton) { set.penButton = it }
         }

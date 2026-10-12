@@ -132,6 +132,9 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
     private var lastCx = 0f; private var lastCy = 0f; private var lastSpan = 0f
     private var navSelect = false                  // czy dotknięcie (bez przesunięcia) tego gestu nawigacji zaznacza element
     private var lastTapT = 0L; private var lastTapX = 0f; private var lastTapY = 0f
+    private var tapCount = 0                       // kolejne szybkie dotknięcia palcem w tym samym miejscu (1, 2, 3)
+    // Podwójne dotknięcie czeka chwilę na trzecie; bez tego „ponów” po trzech dotknięciach zaczynałoby się od zbędnego „cofnij”.
+    private var pendingDouble: Runnable? = null
 
     // pióro
     private var liveActive = false
@@ -336,9 +339,14 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
         animateView(nz, clampX(cx - (cx - tx) * k, nz), clampY(cy - (cy - ty) * k, nz), 160L)
     }
 
-    /** Podwójne dotknięcie palcem — akcja wybrana w ustawieniach (domyślnie cofnij). */
-    private fun doubleTapAction(sx: Float, sy: Float) {
-        when (settings.doubleTap) { 0 -> ed.undo(); 1 -> ed.redo(); 2 -> toggleZoom(sx, sy) }
+    /** Akcja podwójnego albo potrójnego dotknięcia palcem wybrana w ustawieniach: 0 cofnij, 1 ponów, 2 przybliż/oddal, 3 brak. */
+    private fun tapAction(action: Int, sx: Float, sy: Float) {
+        when (action) { 0 -> ed.undo(); 1 -> ed.redo(); 2 -> toggleZoom(sx, sy) }
+    }
+
+    private fun cancelPendingDouble() {
+        pendingDouble?.let { removeCallbacks(it) }
+        pendingDouble = null
     }
 
     private fun toggleZoom(sx: Float, sy: Float) {
@@ -383,7 +391,7 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
     }
 
     fun dispose() {
-        removeCallbacks(holdRunnable); removeCallbacks(longPress)
+        removeCallbacks(holdRunnable); removeCallbacks(longPress); cancelPendingDouble()
         stopAnim()
         doc.listener = null
         ed.app.assets.onLoaded = null
@@ -1088,8 +1096,17 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
                 when (navMax) {
                     1 -> {
                         val now = ev.eventTime
-                        if (now - lastTapT < 320L && hypot(ev.x - lastTapX, ev.y - lastTapY) < 48f * dp) { doubleTapAction(ev.x, ev.y); lastTapT = 0L }
-                        else { lastTapT = now; lastTapX = ev.x; lastTapY = ev.y; if (navSelect) tapSelect(ev.x, ev.y) }
+                        if (tapCount in 1..2 && now - lastTapT < TAP_WINDOW && hypot(ev.x - lastTapX, ev.y - lastTapY) < 48f * dp) {
+                            lastTapT = now
+                            val x = ev.x; val y = ev.y
+                            if (++tapCount == 3) { cancelPendingDouble(); tapCount = 0; tapAction(settings.tripleTap, x, y) }
+                            else if (settings.tripleTap == TAP_NONE) { tapCount = 0; tapAction(settings.doubleTap, x, y) }
+                            else {
+                                val r = Runnable { pendingDouble = null; tapCount = 0; tapAction(settings.doubleTap, x, y) }
+                                pendingDouble = r
+                                postDelayed(r, TAP_WINDOW)
+                            }
+                        } else { tapCount = 1; lastTapT = now; lastTapX = ev.x; lastTapY = ev.y; if (navSelect) tapSelect(ev.x, ev.y) }
                     }
                     2 -> if (settings.twoFingerUndo) ed.undo()
                     3 -> if (settings.twoFingerUndo) ed.redo()
@@ -2351,6 +2368,8 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
     }
 
     companion object {
+        private const val TAP_WINDOW = 320L     // najdłuższa przerwa między kolejnymi dotknięciami palcem (ms)
+        private const val TAP_NONE = 3          // „brak” na liście akcji dotknięcia
         private const val HOLD_DRIFT_DP = 10f   // promień dryfu, w którym przytrzymanie nie jest zerowane
         private const val SNAP_EQ_DP = 6f       // przyciąganie boków prostokąta do równych (kwadrat)
         private const val SNAP_DEAD_DP = 6f     // martwa strefa regulacji kształtu po rozpoznaniu

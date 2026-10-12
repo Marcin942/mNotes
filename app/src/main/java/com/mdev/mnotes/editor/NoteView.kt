@@ -127,6 +127,7 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
     // nawigacja
     private var vt: VelocityTracker? = null
     private var navMax = 1
+    private var navPid = 0
     private var navTravel = 0f
     private var navT0 = 0L
     private var lastCx = 0f; private var lastCy = 0f; private var lastSpan = 0f
@@ -943,6 +944,28 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
     /** W trybie tylko do odczytu gest przewija, chyba że narzędziem jest laser (jedyne, które nic nie zmienia). */
     private fun navOnly(ev: MotionEvent, idx: Int) = ed.readOnly && effectiveTool(ev, idx) != Tool.LASER
 
+    /** Identyfikatory dotknięć, które nie są gestem: opierająca się dłoń albo palec poza stroną (np. na pasku narzędzi). */
+    private val palm = HashSet<Int>()
+
+    private fun palmTouch(ev: MotionEvent, idx: Int) =
+        ev.getToolType(idx) == MotionEvent.TOOL_TYPE_FINGER && settings.palmRejection &&
+            (rejectFinger(ev.eventTime) || ev.getTouchMajor(idx) > PALM_DP * dp)
+
+    private fun outside(ev: MotionEvent, idx: Int) = ev.getX(idx) < 0f || ev.getY(idx) < 0f || ev.getX(idx) > width || ev.getY(idx) > height
+
+    private fun isLive(ev: MotionEvent, i: Int, skip: Int) = i != skip && ev.getPointerId(i) !in palm
+
+    private fun liveCount(ev: MotionEvent, skip: Int = -1): Int {
+        var n = 0
+        for (i in 0 until ev.pointerCount) if (isLive(ev, i, skip)) n++
+        return n
+    }
+
+    private fun firstLive(ev: MotionEvent): Int {
+        for (i in 0 until ev.pointerCount) if (isLive(ev, i, -1)) return i
+        return 0
+    }
+
     private fun rejectFinger(now: Long) = settings.palmRejection && (stylusNear || now - lastStylusT < 450L)
 
     /** Narzędzie dla bieżącego gestu: gumka rysika, przycisk S Pen, albo wybrane w pasku. */
@@ -959,6 +982,7 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
         removeCallbacks(longPress); removeCallbacks(holdRunnable)
         stopAnim()
         val t = ev.getToolType(0)
+        palm.clear()
         if (isStylus(t)) { stylusNear = true; lastStylusT = ev.eventTime }
         if (ed.pipette != null) {
             if (t == MotionEvent.TOOL_TYPE_MOUSE && ev.buttonState and MotionEvent.BUTTON_SECONDARY != 0) { ed.cancelPipette(); mode = Mode.IGNORE; return }
@@ -979,28 +1003,37 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
             }
             isStylus(t) -> if (navOnly(ev, 0)) startNav(ev) else beginTool(ev, 0)
             else -> {
-                if (rejectFinger(ev.eventTime)) { mode = Mode.IGNORE; return }
+                if (palmTouch(ev, 0)) { palm.add(ev.getPointerId(0)); mode = Mode.IGNORE; return }
                 if (rh != 0) { startRuler(ev, rh); return }
-                when (settings.fingerMode) {
-                    0 -> if (!ed.readOnly && selGrab(ev.x, ev.y)) beginTool(ev, 0, Tool.LASSO) else { startNav(ev); navSelect = true }
-                    1 -> if (navOnly(ev, 0)) startNav(ev) else beginTool(ev, 0)
-                    else -> mode = Mode.IGNORE
-                }
+                fingerDown(ev, 0)
             }
+        }
+    }
+
+    private fun fingerDown(ev: MotionEvent, idx: Int) {
+        when (settings.fingerMode) {
+            0 -> if (!ed.readOnly && selGrab(ev.getX(idx), ev.getY(idx))) beginTool(ev, idx, Tool.LASSO) else { startNav(ev); navSelect = true }
+            1 -> if (navOnly(ev, idx)) startNav(ev) else beginTool(ev, idx)
+            else -> mode = Mode.IGNORE
         }
     }
 
     private fun onPointerDown(ev: MotionEvent) {
         val idx = ev.actionIndex
         val t = ev.getToolType(idx)
+        // Dłoń i palec poza stroną nie biorą udziału w gestach, więc nie psują dotknięcia ani nie blokują paska.
+        if (outside(ev, idx) || palmTouch(ev, idx)) { palm.add(ev.getPointerId(idx)); return }
         when (mode) {
             Mode.TOOL -> if (toolType == MotionEvent.TOOL_TYPE_FINGER && t == MotionEvent.TOOL_TYPE_FINGER) { cancelTool(); startNav(ev) }
-            Mode.NAV -> if (isStylus(t) && !navOnly(ev, idx)) { endNavQuiet(); beginTool(ev, idx) } else { navMax = max(navMax, ev.pointerCount); rebase(ev, -1) }
+            Mode.NAV -> if (isStylus(t) && !navOnly(ev, idx)) { endNavQuiet(); beginTool(ev, idx) } else { navMax = max(navMax, liveCount(ev)); rebase(ev, -1) }
             Mode.RULER -> if (isStylus(t) && !navOnly(ev, idx)) { mode = Mode.NONE; rulerGrab = 0; beginTool(ev, idx) } else rulerRebase(ev, -1)
             Mode.PICK -> {}
             Mode.IGNORE, Mode.NONE -> {
                 if (isStylus(t) && !navOnly(ev, idx)) { stylusNear = true; lastStylusT = ev.eventTime; beginTool(ev, idx) }
-                else if (t == MotionEvent.TOOL_TYPE_FINGER && ev.pointerCount >= 2 && !rejectFinger(ev.eventTime) && settings.fingerMode != 1) startNav(ev)
+                else if (t == MotionEvent.TOOL_TYPE_FINGER && !rejectFinger(ev.eventTime)) {
+                    // Palec obok opartej dłoni to zwykłe pojedyncze dotknięcie, a nie szczypanie.
+                    if (liveCount(ev) >= 2) { if (settings.fingerMode != 1) startNav(ev) } else if (palm.isNotEmpty()) fingerDown(ev, idx)
+                }
             }
         }
     }
@@ -1019,10 +1052,11 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
         val idx = ev.actionIndex
         when (mode) {
             Mode.TOOL -> if (ev.getPointerId(idx) == toolPid) { finishTool(ev, idx, false); mode = Mode.IGNORE }
-            Mode.NAV -> rebase(ev, idx)
+            Mode.NAV -> if (ev.getPointerId(idx) in palm) {} else if (liveCount(ev, idx) == 0) { navUp(ev, false); mode = Mode.IGNORE } else rebase(ev, idx)
             Mode.RULER -> rulerRebase(ev, idx)
             else -> {}
         }
+        palm.remove(ev.getPointerId(idx))
     }
 
     private fun onUp(ev: MotionEvent, cancel: Boolean) {
@@ -1033,7 +1067,7 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
             else -> {}
         }
         if (isStylus(ev.getToolType(0))) lastStylusT = ev.eventTime
-        mode = Mode.NONE; toolPid = -1; rulerGrab = 0
+        mode = Mode.NONE; toolPid = -1; rulerGrab = 0; palm.clear()
         predictor?.let { predN = 0 }
         invalidate()
     }
@@ -1044,9 +1078,9 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
         mode = Mode.NAV; navSelect = false
         stopAnim()
         vt?.recycle(); vt = VelocityTracker.obtain().also { it.addMovement(ev) }
-        navMax = ev.pointerCount; navTravel = 0f; navT0 = ev.eventTime
+        navMax = max(1, liveCount(ev)); navPid = ev.getPointerId(firstLive(ev)); navTravel = 0f; navT0 = ev.eventTime
         pullAnim?.cancel(); pull = 0f; pullArmed = false
-        pullEligible = ev.pointerCount == 1 && pullEnabled() && atDocEnd()
+        pullEligible = navMax == 1 && pullEnabled() && atDocEnd()
         rebase(ev, -1)
         removeCallbacks(longPress)
         if (ev.getToolType(0) != MotionEvent.TOOL_TYPE_MOUSE || true) postDelayed(longPress, 520L)
@@ -1056,24 +1090,25 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
 
     private fun rebase(ev: MotionEvent, skip: Int) {
         var sx = 0f; var sy = 0f; var n = 0
-        for (i in 0 until ev.pointerCount) { if (i == skip) continue; sx += ev.getX(i); sy += ev.getY(i); n++ }
+        for (i in 0 until ev.pointerCount) { if (!isLive(ev, i, skip)) continue; sx += ev.getX(i); sy += ev.getY(i); n++ }
         if (n == 0) return
         lastCx = sx / n; lastCy = sy / n
         lastSpan = 0f
         if (n >= 2) {
             var d = 0f
-            for (i in 0 until ev.pointerCount) { if (i == skip) continue; d += hypot(ev.getX(i) - lastCx, ev.getY(i) - lastCy) }
+            for (i in 0 until ev.pointerCount) { if (!isLive(ev, i, skip)) continue; d += hypot(ev.getX(i) - lastCx, ev.getY(i) - lastCy) }
             lastSpan = d / n
         }
     }
 
     private fun navMove(ev: MotionEvent) {
         vt?.addMovement(ev)
-        var sx = 0f; var sy = 0f; val n = ev.pointerCount
-        for (i in 0 until n) { sx += ev.getX(i); sy += ev.getY(i) }
+        var sx = 0f; var sy = 0f; val n = liveCount(ev)
+        if (n == 0) return
+        for (i in 0 until ev.pointerCount) if (isLive(ev, i, -1)) { sx += ev.getX(i); sy += ev.getY(i) }
         val cx = sx / n; val cy = sy / n
         var span = 0f
-        if (n >= 2) { for (i in 0 until n) span += hypot(ev.getX(i) - cx, ev.getY(i) - cy); span /= n }
+        if (n >= 2) { for (i in 0 until ev.pointerCount) if (isLive(ev, i, -1)) span += hypot(ev.getX(i) - cx, ev.getY(i) - cy); span /= n }
         if (n >= 2 && lastSpan > 0f && span > 0f) zoomAbout(cx, cy, span / lastSpan)
         if (n >= 2 && pull > 0f) endPull(false)
         panWithPull(cx - lastCx, cy - lastCy, pullEligible && n == 1 && navMax == 1)
@@ -1096,9 +1131,9 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
                 when (navMax) {
                     1 -> {
                         val now = ev.eventTime
-                        if (tapCount in 1..2 && now - lastTapT < TAP_WINDOW && hypot(ev.x - lastTapX, ev.y - lastTapY) < 48f * dp) {
+                        if (tapCount in 1..2 && now - lastTapT < TAP_WINDOW && hypot(lastCx - lastTapX, lastCy - lastTapY) < 48f * dp) {
                             lastTapT = now
-                            val x = ev.x; val y = ev.y
+                            val x = lastCx; val y = lastCy
                             if (++tapCount == 3) { cancelPendingDouble(); tapCount = 0; tapAction(settings.tripleTap, x, y) }
                             else if (settings.tripleTap == TAP_NONE) { tapCount = 0; tapAction(settings.doubleTap, x, y) }
                             else {
@@ -1106,7 +1141,7 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
                                 pendingDouble = r
                                 postDelayed(r, TAP_WINDOW)
                             }
-                        } else { tapCount = 1; lastTapT = now; lastTapX = ev.x; lastTapY = ev.y; if (navSelect) tapSelect(ev.x, ev.y) }
+                        } else { tapCount = 1; lastTapT = now; lastTapX = lastCx; lastTapY = lastCy; if (navSelect) tapSelect(lastCx, lastCy) }
                     }
                     2 -> if (settings.twoFingerUndo) ed.undo()
                     3 -> if (settings.twoFingerUndo) ed.redo()
@@ -1114,7 +1149,7 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
             } else if (navMax == 1 && tracker != null) {
                 tracker.addMovement(ev)
                 tracker.computeCurrentVelocity(1000, cfg.scaledMaximumFlingVelocity.toFloat())
-                val vx = tracker.xVelocity; val vy = tracker.yVelocity
+                val vx = tracker.getXVelocity(navPid); val vy = tracker.getYVelocity(navPid)
                 if (hypot(vx, vy) > cfg.scaledMinimumFlingVelocity) {
                     val cw = layout.docWidth * zoom; val ch = layout.docHeight * zoom
                     val minX = if (cw <= width) ((cw - width) / 2).toInt() else 0
@@ -2369,6 +2404,7 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
 
     companion object {
         private const val TAP_WINDOW = 320L     // najdłuższa przerwa między kolejnymi dotknięciami palcem (ms)
+        private const val PALM_DP = 110f       // dotknięcie szersze niż ok. 17 mm to dłoń, nie palec
         private const val TAP_NONE = 3          // „brak” na liście akcji dotknięcia
         private const val HOLD_DRIFT_DP = 10f   // promień dryfu, w którym przytrzymanie nie jest zerowane
         private const val SNAP_EQ_DP = 6f       // przyciąganie boków prostokąta do równych (kwadrat)

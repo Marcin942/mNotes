@@ -1,6 +1,7 @@
 package com.mdev.mnotes.data
 
 import com.mdev.mnotes.core.text.NameText
+import com.mdev.mnotes.core.text.TagNames
 import com.mdev.mnotes.editor.T
 import android.content.Context
 import android.os.Handler
@@ -173,13 +174,26 @@ class Repository(ctx: Context) {
         io.execute { writeAtomic(File(root, "folders.json"), s.toByteArray(), true) }
     }
 
-    fun setTag(rawName: String, color: Int?) {
-        val name = NameText.oneLine(rawName)
-        tagColors = if (color == null) tagColors - name else tagColors + (name to color)
+    private fun saveTags() {
         val o = JSONObject(); tagColors.forEach { (k, v) -> o.put(k, v) }
         val s = o.toString()
         io.execute { writeAtomic(File(root, "tags.json"), s.toByteArray(), false) }
+    }
+
+    fun setTag(rawName: String, color: Int?) {
+        val name = NameText.oneLine(rawName)
+        tagColors = if (color == null) tagColors - name else tagColors + (name to color)
+        saveTags()
         if (color == null) notebooks.filter { name in it.tags }.forEach { n -> update(n.id) { it.copy(tags = it.tags - name) } }
+    }
+
+    /** Zmienia nazwę tagu w tabeli kolorów i we wszystkich zeszytach (także w koszu); nazwa istniejącego tagu zlewa oba. */
+    fun renameTag(old: String, rawNew: String) {
+        val new = TagNames.clean(rawNew)
+        if (new.isEmpty() || new == old) return
+        tagColors = TagNames.renamedColors(tagColors, old, new)
+        saveTags()
+        notebooks.filter { old in it.tags }.forEach { n -> update(n.id) { it.copy(tags = TagNames.renamed(it.tags, old, new)) } }
     }
 
     // — Strony i zasoby —

@@ -22,6 +22,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Check
+import androidx.compose.material.icons.rounded.Delete
+import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.Folder
 import androidx.compose.material.icons.rounded.Home
 import androidx.compose.material3.Icon
@@ -40,8 +42,10 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.mdev.mnotes.core.text.NameText
+import com.mdev.mnotes.core.text.TagNames
 import com.mdev.mnotes.app.app
 import com.mdev.mnotes.core.model.PageFormat
 import com.mdev.mnotes.core.model.PageSpec
@@ -149,6 +153,7 @@ fun LibDialogs(st: LibState, onOpen: (String) -> Unit) {
         is LibDialog.Export -> ExportDialog(d.nb, 0, {}) { st.dialog = null }
         is LibDialog.Move -> MoveDialog(st, d)
         is LibDialog.Tags -> TagsDialog(st, d)
+        LibDialog.ManageTags -> ManageTagsDialog(st)
         is LibDialog.Confirm -> MDialog(d.title, { st.dialog = null }, d.ok, { st.dialog = null; d.action() }) {
             Text(d.text, style = MaterialTheme.typography.bodyLarge)
         }
@@ -224,15 +229,14 @@ private fun TagsDialog(st: LibState, d: LibDialog.Tags) {
         (repo.tagColors.keys + repo.notebooks.flatMap { it.tags }).distinct().sortedBy { it.lowercase() }
     }
     var newName by remember { mutableStateOf("") }
-    val tagColors = remember { listOf(0xFF87CF3E, 0xFF1FB5C9, 0xFF5294E2, 0xFF9B6FD9, 0xFFE8638B, 0xFFE5484D, 0xFFF08A30, 0xFFF5B800).map { it.toInt() } }
-    var newColor by remember { mutableStateOf(tagColors[0]) }
+    var newColor by remember { mutableStateOf(TagPalette[0]) }
 
     fun toggle(tag: String) {
         val has = d.nb.all { repo.meta(it)?.tags?.contains(tag) == true }
         d.nb.forEach { id -> repo.update(id) { n -> n.copy(tags = if (has) n.tags - tag else (n.tags + tag).distinct()) } }
     }
     fun add() {
-        val n = NameText.oneLine(newName).removePrefix("#")
+        val n = TagNames.clean(newName)
         if (n.isEmpty()) return
         if (repo.tagColors[n] == null) repo.setTag(n, newColor)
         d.nb.forEach { id -> repo.update(id) { x -> x.copy(tags = (x.tags + n).distinct()) } }
@@ -265,10 +269,11 @@ private fun TagsDialog(st: LibState, d: LibDialog.Tags) {
             MField(newName, { newName = it }, Modifier.fillMaxWidth(), hint = T.t("Nazwa tagu", "Tag name"), onDone = ::add)
             Spacer(Modifier.height(10.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                for (c in tagColors) Dot(Color(c), 24.dp, selected = c == newColor, onClick = { newColor = c })
+                for (c in TagPalette) Dot(Color(c), 24.dp, selected = c == newColor, onClick = { newColor = c })
                 Spacer(Modifier.weight(1f))
                 Chip(T.t("Dodaj", "Add"), newName.isNotBlank(), ::add)
             }
+            Chip(T.t("Zarządzaj tagami…", "Manage tags…"), false, { st.dialog = LibDialog.ManageTags }, Modifier.padding(top = 12.dp), icon = Icons.Rounded.Edit)
         }
     }
 }
@@ -299,6 +304,9 @@ fun NewNotebookDialog(onDismiss: () -> Unit, onCreate: (String, PageSpec, Int, I
             Column(Modifier.weight(1f).verticalScroll(rememberScrollState())) {
                 MField(title, { title = it }, Modifier.fillMaxWidth(), hint = T.t("Tytuł zeszytu", "Notebook title"), onDone = ::create)
 
+                SectionLabel(T.t("Okładka", "Cover"), Modifier.padding(top = 14.dp))
+                CoverPicker(cover, style, { cover = it }, { style = it })
+
                 SectionLabel(T.t("Format", "Format"), Modifier.padding(top = 14.dp))
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     for (f in PageFormat.entries) Chip(formatName(f), f == format, { format = f })
@@ -318,9 +326,6 @@ fun NewNotebookDialog(onDismiss: () -> Unit, onCreate: (String, PageSpec, Int, I
                     for (p in Paper.presets) Dot(Color(p), 30.dp, selected = p == paper, onClick = { paper = p })
                 }
                 Text(paperName(paper), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 4.dp))
-
-                SectionLabel(T.t("Okładka", "Cover"), Modifier.padding(top = 14.dp))
-                CoverPicker(cover, style, { cover = it }, { style = it })
             }
             Column(Modifier.width(150.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                 SectionLabel(T.t("Podgląd", "Preview"), Modifier.align(Alignment.Start))
@@ -331,6 +336,73 @@ fun NewNotebookDialog(onDismiss: () -> Unit, onCreate: (String, PageSpec, Int, I
                 Spacer(Modifier.height(14.dp))
                 Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
                     PaperPreview(spec, Modifier.then(if (spec.w > spec.h) Modifier.width(140.dp) else Modifier.height(150.dp)).shadow(4.dp, RoundedCornerShape(2.dp)).border(0.5.dp, m.line))
+                }
+            }
+        }
+    }
+}
+
+private val TagPalette = listOf(0xFF87CF3E, 0xFF1FB5C9, 0xFF5294E2, 0xFF9B6FD9, 0xFFE8638B, 0xFFE5484D, 0xFFF08A30, 0xFFF5B800).map { it.toInt() }
+
+/** Zarządzanie tagami całej biblioteki: zmiana nazwy i koloru oraz usunięcie, także tagu, którego nie ma już żaden zeszyt. */
+@Composable
+private fun ManageTagsDialog(st: LibState) {
+    val m = mint
+    val repo = LocalContext.current.app.repo
+    val all = remember(repo.tagColors, repo.notebooks) {
+        (repo.tagColors.keys + repo.notebooks.flatMap { it.tags }).distinct().sortedBy { it.lowercase() }
+    }
+    var open by remember { mutableStateOf<String?>(null) }
+    var name by remember { mutableStateOf("") }
+
+    fun rename(t: String) {
+        val n = TagNames.clean(name)
+        if (n.isNotEmpty() && n != t) {
+            repo.renameTag(t, n)
+            if (st.tag == t) st.tag = n
+            open = n
+        }
+    }
+
+    MDialog(T.t("Zarządzaj tagami", "Manage tags"), { st.dialog = null }, T.t("Gotowe", "Done"), { st.dialog = null }, dismissText = "") {
+        Column(Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState())) {
+            if (all.isEmpty()) Text(T.t("Nie ma żadnych tagów.", "There are no tags."), color = MaterialTheme.colorScheme.onSurfaceVariant)
+            for (t in all) {
+                val used = remember(repo.notebooks, t) { repo.notebooks.count { !it.isTrashed && t in it.tags } }
+                val expanded = open == t
+                Row(
+                    Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(if (expanded) m.accentSoft else Color.Transparent)
+                        .clickable { open = if (expanded) null else t; name = t }.padding(horizontal = 8.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Box(Modifier.size(12.dp).clip(RoundedCornerShape(50)).background(repo.tagColors[t]?.let { Color(it) } ?: Color.Gray))
+                    Spacer(Modifier.width(10.dp))
+                    Text(t, Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(
+                        if (used == 0) T.t("nieużywany", "unused") else "$used",
+                        style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                if (expanded) Column(Modifier.padding(start = 8.dp, end = 8.dp, top = 8.dp, bottom = 10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    MField(name, { name = it }, Modifier.fillMaxWidth(), hint = T.t("Nazwa tagu", "Tag name"), onDone = { rename(t) })
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        for (c in TagPalette) Dot(Color(c), 24.dp, selected = c == repo.tagColors[t], onClick = { repo.setTag(t, c) })
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Chip(T.t("Zmień nazwę", "Rename"), false, { rename(t) }, icon = Icons.Rounded.Edit)
+                        Chip(T.t("Usuń tag", "Delete tag"), false, {
+                            st.dialog = LibDialog.Confirm(
+                                T.t("Usunąć tag „$t”?", "Delete tag “$t”?"),
+                                if (used == 0) T.t("Żaden zeszyt go nie używa.", "No notebook uses it.")
+                                else T.t("Zniknie z $used zeszytów (same zeszyty zostaną).", "It will be removed from $used notebooks (the notebooks stay)."),
+                                T.t("Usuń", "Delete"),
+                            ) {
+                                repo.setTag(t, null)
+                                if (st.tag == t) st.go(Place.LIB)
+                                st.dialog = LibDialog.ManageTags
+                            }
+                        }, icon = Icons.Rounded.Delete)
+                    }
                 }
             }
         }

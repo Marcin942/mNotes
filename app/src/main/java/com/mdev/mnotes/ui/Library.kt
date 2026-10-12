@@ -158,6 +158,7 @@ sealed interface LibDialog {
     data class Rename(val key: String) : LibDialog
     data class Move(val keys: Set<String>) : LibDialog
     data class Tags(val nb: Set<String>) : LibDialog
+    data object ManageTags : LibDialog
     data class FolderColor(val id: String) : LibDialog
     data class Cover(val id: String) : LibDialog
     data class Confirm(val title: String, val text: String, val ok: String, val action: () -> Unit) : LibDialog
@@ -320,7 +321,10 @@ private fun Sidebar(st: LibState, onSettings: () -> Unit, afterNav: () -> Unit, 
                 for (f in roots) FolderNode(st, repo, f, 0, afterNav)
             }
             if (tags.isNotEmpty()) {
-                SectionLabel(T.t("Tagi", "Tags"), Modifier.padding(horizontal = 8.dp))
+                Row(Modifier.padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    SectionLabel(T.t("Tagi", "Tags"), Modifier.weight(1f))
+                    IconBtn(Icons.Rounded.Edit, T.t("Zarządzaj tagami", "Manage tags"), { st.dialog = LibDialog.ManageTags }, size = 30.dp, iconSize = 16.dp)
+                }
                 for (t in tags) SideItem(
                     Icons.AutoMirrored.Rounded.Label, t, st.place == Place.TAG && st.tag == t,
                     iconTint = repo.tagColors[t]?.let { Color(it) },

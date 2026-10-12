@@ -15,6 +15,10 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.BiasAlignment
 import androidx.compose.ui.Modifier
@@ -150,9 +154,14 @@ fun NotebookCover(title: String, color: Int, style: Int, modifier: Modifier = Mo
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun CoverPicker(cover: Int, style: Int, onCover: (Int) -> Unit, onStyle: (Int) -> Unit) {
+    val custom = cover !in CoverPalette.colors
+    var open by remember { mutableStateOf(false) }
     FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         for (c in CoverPalette.colors) Dot(Color(c), 30.dp, selected = c == cover, onClick = { onCover(c) })
+        if (custom) Dot(Color(cover), 30.dp, selected = true, onClick = { open = !open })
     }
+    Chip(T.t("Własny kolor", "Custom colour"), open, { open = !open }, Modifier.padding(top = 10.dp))
+    if (open) ColorPicker(cover, onCover, Modifier.padding(top = 8.dp))
     FlowRow(Modifier.padding(top = 10.dp), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         val names = listOf(T.t("Gładka", "Plain"), T.t("Pasy", "Stripes"), T.t("Kropki", "Dots"), T.t("Fale", "Waves"), T.t("Kratka", "Grid"), T.t("Len", "Linen"), T.t("Łuki", "Arcs"))
         for (i in 0 until CoverStyle.COUNT) Chip(names[i], style == i, { onStyle(i) })

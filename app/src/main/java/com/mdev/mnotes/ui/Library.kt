@@ -557,7 +557,7 @@ private fun LibMain(st: LibState, wide: Boolean, onOpen: (String) -> Unit, openD
         if (tabs != null && !st.selecting) {
             Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text(T.t("Otwarte karty", "Open tabs"), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(end = 10.dp))
-                TabStrip(tabs, Modifier.weight(1f), showNew = false)
+                TabStrip(tabs, Modifier.weight(1f), showNew = false, openActive = true)
             }
             Box(Modifier.fillMaxWidth().height(1.dp).background(m.line))
         }

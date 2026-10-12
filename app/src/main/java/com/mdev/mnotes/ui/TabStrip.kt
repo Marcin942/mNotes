@@ -55,10 +55,10 @@ class TabsCtl(
 
 /**
  * Karty zeszytów w jednej linii z nagłówkiem (zastępują tytuł, więc nie zabierają miejsca). Przewijane w poziomie,
- * aktywna zawsze wjeżdża w widok. Zamknięcie ✕ ma 28 dp, „+” prowadzi do biblioteki, gdzie wybiera się kolejny zeszyt.
+ * aktywna zawsze wjeżdża w widok. Z biblioteki ([openActive]) dotknięcie aktywnej karty wraca do jej zeszytu. Zamknięcie ✕ ma 28 dp, „+” prowadzi do biblioteki, gdzie wybiera się kolejny zeszyt.
  */
 @Composable
-fun TabStrip(ctl: TabsCtl, modifier: Modifier = Modifier, showNew: Boolean = true) {
+fun TabStrip(ctl: TabsCtl, modifier: Modifier = Modifier, showNew: Boolean = true, openActive: Boolean = false) {
     val m = mint
     val tick = rememberTick()
     val scroll = rememberScrollState()
@@ -72,7 +72,7 @@ fun TabStrip(ctl: TabsCtl, modifier: Modifier = Modifier, showNew: Boolean = tru
                 Modifier.bringIntoViewRequester(req).height(34.dp).widthIn(min = 88.dp, max = 190.dp).clip(shape)
                     .background(if (active) m.accentSoft else androidx.compose.ui.graphics.Color.Transparent)
                     .border(0.5.dp, if (active) m.accent.copy(alpha = 0.45f) else m.line, shape)
-                    .clickable(role = Role.Tab) { if (!active) { tick(); ctl.open(id) } }
+                    .clickable(role = Role.Tab) { if (!active || openActive) { tick(); ctl.open(id) } }
                     .padding(start = 10.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {

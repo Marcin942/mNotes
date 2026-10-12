@@ -947,9 +947,21 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
     /** Identyfikatory dotknięć, które nie są gestem: opierająca się dłoń albo palec poza stroną (np. na pasku narzędzi). */
     private val palm = HashSet<Int>()
 
-    private fun palmTouch(ev: MotionEvent, idx: Int) =
-        ev.getToolType(idx) == MotionEvent.TOOL_TYPE_FINGER && settings.palmRejection &&
-            (rejectFinger(ev.eventTime) || ev.getTouchMajor(idx) > PALM_DP * dp)
+    private fun palmTouch(ev: MotionEvent, idx: Int) = ev.getToolType(idx) == MotionEvent.TOOL_TYPE_FINGER && rejectFinger(ev.eventTime)
+
+    // Odrzucony palec, który okazał się szybkim dotknięciem (nie opartą dłonią), nadal może zaznaczyć lub odznaczyć.
+    private var rescuePid = -1; private var rescueX = 0f; private var rescueY = 0f; private var rescueT = 0L
+
+    private fun rescueStart(ev: MotionEvent, idx: Int) {
+        rescuePid = ev.getPointerId(idx); rescueX = ev.getX(idx); rescueY = ev.getY(idx); rescueT = ev.eventTime
+    }
+
+    private fun rescueEnd(ev: MotionEvent, idx: Int) {
+        if (rescuePid != ev.getPointerId(idx)) return
+        rescuePid = -1
+        if (ed.sel == null || ed.readOnly || ev.eventTime - rescueT > 280L) return
+        if (hypot(ev.getX(idx) - rescueX, ev.getY(idx) - rescueY) < 10f * dp) tapSelect(rescueX, rescueY)
+    }
 
     private fun outside(ev: MotionEvent, idx: Int) = ev.getX(idx) < 0f || ev.getY(idx) < 0f || ev.getX(idx) > width || ev.getY(idx) > height
 
@@ -966,7 +978,7 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
         return 0
     }
 
-    private fun rejectFinger(now: Long) = settings.palmRejection && (stylusNear || now - lastStylusT < 450L)
+    private fun rejectFinger(now: Long) = settings.palmRejection && now - lastStylusT < (if (stylusNear) HOVER_STALE_MS else 450L)
 
     /** Narzędzie dla bieżącego gestu: gumka rysika, przycisk S Pen, albo wybrane w pasku. */
     private fun effectiveTool(ev: MotionEvent, idx: Int): Tool {
@@ -1003,7 +1015,7 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
             }
             isStylus(t) -> if (navOnly(ev, 0)) startNav(ev) else beginTool(ev, 0)
             else -> {
-                if (palmTouch(ev, 0)) { palm.add(ev.getPointerId(0)); mode = Mode.IGNORE; return }
+                if (palmTouch(ev, 0)) { palm.add(ev.getPointerId(0)); rescueStart(ev, 0); mode = Mode.IGNORE; return }
                 if (rh != 0) { startRuler(ev, rh); return }
                 fingerDown(ev, 0)
             }
@@ -1022,7 +1034,8 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
         val idx = ev.actionIndex
         val t = ev.getToolType(idx)
         // Dłoń i palec poza stroną nie biorą udziału w gestach, więc nie psują dotknięcia ani nie blokują paska.
-        if (outside(ev, idx) || palmTouch(ev, idx)) { palm.add(ev.getPointerId(idx)); return }
+        if (outside(ev, idx)) { palm.add(ev.getPointerId(idx)); return }
+        if (palmTouch(ev, idx)) { palm.add(ev.getPointerId(idx)); if (mode != Mode.TOOL) rescueStart(ev, idx); return }
         when (mode) {
             Mode.TOOL -> if (toolType == MotionEvent.TOOL_TYPE_FINGER && t == MotionEvent.TOOL_TYPE_FINGER) { cancelTool(); startNav(ev) }
             Mode.NAV -> if (isStylus(t) && !navOnly(ev, idx)) { endNavQuiet(); beginTool(ev, idx) } else { navMax = max(navMax, liveCount(ev)); rebase(ev, -1) }
@@ -1056,10 +1069,12 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
             Mode.RULER -> rulerRebase(ev, idx)
             else -> {}
         }
+        rescueEnd(ev, idx)
         palm.remove(ev.getPointerId(idx))
     }
 
     private fun onUp(ev: MotionEvent, cancel: Boolean) {
+        if (!cancel && mode == Mode.IGNORE) rescueEnd(ev, 0) else rescuePid = -1
         when (mode) {
             Mode.TOOL -> finishTool(ev, ev.findPointerIndex(toolPid).coerceAtLeast(0), cancel)
             Mode.NAV -> navUp(ev, cancel)
@@ -2404,7 +2419,7 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
 
     companion object {
         private const val TAP_WINDOW = 320L     // najdłuższa przerwa między kolejnymi dotknięciami palcem (ms)
-        private const val PALM_DP = 110f       // dotknięcie szersze niż ok. 17 mm to dłoń, nie palec
+        private const val HOVER_STALE_MS = 1500L   // po tylu ms bez zdarzeń rysika uznajemy, że odjechał, nawet bez końca zawisu
         private const val TAP_NONE = 3          // „brak” na liście akcji dotknięcia
         private const val HOLD_DRIFT_DP = 10f   // promień dryfu, w którym przytrzymanie nie jest zerowane
         private const val SNAP_EQ_DP = 6f       // przyciąganie boków prostokąta do równych (kwadrat)

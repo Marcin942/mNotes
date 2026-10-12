@@ -92,6 +92,22 @@ internal fun BarLayoutPrefs(set: com.mdev.mnotes.data.Settings) {
     val cfg = set.barConfig
     val dim = MaterialTheme.colorScheme.onSurfaceVariant
     val ink = MaterialTheme.colorScheme.onSurface
+    Group(T.t("Cofnij i Ponów", "Undo and Redo")) {
+        Text(
+            T.t(
+                "Mogą stać na pasku narzędzi albo w osobnej kapsule w rogu strony, poza paskiem.",
+                "They can sit on the toolbar or in a separate capsule in a corner of the page, off the toolbar.",
+            ),
+            style = MaterialTheme.typography.bodySmall, color = dim, modifier = Modifier.padding(bottom = 6.dp),
+        )
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            val names = listOf(
+                T.t("Na pasku", "On the toolbar"), T.t("Lewy górny róg", "Top left"), T.t("Prawy górny róg", "Top right"),
+                T.t("Lewy dolny róg", "Bottom left"), T.t("Prawy dolny róg", "Bottom right"),
+            )
+            names.forEachIndexed { i, n -> Chip(n, set.undoDock == i, { set.undoDock = i }) }
+        }
+    }
     Group(T.t("Układ paska narzędzi", "Toolbar layout")) {
         Text(
             T.t(
@@ -103,6 +119,8 @@ internal fun BarLayoutPrefs(set: com.mdev.mnotes.data.Settings) {
             style = MaterialTheme.typography.bodySmall, color = dim, modifier = Modifier.padding(bottom = 6.dp),
         )
         cfg.order.forEachIndexed { i, id ->
+            // Cofnij i Ponów w kapsule w rogu nie stoją na pasku, więc nie mają tu ani kolejności, ani trybu.
+            if (set.undoDock != 0 && (id == "undo" || id == "redo")) return@forEachIndexed
             if (i > 0) HorizontalDivider(color = mint.line)
             Column(Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {

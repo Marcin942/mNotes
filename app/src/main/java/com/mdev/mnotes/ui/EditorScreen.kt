@@ -309,6 +309,8 @@ fun EditorScreen(ed: Editor, tabs: TabsCtl, onExit: () -> Unit, onSettings: () -
                     )
                     // Panele i okienka kotwiczą się do krawędzi strony, tuż przy pasku, z którego wyszły.
                     Box(Modifier.fillMaxSize().imePadding()) {
+                        // Pod panelami: otwarty panel zasłania kapsułę, a pierwsze dotknięcie strony go zamyka.
+                        if (set.undoDock != 0) UndoCapsule(ed, Modifier.align(undoCorner(set.undoDock)).padding(8.dp).padding(start = if (!ed.chrome && set.undoDock == 1) 48.dp else 0.dp))
                         if (ed.chrome) {
                             panel?.takeIf { it == Panel.PEN || it == Panel.ERASER || it == Panel.LASSO || it == Panel.TAPE || it == Panel.PAINTER }?.let { p ->
                                 val pa = when {
@@ -402,7 +404,7 @@ private fun TopChrome(
     BoxWithConstraints(Modifier.fillMaxWidth().background(m.chrome)) {
         // Przy jednym dokumencie pasek ma być cały na wierzchu: tytuł oddaje mu miejsce, a gdy i tak się nie mieści,
         // pasek dostaje własny wiersz. Przy kartach zostaje w linii i sam zwija najmniej ważne narzędzia pod „⋯”.
-        val spare = maxWidth.value - HEADER_FIXED - (BarFit.length(barItemCount(set.barConfig), 3, barSize(set).value, true) + 8f)
+        val spare = maxWidth.value - HEADER_FIXED - (BarFit.length(barItemCount(set.barConfig, set.undoDock != 0), 3, barSize(set).value, true) + 8f)
         val inline = inlineBar && (tabs.showStrip || spare >= TITLE_MIN)
         Column(Modifier.fillMaxWidth()) {
             Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -495,9 +497,31 @@ private class BarItem(
 )
 
 /** Liczba przycisków paska w układzie [cfg]: nagłówek ocenia nią, czy pasek zmieści się obok tytułu. */
-private fun barItemCount(cfg: BarConfig): Int {
-    val shown = cfg.order.count { cfg.mode(it) != BarMode.MENU }
-    return if (shown < cfg.order.size) shown + 1 else shown
+private fun barItemCount(cfg: BarConfig, undoDocked: Boolean): Int {
+    // Cofnij i Ponów w rogu strony nie zajmują miejsca na pasku.
+    val order = if (undoDocked) cfg.order.filter { it != "undo" && it != "redo" } else cfg.order
+    val shown = order.count { cfg.mode(it) != BarMode.MENU }
+    return if (shown < order.size) shown + 1 else shown
+}
+
+private fun undoCorner(dock: Int): Alignment = when (dock) {
+    1 -> Alignment.TopStart; 2 -> Alignment.TopEnd; 3 -> Alignment.BottomStart; else -> Alignment.BottomEnd
+}
+
+/**
+ * Cofnij i Ponów jako osobna kapsuła w rogu strony (Ustawienia → Edytor i pióro). Zamiast przycisków na pasku, żeby
+ * kciuk sięgał po nie bez wędrowania po całym ekranie, a pasek zyskał dwa miejsca.
+ */
+@Composable
+private fun UndoCapsule(ed: Editor, modifier: Modifier = Modifier) {
+    val ro = ed.readOnly
+    val isz = 22.dp
+    FloatingCard(modifier, radius = 26) {
+        Row(Modifier.padding(horizontal = 2.dp, vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
+            ToolBtn(T.t("Cofnij", "Undo"), { ed.undo() }, enabled = ed.canUndo && !ro, size = 44.dp, shortcut = "Ctrl+Z") { c -> Icon(Icons.AutoMirrored.Rounded.Undo, null, Modifier.size(isz), tint = c) }
+            ToolBtn(T.t("Ponów", "Redo"), { ed.redo() }, enabled = ed.canRedo && !ro, size = 44.dp, shortcut = "Ctrl+Y") { c -> Icon(Icons.AutoMirrored.Rounded.Redo, null, Modifier.size(isz), tint = c) }
+        }
+    }
 }
 
 /** Stała część nagłówka poza tytułem i paskiem: powrót, marginesy i prawa grupa (strona, powiększenie, cztery przyciski). */
@@ -554,7 +578,7 @@ private fun ToolBar(ed: Editor, set: com.mdev.mnotes.data.Settings, vertical: Bo
     // Kolejność i tryby wybiera użytkownik (Ustawienia albo przytrzymanie przycisku); pozycje zbudowane wyżej mają
     // kolejność domyślną, więc tu tylko się je układa.
     val cfg = set.barConfig
-    val shown = items.sortedBy { cfg.order.indexOf(it.id) }
+    val shown = items.filter { set.undoDock == 0 || (it.id != "undo" && it.id != "redo") }.sortedBy { cfg.order.indexOf(it.id) }
     val openSettings = LocalBarSettings.current
     BoxWithConstraints(contentAlignment = Alignment.Center) {
         val fit = BarFit.fit(
@@ -785,14 +809,32 @@ private fun lineName(s: LineStyle): String = when (s) {
     LineStyle.DOTTED -> T.t("Linia kropkowana", "Dotted line")
 }
 
-/** Trzy style linii jako rząd przycisków w panelu; [current] = null, gdy zaznaczenie miesza style. */
+/**
+ * Trzy style linii jako rząd równych pól na całą szerokość panelu; [current] = null, gdy zaznaczenie miesza style.
+ * Próbka stoi nad podpisem, więc rząd nie rośnie z długością nazw (przy chipach „Przerywana” + „Kropkowana” wystawał poza panel).
+ */
 @Composable
 private fun LineStyleRow(current: LineStyle?, onPick: (LineStyle) -> Unit) {
-    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-        for (s in LineStyle.entries) Chip(
-            when (s) { LineStyle.SOLID -> T.t("Ciągła", "Solid"); LineStyle.DASHED -> T.t("Przerywana", "Dashed"); LineStyle.DOTTED -> T.t("Kropkowana", "Dotted") },
-            s == current, { onPick(s) }, glyph = { c -> LineGlyph(s, c, Modifier.size(20.dp)) },
-        )
+    val m = mint
+    val tick = rememberTick()
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        for (s in LineStyle.entries) {
+            val on = s == current
+            val fg = if (on) m.accentText else MaterialTheme.colorScheme.onSurfaceVariant
+            val shape = RoundedCornerShape(8.dp)
+            Column(
+                Modifier.weight(1f).clip(shape).background(if (on) m.accentSoft else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f))
+                    .border(1.dp, if (on) m.accent else Color.Transparent, shape)
+                    .clickable(role = Role.Button) { tick(); onPick(s) }.padding(horizontal = 4.dp, vertical = 7.dp),
+                horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(3.dp),
+            ) {
+                LineGlyph(s, fg, Modifier.width(36.dp).height(14.dp))
+                Text(
+                    when (s) { LineStyle.SOLID -> T.t("Ciągła", "Solid"); LineStyle.DASHED -> T.t("Przerywana", "Dashed"); LineStyle.DOTTED -> T.t("Kropkowana", "Dotted") },
+                    style = MaterialTheme.typography.labelMedium, color = if (on) m.accentText else MaterialTheme.colorScheme.onSurface, maxLines = 1, softWrap = false,
+                )
+            }
+        }
     }
 }
 

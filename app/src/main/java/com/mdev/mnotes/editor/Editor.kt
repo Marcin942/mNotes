@@ -19,6 +19,7 @@ import com.mdev.mnotes.core.model.PageSpace
 import com.mdev.mnotes.core.model.PageSpec
 import com.mdev.mnotes.core.model.PenKind
 import com.mdev.mnotes.core.pen.ActivePen
+import com.mdev.mnotes.core.pen.LineStyle
 import com.mdev.mnotes.core.pen.PenKit
 import com.mdev.mnotes.core.model.Stroke
 import com.mdev.mnotes.core.model.Template
@@ -251,6 +252,8 @@ class Editor(val ctx: Context, val nbId: String) {
     }
 
     fun setSelWidth(w: Float) = replaceSel { e -> if (e is Stroke) e.withStyle(width = w) else e }
+
+    fun setSelLine(line: LineStyle) = replaceSel { e -> if (e is Stroke) e.withStyle(line = line) else e }
 
     fun setSelAlpha(a: Float) = replaceSel { e -> if (e is ImageEl) e.copy(alpha = a) else e }
 
@@ -512,7 +515,7 @@ class Editor(val ctx: Context, val nbId: String) {
         if (e.locked) return null
         val hl = p.kind == PenKind.HIGHLIGHTER
         return when (e) {
-            is Stroke -> if (e.pen == p.kind && e.color == p.color && e.width == p.width) null else e.withStyle(p.color, p.width, p.kind)
+            is Stroke -> if (e.pen == p.kind && e.color == p.color && e.width == p.width && e.line == p.style) null else e.withStyle(p.color, p.width, p.kind, p.style)
             is FillEl -> if (e.color == p.color && e.hl == hl) null else e.copy(color = p.color, hl = hl)
             is TextBox -> if (hl || e.color == p.color) null else e.copy(color = p.color)
             else -> null

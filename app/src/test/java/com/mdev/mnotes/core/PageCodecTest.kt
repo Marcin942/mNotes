@@ -10,6 +10,7 @@ import com.mdev.mnotes.core.model.PageContent
 import com.mdev.mnotes.core.model.PenKind
 import com.mdev.mnotes.core.model.Stroke
 import com.mdev.mnotes.core.model.TextBox
+import com.mdev.mnotes.core.pen.LineStyle
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -121,6 +122,22 @@ class PageCodecTest {
         val back = PageCodec.decode(PageCodec.encode(c)).elements.map { it as Stroke }
         assertTrue(back[0].poly && back[0].locked && back[0].closed)
         assertTrue(!back[1].poly && !back[1].locked)
+    }
+
+    @Test
+    fun lineStyleRoundTrips() {
+        val pts = floatArrayOf(0f, 0f, 1f, 10f, 0f, 1f, 10f, 10f, 1f, 0f, 0f, 1f)
+        val c = PageContent.of(listOf(
+            Stroke(Ids.next(), PenKind.BALLPOINT, 0xFF112233.toInt(), 2f, pts, locked = true, poly = true, line = LineStyle.DASHED),
+            Stroke(Ids.next(), PenKind.HIGHLIGHTER, 0x66FFEE00, 12f, pts, line = LineStyle.DOTTED),
+            Stroke(Ids.next(), PenKind.PENCIL, 0xFF112233.toInt(), 2f, pts, ellipse = true),
+        ))
+        val back = PageCodec.decode(PageCodec.encode(c)).elements.map { it as Stroke }
+        assertEquals(listOf(LineStyle.DASHED, LineStyle.DOTTED, LineStyle.SOLID), back.map { it.line })
+        // Styl nie zjada sąsiednich flag kreski.
+        assertTrue(back[0].poly && back[0].locked && !back[0].ellipse)
+        assertTrue(!back[1].poly && !back[1].locked)
+        assertTrue(back[2].ellipse)
     }
 
     @Test

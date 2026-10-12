@@ -498,7 +498,7 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
             c.save()
             c.translate(layout.left(livePage), layout.top(livePage))
             c.clipRect(0f, 0f, spec.w, spec.h)
-            if (shapeSnapped) renderer.drawStrokeData(c, builder.penKind, builder.penColor, builder.width, shapePts, shapePts.size / 3, zoom, spec.darkPaper, shapePoly)
+            if (shapeSnapped) renderer.drawStrokeData(c, builder.penKind, builder.penColor, builder.width, shapePts, shapePts.size / 3, zoom, spec.darkPaper, shapePoly, builder.line, true)
             else {
                 val n = builder.count
                 var total = n
@@ -514,8 +514,8 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
                         scratch[3 * (n + k) + 2] = pl
                     }
                     total = n + predN
-                    renderer.drawStrokeData(c, builder.penKind, builder.penColor, builder.width, scratch, total, zoom, spec.darkPaper)
-                } else renderer.drawStrokeData(c, builder.penKind, builder.penColor, builder.width, builder.pts, total, zoom, spec.darkPaper)
+                    renderer.drawStrokeData(c, builder.penKind, builder.penColor, builder.width, scratch, total, zoom, spec.darkPaper, line = builder.line)
+                } else renderer.drawStrokeData(c, builder.penKind, builder.penColor, builder.width, builder.pts, total, zoom, spec.darkPaper, line = builder.line)
             }
             c.restore()
         }
@@ -1498,7 +1498,7 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
         livePage = pi
         val p = ed.pen
         val sp = PenSpec.of(p.kind)
-        builder.begin(p.kind, p.color, p.width, (sp.smoothing * settings.smoothing).coerceIn(0f, 1f), (0.5f / zoom).coerceIn(0.05f, 0.9f))
+        builder.begin(p.kind, p.color, p.width, (sp.smoothing * settings.smoothing).coerceIn(0f, 1f), (0.5f / zoom).coerceIn(0.05f, 0.9f), p.style)
         liveActive = true; shapeSnapped = false; predN = 0
         holdX = curX; holdY = curY; holdRaw = 0
         if (ed.sel != null) ed.clearSel()
@@ -1633,7 +1633,7 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
         liveActive = false; rulerSide = 0
         val pi = livePage
         val snapped = shapeSnapped
-        val stroke = if (cancel) null else if (snapped) Stroke(Ids.next(), builder.penKind, builder.penColor, builder.width, shapePts.copyOf(), false, shapePoly, shapeKind == ShapeKind.ELLIPSE) else builder.finish(Ids.next())
+        val stroke = if (cancel) null else if (snapped) Stroke(Ids.next(), builder.penKind, builder.penColor, builder.width, shapePts.copyOf(), false, shapePoly, shapeKind == ShapeKind.ELLIPSE, builder.line) else builder.finish(Ids.next())
         shapeSnapped = false; shapeLabel = null
         if (stroke == null || pi !in doc.pages.indices) return
         val page = doc.pages[pi]
@@ -1907,8 +1907,8 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
         renderer.drawPaper(c, spec, z, cache.backdrop(page))
         renderer.drawElements(c, doc.id, doc.content(page), 0, Bounds(zw.x, zw.y, zw.x + rw, zw.y + rh), z, false, spec.darkPaper)
         if (liveActive && livePage == zwPage) {
-            if (shapeSnapped) renderer.drawStrokeData(c, builder.penKind, builder.penColor, builder.width, shapePts, shapePts.size / 3, z, spec.darkPaper, shapePoly)
-            else renderer.drawStrokeData(c, builder.penKind, builder.penColor, builder.width, builder.pts, builder.count, z, spec.darkPaper)
+            if (shapeSnapped) renderer.drawStrokeData(c, builder.penKind, builder.penColor, builder.width, shapePts, shapePts.size / 3, z, spec.darkPaper, shapePoly, builder.line, true)
+            else renderer.drawStrokeData(c, builder.penKind, builder.penColor, builder.width, builder.pts, builder.count, z, spec.darkPaper, line = builder.line)
         }
         c.restore()
 
@@ -1983,7 +1983,7 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
                 if (e is Stroke) {
                     val pieces = EraseMath.erasePartial(e, px, py, r)
                     if (pieces == null) out.add(e)
-                    else { changed = true; for (pc in pieces) out.add(Stroke(Ids.next(), e.pen, e.color, e.width, pc, false)) }
+                    else { changed = true; for (pc in pieces) out.add(Stroke(Ids.next(), e.pen, e.color, e.width, pc, false, line = e.line)) }
                 } else out.add(e)
             } else if (EraseMath.hitsElement(e, px, py, r)) changed = true else out.add(e)
         }

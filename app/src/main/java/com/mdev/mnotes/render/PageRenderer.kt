@@ -27,7 +27,9 @@ import com.mdev.mnotes.core.model.TemplateGeom
 import com.mdev.mnotes.core.model.TemplateGeometry
 import com.mdev.mnotes.core.model.TapeEl
 import com.mdev.mnotes.core.model.TextBox
+import com.mdev.mnotes.core.pen.LineStyle
 import com.mdev.mnotes.core.pen.PenSpec
+import com.mdev.mnotes.core.pen.StrokeDash
 import com.mdev.mnotes.core.pen.StrokeOutline
 import kotlin.math.max
 
@@ -41,6 +43,7 @@ class PageRenderer(private val assets: Assets?) {
     private val path = Path()
     private val fl = FloatList()
     private val sm = FloatList()
+    private val dash = StrokeDash.Pieces()
     private val rect = RectF()
     private val multiply = PorterDuffXfermode(PorterDuff.Mode.MULTIPLY)
     private val screen = PorterDuffXfermode(PorterDuff.Mode.SCREEN)
@@ -96,7 +99,7 @@ class PageRenderer(private val assets: Assets?) {
 
     fun drawElement(c: Canvas, nb: String, e: Element, scale: Float, decodeImages: Boolean, dark: Boolean = false) {
         when (e) {
-            is Stroke -> drawStrokeData(c, e.pen, e.color, e.width, e.pts, e.count, scale, dark, e.poly)
+            is Stroke -> drawStrokeData(c, e.pen, e.color, e.width, e.pts, e.count, scale, dark, e.poly, e.line, e.poly || e.ellipse)
             is TextBox -> drawText(c, e)
             is ImageEl -> drawImage(c, nb, e, decodeImages)
             is TapeEl -> drawTape(c, e)
@@ -171,8 +174,13 @@ class PageRenderer(private val assets: Assets?) {
     /**
      * Kreska z surowych danych (trójki x,y,p) — używana też do podglądu na żywo. [dark] = ciemny papier.
      * [sharp] = łamana z rozpoznanego kształtu: wierzchołki są rogami, więc rysujemy odcinki, a nie krzywą przez środki krawędzi.
+     * [line] = styl linii, [fit] = kształt, któremu wzór dopasowuje się do długości (patrz [StrokeDash]). Kawałki linii
+     * przerywanej idą jedną ścieżką, żeby półprzezroczyste pióro nie ciemniało tam, gdzie kreska przecina samą siebie.
      */
-    fun drawStrokeData(c: Canvas, pen: PenKind, color: Int, width: Float, pts: FloatArray, n: Int, scale: Float, dark: Boolean = false, sharp: Boolean = false) {
+    fun drawStrokeData(
+        c: Canvas, pen: PenKind, color: Int, width: Float, pts: FloatArray, n: Int, scale: Float, dark: Boolean = false, sharp: Boolean = false,
+        line: LineStyle = LineStyle.SOLID, fit: Boolean = false,
+    ) {
         if (n <= 0) return
         val spec = PenSpec.of(pen)
         paint.reset(); paint.isAntiAlias = true
@@ -184,7 +192,9 @@ class PageRenderer(private val assets: Assets?) {
             if (a < 255) paint.alpha = a
         }
         val minW = 0.9f / scale
-        if (n == 1 || StrokeOutline.isConstant(pts, n)) {
+        val constant = n == 1 || StrokeOutline.isConstant(pts, n)
+        path.rewind()
+        if (constant) {
             var avg = 0f
             for (i in 0 until n) avg += pts[3 * i + 2]
             val w = max(width * (avg / n), minW)
@@ -197,32 +207,48 @@ class PageRenderer(private val assets: Assets?) {
             paint.strokeWidth = w
             paint.strokeCap = Paint.Cap.ROUND
             paint.strokeJoin = Paint.Join.ROUND
-            path.rewind()
-            path.moveTo(pts[0], pts[1])
-            if (n == 2) path.lineTo(pts[3], pts[4])
-            else if (sharp) for (i in 1 until n) path.lineTo(pts[3 * i], pts[3 * i + 1])
-            else {
-                for (i in 1 until n - 1) {
-                    val x0 = pts[3 * i]; val y0 = pts[3 * i + 1]
-                    val x1 = pts[3 * i + 3]; val y1 = pts[3 * i + 4]
-                    path.quadTo(x0, y0, (x0 + x1) * 0.5f, (y0 + y1) * 0.5f)
-                }
-                path.lineTo(pts[3 * n - 3], pts[3 * n - 2])
-            }
-            c.drawPath(path, paint)
         } else {
-            StrokeOutline.build(pts, n, width, fl)
-            StrokeOutline.smooth(fl, sm)
-            if (sm.size < 6) return
             paint.style = Paint.Style.FILL
-            path.rewind()
             path.fillType = Path.FillType.WINDING
-            path.moveTo(sm.a[0], sm.a[1])
-            var i = 2
-            while (i + 3 < sm.size) { path.quadTo(sm.a[i], sm.a[i + 1], sm.a[i + 2], sm.a[i + 3]); i += 4 }
-            path.close()
-            c.drawPath(path, paint)
         }
+        if (line == LineStyle.SOLID) {
+            if (constant) addLine(pts, 0, n, sharp) else addOutline(pts, 0, n, width)
+        } else {
+            StrokeDash.cut(pts, n, width, line, sharp, fit, dash)
+            val a = dash.pts.a
+            for (i in 0 until dash.count) {
+                if (constant) addLine(a, 3 * dash.start(i), dash.size(i), sharp) else addOutline(a, 3 * dash.start(i), dash.size(i), width)
+            }
+        }
+        c.drawPath(path, paint)
+    }
+
+    /** Dopisuje do ścieżki oś kreski o stałej grubości: [n] punktów od indeksu [o] w tablicy trójek. */
+    private fun addLine(a: FloatArray, o: Int, n: Int, sharp: Boolean) {
+        path.moveTo(a[o], a[o + 1])
+        // Kropka linii kropkowanej: odcinek zerowej długości nie dostałby okrągłych końców.
+        if (n == 1) path.lineTo(a[o] + 0.01f, a[o + 1])
+        else if (n == 2) path.lineTo(a[o + 3], a[o + 4])
+        else if (sharp) for (i in 1 until n) path.lineTo(a[o + 3 * i], a[o + 3 * i + 1])
+        else {
+            for (i in 1 until n - 1) {
+                val x0 = a[o + 3 * i]; val y0 = a[o + 3 * i + 1]
+                val x1 = a[o + 3 * i + 3]; val y1 = a[o + 3 * i + 4]
+                path.quadTo(x0, y0, (x0 + x1) * 0.5f, (y0 + y1) * 0.5f)
+            }
+            path.lineTo(a[o + 3 * n - 3], a[o + 3 * n - 2])
+        }
+    }
+
+    /** Dopisuje do ścieżki zamknięty kontur kreski o zmiennej grubości. */
+    private fun addOutline(a: FloatArray, o: Int, n: Int, width: Float) {
+        StrokeOutline.build(a, n, width, fl, o)
+        StrokeOutline.smooth(fl, sm)
+        if (sm.size < 6) return
+        path.moveTo(sm.a[0], sm.a[1])
+        var i = 2
+        while (i + 3 < sm.size) { path.quadTo(sm.a[i], sm.a[i + 1], sm.a[i + 2], sm.a[i + 3]); i += 4 }
+        path.close()
     }
 
     private val textPaint = TextPaint(Paint.ANTI_ALIAS_FLAG)

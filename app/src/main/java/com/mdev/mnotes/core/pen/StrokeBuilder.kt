@@ -20,6 +20,8 @@ class StrokeBuilder {
     private var color = 0xFF000000.toInt()
     var width = 1.42f
         private set
+    var line = LineStyle.SOLID
+        private set
     private var k = 1f
     private var minDist = 0.2f
     private var lastT = 0L
@@ -42,8 +44,9 @@ class StrokeBuilder {
     val penSpec: PenSpec get() = spec
 
     /** [smoothing] 0..1; [minDistPt] odrzuca próbki bliższe niż tyle pt od poprzedniej. */
-    fun begin(kind: PenKind, color: Int, width: Float, smoothing: Float, minDistPt: Float = 0.2f) {
+    fun begin(kind: PenKind, color: Int, width: Float, smoothing: Float, minDistPt: Float = 0.2f, line: LineStyle = LineStyle.SOLID) {
         this.kind = kind
+        this.line = line
         this.spec = PenSpec.of(kind)
         this.color = color
         this.width = width
@@ -104,10 +107,10 @@ class StrokeBuilder {
         if (count == 1) {
             // Kropka: dwa punkty w tym samym miejscu dają okrągłą kropkę dzięki zaokrąglonym końcom.
             val x = pts[0]; val y = pts[1]; val p = maxOf(pts[2], 0.6f)
-            return Stroke(id, kind, color, width, floatArrayOf(x, y, p, x + 0.01f, y, p))
+            return Stroke(id, kind, color, width, floatArrayOf(x, y, p, x + 0.01f, y, p), line = line)
         }
         applyTaper()
-        return Stroke(id, kind, color, width, pts.copyOf(3 * count))
+        return Stroke(id, kind, color, width, pts.copyOf(3 * count), line = line)
     }
 
     private fun applyTaper() {

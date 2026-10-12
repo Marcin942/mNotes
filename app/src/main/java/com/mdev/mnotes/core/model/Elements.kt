@@ -2,6 +2,7 @@ package com.mdev.mnotes.core.model
 
 import com.mdev.mnotes.core.geom.Affine
 import com.mdev.mnotes.core.geom.Bounds
+import com.mdev.mnotes.core.pen.LineStyle
 import java.util.concurrent.atomic.AtomicInteger
 import kotlin.math.abs
 import kotlin.math.atan2
@@ -66,6 +67,8 @@ class Stroke(
      * proporcje do zmiany szerokości i wysokości, a uchwyty ramki (NoteView) rozciągają go niezależnie po osiach.
      */
     val ellipse: Boolean = false,
+    /** Linia ciągła, przerywana albo kropkowana; wzór liczy się przy rysowaniu ([StrokeDash]), punkty są te same. */
+    val line: LineStyle = LineStyle.SOLID,
 ) : Element() {
 
     val count: Int get() = pts.size / 3
@@ -80,7 +83,7 @@ class Stroke(
         val out = pts.copyOf()
         out[3 * i] = x; out[3 * i + 1] = y
         if (closed && i == 0) { out[3 * count - 3] = x; out[3 * count - 2] = y }
-        return Stroke(id, pen, color, width, out, locked, poly, ellipse)
+        return Stroke(id, pen, color, width, out, locked, poly, ellipse, line)
     }
 
     override val bounds: Bounds = run {
@@ -101,11 +104,11 @@ class Stroke(
     /** Zakreślacz leży we własnej warstwie i miesza się z papierem mnożeniem (patrz renderer). */
     val multiply: Boolean get() = pen == PenKind.HIGHLIGHTER
 
-    override fun withId(newId: Int): Stroke = Stroke(newId, pen, color, width, pts, locked, poly, ellipse)
-    override fun withLocked(value: Boolean): Stroke = Stroke(id, pen, color, width, pts, value, poly, ellipse)
+    override fun withId(newId: Int): Stroke = Stroke(newId, pen, color, width, pts, locked, poly, ellipse, line)
+    override fun withLocked(value: Boolean): Stroke = Stroke(id, pen, color, width, pts, value, poly, ellipse, line)
 
-    fun withStyle(color: Int = this.color, width: Float = this.width, pen: PenKind = this.pen): Stroke =
-        Stroke(id, pen, color, width, pts, locked, poly, ellipse)
+    fun withStyle(color: Int = this.color, width: Float = this.width, pen: PenKind = this.pen, line: LineStyle = this.line): Stroke =
+        Stroke(id, pen, color, width, pts, locked, poly, ellipse, line)
 
     override fun transformed(m: Affine): Stroke {
         val out = FloatArray(pts.size)
@@ -117,7 +120,7 @@ class Stroke(
             out[i + 2] = pts[i + 2]
             i += 3
         }
-        return Stroke(id, pen, color, width * m.scaleFactor, out, locked, poly, ellipse)
+        return Stroke(id, pen, color, width * m.scaleFactor, out, locked, poly, ellipse, line)
     }
 }
 

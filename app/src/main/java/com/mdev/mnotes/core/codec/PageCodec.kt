@@ -9,6 +9,7 @@ import com.mdev.mnotes.core.model.PenKind
 import com.mdev.mnotes.core.model.Stroke
 import com.mdev.mnotes.core.model.TapeEl
 import com.mdev.mnotes.core.model.TextBox
+import com.mdev.mnotes.core.pen.LineStyle
 import java.io.ByteArrayOutputStream
 import java.util.zip.CRC32
 import java.util.zip.DataFormatException
@@ -44,6 +45,10 @@ object PageCodec {
     private const val FLAG_POLY = 2
     private const val FLAG_LOCKED = 4
     private const val FLAG_ELLIPSE = 8
+
+    /** Styl linii kreski; starsze wersje ignorują te bity i rysują linię ciągłą. */
+    private const val FLAG_DASHED = 16
+    private const val FLAG_DOTTED = 32
     private const val Q = 100f
 
     fun encode(content: PageContent): ByteArray {
@@ -128,7 +133,8 @@ object PageCodec {
     private fun writeStroke(w: ByteWriter, s: Stroke) {
         w.u8(s.pen.code)
         w.i32(s.color)
-        w.varint((if (s.locked) FLAG_LOCKED else 0) or (if (s.poly) FLAG_POLY else 0) or (if (s.ellipse) FLAG_ELLIPSE else 0))
+        val line = when (s.line) { LineStyle.DASHED -> FLAG_DASHED; LineStyle.DOTTED -> FLAG_DOTTED; LineStyle.SOLID -> 0 }
+        w.varint((if (s.locked) FLAG_LOCKED else 0) or (if (s.poly) FLAG_POLY else 0) or (if (s.ellipse) FLAG_ELLIPSE else 0) or line)
         w.varint((s.width * Q).roundToInt().coerceAtLeast(1))
         val n = s.count
         w.varint(n)
@@ -160,7 +166,8 @@ object PageCodec {
             pts[3 * i + 1] = y / Q
             pts[3 * i + 2] = r.u8() / 255f
         }
-        return Stroke(Ids.next(), pen, color, width, pts, flags and FLAG_LOCKED != 0, flags and FLAG_POLY != 0, flags and FLAG_ELLIPSE != 0)
+        val line = if (flags and FLAG_DASHED != 0) LineStyle.DASHED else if (flags and FLAG_DOTTED != 0) LineStyle.DOTTED else LineStyle.SOLID
+        return Stroke(Ids.next(), pen, color, width, pts, flags and FLAG_LOCKED != 0, flags and FLAG_POLY != 0, flags and FLAG_ELLIPSE != 0, line)
     }
 
     private fun writeText(w: ByteWriter, t: TextBox) {

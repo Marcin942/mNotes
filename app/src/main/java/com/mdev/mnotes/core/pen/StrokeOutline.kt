@@ -21,19 +21,20 @@ object StrokeOutline {
         return true
     }
 
-    fun build(pts: FloatArray, n: Int, width: Float, out: FloatList) {
+    /** [off] = indeks pierwszej liczby kreski w [pts] (kawałek linii przerywanej leży w środku wspólnej tablicy). */
+    fun build(pts: FloatArray, n: Int, width: Float, out: FloatList, off: Int = 0) {
         out.clear()
         if (n <= 0) return
         // Odfiltrowanie powtórzonych punktów (zerowa długość psuje styczne).
         val xs = FloatArray(n); val ys = FloatArray(n); val hs = FloatArray(n)
         var m = 0
         for (i in 0 until n) {
-            val x = pts[3 * i]; val y = pts[3 * i + 1]
+            val x = pts[off + 3 * i]; val y = pts[off + 3 * i + 1]
             if (m > 0 && hypot(x - xs[m - 1], y - ys[m - 1]) < 1e-3f) {
-                hs[m - 1] = maxOf(hs[m - 1], pts[3 * i + 2] * width * 0.5f)
+                hs[m - 1] = maxOf(hs[m - 1], pts[off + 3 * i + 2] * width * 0.5f)
                 continue
             }
-            xs[m] = x; ys[m] = y; hs[m] = pts[3 * i + 2] * width * 0.5f
+            xs[m] = x; ys[m] = y; hs[m] = pts[off + 3 * i + 2] * width * 0.5f
             m++
         }
         if (m == 1) { circle(xs[0], ys[0], hs[0], out); return }

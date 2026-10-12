@@ -17,7 +17,9 @@ import com.mdev.mnotes.core.model.TapeEl
 import com.mdev.mnotes.core.model.TextBox
 import com.mdev.mnotes.core.codec.PageCodec
 import com.mdev.mnotes.core.geom.FloatList
+import com.mdev.mnotes.core.pen.LineStyle
 import com.mdev.mnotes.core.pen.PenSpec
+import com.mdev.mnotes.core.pen.StrokeDash
 import com.mdev.mnotes.core.pen.StrokeOutline
 import com.mdev.mnotes.editor.T
 import com.mdev.mnotes.render.Assets
@@ -207,32 +209,55 @@ class Exporter(private val repo: Repository, private val assets: Assets, private
         val hl = s.pen == PenKind.HIGHLIGHTER
         val alpha = PenSpec.of(s.pen).alpha * (if (hl && dark) 0.84f else 1f)
         val common = (if (alpha < 0.999f) " opacity=\"${f(alpha)}\"" else "") + (if (hl) " style=\"mix-blend-mode:${if (dark) "screen" else "multiply"}\"" else "")
-        if (n == 1 || StrokeOutline.isConstant(pts, n)) {
+        val constant = n == 1 || StrokeOutline.isConstant(pts, n)
+        val mark = sb.length
+        if (constant) {
             var avg = 0f
             for (i in 0 until n) avg += pts[3 * i + 2]
             val w = max(s.width * (avg / n), 0.3f)
             if (n == 1) { sb.append("<circle cx=\"${f(pts[0])}\" cy=\"${f(pts[1])}\" r=\"${f(w / 2)}\" fill=\"${hex(s.color)}\"$common/>\n"); return }
-            sb.append("<path fill=\"none\" stroke=\"${hex(s.color)}\" stroke-width=\"${f(w)}\" stroke-linecap=\"round\" stroke-linejoin=\"round\"$common d=\"M${f(pts[0])} ${f(pts[1])}")
-            if (n == 2) sb.append("L${f(pts[3])} ${f(pts[4])}")
-            else if (s.poly) for (i in 1 until n) sb.append("L${f(pts[3 * i])} ${f(pts[3 * i + 1])}")
-            else {
-                for (i in 1 until n - 1) {
-                    val x0 = pts[3 * i]; val y0 = pts[3 * i + 1]; val x1 = pts[3 * i + 3]; val y1 = pts[3 * i + 4]
-                    sb.append("Q${f(x0)} ${f(y0)} ${f((x0 + x1) / 2)} ${f((y0 + y1) / 2)}")
-                }
-                sb.append("L${f(pts[3 * n - 3])} ${f(pts[3 * n - 2])}")
-            }
-            sb.append("\"/>\n")
+            sb.append("<path fill=\"none\" stroke=\"${hex(s.color)}\" stroke-width=\"${f(w)}\" stroke-linecap=\"round\" stroke-linejoin=\"round\"$common d=\"")
+        } else sb.append("<path fill=\"${hex(s.color)}\"$common d=\"")
+        val data = sb.length
+        // Linia przerywana to jedna ścieżka z wielu kawałków, tak jak na ekranie.
+        if (s.line == LineStyle.SOLID) {
+            if (constant) svgLine(sb, pts, 0, n, s.poly) else svgOutline(sb, pts, 0, n, s.width, fl)
         } else {
-            StrokeOutline.build(pts, n, s.width, fl)
-            val sm = FloatList()
-            StrokeOutline.smooth(fl, sm)
-            if (sm.size < 6) return
-            sb.append("<path fill=\"${hex(s.color)}\"$common d=\"M${f(sm.a[0])} ${f(sm.a[1])}")
-            var i = 2
-            while (i + 3 < sm.size) { sb.append("Q${f(sm.a[i])} ${f(sm.a[i + 1])} ${f(sm.a[i + 2])} ${f(sm.a[i + 3])}"); i += 4 }
-            sb.append("Z\"/>\n")
+            val d = StrokeDash.Pieces()
+            StrokeDash.cut(pts, n, s.width, s.line, s.poly, s.poly || s.ellipse, d)
+            for (i in 0 until d.count) {
+                if (constant) svgLine(sb, d.pts.a, 3 * d.start(i), d.size(i), s.poly) else svgOutline(sb, d.pts.a, 3 * d.start(i), d.size(i), s.width, fl)
+            }
         }
+        if (sb.length == data) sb.setLength(mark) else sb.append("\"/>\n")
+    }
+
+    /** Oś kreski o stałej grubości: [n] punktów od indeksu [o] w tablicy trójek. */
+    private fun svgLine(sb: StringBuilder, a: FloatArray, o: Int, n: Int, sharp: Boolean) {
+        sb.append("M${f(a[o])} ${f(a[o + 1])}")
+        // Kropka: odcinek zerowej długości z okrągłymi końcami.
+        if (n == 1) sb.append("h0.01")
+        else if (n == 2) sb.append("L${f(a[o + 3])} ${f(a[o + 4])}")
+        else if (sharp) for (i in 1 until n) sb.append("L${f(a[o + 3 * i])} ${f(a[o + 3 * i + 1])}")
+        else {
+            for (i in 1 until n - 1) {
+                val x0 = a[o + 3 * i]; val y0 = a[o + 3 * i + 1]; val x1 = a[o + 3 * i + 3]; val y1 = a[o + 3 * i + 4]
+                sb.append("Q${f(x0)} ${f(y0)} ${f((x0 + x1) / 2)} ${f((y0 + y1) / 2)}")
+            }
+            sb.append("L${f(a[o + 3 * n - 3])} ${f(a[o + 3 * n - 2])}")
+        }
+    }
+
+    /** Zamknięty kontur kreski o zmiennej grubości. */
+    private fun svgOutline(sb: StringBuilder, a: FloatArray, o: Int, n: Int, width: Float, fl: FloatList) {
+        StrokeOutline.build(a, n, width, fl, o)
+        val sm = FloatList()
+        StrokeOutline.smooth(fl, sm)
+        if (sm.size < 6) return
+        sb.append("M${f(sm.a[0])} ${f(sm.a[1])}")
+        var i = 2
+        while (i + 3 < sm.size) { sb.append("Q${f(sm.a[i])} ${f(sm.a[i + 1])} ${f(sm.a[i + 2])} ${f(sm.a[i + 3])}"); i += 4 }
+        sb.append("Z")
     }
 
     private fun svgText(sb: StringBuilder, t: TextBox) {

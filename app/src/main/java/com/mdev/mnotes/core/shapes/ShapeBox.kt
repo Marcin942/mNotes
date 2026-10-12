@@ -150,6 +150,6 @@ object ShapeBox {
         }
         // Zamknięta figura zostaje zamknięta co do bitu (bez zaokrągleń w jednym punkcie).
         if (n > 1 && s.pts[0] == s.pts[3 * n - 3] && s.pts[1] == s.pts[3 * n - 2]) { out[3 * n - 3] = out[0]; out[3 * n - 2] = out[1] }
-        return Stroke(s.id, s.pen, s.color, s.width, out, s.locked, s.poly, s.ellipse)
+        return Stroke(s.id, s.pen, s.color, s.width, out, s.locked, s.poly, s.ellipse, s.line)
     }
 }

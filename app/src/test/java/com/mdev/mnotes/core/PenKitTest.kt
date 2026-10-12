@@ -192,6 +192,137 @@ class PenKitTest {
         assertEquals(old[9].width, k.current.width, 0f)
     }
 
+    @Test fun ownSetStartsFromFactoryColoursOrACopy() {
+        val k = kit.addSet("  Do rysunków  ", hl = false)
+        val s = k.sets.last()
+        assertEquals("u1", s.id)
+        assertEquals("Do rysunków", s.name)
+        assertFalse(s.hl)
+        assertEquals(kit.set(PenKit.SET_INK)!!.colors, s.colors)
+        // Kopia bierze barwy, liczbę widocznych i typ ze źródła, nawet gdy poproszono o inny typ.
+        val c = k.withVisible(PenKit.SET_HL, 3).addSet("Pastele", hl = false, from = PenKit.SET_HL).sets.last()
+        assertEquals("u2", c.id)
+        assertTrue(c.hl)
+        assertEquals(3, c.visible)
+        // Zwolnione id wraca do użycia, a zajętego się nie dubluje.
+        assertEquals("u1", k.addSet("B", false).removeSet("u1").addSet("C", false).sets.last().id)
+        assertEquals(PenKit.MAX_NAME, kit.addSet("x".repeat(100), false).sets.last().name.length)
+    }
+
+    @Test fun setCountIsLimited() {
+        var k = kit
+        repeat(20) { k = k.addSet("Z$it", false) }
+        assertEquals(PenKit.MAX_SETS, k.sets.size)
+        assertEquals(k.sets.size, k.sets.map { it.id }.distinct().size)
+        assertEquals(k, PenKit.fromJson(k.toJson()))
+    }
+
+    @Test fun removingOwnSetSendsToolsHomeWithTheirColour() {
+        val k = kit.addSet("Moje", hl = true).withSet(PenKind.BALLPOINT, "u1").withSet(PenKind.HIGHLIGHTER, "u1").withColor(PenKind.BALLPOINT, yellow)
+        assertEquals(listOf(PenKind.BALLPOINT, PenKind.HIGHLIGHTER), k.users("u1"))
+        val before = k.pen(PenKind.BALLPOINT).color
+        val r = k.removeSet("u1")
+        assertNull(r.set("u1"))
+        assertEquals(PenKit.SET_INK, r.slot(PenKind.BALLPOINT).setId)
+        assertEquals(PenKit.SET_HL, r.slot(PenKind.HIGHLIGHTER).setId)
+        // Długopis pisał barwą zakreślacza widzianą na papierze i pisze nią dalej, już jako kolorem spoza listy.
+        assertEquals(before, r.pen(PenKind.BALLPOINT).color)
+        assertTrue(before in r.strip(PenKind.BALLPOINT))
+        assertEquals(k.pen(PenKind.HIGHLIGHTER).color, r.pen(PenKind.HIGHLIGHTER).color)
+        assertEquals(r, PenKit.fromJson(r.toJson()))
+    }
+
+    @Test fun builtInSetsCannotBeRemovedButCanBeReset() {
+        assertEquals(kit, kit.removeSet(PenKit.SET_INK))
+        assertEquals(kit, kit.removeSet("nie ma"))
+        val k = kit.renameSet(PenKit.SET_INK, "Biuro").addColor(PenKit.SET_INK, custom).withVisible(PenKit.SET_INK, 2).withColor(PenKind.BALLPOINT, custom)
+        assertEquals("Biuro", k.set(PenKit.SET_INK)!!.name)
+        assertTrue(k.changed(PenKit.SET_INK))
+        assertFalse(kit.renameSet(PenKit.SET_INK, "Biuro").changed(PenKit.SET_INK))
+        val r = k.resetSet(PenKit.SET_INK)
+        // Reset dotyczy barw; nazwa, którą użytkownik nadał zestawowi, zostaje.
+        assertEquals(PenKit.factory(PenKit.SET_INK)!!.copy(name = "Biuro"), r.set(PenKit.SET_INK))
+        assertFalse(r.changed(PenKit.SET_INK))
+        // Wybrany kolor nie znika razem z zestawem: zostaje na listwie jako dodatkowy.
+        assertEquals(custom, r.pen(PenKind.BALLPOINT).color)
+        assertTrue(custom in r.strip(PenKind.BALLPOINT))
+        val own = kit.addSet("Moje", false)
+        assertEquals(own, own.resetSet("u1"))
+        assertFalse(own.changed("u1"))
+        assertTrue(PenKit.builtIn(PenKit.SET_HL))
+        assertFalse(PenKit.builtIn("u1"))
+        assertEquals("", k.renameSet(PenKit.SET_INK, " ").set(PenKit.SET_INK)!!.name)
+    }
+
+    @Test fun coloursTravelBetweenSets() {
+        // Ten sam typ: barwa bez zmian; do zakreślaczy ciemna barwa jest rozjaśniana, z zakreślaczy wychodzi to, co widać na papierze.
+        assertTrue(navy in kit.copyColor(PenKit.SET_INK, navy, PenKit.SET_BRUSH).set(PenKit.SET_BRUSH)!!.colors)
+        val toHl = kit.copyColor(PenKit.SET_INK, black, PenKit.SET_HL)
+        assertTrue(InkColor.soften(black) in toHl.set(PenKit.SET_HL)!!.colors.take(toHl.set(PenKit.SET_HL)!!.visible))
+        assertTrue(black in toHl.set(PenKit.SET_INK)!!.colors)
+        val toInk = kit.copyColor(PenKit.SET_HL, yellow, PenKit.SET_INK)
+        assertTrue(InkColor.look(yellow) in toInk.set(PenKit.SET_INK)!!.colors)
+        assertEquals(kit, kit.copyColor(PenKit.SET_INK, black, "nie ma"))
+
+        val moved = kit.moveColorTo(PenKit.SET_INK, navy, PenKit.SET_BRUSH)
+        assertFalse(navy in moved.set(PenKit.SET_INK)!!.colors)
+        assertTrue(navy in moved.set(PenKit.SET_BRUSH)!!.colors)
+        // Pióro pisało granatem i pisze nim dalej, choć zestaw już go nie ma.
+        assertEquals(navy, moved.pen(PenKind.FOUNTAIN).color)
+        // Barwa, którą cel już ma, po prostu znika ze źródła; przy pełnym celu nic się nie dzieje.
+        val dup = kit.moveColorTo(PenKit.SET_INK, red, PenKit.SET_BRUSH)
+        assertFalse(red in dup.set(PenKit.SET_INK)!!.colors)
+        assertEquals(kit.set(PenKit.SET_BRUSH), dup.set(PenKit.SET_BRUSH))
+        var full = kit
+        for (i in 0 until PenKit.MAX_COLORS) full = full.addColor(PenKit.SET_BRUSH, 0xFF000100.toInt() + i)
+        assertEquals(PenKit.MAX_COLORS, full.set(PenKit.SET_BRUSH)!!.colors.size)
+        assertEquals(full, full.moveColorTo(PenKit.SET_INK, navy, PenKit.SET_BRUSH))
+        assertEquals(kit, kit.moveColorTo(PenKit.SET_INK, navy, PenKit.SET_INK))
+    }
+
+    @Test fun coloursCanBeHiddenFromTheStripAndBroughtBack() {
+        val ink = kit.set(PenKit.SET_INK)!!
+        val hidden = ink.colors[8]
+        val shown = kit.showColor(PenKit.SET_INK, hidden).set(PenKit.SET_INK)!!
+        assertEquals(7, shown.visible)
+        assertEquals(hidden, shown.colors[6])
+        assertEquals(ink.colors.toSet(), shown.colors.toSet())
+        // Widocznej nie trzeba pokazywać, obcej się nie da.
+        assertEquals(kit, kit.showColor(PenKit.SET_INK, black))
+        assertEquals(kit, kit.showColor(PenKit.SET_INK, custom))
+
+        val h = kit.hideColor(PenKit.SET_INK, red).set(PenKit.SET_INK)!!
+        assertEquals(5, h.visible)
+        assertEquals(red, h.colors[5])
+        assertFalse(red in h.colors.take(h.visible))
+        assertEquals(kit, kit.hideColor(PenKit.SET_INK, hidden))
+        assertEquals(kit.withVisible(PenKit.SET_INK, 1), kit.withVisible(PenKit.SET_INK, 1).hideColor(PenKit.SET_INK, black))
+        // Narzędzie, które pisało schowanym kolorem, nadal ma go na listwie.
+        assertTrue(navy in kit.hideColor(PenKit.SET_INK, navy).strip(PenKind.FOUNTAIN))
+
+        // Pełna listwa: pokazany kolor zajmuje ostatnie miejsce, a dotychczasowy ostatni się chowa.
+        var full = kit
+        for (i in 0 until 8) full = full.addColor(PenKit.SET_INK, 0xFF000100.toInt() + i)
+        val fs = full.set(PenKit.SET_INK)!!
+        assertEquals(PenKit.MAX_VISIBLE, fs.visible)
+        val last = fs.colors[PenKit.MAX_VISIBLE - 1]
+        val back = fs.colors.last()
+        val swapped = full.showColor(PenKit.SET_INK, back).set(PenKit.SET_INK)!!
+        assertEquals(PenKit.MAX_VISIBLE, swapped.visible)
+        assertEquals(back, swapped.colors[PenKit.MAX_VISIBLE - 1])
+        assertEquals(last, swapped.colors[PenKit.MAX_VISIBLE])
+    }
+
+    @Test fun savedKitCannotBringTooManySets() {
+        var k = kit
+        repeat(PenKit.MAX_SETS) { k = k.addSet("Z$it", false) }
+        val extra = k.copy(sets = k.sets + k.sets.last().copy(id = "x1") + k.sets.last().copy(id = "x2"))
+        assertEquals(PenKit.MAX_SETS, PenKit.fromJson(extra.toJson())!!.sets.size)
+        // Zestawy fabryczne wracają, nawet gdy zapis ich nie ma.
+        val none = k.copy(sets = k.sets.filter { !PenKit.builtIn(it.id) })
+        assertEquals(PenKit.MAX_SETS, PenKit.fromJson(none.toJson())!!.sets.size)
+    }
+
     @Test fun swatchShowsWhatLandsOnPaper() {
         // Zakreślacz zostawia na papierze ślad jaśniejszy niż jego atrament; pozostałe narzędzia piszą barwą wprost.
         assertEquals(InkColor.look(yellow), InkColor.onPaper(yellow, true, PenKind.HIGHLIGHTER))

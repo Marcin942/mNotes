@@ -36,6 +36,9 @@ object InkColor {
         return (0xFF shl 24) or (up(r) shl 16) or (up(g) shl 8) or up(b)
     }
 
+    /** Barwa przeniesiona między zestawami różnego typu tak, żeby na papierze wyglądała podobnie. */
+    fun between(c: Int, fromHl: Boolean, toHl: Boolean): Int = if (fromHl == toHl) c else if (toHl) soften(c) else look(c)
+
     /** Barwa z zestawu ([setHl]: zestaw zakreślaczy) w postaci, w jakiej użyje jej narzędzie [kind]. */
     fun forPen(c: Int, setHl: Boolean, kind: PenKind): Int = when {
         kind == PenKind.HIGHLIGHTER && !setHl -> soften(c)
@@ -135,6 +138,22 @@ data class PenKit(val sets: List<ColorSet>, val slots: Map<PenKind, PenSlot>, va
         else s.copy(colors = s.colors.toMutableList().also { it.add(to, it.removeAt(from)) })
     }
 
+    /** Wyciąga schowaną barwę na listwę: na jej koniec, a przy pełnej listwie w miejsce ostatniej widocznej. */
+    fun showColor(setId: String, color: Int) = editSet(setId) { s ->
+        if (s.colors.indexOf(color) < s.visible) s
+        else (s.colors - color).let { rest ->
+            if (s.visible < MAX_VISIBLE) s.copy(colors = rest.take(s.visible) + color + rest.drop(s.visible), visible = s.visible + 1)
+            else s.copy(colors = rest.take(s.visible - 1) + color + rest.drop(s.visible - 1))
+        }
+    }
+
+    /** Chowa barwę z listwy: zostaje w zestawie jako pierwsza ze schowanych. Ostatniej widocznej się nie chowa. */
+    fun hideColor(setId: String, color: Int) = editSet(setId) { s ->
+        val i = s.colors.indexOf(color)
+        if (i < 0 || i >= s.visible || s.visible <= 1) s
+        else (s.colors - color).let { rest -> s.copy(colors = rest.take(s.visible - 1) + color + rest.drop(s.visible - 1), visible = s.visible - 1) }
+    }
+
     /** Zmienia barwę w zestawie; narzędzia z tego zestawu, które nią pisały, przechodzą na nową. */
     fun replaceColor(setId: String, old: Int, new: Int): PenKit {
         val c = new or OPAQUE
@@ -145,6 +164,61 @@ data class PenKit(val sets: List<ColorSet>, val slots: Map<PenKind, PenSlot>, va
     }
 
     fun withVisible(setId: String, n: Int) = editSet(setId) { it.copy(visible = n.coerceIn(1, minOf(MAX_VISIBLE, it.colors.size))) }
+
+    /** Narzędzia, które biorą kolory z danego zestawu. */
+    fun users(setId: String): List<PenKind> = PenKind.entries.filter { slot(it).setId == setId }
+
+    /**
+     * Dokłada na koniec własny zestaw: kopię [from] (z jego typem) albo fabryczne barwy dla typu [hl]. Typ zostaje
+     * na stałe, bo te same liczby znaczą co innego jako atrament i jako zakreślacz.
+     */
+    fun addSet(name: String, hl: Boolean, from: String? = null): PenKit {
+        if (sets.size >= MAX_SETS) return this
+        val src = from?.let { set(it) } ?: DEFAULT_SETS.first { it.id == if (hl) SET_HL else SET_INK }
+        var n = 1
+        while (sets.any { it.id == "u$n" }) n++
+        return copy(sets = sets + src.copy(id = "u$n", name = name.trim().take(MAX_NAME)))
+    }
+
+    /** Pusta nazwa przywraca wbudowanemu zestawowi jego nazwę z tłumaczeń. */
+    fun renameSet(id: String, name: String) = editSet(id) { it.copy(name = name.trim().take(MAX_NAME)) }
+
+    /**
+     * Usuwa własny zestaw. Narzędzia, które z niego brały, wracają do fabrycznego i piszą dalej tym samym kolorem
+     * (jako kolorem spoza listy). Wbudowanych się nie usuwa, bo zapis i tak by je odtworzył; te się przywraca.
+     */
+    fun removeSet(id: String): PenKit {
+        val gone = set(id) ?: return this
+        if (builtIn(id)) return this
+        val left = sets.filter { it.id != id }
+        return copy(sets = left, slots = slots.mapValues { (k, sl) ->
+            if (sl.setId != id) sl
+            else defaultSet(k).let { d -> sl.copy(setId = d, color = InkColor.between(sl.color, gone.hl, left.first { it.id == d }.hl)) }
+        })
+    }
+
+    /** Przywraca wbudowanemu zestawowi fabryczne barwy i ich liczbę na listwie. Nazwa nadana przez użytkownika zostaje. */
+    fun resetSet(id: String): PenKit = factory(id)?.let { d -> editSet(id) { d.copy(name = it.name) } } ?: this
+
+    /** Czy wbudowany zestaw różni się barwami albo ich liczbą na listwie od fabrycznego (jest co przywracać). */
+    fun changed(id: String): Boolean = factory(id)?.let { d -> set(id)?.copy(name = "") != d } ?: false
+
+    /** Kopiuje barwę do innego zestawu (przeliczoną, gdy jeden jest atramentowy, a drugi zakreślaczy). */
+    fun copyColor(from: String, color: Int, to: String): PenKit {
+        val a = set(from) ?: return this
+        val b = set(to) ?: return this
+        return addColor(to, InkColor.between(color, a.hl, b.hl))
+    }
+
+    /** Przenosi barwę do innego zestawu; ze źródłowego znika tylko wtedy, gdy docelowy ją ma (nie był pełny). */
+    fun moveColorTo(from: String, color: Int, to: String): PenKit {
+        val a = set(from) ?: return this
+        val b = set(to) ?: return this
+        if (from == to) return this
+        val c = InkColor.between(color, a.hl, b.hl) or OPAQUE
+        val k = addColor(to, c)
+        return if (c in k.set(to)!!.colors) k.removeColor(from, color) else this
+    }
 
     fun toJson(): String {
         val o = JSONObject().put("v", 1).put("a", active.code)
@@ -161,6 +235,8 @@ data class PenKit(val sets: List<ColorSet>, val slots: Map<PenKind, PenSlot>, va
         const val WIDTHS = 3
         const val MAX_VISIBLE = 12
         const val MAX_COLORS = 24
+        const val MAX_SETS = 8
+        const val MAX_NAME = 24
         const val SET_INK = "ink"
         const val SET_BRUSH = "brush"
         const val SET_HL = "hl"
@@ -173,6 +249,11 @@ data class PenKit(val sets: List<ColorSet>, val slots: Map<PenKind, PenSlot>, va
             ColorSet(SET_BRUSH, "", ints(0xFF3E8E5A, 0xFFC8433F, 0xFF2F7FC1, 0xFFDDA11C, 0xFFD1568A, 0xFF1B1D21, 0xFF1E8C93, 0xFF5E6AD2, 0xFFE2742F, 0xFFFFFFFF), 6),
             ColorSet(SET_HL, "", ints(0xFFF5CF17, 0xFFFFA355, 0xFFFD614F, 0xFFF57BA5, 0xFFAB85F7, 0xFF5F97FF, 0xFF85CFFD, 0xFF57F3C1, 0xFF71DF77, 0xFFC7AD85), 6, hl = true),
         )
+
+        /** Fabryczna postać wbudowanego zestawu; null dla zestawu użytkownika. */
+        fun factory(id: String): ColorSet? = DEFAULT_SETS.firstOrNull { it.id == id }
+
+        fun builtIn(id: String) = factory(id) != null
 
         /** Zestaw, do którego narzędzie jest przypięte fabrycznie: długopis, pióro i ołówek dzielą atramenty. */
         fun defaultSet(kind: PenKind) = when (kind) { PenKind.BRUSH -> SET_BRUSH; PenKind.HIGHLIGHTER -> SET_HL; else -> SET_INK }
@@ -233,8 +314,8 @@ data class PenKit(val sets: List<ColorSet>, val slots: Map<PenKind, PenSlot>, va
                 val ca = s.getJSONArray("c")
                 val colors = List(ca.length()) { ca.getInt(it) or OPAQUE }.distinct().take(MAX_COLORS)
                 val id = s.getString("id")
-                if (colors.isNotEmpty() && sets.none { it.id == id })
-                    sets.add(ColorSet(id, s.optString("n", ""), colors, s.optInt("vis", 6).coerceIn(1, minOf(MAX_VISIBLE, colors.size)), s.optBoolean("hl", false)))
+                if (colors.isNotEmpty() && sets.none { it.id == id } && (builtIn(id) || sets.count { !builtIn(it.id) } < MAX_SETS - DEFAULT_SETS.size))
+                    sets.add(ColorSet(id, s.optString("n", "").take(MAX_NAME), colors, s.optInt("vis", 6).coerceIn(1, minOf(MAX_VISIBLE, colors.size)), s.optBoolean("hl", false)))
             }
             for (d in DEFAULT_SETS) if (sets.none { it.id == d.id }) sets.add(d)
             val pa = o.optJSONArray("pens") ?: JSONArray()

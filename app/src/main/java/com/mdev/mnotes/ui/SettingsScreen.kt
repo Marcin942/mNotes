@@ -28,7 +28,10 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
+import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.ColorLens
+import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.Keyboard
 import androidx.compose.material.icons.rounded.Lock
@@ -41,6 +44,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -67,6 +71,9 @@ import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
+import androidx.compose.ui.input.key.isCtrlPressed
+import com.mdev.mnotes.core.search.SettingsQuery
+import com.mdev.mnotes.data.Settings
 
 private class Cat(val icon: ImageVector, val title: String)
 
@@ -85,6 +92,10 @@ fun SettingsScreen(onBack: () -> Unit, startCat: Int = 0) {
     val set = ctx.app.settings
     val m = mint
     var cat by remember { mutableIntStateOf(startCat) }
+    var query by remember { mutableStateOf("") }
+    val q = remember(query) { SettingsQuery.of(query) }
+    val searchFocus = remember { FocusRequester() }
+    val rootFocus = remember { FocusRequester() }
     val cats = listOf(
         Cat(Icons.Rounded.Palette, T.t("Wygląd", "Appearance")),
         Cat(Icons.Rounded.Edit, T.t("Edytor i pióro", "Editor & pen")),
@@ -95,11 +106,31 @@ fun SettingsScreen(onBack: () -> Unit, startCat: Int = 0) {
         Cat(Icons.Rounded.Keyboard, T.t("Skróty klawiszowe", "Keyboard shortcuts")),
         Cat(Icons.Rounded.Info, T.t("O aplikacji", "About")),
     )
-    BackHandler(onBack = onBack)
-    Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).safeDrawingPadding()) {
+    fun open(i: Int) { query = ""; cat = i }
+    BackHandler { if (query.isNotEmpty()) query = "" else onBack() }
+    LaunchedEffect(Unit) { runCatching { rootFocus.requestFocus() } }
+    Column(
+        Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).safeDrawingPadding().focusRequester(rootFocus).focusable()
+            .onPreviewKeyEvent { e ->
+                if (e.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                when {
+                    e.isCtrlPressed && e.key == Key.F -> { runCatching { searchFocus.requestFocus() }; true }
+                    e.key == Key.Escape && query.isNotEmpty() -> { query = ""; true }
+                    else -> false
+                }
+            },
+    ) {
         Row(Modifier.fillMaxWidth().background(m.header).padding(horizontal = 8.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
             IconBtn(Icons.AutoMirrored.Rounded.ArrowBack, T.t("Wstecz", "Back"), onBack, shortcut = "Esc")
             Text(T.t("Ustawienia", "Settings"), style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(start = 8.dp))
+            Box(Modifier.weight(1f).padding(start = 12.dp), contentAlignment = Alignment.CenterEnd) {
+                MField(
+                    query, { query = it }, Modifier.widthIn(max = 380.dp).fillMaxWidth().focusRequester(searchFocus),
+                    hint = T.t("Szukaj w ustawieniach…", "Search settings…"),
+                    leading = { Icon(Icons.Rounded.Search, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant) },
+                )
+            }
+            if (query.isNotEmpty()) IconBtn(Icons.Rounded.Close, T.t("Wyczyść wyszukiwanie", "Clear search"), { query = "" })
         }
         HorizontalDivider(color = m.line)
         BoxWithConstraints(Modifier.fillMaxSize()) {
@@ -109,12 +140,12 @@ fun SettingsScreen(onBack: () -> Unit, startCat: Int = 0) {
                     Column(Modifier.width(240.dp).fillMaxHeight().background(m.sidebar).verticalScroll(rememberScrollState()).padding(8.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                         cats.forEachIndexed { i, c ->
                             Row(
-                                Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(if (i == cat) m.accentSoft else Color.Transparent)
-                                    .clickable { cat = i }.padding(horizontal = 12.dp, vertical = 11.dp),
+                                Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(if (q == null && i == cat) m.accentSoft else Color.Transparent)
+                                    .clickable { open(i) }.padding(horizontal = 12.dp, vertical = 11.dp),
                                 verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp),
                             ) {
-                                Icon(c.icon, null, Modifier.size(20.dp), tint = if (i == cat) m.accentText else MaterialTheme.colorScheme.onSurfaceVariant)
-                                Text(c.title, style = MaterialTheme.typography.bodyLarge, color = if (i == cat) m.accentText else MaterialTheme.colorScheme.onSurface)
+                                Icon(c.icon, null, Modifier.size(20.dp), tint = if (q == null && i == cat) m.accentText else MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text(c.title, style = MaterialTheme.typography.bodyLarge, color = if (q == null && i == cat) m.accentText else MaterialTheme.colorScheme.onSurface)
                             }
                         }
                     }
@@ -122,20 +153,22 @@ fun SettingsScreen(onBack: () -> Unit, startCat: Int = 0) {
                 }
                 Column(Modifier.weight(1f).fillMaxHeight()) {
                     if (!wide) Row(Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 12.dp, vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        cats.forEachIndexed { i, c -> Chip(c.title, i == cat, { cat = i }, icon = c.icon) }
+                        cats.forEachIndexed { i, c -> Chip(c.title, q == null && i == cat, { open(i) }, icon = c.icon) }
                     }
                     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = if (wide) 32.dp else 16.dp, vertical = 12.dp)) {
                         Column(Modifier.widthIn(max = 720.dp).fillMaxWidth()) {
-                            Text(cats[cat].title, style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(bottom = 4.dp))
-                            when (cat) {
-                                0 -> Appearance(set)
-                                1 -> EditorPrefs(set)
-                                2 -> ColorSetsPrefs(set)
-                                3 -> InputPrefs(set)
-                                4 -> NewNotePrefs(set)
-                                5 -> PrivacyPrefs(set)
-                                6 -> ShortcutsTable(set)
-                                else -> About()
+                            if (q != null) SearchResults(q, query, set, cats.map { it.icon to it.title }, ::open) else {
+                                Text(cats[cat].title, style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(bottom = 4.dp))
+                                when (cat) {
+                                    0 -> Appearance(set)
+                                    1 -> EditorPrefs(set)
+                                    2 -> ColorSetsPrefs(set)
+                                    3 -> InputPrefs(set)
+                                    4 -> NewNotePrefs(set)
+                                    5 -> PrivacyPrefs(set)
+                                    6 -> ShortcutsTable(set)
+                                    else -> About()
+                                }
                             }
                             Spacer(Modifier.height(32.dp))
                         }
@@ -146,9 +179,81 @@ fun SettingsScreen(onBack: () -> Unit, startCat: Int = 0) {
     }
 }
 
+/** Kategorie, które przeszukujemy (bez „O aplikacji”: sam opis, nic do ustawienia). */
+private val SEARCHABLE_CATS = listOf(0, 1, 2, 3, 4, 5, 6)
+
+/** Wyniki wyszukiwania: te same kontrolki co w kategoriach, odfiltrowane i pogrupowane pod nagłówkami kategorii. */
 @Composable
-internal fun Group(title: String? = null, content: @Composable () -> Unit) {
+private fun SearchResults(q: SettingsQuery, raw: String, set: Settings, cats: List<Pair<ImageVector, String>>, open: (Int) -> Unit) {
     val m = mint
+    CompositionLocalProvider(LocalSettingsQuery provides q) {
+        IfAny(fallback = { NoResults(raw) }) {
+            for (i in SEARCHABLE_CATS) IfAny(
+                top = 18.dp,
+                header = {
+                    Row(
+                        Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).clickable { open(i) }.padding(vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Icon(cats[i].first, null, Modifier.size(20.dp), tint = m.accentText)
+                        Text(cats[i].second, Modifier.weight(1f), style = MaterialTheme.typography.titleMedium)
+                        Icon(Icons.AutoMirrored.Rounded.KeyboardArrowRight, null, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                },
+            ) {
+                when (i) {
+                    0 -> Appearance(set)
+                    1 -> EditorPrefs(set)
+                    2 -> ColorsPointer(set)
+                    3 -> InputPrefs(set)
+                    4 -> NewNotePrefs(set)
+                    5 -> PrivacyPrefs(set)
+                    else -> ShortcutsTable(set)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun NoResults(raw: String) {
+    Column(Modifier.fillMaxWidth().padding(top = 32.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+        Text(T.t("Nic nie znaleziono dla „${raw.trim()}”", "Nothing found for “${raw.trim()}”"), style = MaterialTheme.typography.titleMedium)
+        Text(
+            T.t("Spróbuj innego słowa, np. gumka, motyw, skróty, kopia.", "Try another word, e.g. eraser, theme, shortcuts, backup."),
+            style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 6.dp),
+        )
+    }
+}
+
+/** Zamiast całych „Kolorów narzędzi” (zestawy, karty, okna) wynik prowadzi do tej kategorii. */
+@Composable
+private fun ColorsPointer(set: Settings) {
+    Group(keys = "kolory narzędzi zestawy kolorów barwy paleta atrament zakreślacz tool colours colour sets palette ink highlighter") {
+        Extra {
+            Text(
+                T.t("Zestawy kolorów i to, które narzędzie z którego korzysta, ustawisz w tej kategorii.", "Colour sets and which tool uses which are set in this category."),
+                style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(vertical = 8.dp),
+            )
+        }
+    }
+}
+
+@Composable
+internal fun Group(title: String? = null, keys: String = "", content: @Composable () -> Unit) {
+    val m = mint
+    if (LocalSettingsQuery.current != null) {
+        val shape = RoundedCornerShape(12.dp)
+        GroupSearchScope(title.orEmpty(), keys) {
+            IfAny(
+                gap = 2.dp, padH = 14.dp, padV = 8.dp, top = if (title == null) 8.dp else 0.dp,
+                header = title?.let { { SectionLabel(it) } },
+                backdrop = Modifier.clip(shape).background(MaterialTheme.colorScheme.surface).border(1.dp, m.line, shape),
+                body = content,
+            )
+        }
+        return
+    }
     if (title != null) SectionLabel(title)
     Column(
         Modifier.fillMaxWidth().padding(top = if (title == null) 8.dp else 0.dp).clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.surface)
@@ -158,9 +263,10 @@ internal fun Group(title: String? = null, content: @Composable () -> Unit) {
 }
 
 @Composable
-private fun Opt(label: String, content: @Composable () -> Unit) {
+private fun Opt(label: String, keys: String = "", content: @Composable () -> Unit) {
+    if (!rowVisible(label, keys)) return
     Column(Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
-        Text(label, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(bottom = 6.dp))
+        Text(rowLabel(label), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(bottom = 6.dp))
         content()
     }
 }
@@ -175,35 +281,35 @@ internal fun Choice(options: List<String>, selected: Int, onSelect: (Int) -> Uni
 @Composable
 private fun Appearance(set: com.mdev.mnotes.data.Settings) {
     Group {
-        Opt(T.t("Motyw", "Theme")) { Choice(listOf(T.t("Systemowy", "System"), T.t("Jasny", "Light"), T.t("Ciemny", "Dark"), "AMOLED"), set.theme) { set.theme = it } }
-        Opt(T.t("Kolor akcentu (jak w Mint-Y)", "Accent color (like Mint-Y)")) {
+        Opt(T.t("Motyw", "Theme"), "ciemny jasny dark light amoled systemowy czarny wygląd kolory") { Choice(listOf(T.t("Systemowy", "System"), T.t("Jasny", "Light"), T.t("Ciemny", "Dark"), "AMOLED"), set.theme) { set.theme = it } }
+        Opt(T.t("Kolor akcentu (jak w Mint-Y)", "Accent color (like Mint-Y)"), "barwa zielony niebieski kolor interfejsu accent colour") {
             FlowRow(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Accents.list.forEachIndexed { i, a -> Dot(a.color, 34.dp, i == set.accent, { set.accent = i }) }
             }
             Text(Accents.list[set.accent.coerceIn(0, Accents.list.size - 1)].name, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 6.dp))
         }
-        ToggleRow(T.t("Zagęszczony interfejs (desktopowy)", "Compact interface (desktop-like)"), set.compact) { set.compact = it }
-        ToggleRow(T.t("Delikatna wibracja przy dotknięciu przycisków", "Light vibration when tapping buttons"), set.haptics) { set.haptics = it }
-        Opt(T.t("Pasek menu w edytorze (Plik, Edycja, Widok…)", "Editor menu bar (File, Edit, View…)")) {
+        ToggleRow(T.t("Zagęszczony interfejs (desktopowy)", "Compact interface (desktop-like)"), set.compact, keys = "compact gęsty kompaktowy desktop małe odstępy") { set.compact = it }
+        ToggleRow(T.t("Delikatna wibracja przy dotknięciu przycisków", "Light vibration when tapping buttons"), set.haptics, keys = "haptyka drgania wibracje vibration haptic") { set.haptics = it }
+        Opt(T.t("Pasek menu w edytorze (Plik, Edycja, Widok…)", "Editor menu bar (File, Edit, View…)"), "menu menubar") {
             Choice(listOf(T.t("Nigdy", "Never"), T.t("Na dużych ekranach", "On large screens"), T.t("Zawsze", "Always")), set.menuBar) { set.menuBar = it }
         }
-        ToggleRow(T.t("Otwieraj zeszyty jako karty (pasek kart w nagłówku, bez dodatkowego miejsca; Ctrl+Tab przełącza)", "Open notebooks as tabs (tab strip inside the header, no extra space; Ctrl+Tab switches)"), set.tabs) { set.tabs = it }
-        ToggleRow(T.t("Zadokuj panel stron z lewej na szerokim oknie (≥ 840 dp, DeX)", "Dock the page panel on the left in wide windows (≥ 840 dp, DeX)"), set.dockPages) { set.dockPages = it }
-        Opt(T.t("Język", "Language")) { Choice(listOf(T.t("Systemowy", "System"), "Polski", "English"), set.lang) { set.lang = it } }
-        Opt(T.t("Jednostki", "Units")) { Choice(listOf(T.t("Milimetry", "Millimeters"), T.t("Cale", "Inches")), if (set.unitsMm) 0 else 1) { set.unitsMm = it == 0 } }
+        ToggleRow(T.t("Otwieraj zeszyty jako karty (pasek kart w nagłówku, bez dodatkowego miejsca; Ctrl+Tab przełącza)", "Open notebooks as tabs (tab strip inside the header, no extra space; Ctrl+Tab switches)"), set.tabs, keys = "zakładki tabs przełączanie notatek wiele zeszytów") { set.tabs = it }
+        ToggleRow(T.t("Zadokuj panel stron z lewej na szerokim oknie (≥ 840 dp, DeX)", "Dock the page panel on the left in wide windows (≥ 840 dp, DeX)"), set.dockPages, keys = "panel stron miniatury dex szeroki ekran okno tablet") { set.dockPages = it }
+        Opt(T.t("Język", "Language"), "language polski angielski english") { Choice(listOf(T.t("Systemowy", "System"), "Polski", "English"), set.lang) { set.lang = it } }
+        Opt(T.t("Jednostki", "Units"), "units mm cale milimetry centymetry inches") { Choice(listOf(T.t("Milimetry", "Millimeters"), T.t("Cale", "Inches")), if (set.unitsMm) 0 else 1) { set.unitsMm = it == 0 } }
     }
 }
 
 @Composable
 private fun EditorPrefs(set: com.mdev.mnotes.data.Settings) {
-    Group(T.t("Pasek narzędzi", "Toolbar")) {
-        Opt(T.t("Położenie", "Position")) { Choice(listOf(T.t("Góra", "Top"), T.t("Dół", "Bottom"), T.t("Lewo", "Left"), T.t("Prawo", "Right")), set.toolbarPos) { set.toolbarPos = it } }
-        Opt(T.t("Rozmiar", "Size")) { Choice(listOf(T.t("Mały", "Small"), T.t("Normalny", "Normal"), T.t("Duży", "Large")), set.toolbarSize) { set.toolbarSize = it } }
-        Opt(T.t("Listwa grubości i kolorów", "Width and colour strip")) { Choice(listOf(T.t("Z lewej", "Left"), T.t("Z prawej", "Right"), T.t("Przy pasku", "By the toolbar")), set.optionsPos) { set.optionsPos = it } }
+    Group(T.t("Pasek narzędzi", "Toolbar"), keys = "położenie rozmiar listwa") {
+        Opt(T.t("Położenie", "Position"), "toolbar pasek góra dół lewo prawo") { Choice(listOf(T.t("Góra", "Top"), T.t("Dół", "Bottom"), T.t("Lewo", "Left"), T.t("Prawo", "Right")), set.toolbarPos) { set.toolbarPos = it } }
+        Opt(T.t("Rozmiar", "Size"), "toolbar pasek mały duży przyciski") { Choice(listOf(T.t("Mały", "Small"), T.t("Normalny", "Normal"), T.t("Duży", "Large")), set.toolbarSize) { set.toolbarSize = it } }
+        Opt(T.t("Listwa grubości i kolorów", "Width and colour strip"), "toolbar pasek grubość kolor listwa") { Choice(listOf(T.t("Z lewej", "Left"), T.t("Z prawej", "Right"), T.t("Przy pasku", "By the toolbar")), set.optionsPos) { set.optionsPos = it } }
     }
     BarLayoutPrefs(set)
-    Group(T.t("Renderowanie", "Rendering")) {
-        Opt(T.t("Jakość wyświetlania strony", "Page display quality")) {
+    Group(T.t("Renderowanie", "Rendering"), keys = "jakość ostrość wydajność") {
+        Opt(T.t("Jakość wyświetlania strony", "Page display quality"), "render ostrość wydajność bateria pamięć kafelki płynność rozmycie ostra") {
             Choice(
                 listOf(T.t("Zrównoważona", "Balanced"), T.t("Ostra", "Sharp"), T.t("Oszczędna", "Economy"), T.t("Klasyczna (obraz)", "Classic (image)")),
                 set.renderQuality,
@@ -219,44 +325,46 @@ private fun EditorPrefs(set: com.mdev.mnotes.data.Settings) {
             )
         }
     }
-    Group(T.t("Pióro", "Pen")) {
-        Opt(T.t("Wygładzanie: ${(set.smoothing * 100).toInt()}%", "Smoothing: ${(set.smoothing * 100).toInt()}%")) { MSlider(set.smoothing, 0f, 2f) { set.smoothing = it } }
-        ToggleRow(T.t("Przytrzymaj, aby wyprostować kształt", "Hold to snap to shape"), set.holdToShape) { set.holdToShape = it }
-        if (set.holdToShape) Opt(T.t("Czas przytrzymania: ${set.holdMs} ms", "Hold time: ${set.holdMs} ms")) { MSlider(set.holdMs.toFloat(), 250f, 1200f) { set.holdMs = (it / 50).toInt() * 50 } }
+    Group(T.t("Pióro", "Pen"), keys = "wygładzanie kształty rysowanie pen") {
+        Opt(T.t("Wygładzanie: ${(set.smoothing * 100).toInt()}%", "Smoothing: ${(set.smoothing * 100).toInt()}%"), "gładkość stabilizacja drżenie pióro") { MSlider(set.smoothing, 0f, 2f) { set.smoothing = it } }
+        ToggleRow(T.t("Przytrzymaj, aby wyprostować kształt", "Hold to snap to shape"), set.holdToShape, keys = "kształty prosta linia okrąg prostokąt prostowanie snap shape") { set.holdToShape = it }
+        if (set.holdToShape) Opt(T.t("Czas przytrzymania: ${set.holdMs} ms", "Hold time: ${set.holdMs} ms"), "prostowanie kształt opóźnienie") { MSlider(set.holdMs.toFloat(), 250f, 1200f) { set.holdMs = (it / 50).toInt() * 50 } }
     }
-    Group(T.t("Pędzel formatu i wypełnienie", "Format painter & fill")) {
-        Opt(T.t("Tryb pędzla formatu", "Format painter mode")) { Choice(listOf(T.t("Obiektowo", "Object"), "Lasso"), set.painterMode) { set.painterMode = it } }
-        ToggleRow(T.t("Wiaderko domyka małe szpary w liniach", "Fill closes small gaps in lines"), set.fillCloseGaps) { set.fillCloseGaps = it }
+    Group(T.t("Pędzel formatu i wypełnienie", "Format painter & fill"), keys = "wiaderko kopiuj formatowanie") {
+        Opt(T.t("Tryb pędzla formatu", "Format painter mode"), "format painter kopiuj formatowanie styl") { Choice(listOf(T.t("Obiektowo", "Object"), "Lasso"), set.painterMode) { set.painterMode = it } }
+        ToggleRow(T.t("Wiaderko domyka małe szpary w liniach", "Fill closes small gaps in lines"), set.fillCloseGaps, keys = "wiaderko wypełnianie fill kolor szpary luka") { set.fillCloseGaps = it }
     }
-    Group(T.t("Gumka i lasso", "Eraser & lasso")) {
-        Opt(T.t("Domyślny tryb gumki", "Default eraser mode")) { Choice(listOf(T.t("Obiektowa", "Object"), T.t("Pikselowa", "Pixel"), "Lasso"), set.eraserMode) { set.eraserMode = it } }
-        Opt(T.t("Rozmiar gumki: ${set.eraserSize.toInt()} pt", "Eraser size: ${set.eraserSize.toInt()} pt")) { MSlider(set.eraserSize, 3f, 60f) { set.eraserSize = it } }
-        ToggleRow(T.t("Gumka pomija zakreślacz", "Eraser ignores highlighter"), set.eraserKeepHighlighter) { set.eraserKeepHighlighter = it }
-        Opt(T.t("Kształt lassa", "Lasso shape")) { Choice(listOf(T.t("Odręczne", "Freehand"), T.t("Prostokąt", "Rectangle")), if (set.lassoRect) 1 else 0) { set.lassoRect = it == 1 } }
-        ToggleRow(T.t("Przyciągaj do siatki", "Snap to grid"), set.snapGrid) { set.snapGrid = it }
+    Group(T.t("Gumka i lasso", "Eraser & lasso"), keys = "wymaż zaznaczanie") {
+        Opt(T.t("Domyślny tryb gumki", "Default eraser mode"), "eraser wymaż kasowanie pikselowa obiektowa") { Choice(listOf(T.t("Obiektowa", "Object"), T.t("Pikselowa", "Pixel"), "Lasso"), set.eraserMode) { set.eraserMode = it } }
+        Opt(T.t("Rozmiar gumki: ${set.eraserSize.toInt()} pt", "Eraser size: ${set.eraserSize.toInt()} pt"), "eraser grubość wymaż") { MSlider(set.eraserSize, 3f, 60f) { set.eraserSize = it } }
+        ToggleRow(T.t("Gumka pomija zakreślacz", "Eraser ignores highlighter"), set.eraserKeepHighlighter, keys = "eraser wymaż zakreślacz marker") { set.eraserKeepHighlighter = it }
+        Opt(T.t("Kształt lassa", "Lasso shape"), "zaznaczanie zaznacz odręczne prostokąt") { Choice(listOf(T.t("Odręczne", "Freehand"), T.t("Prostokąt", "Rectangle")), if (set.lassoRect) 1 else 0) { set.lassoRect = it == 1 } }
+        ToggleRow(T.t("Przyciągaj do siatki", "Snap to grid"), set.snapGrid, keys = "grid siatka magnes snap") { set.snapGrid = it }
     }
 }
 
 @Composable
 private fun InputPrefs(set: com.mdev.mnotes.data.Settings) {
     Group {
-        Opt(T.t("Palec", "Finger")) { Choice(listOf(T.t("Przewija i powiększa", "Pans & zooms"), T.t("Rysuje", "Draws"), T.t("Ignorowany", "Ignored")), set.fingerMode) { set.fingerMode = it } }
-        ToggleRow(T.t("Odrzucanie dłoni (rysik ma pierwszeństwo)", "Palm rejection (stylus wins)"), set.palmRejection) { set.palmRejection = it }
-        ToggleRow(T.t("Cofnij dotknięciem dwóch palców", "Two-finger tap to undo"), set.twoFingerUndo) { set.twoFingerUndo = it }
-        ToggleRow(T.t("Odciągnij za ostatnią stroną, aby dodać nową", "Pull past the last page to add a new one"), set.pullAddPage) { set.pullAddPage = it }
+        Opt(T.t("Palec", "Finger"), "finger dotyk przewijanie powiększanie rysowanie touch") { Choice(listOf(T.t("Przewija i powiększa", "Pans & zooms"), T.t("Rysuje", "Draws"), T.t("Ignorowany", "Ignored")), set.fingerMode) { set.fingerMode = it } }
+        ToggleRow(T.t("Odrzucanie dłoni (rysik ma pierwszeństwo)", "Palm rejection (stylus wins)"), set.palmRejection, keys = "palm dłoń rysik stylus przypadkowe dotknięcia") { set.palmRejection = it }
+        ToggleRow(T.t("Cofnij dotknięciem dwóch palców", "Two-finger tap to undo"), set.twoFingerUndo, keys = "undo cofanie gest dwa palce") { set.twoFingerUndo = it }
+        ToggleRow(T.t("Odciągnij za ostatnią stroną, aby dodać nową", "Pull past the last page to add a new one"), set.pullAddPage, keys = "nowa strona dodaj pull gest koniec zeszytu") { set.pullAddPage = it }
         val tapActions = listOf(T.t("Cofnij", "Undo"), T.t("Ponów", "Redo"), T.t("Przybliż / oddal", "Zoom in / out"), T.t("Brak", "None"))
-        Opt(T.t("Podwójne dotknięcie palcem", "Finger double tap")) { Choice(tapActions, set.doubleTap) { set.doubleTap = it } }
-        Opt(T.t("Potrójne dotknięcie palcem", "Finger triple tap")) { Choice(tapActions, set.tripleTap) { set.tripleTap = it } }
-        if (set.tripleTap != 3) Text(
-            T.t("Gdy potrójne dotknięcie coś robi, podwójne czeka ułamek sekundy na trzecie dotknięcie. Ustaw „Brak”, aby podwójne działało od razu.",
-                "While triple tap does something, double tap waits a fraction of a second for the third tap. Set it to “None” to make double tap instant."),
-            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(bottom = 6.dp),
-        )
-        Opt(T.t("Przycisk rysika", "Stylus button")) {
+        Opt(T.t("Podwójne dotknięcie palcem", "Finger double tap"), "double tap gest dwukrotne") { Choice(tapActions, set.doubleTap) { set.doubleTap = it } }
+        Opt(T.t("Potrójne dotknięcie palcem", "Finger triple tap"), "triple tap gest trzykrotne") { Choice(tapActions, set.tripleTap) { set.tripleTap = it } }
+        if (set.tripleTap != 3) Extra {
+            Text(
+                T.t("Gdy potrójne dotknięcie coś robi, podwójne czeka ułamek sekundy na trzecie dotknięcie. Ustaw „Brak”, aby podwójne działało od razu.",
+                    "While triple tap does something, double tap waits a fraction of a second for the third tap. Set it to “None” to make double tap instant."),
+                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(bottom = 6.dp),
+            )
+        }
+        Opt(T.t("Przycisk rysika", "Stylus button"), "stylus pen rysik s-pen przycisk boczny gumka lasso laser cofnij") {
             Choice(listOf(T.t("Gumka", "Eraser"), "Lasso", T.t("Cofnij", "Undo"), T.t("Laser", "Laser"), T.t("Brak", "None")), set.penButton) { set.penButton = it }
         }
     }
-    Group(T.t("Mysz i klawiatura (DeX / Linux)", "Mouse & keyboard (DeX / Linux)")) {
+    Group(T.t("Mysz i klawiatura (DeX / Linux)", "Mouse & keyboard (DeX / Linux)"), keys = "kółko przewijanie powiększanie prawy przycisk menu kontekstowe paleta poleceń ctrl+k wheel context palette") { Extra {
         Text(
             T.t(
                 "Kółko przewija, Ctrl+kółko powiększa, prawy przycisk otwiera menu kontekstowe. Skróty klawiszowe są wymienione w zakładce „Skróty klawiszowe”, a Ctrl+K otwiera paletę poleceń.",
@@ -264,24 +372,24 @@ private fun InputPrefs(set: com.mdev.mnotes.data.Settings) {
             ),
             style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(vertical = 8.dp),
         )
-    }
+    } }
 }
 
 @Composable
 private fun NewNotePrefs(set: com.mdev.mnotes.data.Settings) {
-    Group {
-        Opt(T.t("Rozmiar strony", "Page size")) {
+    Group(keys = "nowe notatki nowy zeszyt domyślne ustawienia new notes notebook defaults") {
+        Opt(T.t("Rozmiar strony", "Page size"), "format a3 a4 a5 a6 letter strona papier size") {
             FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 for (f in PageFormat.entries) Chip(formatName(f), f.id == set.newFormat, { set.newFormat = f.id })
             }
         }
-        ToggleRow(T.t("Orientacja pozioma", "Landscape"), set.newLandscape) { set.newLandscape = it }
-        Opt(T.t("Wzór", "Template")) {
+        ToggleRow(T.t("Orientacja pozioma", "Landscape"), set.newLandscape, keys = "poziom pion landscape portrait orientacja strona") { set.newLandscape = it }
+        Opt(T.t("Wzór", "Template"), "template kratka linie kropki czysta pusta tło siatka szablon lined dots grid blank") {
             FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 for (t in Template.entries) Chip(templateName(t), t.code == set.newTemplate, { set.newTemplate = t.code })
             }
         }
-        Opt(T.t("Papier", "Paper")) {
+        Opt(T.t("Papier", "Paper"), "kolor tło kremowy biały barwa strony colour") {
             FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 for (p in Paper.presets) Dot(Color(p), 32.dp, p == set.newPaper, { set.newPaper = p })
             }
@@ -292,17 +400,19 @@ private fun NewNotePrefs(set: com.mdev.mnotes.data.Settings) {
 @Composable
 private fun PrivacyPrefs(set: com.mdev.mnotes.data.Settings) {
     val ctx = LocalContext.current
-    Group(T.t("Prywatność", "Privacy")) {
-        Text(
-            T.t("mNotes działa w całości offline: aplikacja nie ma uprawnienia INTERNET i nie zbiera żadnych danych.", "mNotes is fully offline: the app has no INTERNET permission and collects no data."),
-            style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(vertical = 8.dp),
-        )
-        ToggleRow(T.t("Blokada aplikacji (biometria lub PIN urządzenia)", "App lock (biometrics or device PIN)"), set.appLock) { on ->
+    Group(T.t("Prywatność", "Privacy"), keys = "offline internet dane telemetria śledzenie") {
+        Extra {
+            Text(
+                T.t("mNotes działa w całości offline: aplikacja nie ma uprawnienia INTERNET i nie zbiera żadnych danych.", "mNotes is fully offline: the app has no INTERNET permission and collects no data."),
+                style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(vertical = 8.dp),
+            )
+        }
+        ToggleRow(T.t("Blokada aplikacji (biometria lub PIN urządzenia)", "App lock (biometrics or device PIN)"), set.appLock, keys = "pin biometria odcisk palca lock hasło blokada bezpieczeństwo") { on ->
             if (!on) set.appLock = false
             else if ((ctx as? androidx.fragment.app.FragmentActivity)?.let { com.mdev.mnotes.app.MainActivity.canLock(it) } == true) set.appLock = true
             else android.widget.Toast.makeText(ctx, T.t("Najpierw ustaw blokadę ekranu w systemie.", "Set a screen lock in system settings first."), android.widget.Toast.LENGTH_LONG).show()
         }
-        ToggleRow(T.t("Blokuj zrzuty ekranu i podgląd w ostatnich", "Block screenshots and recents preview"), set.secureFlag) { set.secureFlag = it }
+        ToggleRow(T.t("Blokuj zrzuty ekranu i podgląd w ostatnich", "Block screenshots and recents preview"), set.secureFlag, keys = "zrzut ekranu screenshot ostatnie aplikacje podgląd bezpieczeństwo") { set.secureFlag = it }
     }
     SyncPrefs(set)
     val exportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
@@ -315,12 +425,12 @@ private fun PrivacyPrefs(set: com.mdev.mnotes.data.Settings) {
             android.widget.Toast.makeText(ctx, T.t("Zaimportowano. Zrestartuj aplikację, aby zastosować wszystko.", "Imported. Restart the app to apply everything."), android.widget.Toast.LENGTH_LONG).show()
         }
     }
-    Group(T.t("Ustawienia jako plik", "Settings as a file")) {
+    Group(T.t("Ustawienia jako plik", "Settings as a file"), keys = "eksport import json kopia zapasowa backup przenieś export") { Extra {
         Row(Modifier.padding(vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Chip(T.t("Eksportuj ustawienia (JSON)", "Export settings (JSON)"), false, { exportLauncher.launch("mnotes-settings.json") })
             Chip(T.t("Importuj", "Import"), false, { importLauncher.launch(arrayOf("application/json", "text/plain", "*/*")) })
         }
-    }
+    } }
 }
 
 /** Folder synchronizacji (FIL-004): lustro biblioteki w katalogu, który zsynchronizuje Syncthing, Nextcloud, rsync itp. */
@@ -344,7 +454,7 @@ private fun SyncPrefs(set: com.mdev.mnotes.data.Settings) {
     val access = remember(set.syncUri) { !linked || sync.accessible(set.syncUri) }
     fun whenText(min: Int) = java.text.DateFormat.getDateTimeInstance(java.text.DateFormat.SHORT, java.text.DateFormat.SHORT).format(java.util.Date(min * 60000L))
 
-    Group(T.t("Folder synchronizacji", "Sync folder")) {
+    Group(T.t("Folder synchronizacji", "Sync folder"), keys = "synchronizacja sync syncthing nextcloud rsync kopia zapasowa backup chmura dysk") { Extra {
         Text(
             T.t(
                 "Kopiuje zeszyty do wybranego folderu jako pliki .mnotes (opcjonalnie PDF i Markdown), z zachowaniem struktury folderów biblioteki. Folder zsynchronizujesz Syncthingiem, Nextcloudem lub rsync-iem — aplikacja nie łączy się z siecią. Niczego w tym folderze nie usuwa; zeszyty zablokowane są pomijane.",
@@ -355,26 +465,26 @@ private fun SyncPrefs(set: com.mdev.mnotes.data.Settings) {
         Row(Modifier.padding(vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
             Chip(if (linked) T.t("Zmień folder…", "Change folder…") else T.t("Wybierz folder…", "Choose folder…"), false, { picker.launch(null) })
             if (linked) Chip(T.t("Odłącz", "Detach"), false, { release(set.syncUri); sync.forgetState(); set.syncUri = ""; set.syncAuto = false })
-        }
+        } }
         if (linked) {
-            Text(
+            Extra { Text(
                 T.t("Folder: ", "Folder: ") + (name ?: "…"),
                 style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(vertical = 4.dp),
-            )
-            if (!access) Text(
+            ) }
+            if (!access) Extra { Text(
                 T.t("Brak dostępu do folderu — wybierz go ponownie.", "No access to the folder — choose it again."),
                 style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(bottom = 4.dp),
-            )
-            ToggleRow(T.t("Dołącz PDF", "Include PDF"), set.syncPdf) { set.syncPdf = it }
-            ToggleRow(T.t("Dołącz Markdown (tylko pola tekstowe)", "Include Markdown (text boxes only)"), set.syncMd) { set.syncMd = it }
-            ToggleRow(T.t("Kopiuj automatycznie po wyjściu z aplikacji", "Copy automatically when leaving the app"), set.syncAuto) { set.syncAuto = it }
-            Row(Modifier.padding(vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+            ) }
+            ToggleRow(T.t("Dołącz PDF", "Include PDF"), set.syncPdf, keys = "eksport pdf") { set.syncPdf = it }
+            ToggleRow(T.t("Dołącz Markdown (tylko pola tekstowe)", "Include Markdown (text boxes only)"), set.syncMd, keys = "eksport md tekst") { set.syncMd = it }
+            ToggleRow(T.t("Kopiuj automatycznie po wyjściu z aplikacji", "Copy automatically when leaving the app"), set.syncAuto, keys = "automatycznie wyjście zamknięcie kopia zapasowa") { set.syncAuto = it }
+            Extra { Row(Modifier.padding(vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
                 Chip(
                     if (sync.running) T.t("Synchronizuję…", "Syncing…") else T.t("Synchronizuj teraz", "Sync now"), false,
                     { if (access) sync.start() },
                 )
                 if (sync.running && sync.total > 0) Text("${sync.done} / ${sync.total}", style = MaterialTheme.typography.labelLarge)
-            }
+            } }
             val r = sync.report
             val line = when {
                 r != null -> T.t("Ostatnio: ", "Last: ") + whenText((r.at / 60000L).toInt()) + T.t(
@@ -384,7 +494,7 @@ private fun SyncPrefs(set: com.mdev.mnotes.data.Settings) {
                 set.lastSync > 0 -> T.t("Ostatnia udana synchronizacja: ", "Last successful sync: ") + whenText(set.lastSync)
                 else -> ""
             }
-            if (line.isNotEmpty()) Text(line, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            if (line.isNotEmpty()) Extra { Text(line, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) }
         }
     }
 }
@@ -419,29 +529,32 @@ private fun ShortcutsTable(set: com.mdev.mnotes.data.Settings) {
     val m = mint
     var editing by remember { mutableStateOf<CmdDef?>(null) }
     val keys = Keymap.overrides(set)
-    Text(
-        T.t("Kliknij polecenie, aby zmienić jego skrót. Te same polecenia są w palecie (Ctrl+K) i na pasku menu.", "Click a command to change its shortcut. The same commands appear in the palette (Ctrl+K) and the menu bar."),
-        style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(vertical = 8.dp),
-    )
+    Extra {
+        Text(
+            T.t("Kliknij polecenie, aby zmienić jego skrót. Te same polecenia są w palecie (Ctrl+K) i na pasku menu.", "Click a command to change its shortcut. The same commands appear in the palette (Ctrl+K) and the menu bar."),
+            style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(vertical = 8.dp),
+        )
+    }
     for (g in 0 until CmdDefs.groups.size) {
         Group(CmdDefs.groupName(g)) {
-            CmdDefs.list.filter { it.group == g }.forEachIndexed { i, d ->
+            // Filtr przed pętlą, żeby między ukrytymi wierszami nie zostały osamotnione kreski.
+            CmdDefs.list.filter { it.group == g && rowVisible(it.title, keys[it.id] ?: it.key) }.forEachIndexed { i, d ->
                 val key = keys[d.id] ?: d.key
                 if (i > 0) HorizontalDivider(color = m.line.copy(alpha = 0.5f))
                 Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(6.dp)).clickable { editing = d }.padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Text(d.title, Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
+                    Text(rowLabel(d.title), Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
                     KeyCap(key.ifEmpty { T.t("brak", "none") }, accent = keys.containsKey(d.id))
                 }
             }
         }
     }
-    if (keys.isNotEmpty()) Chip(T.t("Przywróć wszystkie domyślne", "Restore all defaults"), false, { Keymap.resetAll(set) }, Modifier.padding(vertical = 8.dp))
+    if (keys.isNotEmpty()) Extra { Chip(T.t("Przywróć wszystkie domyślne", "Restore all defaults"), false, { Keymap.resetAll(set) }, Modifier.padding(vertical = 8.dp)) }
     for ((group, rows) in FIXED_SHORTCUTS) {
         Group(group) {
-            rows.forEachIndexed { i, (k, d) ->
+            rows.filter { (k, d) -> rowVisible(d, k) }.forEachIndexed { i, (k, d) ->
                 if (i > 0) HorizontalDivider(color = m.line.copy(alpha = 0.5f))
                 Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Text(d, Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
+                    Text(rowLabel(d), Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
                     KeyCap(k)
                 }
             }

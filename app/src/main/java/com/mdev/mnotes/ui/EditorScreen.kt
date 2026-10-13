@@ -1021,10 +1021,11 @@ fun MSlider(value: Float, min: Float, max: Float, onChange: (Float) -> Unit) {
 }
 
 @Composable
-fun ToggleRow(label: String, checked: Boolean, onChange: (Boolean) -> Unit) {
+fun ToggleRow(label: String, checked: Boolean, keys: String = "", onChange: (Boolean) -> Unit) {
     val m = mint
+    if (!rowVisible(label, keys)) return
     Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).clickable { onChange(!checked) }.padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-        Text(label, Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
+        Text(rowLabel(label), Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
         Switch(
             checked, onChange, modifier = Modifier.height(28.dp),
             colors = SwitchDefaults.colors(checkedTrackColor = m.accent, checkedThumbColor = m.onAccent),

@@ -92,7 +92,7 @@ internal fun BarLayoutPrefs(set: com.mdev.mnotes.data.Settings) {
     val cfg = set.barConfig
     val dim = MaterialTheme.colorScheme.onSurfaceVariant
     val ink = MaterialTheme.colorScheme.onSurface
-    Group(T.t("Cofnij i Ponów", "Undo and Redo")) {
+    Group(T.t("Cofnij i Ponów", "Undo and Redo"), keys = "undo redo kapsuła róg cofanie ponawianie") { Extra {
         Text(
             T.t(
                 "Mogą stać na pasku narzędzi albo w osobnej kapsule w rogu strony, poza paskiem.",
@@ -107,8 +107,8 @@ internal fun BarLayoutPrefs(set: com.mdev.mnotes.data.Settings) {
             )
             names.forEachIndexed { i, n -> Chip(n, set.undoDock == i, { set.undoDock = i }) }
         }
-    }
-    Group(T.t("Układ paska narzędzi", "Toolbar layout")) {
+    } }
+    Group(T.t("Układ paska narzędzi", "Toolbar layout"), keys = "kolejność narzędzia ukryj schowaj menu order tools hide") { Extra {
         Text(
             T.t(
                 "„Gdy jest miejsce” chowa narzędzie pod „⋯” dopiero przy ciasnocie (np. przy kartach), „Zawsze” nigdy go nie chowa, " +
@@ -143,5 +143,5 @@ internal fun BarLayoutPrefs(set: com.mdev.mnotes.data.Settings) {
             }
         }
         Chip(T.t("Przywróć układ domyślny", "Restore default layout"), false, { set.barConfig = cfg.reset() }, Modifier.padding(top = 6.dp), icon = Icons.Rounded.RestartAlt)
-    }
+    } }
 }

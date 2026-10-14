@@ -34,6 +34,24 @@
                 <data android:mimeType="application/x-mnotes" />
                 <data android:mimeType="image/*" />
             </intent-filter>
+            <!-- Pliki .mnotes (i PDF-y bez typu) bywają podawane jako „application/octet-stream” albo „application/zip”,
+                 bo system nie zna rozszerzenia, więc rozpoznajemy je po nazwie; wzorce obejmują nazwy z kilkoma kropkami. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:scheme="content" />
+                <data android:scheme="file" />
+                <data android:host="*" />
+                <data android:mimeType="*/*" />
+                <data android:pathPattern=".*\\.mnotes" />
+                <data android:pathPattern=".*\\..*\\.mnotes" />
+                <data android:pathPattern=".*\\..*\\..*\\.mnotes" />
+                <data android:pathPattern=".*\\..*\\..*\\..*\\.mnotes" />
+                <data android:pathPattern=".*\\.pdf" />
+                <data android:pathPattern=".*\\..*\\.pdf" />
+                <data android:pathPattern=".*\\..*\\..*\\.pdf" />
+                <data android:pathPattern=".*\\..*\\..*\\..*\\.pdf" />
+            </intent-filter>
             <intent-filter>
                 <action android:name="android.intent.action.SEND" />
                 <category android:name="android.intent.category.DEFAULT" />

@@ -188,8 +188,15 @@ open class MainActivity : FragmentActivity() {
         handle(intent)
     }
 
+    // Plik otwarty przy zablokowanej aplikacji czeka na odblokowanie, zamiast po cichu przepaść.
+    private var pending: Intent? = null
+
     private fun handle(i: Intent?) {
-        if (i == null || ui.locked) return
+        if (i == null) return
+        if (ui.locked) {
+            if (i.action == Intent.ACTION_VIEW || i.action == Intent.ACTION_SEND) pending = i
+            return
+        }
         i.getStringExtra(EXTRA_NOTEBOOK)?.let { i.removeExtra(EXTRA_NOTEBOOK); ui.open(it) }
         when (i.action) {
             Intent.ACTION_CREATE_NOTE -> ui.quickNote()
@@ -223,7 +230,7 @@ open class MainActivity : FragmentActivity() {
             onDispose { }
         }
         if (ui.locked && app.settings.appLock) {
-            LockScreen(onUnlock = { ui.locked = false }, prompt = ::prompt)
+            LockScreen(onUnlock = { ui.locked = false; pending?.let { p -> pending = null; handle(p) } }, prompt = ::prompt)
             return
         }
         val tabsCtl = TabsCtl(

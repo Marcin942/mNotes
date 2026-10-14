@@ -24,7 +24,7 @@ Założenie projektowe: „Linux Mint user” = osoba ceniąca kontrolę, skrót
 - [x] LIB-007 Kosz: 30 dni, przywracanie, opróżnianie
 - [x] LIB-008 Tagi (kolorowe) + filtrowanie
 - [x] LIB-009 Wyszukiwanie globalne: tytuły, tagi, tekst z pól tekstowych, zakładki, spis treści
-- [~] LIB-010 Import: PDF (adnotacje), obrazy (jako strony), `.mnotes`; „Otwórz w mNotes” z innych aplikacji (intent) _(import (PDF/obrazy/.mnotes) i intenty VIEW/SEND/CREATE_NOTE zaimplementowane — brak testu na urządzeniu)_
+- [~] LIB-010 Import: PDF (adnotacje), obrazy (jako strony), `.mnotes`; „Otwórz w mNotes” z innych aplikacji (intent) _(import (PDF/obrazy/.mnotes) i intenty VIEW/SEND/CREATE_NOTE zaimplementowane; 2026-10-14: „Otwórz w aplikacji” rozpoznaje też `.mnotes` i `.pdf` podane bez typu (`application/octet-stream`, po nazwie pliku), plik trafia luzem do biblioteki (bez folderu), a przy włączonej blokadzie aplikacji czeka na odblokowanie — brak testu na urządzeniu)_
 - [x] LIB-011 Menu kontekstowe (prawy przycisk / długie przytrzymanie)
 - [x] LIB-012 Pusty stan / onboarding / szybka notatka (skrót, CREATE_NOTE intent)
 - [~] LIB-013 Blokada zeszytu (biometria/PIN) _(zaimplementowane (biometria/PIN) — brak testu na urządzeniu)_

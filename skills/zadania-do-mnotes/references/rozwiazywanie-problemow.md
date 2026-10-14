@@ -12,6 +12,8 @@
 | Pierwszy wiersz zadania ucięty | Zwiększ `y0` przez edycję `plan.json` albo zmniejsz poprzedni `y1` (zob. `plan-reczny.md`). |
 | Obrazki wystają poza stronę A5 | Ostrzeżenie z `build.py`: wycinek jest wyższy niż strona. Powiedz użytkownikowi, w mNotes można zmniejszyć obrazek palcem. |
 | Brak wyniku `.pdf` albo OSTRZEŻENIE o niezmniejszonych oryginałach | Brak backendu skalującego. `pip install pypdf` i uruchom `build.py` jeszcze raz. Gdy się nie da, powiedz użytkownikowi wprost, że oryginały w `.mnotes` są w pierwotnym rozmiarze, a `.pdf` nie powstał. |
+| Tekst z PDF (pdftotext) ma dziwne znaki zamiast polskich liter albo wzorów | Czcionka PDF nie ma poprawnej mapy znaków. Nie używaj tego tekstu: spisz zadania z obrazów z `wycinki.py` (krok 6). |
+| Brak bloczku ze spisem zadań w odpowiedzi | Wykonaj krok 6 i wklej bloczki do odpowiedzi (nie tylko do pliku). |
 | `BrokenPipeError` | Wynik był przycięty `head`. Uruchom polecenie bez `| head`. |
 | Pliku nie ma w `/mnt/user-data/outputs/` | Sprawdź wiersz „OK .mnotes: ścieżka” z `build.py` i wskaż użytkownikowi tę ścieżkę. |
 

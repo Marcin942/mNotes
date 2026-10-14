@@ -71,6 +71,11 @@ def main():
         if code != 0:
             print("SAMOTEST: budowanie nie powiodło się")
             sys.exit(1)
+        code, out = run([os.path.join(HERE, "wycinki.py"), os.path.join(d, "plan.json"), "--out", os.path.join(d, "wycinki")])
+        print(out)
+        if code != 0 or len([f for f in os.listdir(os.path.join(d, "wycinki")) if f.endswith(".png")]) != 3:
+            print("SAMOTEST: wycinki.py nie zapisał 3 obrazków zadań")
+            sys.exit(1)
         with zipfile.ZipFile(os.path.join(d, "probka.mnotes")) as z:
             meta = json.loads(z.read("meta.json"))
         if len(meta["pages"]) != 1 + 3 + 2:

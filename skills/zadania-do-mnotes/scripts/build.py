@@ -128,14 +128,25 @@ def task_pages(plan, rend, args):
 
 
 def build_mnotes(plan, tpages, sizes, args, out_path):
+    """Zwraca (liczba stron, ostrzeżenia). Aplikacja rysuje tło PDF w skali 1:1, więc do zeszytu trafia PDF
+    już przeskalowany do A5; samo ustawienie rozmiaru strony nie zmniejszyłoby treści, tylko ją ucięło."""
     pages = []
     assets = {}
+    warns = []
     if not args.no_originals:
         pdf_asset = zc.new_id() + ".pdf"
-        with open(plan["pdf"], "rb") as f:
-            assets[pdf_asset] = f.read()
-        for i, (w, h) in enumerate(sizes):
-            tw, th, _ = pdfout.target_size(w, h)
+        with tempfile.TemporaryDirectory() as d:
+            scaled = os.path.join(d, "oryginaly.pdf")
+            be = pdfout.scale_pdf(plan["pdf"], scaled, sizes)
+            if be is not None:
+                src, page_sizes = scaled, [pdfout.target_size(w, h)[:2] for w, h in sizes]
+            else:
+                src, page_sizes = plan["pdf"], list(sizes)
+                warns.append("nie ma narzędzia do skalowania PDF (pypdf, PyMuPDF, ghostscript): oryginalne strony są w "
+                             "ZACHOWANYM rozmiarze (np. A4), nie w A5. Zainstaluj pypdf (pip install pypdf) i zbuduj ponownie.")
+            with open(src, "rb") as f:
+                assets[pdf_asset] = f.read()
+        for i, (tw, th) in enumerate(page_sizes):
             pages.append({"spec": zc.pdf_background_spec(round(tw, 2), round(th, 2), pdf_asset, i), "images": []})
     for tp in tpages:
         imgs = []
@@ -145,7 +156,15 @@ def build_mnotes(plan, tpages, sizes, args, out_path):
             imgs.append((name, cx, cy, w, h))
         pages.append({"spec": zc.grid_spec(), "images": imgs})
     zc.write_mnotes(out_path, args.name, pages, assets)
-    return len(pages)
+    return len(pages), warns
+
+
+def read_bg_sizes(data):
+    with tempfile.TemporaryDirectory() as d:
+        path = os.path.join(d, "bg.pdf")
+        with open(path, "wb") as f:
+            f.write(data)
+        return [tuple(x) for x in zc.read_page_sizes(path)]
 
 
 def verify_mnotes(path, expected_pages):
@@ -153,6 +172,7 @@ def verify_mnotes(path, expected_pages):
     with zipfile.ZipFile(path) as z:
         meta = json.loads(z.read("meta.json"))
         names = set(z.namelist())
+        bg_sizes = {}
         assert len(meta["pages"]) == expected_pages, "liczba stron w meta.json"
         for p in meta["pages"]:
             data = z.read("p/%s.mnp" % p["id"])
@@ -160,6 +180,10 @@ def verify_mnotes(path, expected_pages):
                 assert "assets/" + asset in names, "brak zasobu " + asset
             if p["s"].get("pa"):
                 assert "assets/" + p["s"]["pa"] in names, "brak tła PDF"
+                bg_sizes[p["s"]["pa"]] = bg_sizes.get(p["s"]["pa"]) or read_bg_sizes(z.read("assets/" + p["s"]["pa"]))
+                real = bg_sizes[p["s"]["pa"]][p["s"]["pn"]]
+                assert abs(real[0] - p["s"]["w"]) < 1.5 and abs(real[1] - p["s"]["h"]) < 1.5, \
+                    "rozmiar tła PDF (%.0f×%.0f) różni się od rozmiaru strony (%.0f×%.0f)" % (real[0], real[1], p["s"]["w"], p["s"]["h"])
     return meta
 
 
@@ -205,7 +229,8 @@ def main():
     produced = []
     if args.format in ("mnotes", "both"):
         path = os.path.join(out_dir, safe + ".mnotes")
-        n = build_mnotes(plan, tpages, sizes, args, path)
+        n, bw = build_mnotes(plan, tpages, sizes, args, path)
+        warns.extend(bw)
         verify_mnotes(path, n)
         produced.append(path)
         zc.say("OK .mnotes: %s  (%d stron: %d oryginalnych + %d zadań)" % (path, n, 0 if args.no_originals else len(sizes), len(tpages)))

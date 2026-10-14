@@ -1,6 +1,6 @@
 ---
 name: zadania-do-mnotes
-description: Zamienia PDF-y z listami zadań (np. od wykładowcy) na zeszyt mNotes (.mnotes) albo PDF. Na początku oryginalne strony w A5, potem strony A5 w kratkę, na każdej obrazek z treścią jednego zadania albo podpunktu. Używaj, gdy użytkownik wrzuca PDF z zadaniami i prosi o plik .mnotes, notatki do rozwiązywania zadań, zeszyt z zadaniami albo o pocięcie zadań na strony.
+description: Zamienia PDF-y z listami zadań (np. od wykładowcy) na zeszyt mNotes (.mnotes) albo PDF. Na początku oryginalne strony w A5, potem strony A5 w kratkę, na każdej obrazek z treścią jednego zadania albo podpunktu. Odpowiedź zawiera też spis treści zadań w bloczku kodu Markdown (do wklejenia w czat). Używaj, gdy użytkownik wrzuca PDF z zadaniami i prosi o plik .mnotes, notatki do rozwiązywania zadań, zeszyt z zadaniami albo o pocięcie zadań na strony.
 ---
 
 # Zadania z PDF do zeszytu mNotes
@@ -13,13 +13,16 @@ Wynik to plik `.mnotes` (domyślnie) albo `.pdf`. Układ:
    - zadanie z podpunktami: **osobna strona na każdy podpunkt**, na niej **2 obrazki**: treść zadania przed podpunktami (to samo na każdej stronie tego zadania) oraz treść podpunktu. Obrazki są osobnymi elementami, więc w mNotes można każdy usunąć albo przestawić.
    Obrazki mają pełną szerokość kartki (420 pt), są przyklejone do góry; reszta strony to kratka na rozwiązanie.
 
+Oprócz pliku w odpowiedzi jest **spis treści zadań w bloczku kodu Markdown** (jeden PDF = jeden bloczek), który użytkownik kopiuje do czata, żeby od razu zadawać pytania (krok 6).
+
 Nie edytuj żadnych plików skilla. Wszystko robią skrypty z folderu `scripts/` obok tego pliku.
 
 ## Zasady, których nie wolno łamać
 
 - Zawsze uruchamiaj skrypty (nie wycinaj zadań „na oko”, nie pisz własnego kodu do `.mnotes`).
 - Nie wymyślaj treści zadań. Obrazki to wycinki z oryginalnego PDF.
-- Jedno wejściowe PDF = jeden zeszyt. Wiele PDF-ów = wiele osobnych zeszytów (powtórz kroki 2–5 dla każdego).
+- Jedno wejściowe PDF = jeden zeszyt. Wiele PDF-ów = wiele osobnych zeszytów (powtórz kroki 2–6 dla każdego).
+- Spis zadań (krok 6) przepisuj **z obrazów**, nie z warstwy tekstowej PDF: ta bywa zniekształcona (wzory, polskie litery). Nie rozwiązuj zadań i nie dopisuj nic od siebie.
 - Przed oddaniem pliku **zawsze** obejrzyj podglądy (krok 3) i porównaj z listą zadań. Plik oddajesz dopiero, gdy się zgadza.
 - Nie zmieniaj nazw katalogów wyników. Gotowy plik trafia do `/mnt/user-data/outputs/` (jeśli taki katalog istnieje), inaczej do bieżącego katalogu.
 
@@ -41,7 +44,7 @@ python3 "$SK/check_env.py"
 
 - `WYNIK: gotowe` → idź dalej.
 - Brak Pillow: `pip install pillow`. Brak renderowania lub tekstu z PDF: `pip install pymupdf` (albo `apt-get install -y poppler-utils`).
-- „skalowanie PDF: brak” oznacza, że **nie da się zrobić wyniku `.pdf`** (`.mnotes` nadal działa). Spróbuj `pip install pypdf`. Jeśli się nie da, powiedz to użytkownikowi i daj `.mnotes`.
+- „skalowanie PDF: brak” oznacza, że oryginalne strony **nie zostaną zmniejszone do A5** (mNotes pokazuje tło PDF w skali 1:1, więc A4 byłby ucięty), a wynik `.pdf` w ogóle nie powstanie. Zawsze wykonaj wtedy `pip install pypdf` i sprawdź `check_env.py` jeszcze raz. Dopiero gdy się nie da, zbuduj mimo to i **powiedz użytkownikowi wprost**, że oryginały są w dużym rozmiarze.
 
 ## Krok 2. Analiza
 
@@ -97,9 +100,33 @@ pdftoppm -r 60 -f 1 -l 3 -png "/mnt/user-data/outputs/NAZWA.pdf" /tmp/zm_kontrol
 
 Dla `.mnotes` kontrola jest wbudowana w `build.py` (OK + lista stron); dodatkowo możesz wyrenderować wycinki z planu (krok 3).
 
-## Krok 6. Odpowiedź dla użytkownika
+## Krok 6. Spisz zadania do bloczku kodu
+
+Dla każdego wejściowego PDF-a (po zbudowaniu zeszytu) zapisz obrazki zadań i przepisz z nich treść:
+
+```bash
+python3 "$SK/wycinki.py" /tmp/zm_NAZWA/plan.json --out /tmp/zm_NAZWA/wycinki
+```
+
+Skrypt zapisuje po jednym PNG na zadanie (`01-Zadanie-1.png`, …; cała treść: wstęp i wszystkie podpunkty). **Obejrzyj każdy obraz po kolei** (narzędziem do oglądania obrazów) i spisz jego treść według reguł:
+
+- Jeden PDF = **jeden bloczek kodu** ` ```markdown ` … ` ``` `. Gdy wejściowych PDF-ów jest kilka, każdy ma osobny bloczek, a nad nim linia z nazwą pliku (np. `**domowe1.pdf**`). Nie łącz plików w jeden bloczek.
+- Jeśli treść zawiera potrójny znak backtick ` ``` `, otocz bloczek czterema (` ```` `).
+- Na początku bloczku: `# <tytuł zeszytu>`. Potem dla każdego zadania nagłówek `## <etykieta zadania z PDF>` (np. `## Zadanie 1.3`), pod nim treść wstępu.
+- Podpunkty jako lista: `- (a) treść`, `- (b) treść` (etykiety tak jak w PDF, bez dublowania etykiety w treści).
+- Wzory w LaTeX: `$…$` w tekście, `$$…$$` dla wzorów w osobnej linii. Znaki specjalne piszesz poprawnie: `\nabla`, `\oint`, `\bar{n}`, `\infty`, `\varepsilon`.
+- Polskie litery zawsze poprawne (ą ć ę ł ń ó ś ź ż), nawet gdy tekst z PDF ma tam inne znaki.
+- Wierność oryginałowi: te same słowa, ten sam porządek, te same gwiazdki (`*`) i oznaczenia trudności. Nie skracaj, nie parafrazuj, nie rozwiązuj, nie dopisuj wskazówek. Rysunki i wykresy opisz jednym zdaniem w nawiasie kwadratowym: `[rysunek: …]`.
+- Gdy czegoś nie umiesz odczytać: `[nieczytelne]`. Nie zgaduj.
+- Jeśli plan ma 0 zadań (skan bez planu ręcznego) i nie da się spisać, napisz to wprost zamiast bloczku.
+
+Ten krok wykonaj nawet przy wyniku `.pdf`.
+
+## Krok 7. Odpowiedź dla użytkownika
 
 Podaj plik (link/załącznik z `/mnt/user-data/outputs/`) i krótko: ile stron oryginału, ile stron zadań, które zadania mają podpunkty. Wypisz każde ostrzeżenie i każdą ręczną poprawkę planu. Powiedz, jak otworzyć: w mNotes „Importuj” → wybrać plik `.mnotes`.
+
+Potem **w samej odpowiedzi** (nie tylko w pliku) wklej bloczki z kroku 6, żeby dało się je skopiować. Dodaj jedno zdanie, że spis jest przepisany z obrazów i warto rzucić okiem na wzory, zanim trafi do czata.
 
 ## Gdy coś pójdzie źle
 

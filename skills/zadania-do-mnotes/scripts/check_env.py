@@ -2,7 +2,7 @@
 """Sprawdza środowisko skilla i mówi, co zadziała. Użycie: python3 check_env.py
 
 Wymagane: Python 3 + Pillow + jedno narzędzie do renderowania PDF (pdftoppm z poppler, PyMuPDF, ghostscript lub mutool).
-Do wyniku .pdf potrzebny jest ponadto backend skalujący (pypdf, PyMuPDF lub ghostscript). Wynik .mnotes nie wymaga go.
+Do przeskalowania oryginałów do A5 (w .mnotes i w .pdf) potrzebny jest backend skalujący: pypdf, PyMuPDF lub ghostscript.
 """
 import os
 import sys
@@ -27,7 +27,7 @@ def main():
     print("tekst z PDF:   %s" % ("jest" if text else "BRAK (potrzebny pdftotext albo PyMuPDF; pip install pymupdf)"))
     ok &= text
     be = pdfout.scale_backend()
-    print("skalowanie PDF: %s" % (be if be else "brak — wynik .pdf niemożliwy (pip install pypdf), .mnotes działa"))
+    print("skalowanie PDF: %s" % (be if be else "brak — oryginały nie zostaną zmniejszone do A5, .pdf niemożliwy (pip install pypdf)"))
     print("katalog wyników: %s" % zc.default_out_dir())
     print("WYNIK: %s" % ("gotowe" if ok else "brakuje wymaganych narzędzi (patrz wyżej)"))
     sys.exit(0 if ok else 1)

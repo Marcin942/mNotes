@@ -41,7 +41,7 @@ python3 "$SK/check_env.py"
 
 - `WYNIK: gotowe` → idź dalej.
 - Brak Pillow: `pip install pillow`. Brak renderowania lub tekstu z PDF: `pip install pymupdf` (albo `apt-get install -y poppler-utils`).
-- „skalowanie PDF: brak” oznacza, że **nie da się zrobić wyniku `.pdf`** (`.mnotes` nadal działa). Spróbuj `pip install pypdf`. Jeśli się nie da, powiedz to użytkownikowi i daj `.mnotes`.
+- „skalowanie PDF: brak” oznacza, że oryginalne strony **nie zostaną zmniejszone do A5** (mNotes pokazuje tło PDF w skali 1:1, więc A4 byłby ucięty), a wynik `.pdf` w ogóle nie powstanie. Zawsze wykonaj wtedy `pip install pypdf` i sprawdź `check_env.py` jeszcze raz. Dopiero gdy się nie da, zbuduj mimo to i **powiedz użytkownikowi wprost**, że oryginały są w dużym rozmiarze.
 
 ## Krok 2. Analiza
 

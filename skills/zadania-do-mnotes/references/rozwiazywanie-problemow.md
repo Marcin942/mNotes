@@ -11,7 +11,7 @@
 | Podpunkty nie wykryte | Skrypt rozpoznaje podpunkty `a)`/`(a)`, `i)`/`(i)`, `1)`/`(1)`, gdy są wcięte względem zadania i jest ich co najmniej 2. Inny zapis: `--sub-regex`. |
 | Pierwszy wiersz zadania ucięty | Zwiększ `y0` przez edycję `plan.json` albo zmniejsz poprzedni `y1` (zob. `plan-reczny.md`). |
 | Obrazki wystają poza stronę A5 | Ostrzeżenie z `build.py`: wycinek jest wyższy niż strona. Powiedz użytkownikowi, w mNotes można zmniejszyć obrazek palcem. |
-| Brak wyniku `.pdf` | Brak backendu skalującego. `pip install pypdf`, a gdy się nie da, daj użytkownikowi `.mnotes` i powiedz o tym wprost. |
+| Brak wyniku `.pdf` albo OSTRZEŻENIE o niezmniejszonych oryginałach | Brak backendu skalującego. `pip install pypdf` i uruchom `build.py` jeszcze raz. Gdy się nie da, powiedz użytkownikowi wprost, że oryginały w `.mnotes` są w pierwotnym rozmiarze, a `.pdf` nie powstał. |
 | `BrokenPipeError` | Wynik był przycięty `head`. Uruchom polecenie bez `| head`. |
 | Pliku nie ma w `/mnt/user-data/outputs/` | Sprawdź wiersz „OK .mnotes: ścieżka” z `build.py` i wskaż użytkownikowi tę ścieżkę. |
 

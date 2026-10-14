@@ -16,7 +16,7 @@ obrazki: wspólna treść zadania i treść podpunktu).
    Włącz „Wykonywanie kodu i tworzenie plików”.
 3. W rozmowie dołącz PDF i napisz np. „Zrób z tego zeszyt mNotes”.
 
-Wymagania środowiska: Python 3 + Pillow + poppler-utils (albo PyMuPDF). Do wyniku PDF dodatkowo pypdf, PyMuPDF albo
+Wymagania środowiska: Python 3 + Pillow + poppler-utils (albo PyMuPDF). Do przeskalowania oryginałów do A5 (i do wyniku PDF) pypdf, PyMuPDF albo
 ghostscript. Skill sam sprawdza środowisko (`scripts/check_env.py`) i podpowiada, co doinstalować.
 
 ### Test lokalny

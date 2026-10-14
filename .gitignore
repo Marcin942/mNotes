@@ -22,3 +22,6 @@ __pycache__
 secrets.properties
 *.keystore
 *.jks
+
+# Archiwum skilla budowane przez skills/pakuj.sh
+skills/*.zip

@@ -58,8 +58,12 @@ data class PageSpec(
 ) {
     val marginLine: Boolean get() = opts and OPT_MARGIN != 0
 
-    /** Ciemny papier bez tła PDF — zakreślacz działa na nim jak „screen”, nie „multiply”. */
-    val darkPaper: Boolean get() = pdf == null && Paper.isDark(paper)
+    /**
+     * Ciemny papier — zakreślacz działa na nim jak „screen”, nie „multiply”. Dotyczy też strony z tłem PDF, bo strona
+     * zaimportowana z Samsung Notes niesie wzór tła w PDF-ie, a kolor papieru w [paper]. Zwykłe importowane PDF-y mają
+     * papier biały, więc dla nich nic się nie zmienia.
+     */
+    val darkPaper: Boolean get() = Paper.isDark(paper)
 
     fun withSize(w: Float, h: Float) = copy(w = w, h = h)
 

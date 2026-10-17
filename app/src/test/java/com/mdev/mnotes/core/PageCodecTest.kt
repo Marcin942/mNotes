@@ -43,6 +43,7 @@ class PageCodecTest {
             TextBox.FAMILY_SERIF, TextBox.STYLE_BOLD or TextBox.STYLE_UNDERLINE, TextBox.ALIGN_CENTER, 0x33FFFF00, true))
         list.add(TextBox(Ids.next(), 60f, 500f, 180f, 30f, 0f, "auto", 12f, 0xFF000000.toInt(), fit = TextBox.FIT_AUTO))
         list.add(TextBox(Ids.next(), 60f, 560f, 180f, 30f, 0f, "stałe", 12f, 0xFF000000.toInt(), fit = TextBox.FIT_FIXED))
+        list.add(TextBox(Ids.next(), 60f, 620f, 180f, 30f, 0f, "interlinia", 12f, 0xFF000000.toInt(), lineSpacing = 1.15f))
         list.add(ImageEl(Ids.next(), "img-1.webp", 250f, 400f, 120f, 80f, -0.2f, 0.5f, false))
         list.add(com.mdev.mnotes.core.model.FillEl(Ids.next(), 0xFF3366CC.toInt(), false, listOf(floatArrayOf(0f, 0f, 600f, 0f, 600f, 800f, 0f, 800f), floatArrayOf(100.5f, 100f, 200f, 100f, 150f, 180.25f))))
         val src = PageContent.of(list)
@@ -77,6 +78,7 @@ class PageCodecTest {
                     assertEquals(a.fill, b.fill)
                     assertEquals(a.size, b.size, 0f)
                     assertEquals(a.fit, b.fit)
+                    assertEquals(a.lineSpacing, b.lineSpacing, 0f)
                 }
                 is ImageEl -> {
                     b as ImageEl
@@ -186,6 +188,17 @@ class PageCodecTest {
         assertEquals(11f, s.pts[3], 1e-4f)
         assertEquals(19.5f, s.pts[4], 1e-4f)
         assertEquals(2f, s.width, 1e-4f)
+    }
+
+    @Test
+    fun defaultLineSpacingAddsNoBytes() {
+        fun enc(ls: Float) = PageCodec.encode(PageContent.of(listOf(
+            TextBox(Ids.next(), 60f, 620f, 180f, 30f, 0f, "a", 12f, 0xFF000000.toInt(), lineSpacing = ls),
+        )))
+        // interlinia 1 zapisuje się jak przed jej wprowadzeniem; inna wartość dokłada flagę i jeden f32
+        assertTrue(enc(1.15f).size - enc(1f).size <= 5)
+        assertEquals(1f, (PageCodec.decode(enc(1f)).elements[0] as TextBox).lineSpacing, 0f)
+        assertEquals(1.15f, (PageCodec.decode(enc(1.15f)).elements[0] as TextBox).lineSpacing, 0f)
     }
 
     @Test

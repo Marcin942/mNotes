@@ -270,7 +270,7 @@ fun TextDialog(ed: Editor, req: TextRequest) {
         }
         val w = ex?.w ?: 240f
         val x = ex?.let { TextFit.corner(it).first } ?: TextFit.placeX(req.x, pageW)
-        val base = TextBox(ex?.id ?: Ids.next(), x + w / 2f, req.y + 10f, w, 20f, ex?.rot ?: 0f, text, size, color, family, style, align, fill, ex?.locked ?: false, fit)
+        val base = TextBox(ex?.id ?: Ids.next(), x + w / 2f, req.y + 10f, w, 20f, ex?.rot ?: 0f, text, size, color, family, style, align, fill, ex?.locked ?: false, fit, ex?.lineSpacing ?: 1f)
         // nowe pole: lewy-górny róg w klikniętym miejscu; istniejące: róg zostaje tam, gdzie był
         val placed = if (ex != null) base.copy(cx = ex.cx, cy = ex.cy, w = ex.w, h = ex.h) else base
         val fitted = TextFit.refit(placed, pageW, pageH, renderer.textMeasure)

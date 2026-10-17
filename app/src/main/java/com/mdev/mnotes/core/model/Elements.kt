@@ -253,6 +253,8 @@ class TextBox(
     override val locked: Boolean = false,
     /** Skąd bierze się rozmiar pola: [FIT_HEIGHT] (stała szerokość, wysokość z tekstu), [FIT_AUTO] albo [FIT_FIXED]. */
     val fit: Int = FIT_HEIGHT,
+    /** Mnożnik odstępu między wierszami (1 = domyślny dla czcionki); import z Samsung Notes używa 1,15. */
+    val lineSpacing: Float = 1f,
 ) : BoxElement() {
 
     val bold: Boolean get() = style and STYLE_BOLD != 0
@@ -267,8 +269,8 @@ class TextBox(
         id: Int = this.id, cx: Float = this.cx, cy: Float = this.cy, w: Float = this.w, h: Float = this.h,
         rot: Float = this.rot, text: String = this.text, size: Float = this.size, color: Int = this.color,
         family: Int = this.family, style: Int = this.style, align: Int = this.align, fill: Int = this.fill,
-        locked: Boolean = this.locked, fit: Int = this.fit,
-    ) = TextBox(id, cx, cy, w, h, rot, text, size, color, family, style, align, fill, locked, fit)
+        locked: Boolean = this.locked, fit: Int = this.fit, lineSpacing: Float = this.lineSpacing,
+    ) = TextBox(id, cx, cy, w, h, rot, text, size, color, family, style, align, fill, locked, fit, lineSpacing)
 
     override fun transformed(m: Affine): TextBox {
         val g = mapBox(m)

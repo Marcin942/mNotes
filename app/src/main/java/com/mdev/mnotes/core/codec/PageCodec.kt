@@ -52,6 +52,8 @@ object PageCodec {
     // Tryb rozmiaru pola tekstowego; brak obu bitów = TextBox.FIT_HEIGHT, czyli zapis sprzed trybów.
     private const val FLAG_TEXT_AUTO = 64
     private const val FLAG_TEXT_FIXED = 128
+    // Interlinia ≠ 1: f32 po tekście. Rekordy mają długość, więc starsza wersja pomija ten ogon i rysuje interlinię 1.
+    private const val FLAG_TEXT_LINES = 256
     private const val Q = 100f
 
     fun encode(content: PageContent): ByteArray {
@@ -175,13 +177,15 @@ object PageCodec {
 
     private fun writeText(w: ByteWriter, t: TextBox) {
         val fit = when (t.fit) { TextBox.FIT_AUTO -> FLAG_TEXT_AUTO; TextBox.FIT_FIXED -> FLAG_TEXT_FIXED; else -> 0 }
-        w.varint((if (t.locked) FLAG_LOCKED else 0) or fit)
+        val lines = t.lineSpacing != 1f
+        w.varint((if (t.locked) FLAG_LOCKED else 0) or fit or (if (lines) FLAG_TEXT_LINES else 0))
         w.f32(t.cx); w.f32(t.cy); w.f32(t.w); w.f32(t.h); w.f32(t.rot)
         w.f32(t.size)
         w.i32(t.color)
         w.u8(t.family); w.u8(t.style); w.u8(t.align)
         w.i32(t.fill)
         w.string(t.text)
+        if (lines) w.f32(t.lineSpacing)
     }
 
     private fun readText(r: ByteReader): TextBox {
@@ -192,8 +196,9 @@ object PageCodec {
         val family = r.u8(); val style = r.u8(); val align = r.u8()
         val fill = r.i32()
         val text = r.string()
+        val lineSpacing = if (flags and FLAG_TEXT_LINES != 0) r.f32().coerceIn(0.5f, 4f) else 1f
         val fit = when { flags and FLAG_TEXT_AUTO != 0 -> TextBox.FIT_AUTO; flags and FLAG_TEXT_FIXED != 0 -> TextBox.FIT_FIXED; else -> TextBox.FIT_HEIGHT }
-        return TextBox(Ids.next(), cx, cy, w, h, rot, text, size, color, family, style, align, fill, flags and FLAG_LOCKED != 0, fit)
+        return TextBox(Ids.next(), cx, cy, w, h, rot, text, size, color, family, style, align, fill, flags and FLAG_LOCKED != 0, fit, lineSpacing)
     }
 
     private fun writeImage(w: ByteWriter, im: ImageEl) {

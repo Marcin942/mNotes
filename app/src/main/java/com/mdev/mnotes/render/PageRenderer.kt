@@ -278,7 +278,7 @@ class PageRenderer(private val assets: Assets?) {
         tp.isStrikeThruText = t.strike
         val al = when (t.align) { TextBox.ALIGN_CENTER -> Layout.Alignment.ALIGN_CENTER; TextBox.ALIGN_END -> Layout.Alignment.ALIGN_OPPOSITE; else -> Layout.Alignment.ALIGN_NORMAL }
         val txt = if (t.text.isEmpty()) " " else t.text
-        return StaticLayout.Builder.obtain(txt, 0, txt.length, tp, max(1, widthPt.toInt())).setAlignment(al).setIncludePad(false).build()
+        return StaticLayout.Builder.obtain(txt, 0, txt.length, tp, max(1, widthPt.toInt())).setAlignment(al).setIncludePad(false).setLineSpacing(0f, t.lineSpacing).build()
     }
 
     /** Pomiar tekstu dla [com.mdev.mnotes.core.text.TextFit]: te same czcionki i zawijanie co przy rysowaniu. */

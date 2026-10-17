@@ -29,7 +29,7 @@ internal object SynthSdocx {
         val height: Int = 2262,
     )
 
-    private class Le {
+    internal class Le {
         private val o = ByteArrayOutputStream()
         val size: Int get() = o.size()
         fun u8(v: Int) = apply { o.write(v) }
@@ -113,22 +113,27 @@ internal object SynthSdocx {
         return head + flexBytes + Le().u16(1).u16(0).toByteArray() + layer
     }
 
-    private fun noteNote(): ByteArray {
+    /** Tablica napisów, a za nią (po kilku bajtach innych danych) opcjonalna ramka tekstu płynącego. */
+    private fun noteNote(flow: ByteArray?): ByteArray {
         val entries = Le()
         for ((id, s) in STRINGS) entries.i32(id).s16(s)
         val e = entries.toByteArray()
-        return Le().i32(2 + e.size).u16(STRINGS.size).bytes(e).toByteArray()
+        val table = Le().i32(2 + e.size).u16(STRINGS.size).bytes(e)
+        if (flow != null) table.bytes(ByteArray(24) { (it * 7 + 3).toByte() }).bytes(flow)
+        return table.toByteArray()
     }
 
-    fun build(pages: List<Page>): ByteArray {
+    /** [media]: nazwa pliku w katalogu `media/` (np. `4@files_x.jpg`) → bajty. */
+    fun build(pages: List<Page>, flow: ByteArray? = null, media: Map<String, ByteArray> = emptyMap()): ByteArray {
         val order = Le().zeros(32).u16(pages.size)
         for (p in pages) order.s16(p.uuid).zeros(32)
         val out = ByteArrayOutputStream()
         ZipOutputStream(out).use { z ->
             fun put(name: String, data: ByteArray) { z.putNextEntry(ZipEntry(name)); z.write(data); z.closeEntry() }
-            put("note.note", noteNote())
+            put("note.note", noteNote(flow))
             put("pageIdInfo.dat", order.toByteArray())
             for (p in pages) put("${p.uuid}.page", pageBytes(p))
+            for ((name, data) in media) put("media/$name", data)
             put("end_tag.bin", byteArrayOf(0))
         }
         return out.toByteArray()

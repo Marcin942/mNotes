@@ -19,17 +19,19 @@ object SdocxReader {
     /** Wczytuje cały dokument ze strumienia ZIP. Strona, której nie da się odczytać, trafia do wyniku z [SdPage.error]. */
     fun read(input: InputStream): SdDocument {
         val files = HashMap<String, ByteArray>()
+        val media = HashMap<Int, ByteArray>()
         var total = 0
         ZipInputStream(input).use { zip ->
             while (true) {
                 val e = zip.nextEntry ?: break
                 val name = e.name.substringAfterLast('/')
+                val mediaId = if (e.isDirectory) null else mediaId(name)
                 val wanted = name == "note.note" || name == "pageIdInfo.dat" || name.endsWith(".page")
-                if (!wanted || e.isDirectory) continue
+                if ((!wanted && mediaId == null) || e.isDirectory) continue
                 val data = readBounded(zip, MAX_ENTRY)
                 total += data.size
                 if (total > MAX_TOTAL) throw SamsungFormatException("plik jest zbyt duży")
-                files[name] = data
+                if (mediaId != null) media[mediaId] = data else files[name] = data
             }
         }
         val note = files["note.note"] ?: throw SamsungFormatException("brak note.note: to nie jest notatka Samsung Notes")
@@ -49,7 +51,16 @@ object SdocxReader {
                 },
             )
         }
-        return SdDocument(strings, pages)
+        return SdDocument(strings, pages, SdFlowReader.find(note), media)
+    }
+
+    /** Numer pliku obrazu z nazwy `<numer>@<nazwa>.jpg|png|webp`; podglądy `.spi` i inne pliki dają null. */
+    internal fun mediaId(name: String): Int? {
+        val at = name.indexOf('@')
+        if (at <= 0 || at > 9) return null
+        val ext = name.substringAfterLast('.', "").lowercase()
+        if (ext != "jpg" && ext != "jpeg" && ext != "png" && ext != "webp") return null
+        return name.substring(0, at).toIntOrNull()?.takeIf { it >= 0 }
     }
 
     /** Czy to archiwum wygląda jak `.sdocx` (ma `note.note`). Czyta strumień tylko do pierwszego trafienia. */

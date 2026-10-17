@@ -41,7 +41,16 @@ class SdPage(
     val isEmpty: Boolean get() = error == null && layers.all { it.isEmpty() }
 }
 
-class SdDocument(val strings: Map<Int, String>, val pages: List<SdPage>)
+/**
+ * Cała notatka. [flow] to tekst płynący z `note.note` (null, gdy notatka go nie ma), [media] to pliki obrazów z katalogu
+ * `media/` pod numerem z przedrostka nazwy (`4@files_….jpg` → 4); bajty trzymane są raz i współdzielone z wynikiem konwersji.
+ */
+class SdDocument(
+    val strings: Map<Int, String>,
+    val pages: List<SdPage>,
+    val flow: SdFlow? = null,
+    val media: Map<Int, ByteArray> = emptyMap(),
+)
 
 /** Wszystkie obiekty warstw w kolejności rysowania: rodzic przed dziećmi. */
 internal fun SdPage.allObjects(): List<SdObject> {

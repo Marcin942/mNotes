@@ -64,6 +64,7 @@ Legenda: P0 = v1, P1 = zaraz po v1, P2 = miło mieć, P3 = kiedyś. Nakład S/M/
 | EDT-046 | ~~Rozpoznawanie wzoru → LaTeX z zaznaczenia~~ — WYCOFANE (daleka przyszłość) | — | — | — |
 | EDT-047 | ~~Obiekt wzoru (render KaTeX)~~ — WYCOFANE (daleka przyszłość) | — | — | — |
 | EDT-048 | Formatowanie zaawansowane tekstu | P1 | M | |
+| EDT-049 | Rozmiar pola tekstowego: auto-rozmiar, uchwyty boków, tryb ręczny | P0 | M | |
 | EDT-050 | Wstaw obraz z galerii (Photo Picker) | P0 | M | |
 | EDT-051 | Wstaw zdjęcie z aparatu | P1 | S | |
 | EDT-052 | Skaner dokumentu (korekta perspektywy) | P2 | L | |

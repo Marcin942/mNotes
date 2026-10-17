@@ -41,6 +41,7 @@ import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.launch
+import com.mdev.mnotes.data.ImportSource
 import com.mdev.mnotes.ui.importUris
 import com.mdev.mnotes.core.model.PageFormat
 import com.mdev.mnotes.core.model.PageSpec
@@ -72,6 +73,9 @@ class UiModel(application: Application) : AndroidViewModel(application) {
     var settingsCat by mutableIntStateOf(0)
     var editor by mutableStateOf<Editor?>(null)
     var locked by mutableStateOf(app.settings.appLock)
+
+    /** Pliki Samsung Notes czekające na okno importu (podgląd, tryb, raport); null = brak. */
+    var samsungImport by mutableStateOf<List<ImportSource>?>(null)
 
     /** Otwarte karty (tylko gdy włączone ustawienie „Otwieraj jako karty”). Edytor istnieje wyłącznie dla aktywnej. */
     var tabs by mutableStateOf(Tabs())
@@ -194,23 +198,37 @@ open class MainActivity : FragmentActivity() {
     private fun handle(i: Intent?) {
         if (i == null) return
         if (ui.locked) {
-            if (i.action == Intent.ACTION_VIEW || i.action == Intent.ACTION_SEND) pending = i
+            if (i.action == Intent.ACTION_VIEW || i.action == Intent.ACTION_SEND || i.action == Intent.ACTION_SEND_MULTIPLE) pending = i
             return
         }
         i.getStringExtra(EXTRA_NOTEBOOK)?.let { i.removeExtra(EXTRA_NOTEBOOK); ui.open(it) }
         when (i.action) {
             Intent.ACTION_CREATE_NOTE -> ui.quickNote()
-            Intent.ACTION_VIEW, Intent.ACTION_SEND -> {
+            Intent.ACTION_VIEW, Intent.ACTION_SEND, Intent.ACTION_SEND_MULTIPLE -> {
                 // Pliki z innych aplikacji („Otwórz w mNotes”, „Udostępnij”) stają się nowymi zeszytami.
-                val uris = if (i.action == Intent.ACTION_VIEW) listOfNotNull(i.data)
-                else listOfNotNull(if (android.os.Build.VERSION.SDK_INT >= 33) i.getParcelableExtra(Intent.EXTRA_STREAM, android.net.Uri::class.java) else @Suppress("DEPRECATION") i.getParcelableExtra(Intent.EXTRA_STREAM))
+                val uris = incomingUris(i)
                 if (uris.isEmpty()) return
                 lifecycleScope.launch {
-                    val made = importUris(app, uris, null, i.type)
-                    if (made.size == 1) ui.open(made[0].id)
+                    val made = importUris(app, uris, null, i.type, onSamsung = { ui.samsungImport = it })
+                    if (made.size == 1 && ui.samsungImport == null) ui.open(made[0].id)
                 }
             }
         }
+    }
+
+    /** Adresy plików z intencji: VIEW (`data`), SEND (jeden strumień), SEND_MULTIPLE (lista); awaryjnie `ClipData`. */
+    private fun incomingUris(i: Intent): List<android.net.Uri> {
+        val out = LinkedHashSet<android.net.Uri>()
+        i.data?.let { out.add(it) }
+        val tiramisu = android.os.Build.VERSION.SDK_INT >= 33
+        if (i.action == Intent.ACTION_SEND) {
+            (if (tiramisu) i.getParcelableExtra(Intent.EXTRA_STREAM, android.net.Uri::class.java) else @Suppress("DEPRECATION") i.getParcelableExtra<android.net.Uri>(Intent.EXTRA_STREAM))?.let { out.add(it) }
+        } else if (i.action == Intent.ACTION_SEND_MULTIPLE) {
+            (if (tiramisu) i.getParcelableArrayListExtra(Intent.EXTRA_STREAM, android.net.Uri::class.java) else @Suppress("DEPRECATION") i.getParcelableArrayListExtra<android.net.Uri>(Intent.EXTRA_STREAM))?.let { out.addAll(it) }
+        }
+        // Część aplikacji podaje pliki tylko w ClipData (zwłaszcza z uprawnieniem do odczytu przypiętym do niej).
+        i.clipData?.let { c -> for (k in 0 until c.itemCount) c.getItemAt(k).uri?.let { out.add(it) } }
+        return out.toList()
     }
 
     override fun onStop() {

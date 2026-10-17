@@ -11,7 +11,6 @@ import android.print.PrintDocumentAdapter
 import android.print.PrintDocumentInfo
 import android.print.PrintManager
 import android.provider.DocumentsContract
-import android.provider.OpenableColumns
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -43,6 +42,9 @@ import com.mdev.mnotes.app.MNotesApp
 import com.mdev.mnotes.app.app
 import com.mdev.mnotes.data.ExportFormat
 import com.mdev.mnotes.data.Exporter
+import com.mdev.mnotes.core.codec.FileKind
+import com.mdev.mnotes.data.ImportProbe
+import com.mdev.mnotes.data.ImportSource
 import com.mdev.mnotes.data.Importer
 import com.mdev.mnotes.data.NotebookMeta
 import com.mdev.mnotes.editor.T
@@ -188,58 +190,53 @@ fun ExportDialog(nb: String, currentPage: Int, prepare: () -> Unit, onDismiss: (
 
 // ─────────────────────────────── Import ───────────────────────────────
 
-private enum class Kind { PDF, IMAGE, MNOTES }
-
-private fun Context.displayName(uri: Uri): String =
-    runCatching { contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { if (it.moveToFirst()) it.getString(0) else null } }.getOrNull()
-        ?: uri.lastPathSegment?.substringAfterLast('/') ?: "import"
-
 /**
  * Importuje pliki (PDF, obrazy, .mnotes) jako nowe zeszyty. Praca na wątku IO, rejestracja w bibliotece na głównym.
- * Zwraca utworzone zeszyty; użytkownik dostaje komunikat (także o plikach pominiętych).
+ * Rodzaj pliku ustala [ImportProbe] po zawartości, bo menedżery plików podają obce typy i adresy bez rozszerzenia.
+ * Pliki Samsung Notes (`.sdocx`, PDF zgodny z Notatkami) trafiają do [onSamsung] (okno z podglądem i wyborem trybu);
+ * bez odbiorcy są pomijane. Zwraca utworzone zeszyty; użytkownik dostaje komunikat (także o plikach pominiętych).
  */
-suspend fun importUris(app: MNotesApp, uris: List<Uri>, folderId: String?, mimeHint: String? = null): List<NotebookMeta> {
+suspend fun importUris(
+    app: MNotesApp,
+    uris: List<Uri>,
+    folderId: String?,
+    mimeHint: String? = null,
+    onSamsung: ((List<ImportSource>) -> Unit)? = null,
+): List<NotebookMeta> {
     val ctx: Context = app
     val imp = Importer(app.repo, app.pdf)
     val made = ArrayList<NotebookMeta>()
+    val samsung = ArrayList<ImportSource>()
     var skipped = 0
     withContext(Dispatchers.IO) {
-        val images = ArrayList<Pair<Uri, String>>()
+        val images = ArrayList<ImportSource>()
         for (u in uris) {
-            val name = ctx.displayName(u)
-            val low = name.lowercase()
-            val mime = (ctx.contentResolver.getType(u) ?: mimeHint).orEmpty()
-            val kind = when {
-                mime == "application/pdf" || low.endsWith(".pdf") -> Kind.PDF
-                low.endsWith(".mnotes") || mime == "application/x-mnotes" -> Kind.MNOTES
-                mime.startsWith("image/") -> Kind.IMAGE
-                low.endsWith(".zip") -> Kind.MNOTES
-                else -> null
-            }
-            val base = name.substringBeforeLast('.', name).ifBlank { "import" }
+            val src = ImportProbe.probe(ctx, u, mimeHint)
+            if (src.isSamsung && onSamsung != null) { samsung.add(src); continue }
+            val base = src.name.substringBeforeLast('.', src.name).ifBlank { "import" }
             val meta = runCatching {
-                when (kind) {
-                    Kind.PDF -> ctx.contentResolver.openInputStream(u)?.use { imp.importPdf(it, base, folderId) }
-                    Kind.MNOTES -> ctx.contentResolver.openInputStream(u)?.use { imp.importMnotes(it, folderId) }
-                    Kind.IMAGE -> {
-                        val ext = low.substringAfterLast('.', "").takeIf { it.matches(Regex("[a-z0-9]{2,4}")) } ?: "jpg"
-                        images.add(u to ext)
-                        null
-                    }
-                    null -> null
+                when (src.kind) {
+                    FileKind.PDF -> ctx.contentResolver.openInputStream(u)?.use { imp.importPdf(it, base, folderId) }
+                    FileKind.MNOTES -> ctx.contentResolver.openInputStream(u)?.use { imp.importMnotes(it, folderId) }
+                    FileKind.IMAGE -> { images.add(src); null }
+                    else -> null
                 }
             }.getOrNull()
-            if (meta != null) made.add(meta) else if (kind != Kind.IMAGE) skipped++
+            if (meta != null) made.add(meta) else if (src.kind != FileKind.IMAGE) skipped++
         }
         if (images.isNotEmpty()) {
-            val title = if (images.size == 1) ctx.displayName(images[0].first).substringBeforeLast('.') else T.t("Import obrazów", "Imported images")
-            val sources = images.map { (u, ext) -> ({ ctx.contentResolver.openInputStream(u) } as () -> java.io.InputStream?) to ext }
+            val title = if (images.size == 1) images[0].name.substringBeforeLast('.') else T.t("Import obrazów", "Imported images")
+            val sources = images.map { src ->
+                val ext = src.name.lowercase().substringAfterLast('.', "").takeIf { it.matches(Regex("[a-z0-9]{2,4}")) } ?: "jpg"
+                ({ ctx.contentResolver.openInputStream(src.uri) } as () -> java.io.InputStream?) to ext
+            }
             val meta = runCatching { imp.importImages(sources, title, folderId) }.getOrNull()
             if (meta != null) made.add(meta) else skipped += images.size
         }
     }
     made.forEach { app.repo.addNotebook(it) }
-    ctx.toast(
+    if (samsung.isNotEmpty()) onSamsung?.invoke(samsung)
+    if (samsung.isEmpty() || made.isNotEmpty() || skipped > 0) ctx.toast(
         when {
             made.isEmpty() -> T.t("Nie udało się zaimportować plików", "Could not import the files")
             skipped > 0 -> T.t("Zaimportowano ${made.size}, pominięto $skipped", "Imported ${made.size}, skipped $skipped")

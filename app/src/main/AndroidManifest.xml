@@ -34,8 +34,18 @@
                 <data android:mimeType="application/x-mnotes" />
                 <data android:mimeType="image/*" />
             </intent-filter>
-            <!-- Pliki .mnotes (i PDF-y bez typu) bywają podawane jako „application/octet-stream” albo „application/zip”,
-                 bo system nie zna rozszerzenia, więc rozpoznajemy je po nazwie; wzorce obejmują nazwy z kilkoma kropkami. -->
+            <!-- Pliki .mnotes i .sdocx (Samsung Notes) menedżery plików podają jako „application/octet-stream” albo
+                 „application/zip” i z adresem bez rozszerzenia (content://…/msf%3A123), więc ani typ, ani wzorzec nazwy ich
+                 nie złapie. Dlatego te typy zgłaszamy wprost, a rodzaj pliku ustala import po zawartości (FileKinds). -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="application/octet-stream" />
+                <data android:mimeType="application/zip" />
+                <data android:mimeType="application/x-zip-compressed" />
+            </intent-filter>
+            <!-- Gdy typ jest zupełnie obcy („*/*”, „text/plain”), zostaje dopasowanie po rozszerzeniu w adresie;
+                 wzorce obejmują nazwy z kilkoma kropkami. -->
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
@@ -51,12 +61,22 @@
                 <data android:pathPattern=".*\\..*\\.pdf" />
                 <data android:pathPattern=".*\\..*\\..*\\.pdf" />
                 <data android:pathPattern=".*\\..*\\..*\\..*\\.pdf" />
+                <data android:pathPattern=".*\\.sdocx" />
+                <data android:pathPattern=".*\\..*\\.sdocx" />
+                <data android:pathPattern=".*\\..*\\..*\\.sdocx" />
+                <data android:pathPattern=".*\\..*\\..*\\..*\\.sdocx" />
             </intent-filter>
+            <!-- Cel udostępniania („Udostępnij” → mNotes): jeden plik albo kilka naraz; .sdocx i .mnotes bywają
+                 podawane jako octet-stream albo zip, więc te typy też zgłaszamy. -->
             <intent-filter>
                 <action android:name="android.intent.action.SEND" />
+                <action android:name="android.intent.action.SEND_MULTIPLE" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <data android:mimeType="application/pdf" />
                 <data android:mimeType="application/x-mnotes" />
+                <data android:mimeType="application/octet-stream" />
+                <data android:mimeType="application/zip" />
+                <data android:mimeType="application/x-zip-compressed" />
                 <data android:mimeType="image/*" />
             </intent-filter>
         </activity>

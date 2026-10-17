@@ -30,7 +30,7 @@ Gdy użytkownik wysłał trzy warianty tej samej notatki, użyj `.sdocx`, a PDF 
 - Zawsze uruchamiaj skrypty. Nie dekoduj formatu "na oko" i nie pisz własnego kodu do `.mnotes`.
 - Nie edytuj plików skilla. Jedno wejście = jeden zeszyt; wiele plików = osobne zeszyty.
 - **Nie dopowiadaj tego, czego raport nie potwierdza.** Wszystko, co skrypt pominął albo przybliżył, wypisz użytkownikowi.
-- Nie dodawaj `--dark`, jeśli użytkownik nie powiedział, że notatka w aplikacji Samsunga ma ciemne tło. Ciemny tryb nie jest wykrywany automatycznie, a `--dark` to heurystyka (patrz niżej).
+- Nie dodawaj `--dark`, jeśli użytkownik nie powiedział, że notatka w aplikacji Samsunga ma ciemne tło. Ciemny tryb to wygląd aplikacji, nie dane pliku: ani `.sdocx`, ani PDF go nie niosą i nie da się go wykryć (patrz „Tło ciemne”).
 - Gotowy plik trafia do `/mnt/user-data/outputs/` (jeśli taki katalog istnieje), inaczej do bieżącego katalogu.
 
 ## Krok 0. Znajdź skrypty i pliki wejściowe
@@ -54,7 +54,7 @@ Skrypt wypisuje raport i zapisuje go obok wyniku (`NOTATKA.raport.txt`). Opcje (
 | Opcja | Znaczenie |
 |---|---|
 | `--title "Tytuł"` | tytuł zeszytu (domyślnie z nazwy pliku, bez daty i numerka) |
-| `--dark` | ciemny papier mNotes i odwrócona jasność pisma (patrz „Tło ciemne”) |
+| `--dark` | wygląd jak w trybie ciemnym Notatek: papier i kolory pisma z odwróconą jasnością (patrz „Tło ciemne”) |
 | `--paper RRGGBB` | wymuś kolor papieru |
 
 ## Krok 2. Sprawdź wynik (obowiązkowo)
@@ -93,7 +93,20 @@ Wartości zmierzono na dwóch próbkach (jasna i ciemna notatka) przez porównan
 
 ### Tło ciemne
 
-W pliku nie ma wprost znacznika „ciemna notatka” (w próbce papier ma kolor `FCFCFC`, a ciemność zapisuje tylko aplikacja Samsunga). `--dark` ustawia ciemny papier mNotes (`1E1F22`) i odwraca jasność kolorów pisma z zachowaniem barwy (czarne → białe). To heurystyka i może się różnić od wyglądu w aplikacji Samsunga; mNotes sam nie odwraca kolorów pisma na ciemnym papierze, dlatego robi to skrypt. Powiedz o tym użytkownikowi, gdy używasz `--dark`.
+Tryb ciemny Notatek jest **wyglądem aplikacji**, a nie zapisem w pliku. Próbka ciemna i jasna mają w `.sdocx` ten sam układ (ciemna: papier `FCFCFC`, pismo `030303`, bez wzoru), a oba PDF-y (zgodny i standardowy) są jasne. Dlatego z pliku nie da się poznać, że użytkownik oglądał notatkę ciemną; zapytaj, jeśli to ważne, i użyj `--dark` tylko na jego życzenie.
+
+`--dark` odtwarza to, co Notatki pokazują w trybie ciemnym (zmierzone na zrzutach ekranu):
+
+- **Papier** i **linie wzoru**: odwrócenie jasności w HLS z zachowaniem barwy i nasycenia (`FCFCFC` → `030303`, `E6E6E6` → `191919`, linia `C8C8C8` → `373737`). Siatka mNotes ma na ciemnym papierze osobny kolor linii, więc zapisywany jest odwrócony.
+- **Pismo** (pióro, pędzel): ta sama inwersja (czarne → białe, `123644` → `BBDFED`); odcienie o średniej jasności i mocnym nasyceniu (np. zielony `34CF72`) prawie się nie zmieniają.
+- **Zakreślacz**: kolor oryginału jest odwrócony, a krycie ustala mNotes. Na ciemnym papierze mNotes miesza zakreślacz trybem „screen” z kryciem 0,5 × 0,84, więc skrypt dobiera kolor tak, by wynik zgadzał się ze zrzutem (np. `73123644` → ok. (86,103,110)). Odstępstwo: biały zakreślacz wychodzi nieco ciemniejszy niż w Notatkach (ok. 109 zamiast 116), bo przy tym kryciu nie da się go mocniej rozjaśnić.
+- **Nie zweryfikowane:** wygląd linii wzoru innych niż szablon 5 w trybie ciemnym (nie było próbki). Napisz o tym użytkownikowi.
+
+mNotes sam nie odwraca kolorów pisma na ciemnym papierze, dlatego robi to skrypt. Aplikacja pokaże wersję ciemną jako zwykłą notatkę z ciemnym papierem, więc po powrocie do jasnego motywu pismo zostaje jasne.
+
+### Końcowa pusta strona
+
+Samsung dopisuje na końcu pliku `.sdocx` pustą stronę, której w aplikacji i w PDF nie widać (próbki mają 3 strony, pokazują 2). Konwerter pomija puste strony na **końcu** notatki i wpisuje to do raportu; puste strony w środku zostają. Notatka złożona z samych pustych stron zachowuje jedną.
 
 ## Gdy coś pójdzie źle
 

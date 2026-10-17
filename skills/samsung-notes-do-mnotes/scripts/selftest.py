@@ -94,8 +94,35 @@ def main():
         out3 = os.path.join(d, "ciemna.mnotes")
         convert.convert(sd, out3, "Ciemna", dark=True)
         _m3, pages3 = mio.read_mnotes(out3)
-        check(pages3[0]["spec"]["p"] == mio.signed32(convert.DARK_PAPER), "--dark: ciemny papier")
+        check(pages3[1]["spec"]["p"] == mio.signed32(0xFF030303), "--dark: papier FCFCFC -> 030303 (zmierzone na zrzucie)")
+        check(pages3[0]["spec"]["p"] == mio.signed32(0xFF191919), "--dark: papier E6E6E6 -> 191919")
+        check(pages3[0]["spec"]["l"] == mio.signed32(0xFF373737), "--dark: linie siatki odwrócone jak papier")
         check(pages3[0]["strokes"][0]["color"] == mio.signed32(0xFFFFFFFF), "--dark: czarne pismo staje się białe")
+        check(convert.invert_argb(0xFF030303) == 0xFFFCFCFC and convert.invert_argb(0xFF123644) == 0xFFBBDFED,
+              "--dark: pismo 030303 -> FCFCFC, 123644 -> BBDFED (zmierzone na zrzucie)")
+        # zakreślacz: wynik „screen” z krycia 0,5*0,84 na papierze 030303 ma wyjść jak na zrzucie (tolerancja kwantyzacji)
+        am = convert.HIGHLIGHT_ALPHA * convert.DARK_SCREEN_FACTOR
+        hm = convert.highlighter_color_dark(convert.invert_argb(0x73123644), 0xFF030303)
+        shown = [round(255 * (1 - (1 - 3 / 255) * (1 - am * ((hm >> sh) & 0xFF) / 255))) for sh in (16, 8, 0)]
+        check(all(abs(a - b) <= 4 for a, b in zip(shown, (86, 103, 110))),
+              "--dark: zakreślacz 123644 daje na ciemnym papierze (86,103,110) jak na zrzucie (jest %s)" % shown)
+
+        trail = synth.sample_pages() + [{"uuid": "aaaaaaaa-0000-4000-8000-000000000003", "bg": 0xFFFCFCFC,
+                                         "template": None, "strokes": []}]
+        sd4 = os.path.join(d, "z-pusta.sdocx")
+        with open(sd4, "wb") as f:
+            f.write(synth.build_sdocx(trail))
+        out4 = os.path.join(d, "z-pusta.mnotes")
+        _m4, rep4 = convert.convert(sd4, out4, "Z pustą")
+        check(len(mio.read_mnotes(out4)[1]) == 2 and "pustą stronę" in rep4,
+              "pusta strona na końcu pliku odpada i trafia do raportu")
+        only = [{"uuid": "aaaaaaaa-0000-4000-8000-000000000009", "bg": 0xFFFCFCFC, "template": None, "strokes": []}]
+        sd5 = os.path.join(d, "same-puste.sdocx")
+        with open(sd5, "wb") as f:
+            f.write(synth.build_sdocx(only))
+        out5 = os.path.join(d, "same-puste.mnotes")
+        convert.convert(sd5, out5, "Pusta")
+        check(len(mio.read_mnotes(out5)[1]) == 1, "notatka z samymi pustymi stronami zachowuje jedną stronę")
 
         try:
             import numpy  # noqa: F401

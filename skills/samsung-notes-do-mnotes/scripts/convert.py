@@ -49,7 +49,11 @@ GRID_LINE_WIDTH_PT = 1.0
 TEMPLATE_PITCH_FACTOR = {1: 2 / 3, 2: 1.0, 3: 4 / 3, 4: 2 / 3, 5: 1.0, 6: 4 / 3, 7: 2 / 3, 8: 1.0, 9: 4 / 3}
 VERIFIED_TEMPLATES = {5}
 
-DARK_PAPER = 0xFF1E1F22   # Paper.DARK w mNotes
+# Tryb ciemny Samsung Notes to wygląd w aplikacji, nie dane pliku (.sdocx i oba PDF-y niosą notatkę jasną). Zmierzone
+# na zrzucie ekranu: papier FCFCFC -> 030303, pismo 030303 -> FCFCFC, 123644 -> BBDFED, czyli odwrócenie jasności HLS
+# z zachowaniem barwy i nasycenia; zakreślacz to zwykła alfa (0x73) nałożona na ciemny papier.
+HIGHLIGHT_ALPHA = 0.5     # PenSpec HIGHLIGHTER.alpha w mNotes
+DARK_SCREEN_FACTOR = 0.84 # PageRenderer.styleHighlighter: na ciemnym papierze alfa * 0,84, tryb „screen”
 
 OBJECT_NAMES = {2: "pole tekstowe", 3: "obraz", 4: "kontener", 7: "kształt", 8: "linia", 10: "nagranie głosu",
                 11: "wzór matematyczny", 12: "tabela (stara)", 13: "strona WWW", 14: "malowanie", 16: "wideo",
@@ -150,6 +154,26 @@ def highlighter_color(c0, paper):
     return pack(0xFF, *out)
 
 
+def invert_argb(c):
+    r, g, b = invert_lightness(*rgb(c))
+    return pack(c >> 24, r, g, b)
+
+
+def highlighter_color_dark(c0, paper):
+    """Kolor zakreślacza mNotes na ciemnym papierze. Samsung nakłada go zwykłą alfą (P + (C - P) * a), mNotes
+    rozświetla „screen” z kryciem 0,5 * 0,84; odwracamy wzór screen, żeby wynik był ten sam. Gdy takie krycie nie
+    wystarcza (kolor jaśniejszy, niż screen da z krycia 0,42), wartość jest przycinana, więc wynik jest nieco ciemniejszy."""
+    a = (c0 >> 24) / 255.0
+    am = HIGHLIGHT_ALPHA * DARK_SCREEN_FACTOR
+    out = []
+    for c, p in zip(rgb(c0), rgb(paper)):
+        t = (p + (c - p) * a) / 255.0
+        pp = p / 255.0
+        v = (1.0 - (1.0 - t) / (1.0 - pp)) / am if pp < 1.0 else 1.0
+        out.append(int(round(255.0 * max(0.0, min(1.0, v)))))
+    return pack(0xFF, *out)
+
+
 # --- pióra --------------------------------------------------------------------------------------
 
 def pen_kind(st):
@@ -204,10 +228,7 @@ def map_stroke(st, paper, dark, rep):
     short = (st.pen or "?").split(".")[-1]
 
     if kind == "marker":
-        if dark:
-            r, g, b = invert_lightness(*rgb(color))
-            color = pack(color >> 24, r, g, b)
-        mapped = highlighter_color(color, paper)
+        mapped = highlighter_color_dark(invert_argb(color), paper) if dark else highlighter_color(color, paper)
         pen, width = mio.HIGHLIGHTER, size
         pts = [(x, y, 1.0) for x, y, _p in pts]
         rep.warn_once("marker-" + short, "Zakreślacz %s -> zakreślacz mNotes (stała szerokość %.1f pt, kolor przeliczony "
@@ -232,8 +253,7 @@ def map_stroke(st, paper, dark, rep):
         rep.warn_once("pen-" + short, "Nieznane pióro %s -> długopis mNotes o stałej szerokości (przybliżenie, "
                       "brak kalibracji tego pióra)." % short)
     if dark and pen != mio.HIGHLIGHTER:
-        r, g, b = invert_lightness(*rgb(mapped))
-        mapped = pack(mapped >> 24, r, g, b)
+        mapped = invert_argb(mapped)
     return {"pen": pen, "color": mapped, "width": width,
             "pts": simplify(pts, pen in (mio.BRUSH, mio.FOUNTAIN))}
 
@@ -269,7 +289,7 @@ def build_page_spec(pg, rep, args):
     if args.paper is not None:
         paper = 0xFF000000 | args.paper
     elif args.dark:
-        paper = DARK_PAPER
+        paper = invert_argb(paper)
     t = pg.template_type or 0
     template, spacing, line, lw = mio.TEMPLATE_BLANK, 0.0, None, 0.6
     if t in TEMPLATE_PITCH_FACTOR:
@@ -280,7 +300,7 @@ def build_page_spec(pg, rep, args):
         if template == mio.TEMPLATE_GRID:
             w, h = fit_size(w, GRID_OFFSET_X_PT * (pitch / GRID_PITCH_PT), pitch), fit_size(h, GRID_OFFSET_Y_PT * (pitch / GRID_PITCH_PT), pitch)
             note = "rozmiar strony powiększony do %.1fx%.1f pt, by siatka mNotes (wyśrodkowana) zgodziła się z siatką Notatek" % (w, h)
-        line, lw = (GRID_LINE, GRID_LINE_WIDTH_PT) if not args.dark else (None, GRID_LINE_WIDTH_PT)
+        line, lw = (invert_argb(GRID_LINE) if args.dark else GRID_LINE), GRID_LINE_WIDTH_PT
         if t not in VERIFIED_TEMPLATES:
             rep.warn_once("tpl-%d" % t, "Wzór tła %d (%s) nie był sprawdzony na próbce: rozstaw i położenie linii są "
                           "przybliżone." % (t, ("wąskie linie", "średnie linie", "szerokie linie", "wąska kratka", "średnia kratka",
@@ -296,11 +316,6 @@ def build_page_spec(pg, rep, args):
     if pg.bg_image is not None and not pg.template_uri:
         rep.warn_once("bgimg", "Strona ma obraz tła — pominięty w tym etapie.")
     spec = mio.page_spec(w, h, paper, template, line, spacing, lw, opts=0)
-    if line is None and template != mio.TEMPLATE_BLANK:
-        # wzór na ciemnym papierze (--dark): linia jak Paper.autoLineColor (mieszanie z 0xA7B4C8 w 20%)
-        r, g, b = rgb(paper)
-        mix = lambda a, c: int(round(a + (c - a) * 0.20))
-        spec["l"] = mio.signed32(pack(0xFF, mix(r, 0xA7), mix(g, 0xB4), mix(b, 0xC8)))
     return spec, paper
 
 
@@ -326,6 +341,14 @@ def convert_page(pg, strings, spec_paper, rep, args, stats):
     return strokes
 
 
+def trim_trailing_empty(pages):
+    """Strony bez żadnego obiektu na końcu odpadają (zostaje co najmniej jedna)."""
+    n = len(pages)
+    while n > 1 and not any(True for layer in pages[n - 1].layers for _o in sdocx.walk(layer)):
+        n -= 1
+    return pages[:n]
+
+
 def default_title(path):
     stem = os.path.splitext(os.path.basename(path))[0]
     stem = re.sub(r"\s*\(\d+\)$", "", stem)
@@ -340,14 +363,23 @@ def convert(src, out, title=None, dark=False, paper=None):
     stats = {"strokes": 0, "skipped": Counter()}
     with tempfile.TemporaryDirectory() as tmp:
         strings, pages, _z = load_input(src, tmp)
+    kept = trim_trailing_empty(pages)
+    dropped = len(pages) - len(kept)
+    if dropped:
+        rep.note("Pominięto %d pustą stronę na końcu pliku: Samsung Notes dopisuje ją po ostatniej stronie z treścią "
+                 "(w obu próbkach nie było jej ani w aplikacji, ani w PDF-ie). Jeśli to była celowa pusta strona, "
+                 "dodaj ją w mNotes." % dropped)
     out_pages = []
-    for pg in pages:
+    for pg in kept:
         spec, paper_c = build_page_spec(pg, rep, args)
         out_pages.append({"spec": spec, "strokes": convert_page(pg, strings, paper_c, rep, args, stats)})
     meta = mio.write_mnotes(out, title or default_title(src), out_pages)
     if dark:
-        rep.note("Tryb ciemny wymuszony (--dark): papier %06X, kolory pisma z odwróconą jasnością — to heurystyka, "
-                 "do poprawki po sprawdzeniu, jak notatka wygląda w aplikacji Samsunga." % (DARK_PAPER & 0xFFFFFF))
+        rep.note("Wygląd ciemny (--dark), jak w trybie ciemnym aplikacji Samsung Notes: papier i pismo mają odwróconą "
+                 "jasność z zachowaniem barwy (sprawdzone na zrzucie ekranu: papier FCFCFC -> 030303, pismo czarne -> "
+                 "białe), zakreślacz nałożony zwykłą alfą. Sam plik i PDF-y zawierają notatkę jasną; ciemność to "
+                 "wygląd aplikacji. Linie wzoru na ciemnym papierze są wyliczone tą samą regułą, ale nie sprawdzone "
+                 "na zrzucie.")
     for what, n in sorted(stats["skipped"].items()):
         rep.note("Pominięto: %s — %d szt. (jeszcze nie przenoszone)." % (what, n))
     head = ["Konwersja Samsung Notes -> mNotes", "Wejście: %s" % os.path.basename(src),
@@ -361,7 +393,7 @@ def main(argv=None):
     ap.add_argument("input", help=".sdocx albo PDF zgodny z Notatkami")
     ap.add_argument("-o", "--out", help="plik wynikowy .mnotes (domyślnie obok wejścia)")
     ap.add_argument("--title", help="tytuł zeszytu (domyślnie z nazwy pliku)")
-    ap.add_argument("--dark", action="store_true", help="ciemny papier i odwrócona jasność pisma (heurystyka)")
+    ap.add_argument("--dark", action="store_true", help="wygląd jak w trybie ciemnym aplikacji Samsung Notes (papier i pismo z odwróconą jasnością)")
     ap.add_argument("--paper", help="wymuś kolor papieru, RRGGBB")
     a = ap.parse_args(argv)
     out = a.out or os.path.splitext(a.input)[0] + ".mnotes"

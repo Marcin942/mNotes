@@ -43,6 +43,7 @@ import com.mdev.mnotes.core.pen.StrokeBuilder
 import com.mdev.mnotes.core.shapes.ShapeBox
 import com.mdev.mnotes.core.shapes.ShapeFrame
 import com.mdev.mnotes.core.shapes.ShapeKind
+import com.mdev.mnotes.core.text.TextFit
 import com.mdev.mnotes.core.shapes.ShapeRecognizer
 import com.mdev.mnotes.data.DocListener
 import com.mdev.mnotes.data.PageState
@@ -195,6 +196,7 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
     private var lAngleStart = 0f
     private var vIdx = 0; private var vBase: Stroke? = null; private var vDx = 0f; private var vDy = 0f
     private var rFrame: ShapeFrame? = null; private var rHandle = 0
+    private var tBase: TextBox? = null; private var tSide = TextFit.Side.RIGHT
     private var sbSel: Sel? = null; private var sbKey = -1; private var sbVal: Bounds? = null
 
     // laser
@@ -699,6 +701,12 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
         if (poly != null) for (i in 0 until poly.vertexCount) {
             val vx = scrX(pi, poly.pts[3 * i]); val vy = scrY(pi, poly.pts[3 * i + 1])
             c.drawCircle(vx, vy, r * 1.15f, handleFill); c.drawCircle(vx, vy, r * 1.15f, handleStroke)
+        }
+        textSel()?.let { tb ->
+            for (side in TextFit.Side.values()) {
+                val hx = scrX(pi, textHandleX(tb, side)); val hy = scrY(pi, textHandleY(tb, side))
+                c.drawCircle(hx, hy, r * 0.95f, handleFill); c.drawCircle(hx, hy, r * 0.95f, handleStroke)
+            }
         }
         val sf = shape?.let { ShapeBox.frameOf(it) }
         if (sf != null) for (h in 0 until ShapeBox.HANDLES) {
@@ -1746,8 +1754,69 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
         return best
     }
 
+    /** Jedyny zaznaczony, niezablokowany tekst (4 uchwyty boków); w trakcie zmiany rozmiaru — jego bieżąca wersja. */
+    private fun textSel(): TextBox? {
+        if (lLifting) return if (lm == LM.RESIZE) lEls.firstOrNull() as? TextBox else null
+        val s = ed.sel ?: return null
+        if (s.ids.size != 1) return null
+        val e = ed.selElements().singleOrNull() as? TextBox ?: return null
+        return if (e.locked) null else e
+    }
+
+    private fun textHandleX(t: TextBox, side: TextFit.Side): Float = when (side) {
+        TextFit.Side.RIGHT -> t.cx + cos(t.rot) * t.w / 2f
+        TextFit.Side.LEFT -> t.cx - cos(t.rot) * t.w / 2f
+        TextFit.Side.TOP -> t.cx + sin(t.rot) * t.h / 2f
+        TextFit.Side.BOTTOM -> t.cx - sin(t.rot) * t.h / 2f
+    }
+
+    private fun textHandleY(t: TextBox, side: TextFit.Side): Float = when (side) {
+        TextFit.Side.RIGHT -> t.cy + sin(t.rot) * t.w / 2f
+        TextFit.Side.LEFT -> t.cy - sin(t.rot) * t.w / 2f
+        TextFit.Side.TOP -> t.cy - cos(t.rot) * t.h / 2f
+        TextFit.Side.BOTTOM -> t.cy + cos(t.rot) * t.h / 2f
+    }
+
+    /** Uchwyt boku pola tekstowego pod punktem ekranu albo null. Promień maleje przy małym polu, by środek zostawał do przesuwania. */
+    private fun textHit(t: TextBox, pi: Int, sx: Float, sy: Float): TextFit.Side? {
+        var best: TextFit.Side? = null
+        var bd = min(24f * dp, max(12f * dp, 0.4f * min(t.w, t.h) * zoom))
+        for (side in TextFit.Side.values()) {
+            val d = hypot(sx - scrX(pi, textHandleX(t, side)), sy - scrY(pi, textHandleY(t, side)))
+            if (d < bd) { bd = d; best = side }
+        }
+        return best
+    }
+
+    private fun textResizeDown(): Boolean {
+        val t = textSel() ?: return false
+        val s = ed.sel ?: return false
+        val pi = doc.indexOf(s.pageId); if (pi < 0) return false
+        val side = textHit(t, pi, curX, curY) ?: return false
+        lPage = pi; lm = LM.RESIZE; lIds = s.ids; tBase = t; tSide = side
+        lBounds = t.bounds; lM = Affine.IDENTITY; lLifting = false
+        // uchwyt zostaje pod piórem tam, gdzie go chwycono
+        vDx = textHandleX(t, side) - pgX(pi, curX); vDy = textHandleY(t, side) - pgY(pi, curY)
+        return true
+    }
+
+    /** Przeciąga uchwyt boku tekstu; zawsze liczy od stanu z początku gestu, więc nie ma dryfu. */
+    private fun textResizeDrag(px: Float, py: Float) {
+        val b = tBase ?: return
+        var x = px + vDx; var y = py + vDy
+        if (settings.snapGrid || ed.gridSnap) { val g = 14.17f; x = (x / g).roundToInt() * g; y = (y / g).roundToInt() * g }
+        val cur = TextFit.resizeSide(b, tSide, x, y, ed.textMeasurer())
+        lEls = listOf(cur); lBounds = cur.bounds
+        val mm = settings.unitsMm
+        fun fmt(pt: Float) = if (mm) "%.1f mm".format(pt * 25.4f / 72f) else "%.2f in".format(pt / 72f)
+        shapeLabel = "${fmt(cur.w)} × ${fmt(cur.h)}"
+        ed.viewTick++
+    }
+
     private fun resizeDown(): Boolean {
-        val st = shapeSel() ?: return false
+        // dotknięcie uchwytu bez przeciągnięcia nie czyści stanu gestu, więc zerujemy go przed następnym
+        tBase = null; vBase = null
+        val st = shapeSel() ?: return textResizeDown()
         val s = ed.sel ?: return false
         val pi = doc.indexOf(s.pageId); if (pi < 0) return false
         val h = resizeHit(st, pi, curX, curY)
@@ -1762,6 +1831,7 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
 
     /** Przeciąga uchwyt kształtu: przeciwległa krawędź stoi, kwadrat i koło łapią się same, opcjonalnie siatka. */
     private fun resizeDrag(px: Float, py: Float) {
+        if (tBase != null) { textResizeDrag(px, py); return }
         val b = vBase ?: return; val f = rFrame ?: return
         var x = px + vDx; var y = py + vDy
         if (settings.snapGrid || ed.gridSnap) { val g = 14.17f; x = (x / g).roundToInt() * g; y = (y / g).roundToInt() * g }
@@ -2295,7 +2365,7 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
         val tgt = if (cancel) lPage else dropPage()
         lLifting = false
         lm = LM.NONE; ln = 0
-        vBase = null; rFrame = null; shapeLabel = null
+        vBase = null; rFrame = null; tBase = null; shapeLabel = null
         if (page == null || orig == null || lifted == null) return
         val m = lM
         if (cancel || (m.isIdentity && !vertex)) {
@@ -2369,6 +2439,8 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
         }
         val sh = shapeSel()
         if (sh != null && resizeHit(sh, pi, sx, sy) >= 0) return true
+        val tx = textSel()
+        if (tx != null && textHit(tx, pi, sx, sy) != null) return true
         val b = selBounds() ?: return false
         val cs = selQuad(pi, b)
         val rot = rotateHandle(cs)

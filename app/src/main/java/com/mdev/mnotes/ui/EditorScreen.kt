@@ -78,6 +78,7 @@ import androidx.compose.material.icons.rounded.ContentCut
 import androidx.compose.material.icons.rounded.ContentPaste
 import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.Edit
+import androidx.compose.material.icons.rounded.WidthFull
 import androidx.compose.material.icons.rounded.FitScreen
 import androidx.compose.material.icons.rounded.FlipToBack
 import androidx.compose.material.icons.rounded.CropRotate
@@ -1126,6 +1127,15 @@ private fun SelectionBar(ed: Editor, panel: Panel?, toggle: (Panel) -> Unit, edi
                     IconBtn(if (locked) Icons.Rounded.LockOpen else Icons.Rounded.Lock, if (locked) T.t("Odblokuj", "Unlock") else T.t("Zablokuj", "Lock"), { ed.lockSel(!locked) }, size = 36.dp, iconSize = 20.dp)
                     if (els.size > 1) IconBtn(Icons.Rounded.AlignHorizontalLeft, T.t("Wyrównaj", "Align"), { toggle(Panel.ALIGN) }, selected = panel == Panel.ALIGN, size = 36.dp, iconSize = 20.dp)
                     if (els.size == 1 && els[0] is TextBox) IconBtn(Icons.Rounded.Edit, T.t("Edytuj tekst", "Edit text"), editText, size = 36.dp, iconSize = 20.dp)
+                    if (els.size == 1 && els[0] is TextBox && !locked) {
+                        val auto = (els[0] as TextBox).fit == TextBox.FIT_AUTO
+                        IconBtn(
+                            Icons.Rounded.WidthFull,
+                            if (auto) T.t("Auto-rozmiar włączony: dotknij, by zamrozić szerokość", "Auto-size on: tap to freeze the width")
+                            else T.t("Auto-rozmiar: dopasuj pole do tekstu", "Auto-size: fit the box to its text"),
+                            { ed.toggleTextFit() }, selected = auto, size = 36.dp, iconSize = 20.dp,
+                        )
+                    }
                     BarSep(false)
                     IconBtn(Icons.Rounded.Delete, T.t("Usuń", "Delete"), { ed.deleteSel() }, size = 36.dp, iconSize = 20.dp, shortcut = "Del", tint = MaterialTheme.colorScheme.error)
                 }

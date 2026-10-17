@@ -302,6 +302,22 @@ class Editor(val ctx: Context, val nbId: String) {
     fun nudgeSel(dx: Float, dy: Float) = replaceSel { it.transformed(com.mdev.mnotes.core.geom.Affine.translation(dx, dy)) }
 
     // — Tekst i obrazy —
+    private val textMeasure by lazy { com.mdev.mnotes.render.PageRenderer(app.assets).textMeasure }
+
+    /**
+     * Auto-rozmiar zaznaczonego pola: włącza go (pole rozciąga się do tekstu, najwyżej do prawej krawędzi strony)
+     * albo, gdy już działa, zamraża obecną szerokość. Cofanie przywraca poprzedni rozmiar i tryb.
+     */
+    fun toggleTextFit() {
+        val p = selPage() ?: return
+        val spec = p.spec
+        replaceSel { e ->
+            if (e is TextBox) com.mdev.mnotes.core.text.TextFit.withFit(e, if (e.fit == TextBox.FIT_AUTO) TextBox.FIT_HEIGHT else TextBox.FIT_AUTO, spec.w, spec.h, textMeasure) else e
+        }
+    }
+
+    fun textMeasurer(): com.mdev.mnotes.core.text.TextMeasure = textMeasure
+
     fun newText(pageId: String, x: Float, y: Float) { textReq = TextRequest(pageId, null, x, y) }
     fun editText(pageId: String, t: TextBox) { textReq = TextRequest(pageId, t, t.cx, t.cy) }
 

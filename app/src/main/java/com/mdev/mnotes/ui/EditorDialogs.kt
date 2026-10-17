@@ -66,6 +66,7 @@ import androidx.compose.material.icons.rounded.Checklist
 import androidx.compose.material.icons.rounded.FormatListNumbered
 import androidx.compose.material.icons.rounded.FormatListBulleted
 import com.mdev.mnotes.core.text.ListText
+import com.mdev.mnotes.core.text.TextFit
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.unit.dp
@@ -256,14 +257,25 @@ fun TextDialog(ed: Editor, req: TextRequest) {
     LaunchedEffect(Unit) { runCatching { focus.requestFocus() } }
     val renderer = remember { PageRenderer(ed.app.assets) }
 
+    // Nowe pole dopasowuje się do tekstu; istniejące zachowuje swój tryb (okno edycji go nie zmienia, chyba że przełącznik)
+    var autoFit by remember(req) { mutableStateOf((ex?.fit ?: TextBox.FIT_AUTO) == TextBox.FIT_AUTO) }
+
     fun commit() {
+        val spec = ed.doc.page(req.pageId)?.spec
+        val pageW = spec?.w ?: 595f; val pageH = spec?.h ?: 842f
+        val fit = when {
+            autoFit -> TextBox.FIT_AUTO
+            ex != null && ex.fit == TextBox.FIT_FIXED -> TextBox.FIT_FIXED
+            else -> TextBox.FIT_HEIGHT
+        }
         val w = ex?.w ?: 240f
-        val base = TextBox(ex?.id ?: Ids.next(), 0f, 0f, w, 20f, ex?.rot ?: 0f, text, size, color, family, style, align, fill, ex?.locked ?: false)
-        val h = renderer.layoutFor(base, w).height.toFloat().coerceAtLeast(size * 1.3f) + 8f
-        val cx = ex?.cx ?: (req.x + w / 2f)
-        val cy = if (ex != null) ex.cy + (h - ex.h) / 2f else req.y + h / 2f
+        val x = ex?.let { TextFit.corner(it).first } ?: TextFit.placeX(req.x, pageW)
+        val base = TextBox(ex?.id ?: Ids.next(), x + w / 2f, req.y + 10f, w, 20f, ex?.rot ?: 0f, text, size, color, family, style, align, fill, ex?.locked ?: false, fit)
+        // nowe pole: lewy-górny róg w klikniętym miejscu; istniejące: róg zostaje tam, gdzie był
+        val placed = if (ex != null) base.copy(cx = ex.cx, cy = ex.cy, w = ex.w, h = ex.h) else base
+        val fitted = TextFit.refit(placed, pageW, pageH, renderer.textMeasure)
         set.textSize = size; set.textColor = color; set.textFamily = family
-        ed.commitText(req, base.copy(cx = cx, cy = cy, h = h))
+        ed.commitText(req, fitted)
     }
     MDialog(
         if (ex == null) T.t("Nowy tekst", "New text") else T.t("Edytuj tekst", "Edit text"), { ed.textReq = null },
@@ -308,6 +320,7 @@ fun TextDialog(ed: Editor, req: TextRequest) {
         MSlider(size, 8f, 96f) { size = it }
         SectionLabel(T.t("Kolor", "Color"))
         ColorPicker(color, { color = it }, recent = ed.kit.sets.filter { !it.hl }.flatMap { it.colors.take(it.visible) }.distinct())
+        ToggleRow(T.t("Dopasuj rozmiar do tekstu", "Fit size to text"), autoFit) { autoFit = it }
         ToggleRow(T.t("Tło pola", "Box background"), fill != 0) { fill = if (it) 0xFFFFF59D.toInt() else 0 }
         if (fill != 0) ColorPicker(fill, { fill = it }, withAlpha = true)
     }

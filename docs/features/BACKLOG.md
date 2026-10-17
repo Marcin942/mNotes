@@ -28,6 +28,7 @@ Założenie projektowe: „Linux Mint user” = osoba ceniąca kontrolę, skrót
 - [x] LIB-011 Menu kontekstowe (prawy przycisk / długie przytrzymanie)
 - [x] LIB-012 Pusty stan / onboarding / szybka notatka (skrót, CREATE_NOTE intent)
 - [~] LIB-013 Blokada zeszytu (biometria/PIN) _(zaimplementowane (biometria/PIN) — brak testu na urządzeniu)_
+- [~] LIB-015 Import z Samsung Notes (2026-10-17, etap 1: skill poza aplikacją): `skills/samsung-notes-do-mnotes/` zamienia `.sdocx` albo PDF zgodny z Notatkami (niesie w sobie cały `.sdocx`) na `.mnotes` z **edytowalnymi** kreskami i tłem Samsunga; standardowy PDF (sam raster) skrypt odrzuca z komunikatem. Pióra przeliczone z pomiarów (InkPen2 → pióro z grubością z prędkości, BrushPen → pędzel, Marker → zakreślacz), siatka szablonu 5 odtworzona co do rozstawu i koloru, strona powiększona tak, by wyśrodkowana siatka mNotes zgadzała się z oryginałem. Raport odstępstw na końcu. Zgodność formatu z aplikacją pilnuje `SkillSamsungFormatTest` (fixture z syntetycznego `.sdocx`, `skills/generuj-fixture-samsung.py`). **Nie przenosi jeszcze:** tekstu, obrazów, kształtów, tła PDF, warstw; szablony ≠ 5 niesprawdzone; ciemna notatka tylko heurystyką `--dark` (czeka na zrzut z Samsunga). Dalsze typy obiektów dopiero po notatce testowej od właściciela; import wprost w aplikacji to osobny etap _(bez testu na tablecie)_
 
 ## C. Strony i szablony (PAG)
 - [x] PAG-001 Rozmiary: A4/A5/A6/B5/Letter/Legal/Tablet/Kwadrat/własny, pion/poziom

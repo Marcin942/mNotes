@@ -1,7 +1,12 @@
 #!/usr/bin/env bash
-# Pakuje skill do ZIP-a gotowego do wgrania w Claude (folder skilla na najwyższym poziomie archiwum).
+# Pakuje skille do ZIP-ów gotowych do wgrania w Claude (folder skilla na najwyższym poziomie archiwum).
+# Bez argumentów pakuje wszystkie skille; z argumentem tylko wskazany (np. samsung-notes-do-mnotes).
 set -euo pipefail
 cd "$(dirname "$0")"
-rm -f zadania-do-mnotes.zip
-find zadania-do-mnotes -name __pycache__ -prune -o -type f -print | sort | zip -q -@ zadania-do-mnotes.zip
-unzip -l zadania-do-mnotes.zip
+SKILLE=(zadania-do-mnotes samsung-notes-do-mnotes)
+[ $# -gt 0 ] && SKILLE=("$@")
+for s in "${SKILLE[@]}"; do
+  rm -f "$s.zip"
+  find "$s" -name __pycache__ -prune -o -type f -print | sort | zip -q -@ "$s.zip"
+  unzip -l "$s.zip"
+done

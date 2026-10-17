@@ -239,9 +239,14 @@ fun LibraryScreen(st: LibState, onOpen: (String) -> Unit, onSettings: () -> Unit
     val m = mint
     val scope = rememberCoroutineScope()
     val app = androidx.compose.ui.platform.LocalContext.current.app
+    val startSamsung = LocalSamsungStart.current
     BoxWithConstraints(
         Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).fileDrop { uris ->
-            scope.launch { val made = importUris(app, uris, st.folderId); if (made.size == 1) onOpen(made[0].id) }
+            scope.launch {
+                var handed = false
+                val made = importUris(app, uris, st.folderId, onSamsung = { handed = true; startSamsung(it, st.folderId) })
+                if (made.size == 1 && !handed) onOpen(made[0].id)
+            }
         },
     ) {
         val wide = maxWidth >= 840.dp
@@ -507,7 +512,9 @@ private fun LibMain(st: LibState, wide: Boolean, onOpen: (String) -> Unit, openD
     }
 
     val ops = remember(st, repo) { LibOps(st, repo, onOpen) }
-    val doImport = rememberImportLauncher({ if (st.place == Place.LIB) st.folderId else null }, onOpen)
+    val importFolderId = { if (st.place == Place.LIB) st.folderId else null }
+    val doImport = rememberImportLauncher(importFolderId, onOpen)
+    val doImportFolder = rememberFolderImportLauncher(importFolderId, onOpen)
 
     LaunchedEffect(Unit) { rootFocus.requestFocus() }
     LaunchedEffect(st.dialog) { if (st.dialog == null) runCatching { rootFocus.requestFocus() } }
@@ -551,7 +558,7 @@ private fun LibMain(st: LibState, wide: Boolean, onOpen: (String) -> Unit, openD
                 }
             },
     ) {
-        if (st.selecting) SelectionBar(st, ops, inTrash, order) else TopBar(st, wide, ops, openDrawer, searchFocus, doImport) { searchHasFocus = it }
+        if (st.selecting) SelectionBar(st, ops, inTrash, order) else TopBar(st, wide, ops, openDrawer, searchFocus, doImport, doImportFolder) { searchHasFocus = it }
         Box(Modifier.fillMaxWidth().height(1.dp).background(m.line))
         // Otwarte karty: biblioteka jest ich centrum; dotknięcie wznawia zeszyt tam, gdzie go zostawiono.
         if (tabs != null && !st.selecting) {
@@ -630,7 +637,7 @@ private class LibOps(val st: LibState, val repo: Repository, val onOpen: (String
 // — Pasek górny —
 
 @Composable
-private fun TopBar(st: LibState, wide: Boolean, ops: LibOps, openDrawer: () -> Unit, searchFocus: FocusRequester, doImport: () -> Unit, onSearchFocus: (Boolean) -> Unit) {
+private fun TopBar(st: LibState, wide: Boolean, ops: LibOps, openDrawer: () -> Unit, searchFocus: FocusRequester, doImport: () -> Unit, doImportFolder: () -> Unit, onSearchFocus: (Boolean) -> Unit) {
     val m = mint
     val app = LocalContext.current.app; val repo = app.repo; val set = app.settings
     var sortMenu by remember { mutableStateOf(false) }
@@ -724,9 +731,13 @@ private fun TopBar(st: LibState, wide: Boolean, ops: LibOps, openDrawer: () -> U
                         onClick = { newMenu = false; st.dialog = LibDialog.NewFolder },
                     )
                     DropdownMenuItem(
-                        text = { Text(T.t("Importuj PDF, obrazy, .mnotes…", "Import PDF, images, .mnotes…")) }, leadingIcon = { Icon(Icons.Rounded.FileOpen, null) },
+                        text = { Text(T.t("Importuj pliki (PDF, obrazy, .mnotes, Samsung Notes)…", "Import files (PDF, images, .mnotes, Samsung Notes)…")) }, leadingIcon = { Icon(Icons.Rounded.FileOpen, null) },
                         trailingIcon = { Text("Ctrl+O", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant) },
                         onClick = { newMenu = false; doImport() },
+                    )
+                    DropdownMenuItem(
+                        text = { Text(T.t("Importuj cały folder…", "Import a whole folder…")) }, leadingIcon = { Icon(Icons.Rounded.Folder, null) },
+                        onClick = { newMenu = false; doImportFolder() },
                     )
                 }
             }

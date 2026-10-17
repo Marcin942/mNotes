@@ -246,16 +246,46 @@ suspend fun importUris(
     return made
 }
 
-/** Zwraca funkcję otwierającą systemowy wybór plików do importu; po imporcie jednego zeszytu otwiera go. */
+/**
+ * Importuje [uris] do folderu [folder]: zwykłe pliki od razu jako zeszyty (jeden zeszyt się otwiera), pliki Samsung Notes
+ * przez okno importu z podglądem ([LocalSamsungStart]).
+ */
 @Composable
-fun rememberImportLauncher(folderId: () -> String?, onOpen: (String) -> Unit): () -> Unit {
+private fun rememberImporter(onOpen: (String) -> Unit): (List<Uri>, String?) -> Unit {
     val app = LocalContext.current.app
     val scope = rememberCoroutineScope()
-    val launcher = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
+    val startSamsung = LocalSamsungStart.current
+    return { uris, folder ->
         if (uris.isNotEmpty()) scope.launch {
-            val made = importUris(app, uris, folderId())
-            if (made.size == 1) onOpen(made[0].id)
+            var handed = false
+            val made = importUris(app, uris, folder, onSamsung = { handed = true; startSamsung(it, folder) })
+            if (made.size == 1 && !handed) onOpen(made[0].id)
         }
     }
-    return { launcher.launch(arrayOf("application/pdf", "image/*", "application/zip", "application/x-mnotes", "application/octet-stream")) }
+}
+
+/** Zwraca funkcję otwierającą systemowy wybór plików do importu (kilka naraz); po imporcie jednego zeszytu otwiera go. */
+@Composable
+fun rememberImportLauncher(folderId: () -> String?, onOpen: (String) -> Unit): () -> Unit {
+    val import = rememberImporter(onOpen)
+    val launcher = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris -> import(uris, folderId()) }
+    return { launcher.launch(arrayOf("application/pdf", "image/*", "application/zip", "application/x-mnotes", "application/octet-stream", "*/*")) }
+}
+
+/** Zwraca funkcję otwierającą wybór folderu; importuje z niego wszystkie pliki (razem z podfolderami), rodzaj ustala zawartość. */
+@Composable
+fun rememberFolderImportLauncher(folderId: () -> String?, onOpen: (String) -> Unit): () -> Unit {
+    val ctx = LocalContext.current
+    val import = rememberImporter(onOpen)
+    val scope = rememberCoroutineScope()
+    val launcher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { tree ->
+        if (tree != null) {
+            val folder = folderId()
+            scope.launch {
+                val files = withContext(Dispatchers.IO) { ImportProbe.listTree(ctx, tree) }
+                if (files.isEmpty()) ctx.toast(T.t("W tym folderze nie ma plików", "There are no files in this folder")) else import(files, folder)
+            }
+        }
+    }
+    return { launcher.launch(null) }
 }

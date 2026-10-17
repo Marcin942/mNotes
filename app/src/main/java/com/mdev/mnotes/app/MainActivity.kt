@@ -13,6 +13,7 @@ import androidx.biometric.BiometricManager
 import androidx.biometric.BiometricPrompt
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.size
@@ -40,8 +41,12 @@ import androidx.core.content.ContextCompat
 import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.launch
 import com.mdev.mnotes.data.ImportSource
+import com.mdev.mnotes.data.SamsungSession
+import com.mdev.mnotes.ui.LocalSamsungStart
+import com.mdev.mnotes.ui.SamsungImportScreen
 import com.mdev.mnotes.ui.importUris
 import com.mdev.mnotes.core.model.PageFormat
 import com.mdev.mnotes.core.model.PageSpec
@@ -74,8 +79,30 @@ class UiModel(application: Application) : AndroidViewModel(application) {
     var editor by mutableStateOf<Editor?>(null)
     var locked by mutableStateOf(app.settings.appLock)
 
-    /** Pliki Samsung Notes czekające na okno importu (podgląd, tryb, raport); null = brak. */
-    var samsungImport by mutableStateOf<List<ImportSource>?>(null)
+    /** Otwarte okno importu Samsung Notes (podgląd, tryb, raport); null = brak. Żyje w modelu, więc obrót ekranu go nie gubi. */
+    var samsung by mutableStateOf<SamsungSession?>(null)
+        private set
+
+    /** Dokłada pliki do otwartego okna importu albo otwiera nowe (folder docelowy ustala pierwsze wywołanie). */
+    fun startSamsung(sources: List<ImportSource>, folderId: String?) {
+        if (sources.isEmpty()) return
+        val s = samsung ?: SamsungSession(app, viewModelScope, folderId).also { samsung = it }
+        s.add(sources)
+    }
+
+    fun closeSamsung() {
+        samsung?.cancel()
+        samsung = null
+    }
+
+    /** Koniec zapisu: przy samych sukcesach okno się zamyka, a jedyny nowy zeszyt od razu się otwiera. */
+    fun samsungFinished(failed: Int) {
+        val s = samsung ?: return
+        if (failed > 0) return
+        val only = s.made.singleOrNull()
+        samsung = null
+        if (only != null) open(only.id)
+    }
 
     /** Otwarte karty (tylko gdy włączone ustawienie „Otwieraj jako karty”). Edytor istnieje wyłącznie dla aktywnej. */
     var tabs by mutableStateOf(Tabs())
@@ -161,7 +188,7 @@ class UiModel(application: Application) : AndroidViewModel(application) {
         open(n.id)
     }
 
-    override fun onCleared() { editor?.let { app.openIds.remove(it.nbId) }; tabs.ids.forEach { app.openIds.remove(it) }; editor?.close() }
+    override fun onCleared() { samsung?.cancel(); editor?.let { app.openIds.remove(it.nbId) }; tabs.ids.forEach { app.openIds.remove(it) }; editor?.close() }
 }
 
 open class MainActivity : FragmentActivity() {
@@ -209,8 +236,9 @@ open class MainActivity : FragmentActivity() {
                 val uris = incomingUris(i)
                 if (uris.isEmpty()) return
                 lifecycleScope.launch {
-                    val made = importUris(app, uris, null, i.type, onSamsung = { ui.samsungImport = it })
-                    if (made.size == 1 && ui.samsungImport == null) ui.open(made[0].id)
+                    var handed = false
+                    val made = importUris(app, uris, null, i.type, onSamsung = { handed = true; ui.startSamsung(it, null) })
+                    if (made.size == 1 && !handed) ui.open(made[0].id)
                 }
             }
         }
@@ -255,20 +283,26 @@ open class MainActivity : FragmentActivity() {
             ui.tabs, app.settings.tabs, ui::open, ui::closeTab, ui::stepTab, ui::leave,
             { id -> app.repo.meta(id)?.title ?: "" },
         )
-        when (ui.screen) {
-            Screen.LIBRARY -> LibraryScreen(ui.lib, onOpen = ui::open, tabs = tabsCtl.takeIf { it.on }, onSettings = { ui.settingsCat = 0; ui.screen = Screen.SETTINGS })
-            Screen.SETTINGS -> SettingsScreen(onBack = { ui.screen = if (ui.editor != null) Screen.EDITOR else Screen.LIBRARY }, startCat = ui.settingsCat)
-            Screen.EDITOR -> {
-                val ed = ui.editor
-                if (ed == null) { ui.screen = Screen.LIBRARY } else key(ed.nbId) {
-                    CompositionLocalProvider(LocalBarSettings provides { ui.settingsCat = EDITOR_CAT; ui.screen = Screen.SETTINGS }) {
-                        EditorScreen(ed, tabsCtl, onExit = ui::leave, onSettings = { ui.settingsCat = 0; ui.screen = Screen.SETTINGS }, onShortcuts = { ui.settingsCat = SHORTCUTS_CAT; ui.screen = Screen.SETTINGS }, onColorSets = { ui.settingsCat = COLORS_CAT; ui.screen = Screen.SETTINGS })
+        CompositionLocalProvider(LocalSamsungStart provides ui::startSamsung) {
+            Box(Modifier.fillMaxSize()) {
+                when (ui.screen) {
+                    Screen.LIBRARY -> LibraryScreen(ui.lib, onOpen = ui::open, tabs = tabsCtl.takeIf { it.on }, onSettings = { ui.settingsCat = 0; ui.screen = Screen.SETTINGS })
+                    Screen.SETTINGS -> SettingsScreen(onBack = { ui.screen = if (ui.editor != null) Screen.EDITOR else Screen.LIBRARY }, startCat = ui.settingsCat)
+                    Screen.EDITOR -> {
+                        val ed = ui.editor
+                        if (ed == null) { ui.screen = Screen.LIBRARY } else key(ed.nbId) {
+                            CompositionLocalProvider(LocalBarSettings provides { ui.settingsCat = EDITOR_CAT; ui.screen = Screen.SETTINGS }) {
+                                EditorScreen(ed, tabsCtl, onExit = ui::leave, onSettings = { ui.settingsCat = 0; ui.screen = Screen.SETTINGS }, onShortcuts = { ui.settingsCat = SHORTCUTS_CAT; ui.screen = Screen.SETTINGS }, onColorSets = { ui.settingsCat = COLORS_CAT; ui.screen = Screen.SETTINGS })
+                            }
+                        }
                     }
                 }
+                // Z ustawień wracamy do poprzedniego ekranu (biblioteki lub edytora).
+                if (ui.screen == Screen.SETTINGS) BackHandler { ui.screen = if (ui.editor != null) Screen.EDITOR else Screen.LIBRARY }
+                // Okno importu leży nad wszystkim (także nad edytorem, gdy plik przyszedł z innej aplikacji).
+                ui.samsung?.let { s -> SamsungImportScreen(s, onClose = ui::closeSamsung, onFinished = { _, failed -> ui.samsungFinished(failed) }) }
             }
         }
-        // Z ustawień wracamy do poprzedniego ekranu (biblioteki lub edytora).
-        if (ui.screen == Screen.SETTINGS) BackHandler { ui.screen = if (ui.editor != null) Screen.EDITOR else Screen.LIBRARY }
     }
 
     @Composable

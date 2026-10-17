@@ -74,7 +74,10 @@ class Editor(val ctx: Context, val nbId: String) {
     var sel by mutableStateOf<Sel?>(null)
     var selTick by mutableIntStateOf(0)
     /** Uchwyty skali i obrotu są widoczne i aktywne tylko po włączeniu przyciskiem na pasku zaznaczenia; nowe zaznaczenie je wyłącza. */
-    var transformMode by mutableStateOf(false)
+    var transformMode: Boolean
+        get() = transformModeState
+        set(v) { if (transformModeState != v) { transformModeState = v; view?.invalidate() } }
+    private var transformModeState by mutableStateOf(false)
     var undoTick by mutableIntStateOf(0)
     var structTick by mutableIntStateOf(0)
     var pageIndex by mutableIntStateOf(0)

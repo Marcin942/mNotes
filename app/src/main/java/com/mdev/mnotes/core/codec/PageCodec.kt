@@ -49,6 +49,9 @@ object PageCodec {
     /** Styl linii kreski; starsze wersje ignorują te bity i rysują linię ciągłą. */
     private const val FLAG_DASHED = 16
     private const val FLAG_DOTTED = 32
+    // Tryb rozmiaru pola tekstowego; brak obu bitów = TextBox.FIT_HEIGHT, czyli zapis sprzed trybów.
+    private const val FLAG_TEXT_AUTO = 64
+    private const val FLAG_TEXT_FIXED = 128
     private const val Q = 100f
 
     fun encode(content: PageContent): ByteArray {
@@ -171,7 +174,8 @@ object PageCodec {
     }
 
     private fun writeText(w: ByteWriter, t: TextBox) {
-        w.varint(if (t.locked) FLAG_LOCKED else 0)
+        val fit = when (t.fit) { TextBox.FIT_AUTO -> FLAG_TEXT_AUTO; TextBox.FIT_FIXED -> FLAG_TEXT_FIXED; else -> 0 }
+        w.varint((if (t.locked) FLAG_LOCKED else 0) or fit)
         w.f32(t.cx); w.f32(t.cy); w.f32(t.w); w.f32(t.h); w.f32(t.rot)
         w.f32(t.size)
         w.i32(t.color)
@@ -188,7 +192,8 @@ object PageCodec {
         val family = r.u8(); val style = r.u8(); val align = r.u8()
         val fill = r.i32()
         val text = r.string()
-        return TextBox(Ids.next(), cx, cy, w, h, rot, text, size, color, family, style, align, fill, flags and FLAG_LOCKED != 0)
+        val fit = when { flags and FLAG_TEXT_AUTO != 0 -> TextBox.FIT_AUTO; flags and FLAG_TEXT_FIXED != 0 -> TextBox.FIT_FIXED; else -> TextBox.FIT_HEIGHT }
+        return TextBox(Ids.next(), cx, cy, w, h, rot, text, size, color, family, style, align, fill, flags and FLAG_LOCKED != 0, fit)
     }
 
     private fun writeImage(w: ByteWriter, im: ImageEl) {

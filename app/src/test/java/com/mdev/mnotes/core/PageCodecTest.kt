@@ -41,6 +41,8 @@ class PageCodecTest {
         repeat(60) { list.add(randomStroke(rnd, PenKind.entries[it % PenKind.entries.size])) }
         list.add(TextBox(Ids.next(), 120.5f, 300f, 200f, 40f, 0.3f, "Zażółć gęślą jaźń ✓", 14f, 0xFF00AA00.toInt(),
             TextBox.FAMILY_SERIF, TextBox.STYLE_BOLD or TextBox.STYLE_UNDERLINE, TextBox.ALIGN_CENTER, 0x33FFFF00, true))
+        list.add(TextBox(Ids.next(), 60f, 500f, 180f, 30f, 0f, "auto", 12f, 0xFF000000.toInt(), fit = TextBox.FIT_AUTO))
+        list.add(TextBox(Ids.next(), 60f, 560f, 180f, 30f, 0f, "stałe", 12f, 0xFF000000.toInt(), fit = TextBox.FIT_FIXED))
         list.add(ImageEl(Ids.next(), "img-1.webp", 250f, 400f, 120f, 80f, -0.2f, 0.5f, false))
         list.add(com.mdev.mnotes.core.model.FillEl(Ids.next(), 0xFF3366CC.toInt(), false, listOf(floatArrayOf(0f, 0f, 600f, 0f, 600f, 800f, 0f, 800f), floatArrayOf(100.5f, 100f, 200f, 100f, 150f, 180.25f))))
         val src = PageContent.of(list)
@@ -74,6 +76,7 @@ class PageCodecTest {
                     assertEquals(a.family, b.family)
                     assertEquals(a.fill, b.fill)
                     assertEquals(a.size, b.size, 0f)
+                    assertEquals(a.fit, b.fit)
                 }
                 is ImageEl -> {
                     b as ImageEl

@@ -251,6 +251,8 @@ class TextBox(
     /** Kolor tła pola (ARGB); 0 = brak. */
     val fill: Int = 0,
     override val locked: Boolean = false,
+    /** Skąd bierze się rozmiar pola: [FIT_HEIGHT] (stała szerokość, wysokość z tekstu), [FIT_AUTO] albo [FIT_FIXED]. */
+    val fit: Int = FIT_HEIGHT,
 ) : BoxElement() {
 
     val bold: Boolean get() = style and STYLE_BOLD != 0
@@ -265,8 +267,8 @@ class TextBox(
         id: Int = this.id, cx: Float = this.cx, cy: Float = this.cy, w: Float = this.w, h: Float = this.h,
         rot: Float = this.rot, text: String = this.text, size: Float = this.size, color: Int = this.color,
         family: Int = this.family, style: Int = this.style, align: Int = this.align, fill: Int = this.fill,
-        locked: Boolean = this.locked,
-    ) = TextBox(id, cx, cy, w, h, rot, text, size, color, family, style, align, fill, locked)
+        locked: Boolean = this.locked, fit: Int = this.fit,
+    ) = TextBox(id, cx, cy, w, h, rot, text, size, color, family, style, align, fill, locked, fit)
 
     override fun transformed(m: Affine): TextBox {
         val g = mapBox(m)
@@ -288,6 +290,13 @@ class TextBox(
         const val ALIGN_START = 0
         const val ALIGN_CENTER = 1
         const val ALIGN_END = 2
+
+        /** Stała szerokość nadana ręcznie; wysokość wynika z tekstu. Tak działały pola przed wprowadzeniem trybów. */
+        const val FIT_HEIGHT = 0
+        /** Pole rośnie razem z tekstem aż do prawej krawędzi strony, potem zawija (domyślne dla nowych pól). */
+        const val FIT_AUTO = 1
+        /** Ręcznie ustawiona szerokość i wysokość; tekst, który się nie mieści, jest przycięty do ramki. */
+        const val FIT_FIXED = 2
     }
 }
 

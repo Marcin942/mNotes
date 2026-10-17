@@ -267,6 +267,9 @@ class Exporter(private val repo: Repository, private val assets: Assets, private
         if (t.rot != 0f) sb.append(" transform=\"rotate(${f(Math.toDegrees(t.rot.toDouble()).toFloat())} ${f(t.cx)} ${f(t.cy)})\"")
         sb.append(">\n")
         if (t.fill != 0) sb.append("<rect x=\"${f(x0)}\" y=\"${f(y0)}\" width=\"${f(t.w)}\" height=\"${f(t.h)}\" rx=\"4\" fill=\"${hex(t.fill)}\"/>\n")
+        // ręcznie ustawiona ramka przycina tekst tak samo jak na ekranie
+        val clip = t.fit == TextBox.FIT_FIXED
+        if (clip) sb.append("<clipPath id=\"tc${t.id}\"><rect x=\"${f(x0)}\" y=\"${f(y0)}\" width=\"${f(t.w)}\" height=\"${f(t.h)}\"/></clipPath>\n<g clip-path=\"url(#tc${t.id})\">\n")
         val fam = when (t.family) { TextBox.FAMILY_SERIF -> "serif"; TextBox.FAMILY_MONO -> "monospace"; TextBox.FAMILY_HAND -> "cursive"; else -> "sans-serif" }
         val deco = listOfNotNull("underline".takeIf { t.underline }, "line-through".takeIf { t.strike }).joinToString(" ")
         for (l in 0 until lay.lineCount) {
@@ -278,6 +281,7 @@ class Exporter(private val repo: Repository, private val assets: Assets, private
             if (deco.isNotEmpty()) sb.append(" text-decoration=\"$deco\"")
             sb.append(" xml:space=\"preserve\">${esc(line)}</text>\n")
         }
+        if (clip) sb.append("</g>\n")
         sb.append("</g>\n")
     }
 

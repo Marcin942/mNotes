@@ -31,12 +31,16 @@ import com.mdev.mnotes.core.pen.LineStyle
 import com.mdev.mnotes.core.pen.PenSpec
 import com.mdev.mnotes.core.pen.StrokeDash
 import com.mdev.mnotes.core.pen.StrokeOutline
+import com.mdev.mnotes.core.text.TextMeasure
 import kotlin.math.max
 
 /**
  * Rysowanie strony (papier, wzór, elementy) na dowolnym Canvasie w układzie strony (pt).
  * Instancja nie jest bezpieczna wątkowo — każdy wątek (UI, renderer, miniatury) ma własną.
  */
+/** Szerokość, przy której StaticLayout nie zawija wierszy (pomiar naturalnej szerokości tekstu). */
+private const val UNWRAPPED = 20000f
+
 class PageRenderer(private val assets: Assets?) {
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
     private val bmpPaint = Paint(Paint.FILTER_BITMAP_FLAG or Paint.ANTI_ALIAS_FLAG)
@@ -277,6 +281,19 @@ class PageRenderer(private val assets: Assets?) {
         return StaticLayout.Builder.obtain(txt, 0, txt.length, tp, max(1, widthPt.toInt())).setAlignment(al).setIncludePad(false).build()
     }
 
+    /** Pomiar tekstu dla [com.mdev.mnotes.core.text.TextFit]: te same czcionki i zawijanie co przy rysowaniu. */
+    val textMeasure: TextMeasure = object : TextMeasure {
+        override fun naturalWidth(t: TextBox): Float {
+            // szerokość większa niż jakikolwiek wiersz, więc StaticLayout zawija tylko na znakach nowej linii
+            val l = layoutFor(t, UNWRAPPED)
+            var w = 0f
+            for (i in 0 until l.lineCount) w = max(w, l.getLineWidth(i))
+            return w
+        }
+
+        override fun textHeight(t: TextBox, width: Float): Float = layoutFor(t, width).height.toFloat()
+    }
+
     private fun drawText(c: Canvas, t: TextBox) {
         c.save()
         c.rotate(Math.toDegrees(t.rot.toDouble()).toFloat(), t.cx, t.cy)
@@ -285,6 +302,8 @@ class PageRenderer(private val assets: Assets?) {
             paint.reset(); paint.isAntiAlias = true; paint.color = t.fill
             c.drawRoundRect(0f, 0f, t.w, t.h, 4f, 4f, paint)
         }
+        // ręcznie ustawiona ramka przycina tekst, który się w niej nie mieści
+        if (t.fit == TextBox.FIT_FIXED) c.clipRect(0f, 0f, t.w, t.h)
         layoutFor(t).draw(c)
         c.restore()
     }

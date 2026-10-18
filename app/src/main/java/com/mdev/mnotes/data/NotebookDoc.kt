@@ -17,6 +17,8 @@ class PageState(val id: String, spec: PageSpec) {
     @Volatile var content: PageContent? = null
     /** Rośnie przy każdej zmianie zawartości lub wyglądu — rendery porównują ją, by odrzucać nieaktualne wyniki. */
     @Volatile var version: Int = 0
+    /** Wersja ostatniej zmiany zawartości. Wynik renderu starszy od [version], ale nie od tej wartości, różni się tylko wyglądem strony. */
+    @Volatile var contentVersion: Int = 0
 }
 
 interface DocListener {
@@ -67,6 +69,7 @@ class NotebookDoc(val repo: Repository, val id: String) : DocHost {
         val p = page(pageId) ?: return
         p.content = content(p).apply(edit)
         p.version++
+        p.contentVersion = p.version
         dirtyContent.add(pageId)
         scheduleSave()
         listener?.pageChanged(pageId, edit)

@@ -392,8 +392,13 @@ class PageCache(
         if (bmp == null) { t.retryAt = System.nanoTime() + RETRY_NS; return }
         // Zmiana w trakcie renderu: wynik odrzucony. Przyjęcie nieaktualnego pokazywałoby na chwilę stan sprzed kilku
         // kroków (np. przesuwany obiekt w starym miejscu), a nowa bitmapa wnika z przenikaniem, spod którego widać bazę.
-        if (page != null && ver == page.version) {
-            adopt(t, bmp, bg); t.bscale = baseSc; t.version = ver; t.readyAt = System.nanoTime()
+        // Wyjątek: gdy od startu renderu zmienił się tylko wygląd strony (suwak rozstawu zmienia go co kilkadziesiąt ms,
+        // częściej niż trwa render), wynik przyjmujemy mimo starszej wersji, a kafelek zostanie odnowiony od nowa.
+        // Odrzucanie wszystkiego zostawiałoby na ekranie stan sprzed gestu aż do puszczenia suwaka.
+        if (page != null && ver >= page.contentVersion) {
+            // Podmiana bitmapy, która już była, nie przenika: spod przenikania wyzierałaby baza w innej wersji.
+            val swap = t.bmp != null && t.version >= page.contentVersion
+            adopt(t, bmp, bg); t.bscale = baseSc; t.version = ver; t.readyAt = if (swap) 0L else System.nanoTime()
             t.pending = Bounds.EMPTY
             trim()
         }

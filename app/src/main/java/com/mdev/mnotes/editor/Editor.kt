@@ -70,6 +70,8 @@ class CropSession(val pageId: String, val imageId: Int, val original: ImageEl, v
     var ratio by mutableStateOf(CropRatio.FREE)
     /** Czy proporcje są odwrócone (pion zamiast poziomu). */
     var portrait by mutableStateOf(false)
+    /** Ćwierć obrotu, wokół której działa suwak prostowania (0..3); zmieniają ją tylko przyciski 90°. */
+    var quarter by mutableStateOf(CropGeom.quarterOf(frame.a))
 
     /** Szerokość/wysokość ramki, jaką wymusza wybrany wybór, albo null. */
     val lockedRatio: Float?
@@ -612,6 +614,7 @@ class Editor(val ctx: Context, val nbId: String) {
         val page = c.frame.a + c.place.phi
         c.place = c.place.turned(page - q.a, c.frame.cx, c.frame.cy, c.iw, c.ih)
         c.portrait = !c.portrait
+        c.quarter = (c.quarter + if (clockwise) -1 else 1).mod(4)
         c.want = CropGeom.quarter(c.want, clockwise).copy(cx = q.cx, cy = q.cy)
         c.set(q, keepWant = true)
     }
@@ -643,7 +646,7 @@ class Editor(val ctx: Context, val nbId: String) {
         val page = f.a + c.place.phi
         val full = CropGeom.full(c.iw, c.ih)
         c.place = CropPlace(at[0], at[1], c.place.s, page)
-        c.ratio = CropRatio.FREE; c.portrait = false
+        c.ratio = CropRatio.FREE; c.portrait = false; c.quarter = 0
         c.set(full)
     }
 

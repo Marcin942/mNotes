@@ -183,6 +183,7 @@ import com.mdev.mnotes.core.pen.InkColor
 import com.mdev.mnotes.core.pen.LineStyle
 import com.mdev.mnotes.core.pen.PenKit
 import com.mdev.mnotes.editor.Clip
+import com.mdev.mnotes.core.edit.CropGeom
 import com.mdev.mnotes.editor.CropRatio
 import com.mdev.mnotes.editor.Editor
 import com.mdev.mnotes.editor.NoteView
@@ -981,9 +982,8 @@ private fun cropRatioName(r: CropRatio) = when (r) {
 private fun CropBar(ed: Editor) {
     val c = ed.crop ?: return
     val half = (Math.PI / 2).toFloat()
-    val a = c.frame.a
-    val q = Math.round(a / half)
-    val deg = Math.toDegrees((a - q * half).toDouble()).toFloat()
+    val q = c.quarter
+    val deg = Math.toDegrees(CropGeom.tiltOf(c.frame.a, q).toDouble()).toFloat()
     val changed = !ed.cropIsFull()
     FloatingCard(Modifier.widthIn(max = 460.dp)) {
         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {

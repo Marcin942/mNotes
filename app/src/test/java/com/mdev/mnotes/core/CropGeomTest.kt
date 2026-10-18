@@ -177,4 +177,17 @@ class CropGeomTest {
             }
         }
     }
+
+    @Test fun sliderKeepsItsQuarterAtPlusAndMinus45() {
+        // suwak ustawia a = q·90° + δ; przy δ = ±45° odczyt odchylenia nie może przeskoczyć do sąsiedniej ćwiartki
+        for (q in 0..3) for (d in listOf(-45f, -44.9f, 0f, 44.9f, 45f)) {
+            val a = CropGeom.normAngle(q * CropGeom.HALF_PI + deg(d))
+            assertEquals(deg(d), CropGeom.tiltOf(a, q), 1e-4f)
+        }
+        // na starcie odchylenie mieści się w (-45°, 45°]
+        assertEquals(0, CropGeom.quarterOf(deg(45f)))
+        assertEquals(1, CropGeom.quarterOf(deg(45.1f)))
+        assertEquals(3, CropGeom.quarterOf(deg(-45f)))
+        assertEquals(0, CropGeom.quarterOf(deg(-44.9f)))
+    }
 }

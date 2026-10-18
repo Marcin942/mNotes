@@ -4,6 +4,7 @@ import com.mdev.mnotes.core.model.ImageCrop
 import com.mdev.mnotes.core.model.ImageEl
 import kotlin.math.PI
 import kotlin.math.abs
+import kotlin.math.ceil
 import kotlin.math.cos
 import kotlin.math.max
 import kotlin.math.min
@@ -77,6 +78,15 @@ object CropGeom {
         if (x <= -PI.toFloat()) x += TWO_PI
         return x
     }
+
+    /**
+     * Ćwierć obrotu, wokół której prostuje się ramka o kącie [a]: odchylenie mieści się w (-45°, 45°]. Liczone raz
+     * na początku przycinania; potem zmieniają je tylko przyciski 90°, żeby suwak przy ±45° nie przeskakiwał.
+     */
+    fun quarterOf(a: Float): Int = ceil(a / HALF_PI - 0.5f).toInt().mod(4)
+
+    /** Odchylenie kąta [a] od ćwierci obrotu [q], w (-π, π]. */
+    fun tiltOf(a: Float, q: Int): Float = normAngle(a - q * HALF_PI)
 
     /** Czy ramka ma boki równoległe do boków pliku (też po obrocie o ćwierć obrotu). */
     fun isAxisAligned(a: Float): Boolean = abs(sin(a)) < 1e-4f || abs(cos(a)) < 1e-4f

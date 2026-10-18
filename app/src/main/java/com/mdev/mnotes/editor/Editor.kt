@@ -638,16 +638,13 @@ class Editor(val ctx: Context, val nbId: String) {
         c.set(CropGeom.withRatio(c.frame, k, c.iw, c.ih))
     }
 
-    /** Cały plik, bez kąta: środek pliku staje tam, gdzie był środek ramki. */
+    /** Cały plik, bez kąta ramki: plik stoi w miejscu (jak przy ręcznym rozciągnięciu uchwytów), a przy pochyleniu obraca się wokół środka ramki. */
     fun cropReset() {
         val c = crop ?: return
         val f = c.frame
-        val at = c.place.toPage(f.cx, f.cy, c.iw, c.ih)
-        val page = f.a + c.place.phi
-        val full = CropGeom.full(c.iw, c.ih)
-        c.place = CropPlace(at[0], at[1], c.place.s, page)
+        c.place = c.place.turned(f.a + c.place.phi, f.cx, f.cy, c.iw, c.ih)
         c.ratio = CropRatio.FREE; c.portrait = false; c.quarter = 0
-        c.set(full)
+        c.set(CropGeom.full(c.iw, c.ih))
     }
 
     fun cropIsFull(): Boolean {

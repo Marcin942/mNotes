@@ -220,4 +220,22 @@ class CropGeomTest {
         assertEquals(3, CropGeom.quarterOf(deg(-45f)))
         assertEquals(0, CropGeom.quarterOf(deg(-44.9f)))
     }
+
+    @Test fun wholeImageKeepsFileInPlaceWhenFrameIsStraight() {
+        // „Cały obraz” bez pochylenia ma zostawić plik tam, gdzie stoi (jak ręczne rozciągnięcie uchwytów)
+        val p = CropPlace(120f, 340f, 0.05f, 0f)
+        val f = CropFrame(1500f, 1200f, 800f, 500f, 0f)
+        val q = p.turned(f.a + p.phi, f.cx, f.cy, iw, ih)
+        assertEquals(p.ox, q.ox, 1e-3f); assertEquals(p.oy, q.oy, 1e-3f); assertEquals(p.phi, q.phi, 1e-6f)
+    }
+
+    @Test fun wholeImageRotatesFileAroundFrameCenterWhenTilted() {
+        val p = CropPlace(120f, 340f, 0.05f, deg(-10f))
+        val f = CropFrame(1500f, 1200f, 800f, 500f, deg(10f))
+        val before = p.toPage(f.cx, f.cy, iw, ih)
+        val q = p.turned(f.a + p.phi, f.cx, f.cy, iw, ih)
+        val after = q.toPage(f.cx, f.cy, iw, ih)
+        assertEquals(0f, q.phi, 1e-6f)
+        assertEquals(before[0], after[0], 1e-3f); assertEquals(before[1], after[1], 1e-3f)
+    }
 }

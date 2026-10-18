@@ -81,14 +81,15 @@ class PenKitTest {
         assertFalse(custom in k.strip(PenKind.BRUSH))
     }
 
-    @Test fun addColorOnFullStripReplacesLastVisible() {
+    @Test fun addColorFillsTheStripUpToTheLimit() {
+        // Limit listwy równa się limitowi zestawu, więc zestaw w całości na listwie jest pełny i nic już do niego nie wejdzie.
         var k = kit.withVisible(PenKit.SET_INK, 10)
-        k = k.addColor(PenKit.SET_INK, 0xFF000001.toInt()).addColor(PenKit.SET_INK, 0xFF000002.toInt())
-        assertEquals(PenKit.MAX_VISIBLE, k.set(PenKit.SET_INK)!!.visible)
-        k = k.addColor(PenKit.SET_INK, custom)
-        assertEquals(PenKit.MAX_VISIBLE, k.set(PenKit.SET_INK)!!.visible)
-        assertEquals(custom, k.strip(PenKind.BALLPOINT).last())
-        assertEquals(13, k.set(PenKit.SET_INK)!!.colors.size)
+        for (i in 0 until PenKit.MAX_COLORS) k = k.addColor(PenKit.SET_INK, 0xFF000100.toInt() + i)
+        val s = k.set(PenKit.SET_INK)!!
+        assertEquals(PenKit.MAX_COLORS, s.colors.size)
+        assertEquals(PenKit.MAX_VISIBLE, s.visible)
+        assertEquals(k, k.addColor(PenKit.SET_INK, custom))
+        assertEquals(custom, k.withColor(PenKind.BALLPOINT, custom).strip(PenKind.BALLPOINT).last())
     }
 
     @Test fun removeMoveAndReplaceColor() {
@@ -300,17 +301,12 @@ class PenKitTest {
         // Narzędzie, które pisało schowanym kolorem, nadal ma go na listwie.
         assertTrue(navy in kit.hideColor(PenKit.SET_INK, navy).strip(PenKind.FOUNTAIN))
 
-        // Pełna listwa: pokazany kolor zajmuje ostatnie miejsce, a dotychczasowy ostatni się chowa.
+        // Pełna listwa (wszystkie 24 kolory widoczne): nie ma czego chować ani pokazywać.
         var full = kit
-        for (i in 0 until 8) full = full.addColor(PenKit.SET_INK, 0xFF000100.toInt() + i)
-        val fs = full.set(PenKit.SET_INK)!!
-        assertEquals(PenKit.MAX_VISIBLE, fs.visible)
-        val last = fs.colors[PenKit.MAX_VISIBLE - 1]
-        val back = fs.colors.last()
-        val swapped = full.showColor(PenKit.SET_INK, back).set(PenKit.SET_INK)!!
-        assertEquals(PenKit.MAX_VISIBLE, swapped.visible)
-        assertEquals(back, swapped.colors[PenKit.MAX_VISIBLE - 1])
-        assertEquals(last, swapped.colors[PenKit.MAX_VISIBLE])
+        for (i in 0 until PenKit.MAX_COLORS) full = full.addColor(PenKit.SET_INK, 0xFF000100.toInt() + i)
+        full = full.withVisible(PenKit.SET_INK, 99)
+        assertEquals(PenKit.MAX_VISIBLE, full.set(PenKit.SET_INK)!!.visible)
+        assertEquals(full, full.showColor(PenKit.SET_INK, full.set(PenKit.SET_INK)!!.colors.last()))
     }
 
     @Test fun savedKitCannotBringTooManySets() {
@@ -329,5 +325,24 @@ class PenKitTest {
         assertEquals(InkColor.look(InkColor.soften(black)), InkColor.onPaper(black, false, PenKind.HIGHLIGHTER))
         assertEquals(black, InkColor.onPaper(black, false, PenKind.BALLPOINT))
         assertEquals(InkColor.look(yellow), InkColor.onPaper(yellow, true, PenKind.BALLPOINT))
+    }
+
+    @Test fun takenFormatBecomesTheActivePen() {
+        val k = kit.withTaken(PenKind.FOUNTAIN, custom, 3.5f, LineStyle.DASHED)
+        assertEquals(PenKind.FOUNTAIN, k.active)
+        val p = k.current
+        assertEquals(custom, p.color)
+        assertEquals(LineStyle.DASHED, p.style)
+        val spec = PenSpec.of(PenKind.FOUNTAIN)
+        assertEquals(3.5f.coerceIn(spec.minWidth, spec.maxWidth), p.width, 0.001f)
+    }
+
+    @Test fun stripHoldsTwentyFourColoursWhenAsked() {
+        var k = kit
+        for (i in 0 until PenKit.MAX_COLORS) k = k.addColor(PenKit.SET_BRUSH, 0xFF000100.toInt() + i)
+        val s = k.set(PenKit.SET_BRUSH)!!
+        assertEquals(24, PenKit.MAX_VISIBLE)
+        assertTrue(s.visible <= PenKit.MAX_VISIBLE)
+        assertEquals(minOf(PenKit.MAX_VISIBLE, s.colors.size), k.withVisible(PenKit.SET_BRUSH, 99).set(PenKit.SET_BRUSH)!!.visible)
     }
 }

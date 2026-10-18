@@ -55,6 +55,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.FormatColorFill
 import androidx.compose.material.icons.rounded.FormatPaint
 import androidx.compose.material.icons.rounded.IosShare
+import androidx.compose.material.icons.rounded.Colorize
 import androidx.compose.material.icons.rounded.Straighten
 import androidx.compose.material.icons.rounded.UnfoldMore
 import androidx.compose.material.icons.rounded.VisibilityOff
@@ -239,6 +240,7 @@ fun EditorScreen(ed: Editor, tabs: TabsCtl, onExit: () -> Unit, onSettings: () -
 
     fun toggle(p: Panel) { if (p == Panel.PAGES && dock) set.dockPages = false else panel = if (panel == p) null else p }
     // Pipeta chowa panele, żeby strona była widoczna.
+    LaunchedEffect(ed.tool) { if (ed.tool != Tool.PAINTER) ed.formatPick = false }
     LaunchedEffect(ed.pipette != null) { if (ed.pipette != null) panel = null }
     fun applyLayout(mode: Int) { set.layoutMode = mode; ed.view?.applyLayoutMode() }
     fun pickTool(t: Tool, p: Panel?) {
@@ -568,6 +570,7 @@ private fun ToolBar(ed: Editor, set: com.mdev.mnotes.data.Settings, vertical: Bo
     tool("eraser", 3, MIcons.Eraser, T.t("Gumka", "Eraser"), "E", Tool.ERASER, Panel.ERASER)
     tool("painter", 11, Icons.Rounded.FormatPaint, T.t("Pędzel formatu — przenosi kolor i styl aktywnego pióra", "Format painter — applies the active pen's colour and style"), "B", Tool.PAINTER, Panel.PAINTER)
     tool("fill", 12, Icons.Rounded.FormatColorFill, T.t("Wypełnienie (wiaderko)", "Fill (paint bucket)"), "F", Tool.FILL, null)
+    icon("pipette", 2, 17, Icons.Rounded.Colorize, T.t("Pipeta — pobierz kolor ze strony", "Eyedropper — pick a colour from the page"), "I", !ro, ed.pipette != null, pin = false) { if (ed.pipette != null) ed.cancelPipette() else ed.pipetteForCurrent() }
     tool("lasso", 4, if (set.lassoRect) Icons.Rounded.HighlightAlt else Icons.Rounded.Gesture, T.t("Lasso", "Lasso"), "L", Tool.LASSO, Panel.LASSO)
     tool("text", 7, Icons.Rounded.TextFields, T.t("Tekst", "Text"), "T", Tool.TEXT, null)
     tool("laser", 14, Icons.Rounded.TrackChanges, T.t("Laser", "Laser"), "O", Tool.LASER, null, enabled = true)
@@ -885,7 +888,7 @@ private fun ToolPanel(ed: Editor, set: com.mdev.mnotes.data.Settings, panel: Pan
                         SectionLabel(T.t("Rozmiar", "Size")); Spacer(Modifier.weight(1f))
                         Text(String.format("%.0f pt", set.eraserSize), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
-                    MSlider(set.eraserSize, 3f, 60f) { set.eraserSize = it }
+                    MSlider(set.eraserSize, 1f, 60f) { set.eraserSize = it }
                     ToggleRow(T.t("Nie ruszaj zakreślacza", "Keep highlighter"), set.eraserKeepHighlighter) { set.eraserKeepHighlighter = it }
                     HorizontalDivider(Modifier.padding(vertical = 6.dp), color = m.line)
                     Chip(T.t("Wyczyść stronę", "Clear page"), false, { ed.clearPage(); close() }, icon = Icons.Rounded.Delete)
@@ -905,6 +908,8 @@ private fun ToolPanel(ed: Editor, set: com.mdev.mnotes.data.Settings, panel: Pan
                         Chip(T.t("Obiektowo", "Object"), set.painterMode == 0, { set.painterMode = 0 }, icon = Icons.Rounded.FormatPaint)
                         Chip(T.t("Lasso", "Lasso"), set.painterMode == 1, { set.painterMode = 1 }, icon = Icons.Rounded.Gesture)
                     }
+                    Chip(T.t("Pobierz format", "Take format"), ed.formatPick, { ed.formatPick = !ed.formatPick; if (ed.formatPick) { ed.say(T.t("Dotknij obiektu, z którego pobrać format", "Tap the object to take the format from")); close() } }, icon = Icons.Rounded.Colorize)
+                    if (ed.formatPick) Text(T.t("Dotknij rysikiem obiektu na stronie — jego kolor, grubość, styl linii i rodzaj pióra staną się aktywnym piórem.", "Tap an object with the stylus — its colour, width, line style and pen type become the active pen."), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
                     Text(T.t("Kolor i styl bierze z aktywnego pióra — wybierz pióro na pasku, a kolor i grubość na listwie. Obiektowo: przeciągnij po obiektach. Lasso: obrysuj je.", "Colour and style come from the active pen — pick the pen on the toolbar, the colour and width on the strip. Object: drag over objects. Lasso: circle them."), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 else -> {

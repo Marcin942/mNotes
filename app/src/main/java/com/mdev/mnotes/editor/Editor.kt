@@ -71,6 +71,8 @@ class Editor(val ctx: Context, val nbId: String) {
     fun toggleZoomWin() { zoomWin = !zoomWin; view?.zoomWinChanged() }
     /** Pipeta: gdy niepusta, następne dotknięcie strony pobiera kolor i przekazuje go do tej funkcji. */
     var pipette by mutableStateOf<((Int) -> Unit)?>(null)
+    /** Pędzel formatu w trybie „Pobierz format”: następne dotknięcie obiektu ustawia aktywne pióro według niego. */
+    var formatPick by mutableStateOf(false)
     var sel by mutableStateOf<Sel?>(null)
     var selTick by mutableIntStateOf(0)
     /** Uchwyty skali i obrotu są widoczne i aktywne tylko po włączeniu przyciskiem na pasku zaznaczenia; nowe zaznaczenie je wyłącza. */
@@ -153,6 +155,17 @@ class Editor(val ctx: Context, val nbId: String) {
     fun selectPen(kind: PenKind) {
         editKit { it.withActive(kind) }
         tool = Tool.PEN; clearSelIfNotLasso()
+    }
+
+    /** Pobiera format obiektu do aktywnego pióra; false, gdy obiekt (obraz, taśma) nie ma formatu. */
+    fun takeFormat(e: Element): Boolean {
+        when (e) {
+            is Stroke -> editKit { it.withTaken(e.pen, e.color, e.width, e.line) }
+            is FillEl -> editKit { it.withColor(it.active, e.color) }
+            is TextBox -> editKit { it.withColor(it.active, e.color) }
+            else -> return false
+        }
+        return true
     }
 
     fun setPenColor(c: Int) = editKit { it.withColor(it.active, c) }
@@ -429,7 +442,17 @@ class Editor(val ctx: Context, val nbId: String) {
     /** Pipeta z paska/skrótu: kolor trafia do zaznaczenia albo do aktywnego pióra. */
     fun pipetteForCurrent() = startPipette { c ->
         if (sel != null && !readOnly) recolorSel(c)
-        else { setPenColor(c); if (!penTool && tool != Tool.TEXT) tool = Tool.PEN }
+        else {
+            if (settings.pipetteKeep) keepPicked(c)
+            setPenColor(c); if (!penTool && tool != Tool.TEXT) tool = Tool.PEN
+        }
+    }
+
+    /** Dopisuje pobrany kolor do zestawu aktywnego pióra, ale tylko gdy listwa ma jeszcze miejsce (inaczej wypchnąłby cudzy kolor). */
+    private fun keepPicked(c: Int) {
+        val cs = kit.setOf(kit.active)
+        if ((c or 0xFF000000.toInt()) in cs.colors || cs.visible >= PenKit.MAX_VISIBLE || cs.colors.size >= PenKit.MAX_COLORS) return
+        editKit { it.addColor(cs.id, c) }
     }
 
     fun toggleRuler() { ruler = !ruler; if (ruler) view?.rulerShown() else view?.invalidate() }

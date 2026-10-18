@@ -2101,35 +2101,48 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
         if (pi < 0) { eraseLastPage = -1; return }
         val px = pgX(pi, sx); val py = pgY(pi, sy)
         val r = settings.eraserSize
-        if (eraseLastPage == pi) {
-            val steps = ceil(hypot(px - eraseLx, py - eraseLy) / (r * 0.6f)).toInt().coerceAtLeast(1)
-            for (k in 1..steps) { val f = k.toFloat() / steps; eraseAt(pi, eraseLx + (px - eraseLx) * f, eraseLy + (py - eraseLy) * f) }
-        } else eraseAt(pi, px, py)
-        eraseLastPage = pi; eraseLx = px; eraseLy = py
-    }
-
-    private fun eraseAt(pi: Int, px: Float, py: Float) {
+        // Wszystkie kroki jednego ruchu liczone w pamięci, a do dokumentu trafia jedna zmiana: przy małej gumce kroków są setki.
         val page = doc.pages[pi]
         val cur = doc.content(page)
+        var work: List<Element> = cur.elements
+        var changed = false
+        if (eraseLastPage == pi) {
+            val steps = ceil(hypot(px - eraseLx, py - eraseLy) / (r * 0.6f)).toInt().coerceAtLeast(1)
+            for (k in 1..steps) {
+                val f = k.toFloat() / steps
+                eraseStep(work, eraseLx + (px - eraseLx) * f, eraseLy + (py - eraseLy) * f)?.let { work = it; changed = true }
+            }
+        } else eraseStep(work, px, py)?.let { work = it; changed = true }
+        eraseLastPage = pi; eraseLx = px; eraseLy = py
+        if (!changed) return
+        eraseStart.getOrPut(page.id) { cur }
+        doc.applyElements(page.id, ElementsEdit.diff(cur, PageContent.of(work)))
+    }
+
+    /** Jeden krok gumki w punkcie (px, py); null = nic nie zmienił. Lista powstaje dopiero przy pierwszym trafieniu. */
+    private fun eraseStep(src: List<Element>, px: Float, py: Float): List<Element>? {
         val r = settings.eraserSize
         val keepHl = settings.eraserKeepHighlighter
         val pixel = settings.eraserMode == 1
-        val out = ArrayList<Element>(cur.size)
-        var changed = false
-        for (e in cur.elements) {
+        var out: ArrayList<Element>? = null
+        for (i in src.indices) {
+            val e = src[i]
             // Wypełnienie leży pod pismem: gumka przeciągana po zamalowanym obszarze ściera tylko kreski (usunąć je można lassem gumki).
-            if (e.locked || e is TapeEl || e is FillEl || (keepHl && e is Stroke && e.pen == PenKind.HIGHLIGHTER) || !e.bounds.inflate(r + 1f).contains(px, py)) { out.add(e); continue }
-            if (pixel) {
-                if (e is Stroke) {
-                    val pieces = EraseMath.erasePartial(e, px, py, r)
-                    if (pieces == null) out.add(e)
-                    else { changed = true; for (pc in pieces) out.add(Stroke(Ids.next(), e.pen, e.color, e.width, pc, false, line = e.line)) }
-                } else out.add(e)
-            } else if (EraseMath.hitsElement(e, px, py, r)) changed = true else out.add(e)
+            val skip = e.locked || e is TapeEl || e is FillEl || (keepHl && e is Stroke && e.pen == PenKind.HIGHLIGHTER) || !e.bounds.inflate(r + 1f).contains(px, py)
+            var repl: List<Element>? = null
+            var hit = false
+            if (!skip) {
+                if (pixel) {
+                    if (e is Stroke) {
+                        val pieces = EraseMath.erasePartial(e, px, py, r)
+                        if (pieces != null) { hit = true; repl = pieces.map { Stroke(Ids.next(), e.pen, e.color, e.width, it, false, line = e.line) } }
+                    }
+                } else if (EraseMath.hitsElement(e, px, py, r)) hit = true
+            }
+            if (hit && out == null) { out = ArrayList(src.size); for (j in 0 until i) out.add(src[j]) }
+            if (out != null) { if (!hit) out.add(e) else if (repl != null) out.addAll(repl) }
         }
-        if (!changed) return
-        eraseStart.getOrPut(page.id) { cur }
-        doc.applyElements(page.id, ElementsEdit.diff(cur, PageContent.of(out)))
+        return out
     }
 
     private fun eraseUp(cancel: Boolean) {
@@ -2157,10 +2170,24 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
     /** Pędzel formatu: jak gumka (obiektowa albo lasso), tylko zamiast usuwać nadaje styl aktywnego pióra. */
     private fun paintDown() {
         eraseStart.clear(); eraseLastPage = -1
+        if (ed.formatPick) { takeFormatAt(); mode = Mode.IGNORE; return }
         if (ed.sel != null) ed.clearSel()
         if (ed.readOnly) { mode = Mode.IGNORE; return }
         if (settings.painterMode == 1) { val pi = pageIdxAt(curX, curY); if (pi < 0) { mode = Mode.IGNORE; return }; lPage = pi; ln = 0; addLasso(pgX(pi, curX), pgY(pi, curY)) }
         else paintTo(curX, curY)
+    }
+
+    /** „Pobierz format”: obiekt na wierzchu pod punktem dotyku (ostatni na liście leży najwyżej) ustawia aktywne pióro. */
+    private fun takeFormatAt() {
+        val pi = pageIdxAt(curX, curY)
+        if (pi < 0) return
+        val px = pgX(pi, curX); val py = pgY(pi, curY)
+        val r = PAINT_R_DP * dp / zoom
+        val els = doc.content(doc.pages[pi]).elements
+        val top = els.lastOrNull { it !is TapeEl && it.bounds.inflate(r + 1f).contains(px, py) && EraseMath.hitsElement(it, px, py, r) }
+        if (top == null) { ed.say(T.t("Dotknij obiektu, z którego chcesz pobrać format", "Tap the object to take the format from")); return }
+        if (ed.takeFormat(top)) ed.formatPick = false
+        else ed.say(T.t("Ten obiekt nie ma formatu do pobrania", "This object has no format to take"))
     }
 
     private fun paintTo(sx: Float, sy: Float) {

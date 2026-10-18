@@ -334,9 +334,16 @@ private fun EditorPrefs(set: com.mdev.mnotes.data.Settings) {
         Opt(T.t("Tryb pędzla formatu", "Format painter mode"), "format painter kopiuj formatowanie styl") { Choice(listOf(T.t("Obiektowo", "Object"), "Lasso"), set.painterMode) { set.painterMode = it } }
         ToggleRow(T.t("Wiaderko domyka małe szpary w liniach", "Fill closes small gaps in lines"), set.fillCloseGaps, keys = "wiaderko wypełnianie fill kolor szpary luka") { set.fillCloseGaps = it }
     }
+    Group(T.t("Pipeta", "Eyedropper"), keys = "pipeta próbnik kolor paleta eyedropper") {
+        ToggleRow(T.t("Pobrany kolor zostaje w palecie", "Picked colour stays in the palette"), set.pipetteKeep, keys = "pipeta próbnik kolor paleta zestaw zostaje znika eyedropper") { set.pipetteKeep = it }
+        Text(
+            T.t("Dotyczy tylko niepełnej listwy. Wyłączone: pobrany kolor znika z listwy po zmianie koloru.", "Applies only while the strip has room. Off: a picked colour disappears from the strip once you change colour."),
+            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(bottom = 6.dp),
+        )
+    }
     Group(T.t("Gumka i lasso", "Eraser & lasso"), keys = "wymaż zaznaczanie") {
         Opt(T.t("Domyślny tryb gumki", "Default eraser mode"), "eraser wymaż kasowanie pikselowa obiektowa") { Choice(listOf(T.t("Obiektowa", "Object"), T.t("Pikselowa", "Pixel"), "Lasso"), set.eraserMode) { set.eraserMode = it } }
-        Opt(T.t("Rozmiar gumki: ${set.eraserSize.toInt()} pt", "Eraser size: ${set.eraserSize.toInt()} pt"), "eraser grubość wymaż") { MSlider(set.eraserSize, 3f, 60f) { set.eraserSize = it } }
+        Opt(T.t("Rozmiar gumki: ${set.eraserSize.toInt()} pt", "Eraser size: ${set.eraserSize.toInt()} pt"), "eraser grubość wymaż") { MSlider(set.eraserSize, 1f, 60f) { set.eraserSize = it } }
         ToggleRow(T.t("Gumka pomija zakreślacz", "Eraser ignores highlighter"), set.eraserKeepHighlighter, keys = "eraser wymaż zakreślacz marker") { set.eraserKeepHighlighter = it }
         Opt(T.t("Kształt lassa", "Lasso shape"), "zaznaczanie zaznacz odręczne prostokąt") { Choice(listOf(T.t("Odręczne", "Freehand"), T.t("Prostokąt", "Rectangle")), if (set.lassoRect) 1 else 0) { set.lassoRect = it == 1 } }
         ToggleRow(T.t("Przyciągaj do siatki", "Snap to grid"), set.snapGrid, keys = "grid siatka magnes snap") { set.snapGrid = it }

@@ -57,7 +57,7 @@ class BarConfig private constructor(val order: List<String>, private val modes: 
         /** Stabilne id pozycji paska w kolejności domyślnej. */
         val DEFAULT_ORDER = listOf(
             "undo", "redo", "ballpoint", "fountain", "pencil", "brush", "highlighter", "eraser", "painter", "fill",
-            "lasso", "text", "laser", "hand", "tape", "space", "ruler",
+            "pipette", "lasso", "text", "laser", "hand", "tape", "space", "ruler",
         )
 
         val DEFAULT = BarConfig(DEFAULT_ORDER, emptyMap())

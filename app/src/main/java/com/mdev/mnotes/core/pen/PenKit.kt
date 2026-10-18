@@ -94,6 +94,10 @@ data class PenKit(val sets: List<ColorSet>, val slots: Map<PenKind, PenSlot>, va
 
     fun withColor(kind: PenKind, color: Int) = edit(kind) { it.copy(color = color or OPAQUE) }
     fun withWidthIndex(kind: PenKind, i: Int) = edit(kind) { it.copy(widthIndex = i.coerceIn(0, WIDTHS - 1)) }
+    /** Pióro „jak ten kreska”: rodzaj, kolor, styl linii i grubość (do aktualnie wybranej z trzech) stają się aktywne. */
+    fun withTaken(kind: PenKind, color: Int, width: Float, style: LineStyle): PenKit =
+        withActive(kind).withColor(kind, color).withStyle(kind, style).withWidth(kind, slot(kind).widthIndex, width)
+
     fun withStyle(kind: PenKind, style: LineStyle) = edit(kind) { it.copy(style = style) }
 
     fun withWidth(kind: PenKind, i: Int, w: Float): PenKit {
@@ -233,7 +237,7 @@ data class PenKit(val sets: List<ColorSet>, val slots: Map<PenKind, PenSlot>, va
 
     companion object {
         const val WIDTHS = 3
-        const val MAX_VISIBLE = 12
+        const val MAX_VISIBLE = 24
         const val MAX_COLORS = 24
         const val MAX_SETS = 8
         const val MAX_NAME = 24

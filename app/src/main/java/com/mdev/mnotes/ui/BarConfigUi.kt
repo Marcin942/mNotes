@@ -22,6 +22,7 @@ import androidx.compose.material.icons.rounded.Gesture
 import androidx.compose.material.icons.rounded.HighlightAlt
 import androidx.compose.material.icons.rounded.PanTool
 import androidx.compose.material.icons.rounded.RestartAlt
+import androidx.compose.material.icons.rounded.Colorize
 import androidx.compose.material.icons.rounded.Straighten
 import androidx.compose.material.icons.rounded.TextFields
 import androidx.compose.material.icons.rounded.TrackChanges
@@ -52,6 +53,7 @@ internal fun barName(id: String): String = when (id) {
     "eraser" -> T.t("Gumka", "Eraser")
     "painter" -> T.t("Pędzel formatu", "Format painter")
     "fill" -> T.t("Wypełnienie (wiaderko)", "Fill (paint bucket)")
+    "pipette" -> T.t("Pipeta (próbnik koloru)", "Eyedropper")
     "lasso" -> T.t("Lasso", "Lasso")
     "text" -> T.t("Tekst", "Text")
     "laser" -> T.t("Laser", "Laser")
@@ -72,6 +74,7 @@ internal fun barVector(id: String, lassoRect: Boolean): ImageVector? = when (id)
     "eraser" -> MIcons.Eraser
     "painter" -> Icons.Rounded.FormatPaint
     "fill" -> Icons.Rounded.FormatColorFill
+    "pipette" -> Icons.Rounded.Colorize
     "lasso" -> if (lassoRect) Icons.Rounded.HighlightAlt else Icons.Rounded.Gesture
     "text" -> Icons.Rounded.TextFields
     "laser" -> Icons.Rounded.TrackChanges

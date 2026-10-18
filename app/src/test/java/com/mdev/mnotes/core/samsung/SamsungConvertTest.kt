@@ -3,6 +3,7 @@ package com.mdev.mnotes.core.samsung
 import com.mdev.mnotes.core.model.Paper
 import com.mdev.mnotes.core.model.PenKind
 import com.mdev.mnotes.core.model.Template
+import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
@@ -76,6 +77,44 @@ class SamsungConvertTest {
         assertTrue(pitch[6].dot > 0f)
         assertTrue(pitch.all { it.margins.isEmpty() })
         assertFalse(withTemplate(2).has("nie był sprawdzony"))
+    }
+
+    @Test fun embeddedPdfBecomesPageBackground() {
+        val pdf = byteArrayOf(0x25, 0x50, 0x44, 0x46)
+        val pages = listOf(
+            SynthSdocx.Page("eeeeeeee-0000-4000-8000-000000000001", template = 16, pdf = 0 to 0),
+            SynthSdocx.Page("eeeeeeee-0000-4000-8000-000000000002", template = 16, pdf = 0 to 3),
+        )
+        val doc = SdocxReader.read(ByteArrayInputStream(SynthSdocx.build(pages, media = mapOf("0@Study.pdf" to pdf))))
+        assertEquals(setOf(0), doc.pdfs.keys)
+        assertTrue(doc.media.isEmpty())
+        val n = SamsungConvert.convert(doc, "a.sdocx", ConvertOptions(ImportMode.ORIGINAL))
+        assertEquals(listOf(0, 3), n.pages.map { it.pdf!!.page })
+        assertNull(n.pages[0].background)
+        assertArrayEquals(pdf, n.pdfs[0])
+        assertFalse(n.has("tło PDF"))
+        assertFalse(n.has("nie jest jeszcze odtwarzany"))
+    }
+
+    @Test fun pdfBackgroundWithoutFileIsReported() {
+        val n = SamsungConvert.convert(read(listOf(SynthSdocx.Page("eeeeeeee-0000-4000-8000-000000000003", template = 16, pdf = 0 to 0))), "a.sdocx", ConvertOptions(ImportMode.ORIGINAL))
+        assertNull(n.pages[0].pdf)
+        assertTrue(n.has("tło PDF"))
+    }
+
+    @Test fun musicTemplateHasElevenStaves() {
+        val n = withTemplate(15)
+        val bg = n.pages[0].background!!
+        assertEquals(BgKind.STAFF, bg.kind)
+        assertEquals(5, bg.staff!!.lines)
+        val lines = SdBackgroundGeometry.lines(bg)
+        assertEquals(11 * 5, lines.size / 4)
+        assertEquals(bg.offsetY, lines[1], 1e-3f)
+        assertFalse(n.has("nie jest jeszcze odtwarzany"))
+        val std = SamsungConvert.convert(read(listOf(SynthSdocx.Page("eeeeeeee-0000-4000-8000-000000000015", template = 15))), "a.sdocx", ConvertOptions(ImportMode.STANDARD))
+        assertEquals(Template.BLANK, std.pages[0].spec.template)
+        assertEquals(0.375f * 2262, std.pages[0].spec.h, 1e-3f)
+        assertTrue(std.has("pięciolinii"))
     }
 
     @Test fun oxfordHasLinesAndTwoRedMargins() {
@@ -226,7 +265,7 @@ class SamsungConvertTest {
     }
 
     @Test fun unreadablePageStaysAsEmptySheetWithWarning() {
-        val bad = SdPage("x", 0, 0, null, null, null, null, false, emptyList(), error = "brak pliku strony")
+        val bad = SdPage("x", 0, 0, null, null, null, null, null, emptyList(), error = "brak pliku strony")
         val n = SamsungConvert.convert(SdDocument(emptyMap(), listOf(bad)), "a.sdocx", ConvertOptions())
         assertEquals(1, n.pages.size)
         assertTrue(n.pages[0].strokes.isEmpty())

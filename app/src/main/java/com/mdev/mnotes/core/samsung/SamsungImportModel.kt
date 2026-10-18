@@ -30,7 +30,13 @@ class ReportItem(val level: Level, val pl: String, val en: String, val pages: Li
     fun text(polish: Boolean): String = if (polish) pl else en
 }
 
-enum class BgKind { LINES, GRID, DOTS }
+enum class BgKind { LINES, GRID, DOTS, STAFF }
+
+/**
+ * Pięciolinie (szablon „Muzyka”): [lines] linii co [SdBackground.pitchY] tworzy jedną pięciolinię, [groups] pięciolinii co
+ * [groupPitch] od [SdBackground.offsetY]; linie biegną od [left] do [right]. Wszystko w pt.
+ */
+data class SdStaff(val lines: Int, val groups: Int, val groupPitch: Float, val left: Float, val right: Float)
 
 /** Pionowa linia marginesu (papier Oxford): od pierwszej linii wzoru do dołu strony; [x] i [width] w pt. */
 data class SdMargin(val x: Float, val width: Float, val color: Int)
@@ -54,6 +60,7 @@ data class SdBackground(
     val lineWidth: Float,
     val dot: Float = 0f,
     val margins: List<SdMargin> = emptyList(),
+    val staff: SdStaff? = null,
 )
 
 /** Strona po konwersji. [background] niepusty = [spec] nie ma jeszcze [PageSpec.pdf], dopisuje je warstwa zapisu. */
@@ -64,6 +71,8 @@ class ConvertedPage(
     val elements: List<Element>,
     /** Numer strony w pliku źródłowym (od 0). */
     val source: Int,
+    /** Tło z osadzonego PDF-a ([ConvertedNote.pdfs]); wtedy [spec] też nie ma [PageSpec.pdf], dopisuje je warstwa zapisu. */
+    val pdf: SdPdfPage? = null,
 ) {
     val strokes: List<Stroke> get() = elements.filterIsInstance<Stroke>()
     val textBoxes: List<TextBox> get() = elements.filterIsInstance<TextBox>()
@@ -79,6 +88,8 @@ class ConvertedNote(
     val droppedTrailing: Int,
     /** Pliki obrazów dokumentu (numer → bajty) dla kluczy `sd:` z [ConvertedPage.elements]. */
     val media: Map<Int, ByteArray> = emptyMap(),
+    /** Osadzone pliki PDF (numer → bajty) dla [ConvertedPage.pdf]. */
+    val pdfs: Map<Int, ByteArray> = emptyMap(),
 ) {
     val textBoxCount: Int get() = pages.sumOf { it.textBoxes.size }
     val imageCount: Int get() = pages.sumOf { it.images.size }

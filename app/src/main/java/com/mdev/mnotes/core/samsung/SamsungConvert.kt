@@ -44,6 +44,8 @@ object SamsungConvert {
     private class Pattern(
         val kind: BgKind, val pitchX: Double, val pitchY: Double, val offX: Double, val offY: Double,
         val lineWidth: Double, val line: Int, val dot: Double = 0.0, val oxford: Boolean = false,
+        /** Pięciolinie: liczba linii, liczba pięciolinii, rozstaw pięciolinii, lewy i prawy brzeg (jednostki). */
+        val staff: SdStaff? = null,
     )
     private const val GRID_LINE = 0xFFC8C8C8.toInt()
     private const val GRID_LINE_WIDTH = 1.7          // jednostek; ok. 0,64 pt
@@ -62,6 +64,8 @@ object SamsungConvert {
         8 to Pattern(BgKind.DOTS, 108.96, 102.07, 0.0, DOT_OFFSET_Y, GRID_LINE_WIDTH, GRID_LINE, DOT_DIAMETER),
         9 to Pattern(BgKind.DOTS, 175.67, 168.13, 0.0, DOT_OFFSET_Y, GRID_LINE_WIDTH, GRID_LINE, DOT_DIAMETER),
         11 to Pattern(BgKind.LINES, 0.0, 66.04, 0.0, 44.74, 1.5, 0xFFD8D8D8.toInt(), oxford = true),
+        // „Muzyka” z karty Kreatywne: 11 pięciolinii po 5 linii, zmierzone na PDF-ie z eksportu (plik nie ma żadnego obrazu tła)
+        15 to Pattern(BgKind.STAFF, 0.0, 17.27, 0.0, 275.6, 2.2, 0xFF808080.toInt(), staff = SdStaff(5, 11, 174.3f, 100f, 1501f)),
     )
 
     /** Dwie czerwone linie marginesu papieru Oxford: środek, grubość (jednostki Samsunga) i kolor. */
@@ -76,10 +80,13 @@ object SamsungConvert {
         21 to ("matematyka" to "math"), 22 to ("tabela" to "table"), 23 to ("blok kodu" to "code block"),
         24 to ("załącznik" to "attachment"),
     )
+    /** Szablon „studyjny”: tło to strona osadzonego PDF-a, nie wzór. */
+    private const val PDF_TEMPLATE = 16
+
     private val TEMPLATE_NAMES = mapOf(
         10 to ("lista zadań" to "task list"),
         12 to ("własny obraz" to "custom image"), 13 to ("tygodniowy" to "weekly"),
-        14 to ("miesięczny" to "monthly"), 15 to ("rękopis" to "manuscript"), 16 to ("PDF" to "PDF"),
+        14 to ("miesięczny" to "monthly"), 16 to ("PDF" to "PDF"),
     )
 
     /** Zbiera pozycje raportu; powtarzające się ostrzeżenie (ten sam [key]) dopisuje tylko numer strony. */
@@ -115,7 +122,7 @@ object SamsungConvert {
     fun trimTrailingEmpty(pages: List<SdPage>, flow: SdFlow? = null): List<SdPage> {
         fun hasText(i: Int) = flow != null && flow.pageRange(i).any { !flow.text[it].isWhitespace() }
         var n = pages.size
-        while (n > 1 && pages[n - 1].isEmpty && !hasText(n - 1)) n--
+        while (n > 1 && pages[n - 1].isEmpty && pages[n - 1].pdf == null && !hasText(n - 1)) n--
         return pages.subList(0, n)
     }
 
@@ -150,7 +157,8 @@ object SamsungConvert {
         val ignoredKinds = sortedSetOf<Int>()
         val pages = kept.mapIndexed { i, pg ->
             val page = i + 1
-            val (spec, bg) = buildPage(pg, opts, rep, page)
+            val pdfRef = pg.pdf?.takeIf { doc.pdfs.containsKey(it.media) }
+            val (spec, bg) = buildPage(pg, opts, rep, page, pdfRef != null)
             val strokes = ArrayList<Stroke>()
             val objects = ArrayList<Element>()
             if (pg.error != null) {
@@ -205,7 +213,7 @@ object SamsungConvert {
             }
             elements.addAll(objects)
             elements.addAll(strokes)
-            ConvertedPage(spec, bg, elements, i)
+            ConvertedPage(spec, bg, elements, i, pdfRef)
         }
         flowNotes(doc, rep, mixedPages, overflowPages, ignoredKinds)
         if (shapeCount > 0) {
@@ -237,7 +245,7 @@ object SamsungConvert {
                     "rule but were not checked against a screenshot.",
             )
         }
-        return ConvertedNote(title ?: defaultTitle(fileName), pages, rep.items(), strokeCount, dropped, doc.media)
+        return ConvertedNote(title ?: defaultTitle(fileName), pages, rep.items(), strokeCount, dropped, doc.media, doc.pdfs.filterKeys { k -> pages.any { it.pdf?.media == k } })
     }
 
     private fun unitsToPt(r: SdRect) = SdRect(r.x0 * UNIT_PT, r.y0 * UNIT_PT, r.x1 * UNIT_PT, r.y1 * UNIT_PT)
@@ -297,7 +305,7 @@ object SamsungConvert {
         return n * pitch + 2 * offset
     }
 
-    private fun buildPage(pg: SdPage, opts: ConvertOptions, rep: Report, page: Int): Pair<PageSpec, SdBackground?> {
+    private fun buildPage(pg: SdPage, opts: ConvertOptions, rep: Report, page: Int, pdfBackground: Boolean): Pair<PageSpec, SdBackground?> {
         val unitsW = if (pg.width > 0) pg.width else 1600
         val unitsH = if (pg.height > 0) pg.height else 2262
         var w = unitsW * UNIT_PT.toDouble()
@@ -327,9 +335,19 @@ object SamsungConvert {
                 bg = SdBackground(
                     w.toFloat(), h.toFloat(), paper, pattern.kind, pitchX.toFloat(), pitchY.toFloat(), offX.toFloat(), offY.toFloat(),
                     lineColor, lineWidthPt, (pattern.dot * u).toFloat(), margins,
+                    pattern.staff?.let { SdStaff(it.lines, it.groups, (it.groupPitch * u).toFloat(), (it.left * u).toFloat(), (it.right * u).toFloat()) },
                 )
             } else {
-                template = when (pattern.kind) { BgKind.LINES -> Template.LINED; BgKind.GRID -> Template.GRID; BgKind.DOTS -> Template.DOTS }
+                template = when (pattern.kind) {
+                    BgKind.LINES -> Template.LINED; BgKind.GRID -> Template.GRID; BgKind.DOTS -> Template.DOTS; BgKind.STAFF -> Template.BLANK
+                }
+                if (pattern.kind == BgKind.STAFF) {
+                    rep.once(
+                        "staff", Level.INFO,
+                        "mNotes nie ma pięciolinii jako wzoru: w trybie standardowym strona ma gładki papier. Tryb „wygląd oryginału” zachowuje pięciolinie.",
+                        "mNotes has no staff paper pattern: in standard mode the page is plain. “Original look” keeps the staves.", page,
+                    )
+                }
                 spacing = pitchY
                 line = lineColor
                 lineWidth = lineWidthPt
@@ -340,7 +358,7 @@ object SamsungConvert {
                         "Oxford paper uses plain lines without the red margin in standard mode. “Original look” keeps it.", page,
                     )
                 }
-                if (template != Template.LINED) {
+                if (template != Template.LINED && template != Template.BLANK) {
                     w = fitSize(w, offX, pitchY)
                     h = fitSize(h, offY, pitchY)
                     rep.once(
@@ -352,7 +370,7 @@ object SamsungConvert {
                     )
                 }
             }
-        } else if (t != 0) {
+        } else if (t != 0 && !(pdfBackground && t == PDF_TEMPLATE)) {
             val (pl, en) = TEMPLATE_NAMES[t] ?: ("nieznany" to "unknown")
             rep.once(
                 "tpl-$t", Level.WARN, "Wzór tła $t ($pl) nie jest jeszcze odtwarzany: strona ma gładki papier.",
@@ -365,10 +383,10 @@ object SamsungConvert {
                 "The page has a custom background image (${pg.templateUri}): skipped, plain paper used.", page,
             )
         }
-        if (pg.hasPdf) {
+        if (pg.hasPdf && !pdfBackground) {
             rep.once(
-                "pdf", Level.WARN, "Strona ma wstawione tło PDF: pominięte (gładki papier).",
-                "The page has an inserted PDF background: skipped (plain paper).", page,
+                "pdf", Level.WARN, "Strona ma wstawione tło PDF, ale pliku PDF nie ma w notatce: pominięte (gładki papier).",
+                "The page has an inserted PDF background, but the PDF file is not in the note: skipped (plain paper).", page,
             )
         }
         if (pg.bgImage != null && pg.templateUri.isNullOrEmpty()) {

@@ -31,6 +31,8 @@ class SamsungImporter(private val repo: Repository) {
                 val asset = repo.importAsset(id, ByteArrayInputStream(pdf), "pdf")
                 backgrounds.forEachIndexed { i, bg -> refs[bg] = PdfRef(asset, i) }
             }
+            // PDF osadzony w notatce (szablony studyjne) to jeden zasób na plik; strony wskazują jego numery stron
+            val pdfAssets = note.pdfs.mapValues { (_, bytes) -> repo.importAsset(id, ByteArrayInputStream(bytes), "pdf") }
             // ten sam obraz (i ten sam kadr) na wielu stronach to jeden plik w zeszycie; brak pliku = obraz pominięty
             val assets = HashMap<String, String?>()
             fun resolve(e: Element): Element? {
@@ -43,7 +45,9 @@ class SamsungImporter(private val repo: Repository) {
             val now = System.currentTimeMillis()
             val pages = note.pages.map { cp ->
                 val pageId = newId()
-                val spec = cp.background?.let { cp.spec.copy(pdf = refs.getValue(it)) } ?: cp.spec
+                val embedded = cp.pdf?.let { p -> pdfAssets[p.media]?.let { PdfRef(it, p.page) } }
+                val spec = embedded?.let { cp.spec.copy(pdf = it) }
+                    ?: cp.background?.let { cp.spec.copy(pdf = refs.getValue(it)) } ?: cp.spec
                 val els = cp.elements.mapNotNull(::resolve)
                 if (els.isNotEmpty()) repo.writePage(id, pageId, PageCodec.encode(PageContent.of(els)))
                 PageMeta(pageId, spec)

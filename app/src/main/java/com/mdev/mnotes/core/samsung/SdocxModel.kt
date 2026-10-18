@@ -25,6 +25,9 @@ class SdObject(val type: Int, val payload: ByteArray, val children: List<SdObjec
  * Strona notatki. [error] niepusty oznacza stronę, której nie dało się odczytać (jest wtedy bez warstw);
  * konwerter zachowuje jej miejsce jako pustą kartkę z ostrzeżeniem w raporcie.
  */
+/** Strona osadzonego PDF-a użyta jako tło: plik `<media>@….pdf`, numer strony PDF-a (od 0). */
+class SdPdfPage(val media: Int, val page: Int)
+
 class SdPage(
     val uuid: String,
     val width: Int,
@@ -33,12 +36,15 @@ class SdPage(
     val templateType: Int?,
     val templateUri: String?,
     val bgImage: Int?,
-    val hasPdf: Boolean,
+    /** Tło z wstawionego PDF-a (szablony „studyjne”); null = strona go nie ma. */
+    val pdf: SdPdfPage?,
     val layers: List<List<SdObject>>,
     val error: String? = null,
 ) {
     /** Strona bez żadnego obiektu (Samsung dopisuje taką po ostatniej stronie z treścią). */
     val isEmpty: Boolean get() = error == null && layers.all { it.isEmpty() }
+
+    val hasPdf: Boolean get() = pdf != null
 }
 
 /**
@@ -50,6 +56,8 @@ class SdDocument(
     val pages: List<SdPage>,
     val flow: SdFlow? = null,
     val media: Map<Int, ByteArray> = emptyMap(),
+    /** Osadzone pliki PDF (numer pliku → bajty) dla [SdPage.pdf]. */
+    val pdfs: Map<Int, ByteArray> = emptyMap(),
 )
 
 /** Wszystkie obiekty warstw w kolejności rysowania: rodzic przed dziećmi. */

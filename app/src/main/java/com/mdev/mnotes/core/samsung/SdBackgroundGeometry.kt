@@ -17,9 +17,19 @@ object SdBackgroundGeometry {
         return FloatArray(minOf(n, MAX_LINES)) { offset + it * pitch }
     }
 
-    /** Odcinki jako czwórki x1, y1, x2, y2: linie poziome (LINES), do tego pionowe (GRID); kropki ich nie mają. */
+    /** Odcinki jako czwórki x1, y1, x2, y2: linie poziome (LINES), do tego pionowe (GRID), linie pięciolinii (STAFF); kropki ich nie mają. */
     fun lines(bg: SdBackground): FloatArray {
         if (bg.kind == BgKind.DOTS) return FloatArray(0)
+        val staff = bg.staff
+        if (bg.kind == BgKind.STAFF) {
+            if (staff == null || staff.lines < 1) return FloatArray(0)
+            val out = ArrayList<Float>()
+            for (g in positions(bg.offsetY, staff.groupPitch, bg.h).take(staff.groups)) for (k in 0 until staff.lines) {
+                val y = g + k * bg.pitchY
+                if (y <= bg.h) { out.add(staff.left); out.add(y); out.add(staff.right); out.add(y) }
+            }
+            return out.toFloatArray()
+        }
         val ys = positions(bg.offsetY, bg.pitchY, bg.h)
         val xs = if (bg.kind == BgKind.GRID) positions(bg.offsetX, bg.pitchX, bg.w) else FloatArray(0)
         val out = FloatArray((xs.size + ys.size) * 4)

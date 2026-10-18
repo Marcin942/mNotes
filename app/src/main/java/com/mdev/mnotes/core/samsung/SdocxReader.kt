@@ -20,18 +20,24 @@ object SdocxReader {
     fun read(input: InputStream): SdDocument {
         val files = HashMap<String, ByteArray>()
         val media = HashMap<Int, ByteArray>()
+        val pdfs = HashMap<Int, ByteArray>()
         var total = 0
         ZipInputStream(input).use { zip ->
             while (true) {
                 val e = zip.nextEntry ?: break
                 val name = e.name.substringAfterLast('/')
                 val mediaId = if (e.isDirectory) null else mediaId(name)
+                val pdfId = if (e.isDirectory || mediaId != null) null else pdfId(name)
                 val wanted = name == "note.note" || name == "pageIdInfo.dat" || name.endsWith(".page")
-                if ((!wanted && mediaId == null) || e.isDirectory) continue
+                if ((!wanted && mediaId == null && pdfId == null) || e.isDirectory) continue
                 val data = readBounded(zip, MAX_ENTRY)
                 total += data.size
                 if (total > MAX_TOTAL) throw SamsungFormatException("plik jest zbyt duży")
-                if (mediaId != null) media[mediaId] = data else files[name] = data
+                when {
+                    mediaId != null -> media[mediaId] = data
+                    pdfId != null -> pdfs[pdfId] = data
+                    else -> files[name] = data
+                }
             }
         }
         val note = files["note.note"] ?: throw SamsungFormatException("brak note.note: to nie jest notatka Samsung Notes")
@@ -51,7 +57,7 @@ object SdocxReader {
                 },
             )
         }
-        return SdDocument(strings, pages, SdFlowReader.find(note), media)
+        return SdDocument(strings, pages, SdFlowReader.find(note), media, pdfs)
     }
 
     /** Numer pliku obrazu z nazwy `<numer>@<nazwa>.jpg|png|webp`; podglądy `.spi` i inne pliki dają null. */
@@ -60,6 +66,13 @@ object SdocxReader {
         if (at <= 0 || at > 9) return null
         val ext = name.substringAfterLast('.', "").lowercase()
         if (ext != "jpg" && ext != "jpeg" && ext != "png" && ext != "webp") return null
+        return name.substring(0, at).toIntOrNull()?.takeIf { it >= 0 }
+    }
+
+    /** Numer pliku osadzonego PDF-a z nazwy `<numer>@<nazwa>.pdf`. */
+    internal fun pdfId(name: String): Int? {
+        val at = name.indexOf('@')
+        if (at <= 0 || at > 9 || !name.endsWith(".pdf", ignoreCase = true)) return null
         return name.substring(0, at).toIntOrNull()?.takeIf { it >= 0 }
     }
 
@@ -90,7 +103,7 @@ object SdocxReader {
     }
 
     private fun failedPage(uuid: String, message: String) =
-        SdPage(uuid, 0, 0, null, null, null, null, false, emptyList(), error = message)
+        SdPage(uuid, 0, 0, null, null, null, null, null, emptyList(), error = message)
 
     /** Tablica napisów z `note.note`: u32 rozmiar, u16 liczba, pary (u32 id, napis). Położenie szukane skanem. */
     internal fun readStringTable(note: ByteArray): Map<Int, String> {
@@ -242,10 +255,15 @@ object SdocxReader {
         val bgColor = if (fm and 32L != 0L) r.i32() else null
         if (fm and 64L != 0L) r.i32()
         if (fm and 128L != 0L) r.i32()
-        var hasPdf = false
+        var pdf: SdPdfPage? = null
         if (fm and 256L != 0L) {
-            hasPdf = true
-            repeat(r.u16()) { r.skip(24) }
+            // krotki (plik, strona PDF-a, lewo, góra, prawo, dół); wszystkie obserwowane strony zajmują całą stronę notatki
+            repeat(r.u16()) {
+                val media = r.i32()
+                val page = r.i32()
+                r.skip(16)
+                if (pdf == null && media >= 0 && page >= 0) pdf = SdPdfPage(media, page)
+            }
         }
         val template = if (fm and 512L != 0L) r.i32() else null
         r = LeReader(b, layerOff)
@@ -261,6 +279,6 @@ object SdocxReader {
             layers.add(readObjects(r, cnt, 0))
             r.skip(32)
         }
-        return SdPage(uuid, w, h, bgColor, template, uri, bgImage, hasPdf, layers)
+        return SdPage(uuid, w, h, bgColor, template, uri, bgImage, pdf, layers)
     }
 }

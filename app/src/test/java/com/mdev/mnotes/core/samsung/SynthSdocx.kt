@@ -27,6 +27,8 @@ internal object SynthSdocx {
         val extra: List<Pair<Int, ByteArray>> = emptyList(),
         val width: Int = 1600,
         val height: Int = 2262,
+        /** Tło z osadzonego PDF-a: (numer pliku, strona PDF-a). */
+        val pdf: Pair<Int, Int>? = null,
     )
 
     internal class Le {
@@ -97,6 +99,7 @@ internal object SynthSdocx {
         var fm = 0L
         val flex = Le()
         if (p.bg != null) { fm = fm or 32; flex.i32(p.bg) }
+        if (p.pdf != null) { fm = fm or 256; flex.u16(1).i32(p.pdf.first).i32(p.pdf.second).i32(0).i32(0).i32(p.width).i32(p.height) }
         if (p.template != null) { fm = fm or 512; flex.i32(p.template) }
         val headFixed = Le().mask(0).mask(fm).i32(0).i32(p.width).i32(p.height).i32(0).i32(0).s16(p.uuid).i64(0).i32(1).i32(1)
             .toByteArray()

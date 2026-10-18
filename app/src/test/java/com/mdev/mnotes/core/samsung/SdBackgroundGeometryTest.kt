@@ -5,8 +5,8 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class SdBackgroundGeometryTest {
-    private fun bg(kind: BgKind, w: Float = 600f, h: Float = 848.25f, pitch: Float = 38.25f, ox: Float = 0.1f, oy: Float = 16.71f) =
-        SdBackground(w, h, 0xFFE6E6E6.toInt(), kind, pitch, ox, oy, 0xFFC8C8C8.toInt(), 1f)
+    private fun bg(kind: BgKind, w: Float = 600f, h: Float = 848.25f, pitch: Float = 38.25f, ox: Float = 0.1f, oy: Float = 16.71f, pitchX: Float = pitch, margins: List<SdMargin> = emptyList()) =
+        SdBackground(w, h, 0xFFE6E6E6.toInt(), kind, pitchX, pitch, ox, oy, 0xFFC8C8C8.toInt(), 1f, margins = margins)
 
     @Test fun gridHasVerticalAndHorizontalLinesFromOffsets() {
         val l = SdBackgroundGeometry.lines(bg(BgKind.GRID))
@@ -37,6 +37,19 @@ class SdBackgroundGeometryTest {
         assertEquals(0.1f, d[0], 1e-4f)
         assertEquals(16.71f, d[1], 1e-4f)
         assertEquals(0.1f + 38.25f, d[2], 1e-4f)
+    }
+
+    @Test fun dotsUseSeparateHorizontalPitch() {
+        val d = SdBackgroundGeometry.dots(bg(BgKind.DOTS, pitch = 38.25f, pitchX = 50f))
+        assertEquals(0.1f + 50f, d[2], 1e-4f)
+        assertEquals(16 * 0 + 12 * 22 * 2, d.size)   // 0,1 + k·50 ≤ 600 → k = 0..11
+    }
+
+    @Test fun marginsRunFromFirstLineToPageBottom() {
+        val m = SdBackgroundGeometry.margins(bg(BgKind.LINES, margins = listOf(SdMargin(88f, 1.3f, 0xFFF09E9C.toInt()), SdMargin(93f, 1f, 0xFFF09E9C.toInt()))))
+        assertEquals(8, m.size)
+        assertEquals(88f, m[0], 1e-4f); assertEquals(16.71f, m[1], 1e-4f); assertEquals(88f, m[2], 1e-4f); assertEquals(848.25f, m[3], 1e-4f)
+        assertEquals(93f, m[4], 1e-4f)
     }
 
     @Test fun gridHasNoDots() {

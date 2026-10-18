@@ -55,11 +55,43 @@ class SamsungConvertTest {
         assertEquals(0, p.spec.opts)
         val bg = p.background!!
         assertEquals(BgKind.GRID, bg.kind)
-        assertEquals(38.25f, bg.pitch, 1e-4f)
+        assertEquals(102.29f * 0.375f, bg.pitchX, 1e-3f)
+        assertEquals(102.07f * 0.375f, bg.pitchY, 1e-3f)
         assertEquals(0xFFC8C8C8.toInt(), bg.line)
         assertEquals(p.spec.w, bg.w, 1e-4f)
         assertEquals(p.spec.paper, bg.paper)
         assertEquals("Notes", n.title)
+    }
+
+    private fun withTemplate(t: Int) =
+        SamsungConvert.convert(read(listOf(SynthSdocx.Page("eeeeeeee-0000-4000-8000-0000000000%02d".format(t), bg = 0xFFFCFCFC.toInt(), template = t))), "a.sdocx", ConvertOptions(ImportMode.ORIGINAL))
+
+    @Test fun measuredPatternsHaveDistinctSpacing() {
+        val pitch = (1..9).map { withTemplate(it).pages[0].background!! }
+        assertEquals(listOf(BgKind.LINES, BgKind.LINES, BgKind.LINES, BgKind.GRID, BgKind.GRID, BgKind.GRID, BgKind.DOTS, BgKind.DOTS, BgKind.DOTS), pitch.map { it.kind })
+        listOf(72.05f, 102.07f, 168.13f).forEachIndexed { i, v -> assertEquals(v, pitch[i].pitchY / 0.375f, 1e-3f) }
+        // kropki: poziomo rzadziej niż w pionie i pierwszy rząd niżej niż pierwsza linia
+        assertTrue(pitch[6].pitchX > pitch[6].pitchY)
+        assertTrue(pitch[6].offsetY > pitch[0].offsetY)
+        assertTrue(pitch[6].dot > 0f)
+        assertTrue(pitch.all { it.margins.isEmpty() })
+        assertFalse(withTemplate(2).has("nie był sprawdzony"))
+    }
+
+    @Test fun oxfordHasLinesAndTwoRedMargins() {
+        val n = withTemplate(11)
+        val bg = n.pages[0].background!!
+        assertEquals(BgKind.LINES, bg.kind)
+        assertEquals(66.04f * 0.375f, bg.pitchY, 1e-3f)
+        assertEquals(2, bg.margins.size)
+        assertEquals(235.5f * 0.375f, bg.margins[0].x, 1e-3f)
+        assertTrue(SamsungColor.r(bg.margins[0].color) > 0xE0 && SamsungColor.g(bg.margins[0].color) < 0xB0)
+        assertFalse(n.has("nie jest jeszcze odtwarzany"))
+        val dark = SamsungConvert.convert(read(listOf(SynthSdocx.Page("eeeeeeee-0000-4000-8000-000000000011", template = 11))), "a.sdocx", ConvertOptions(ImportMode.ORIGINAL, dark = true))
+        assertEquals(SamsungColor.invertArgb(0xFFF09E9C.toInt()), dark.pages[0].background!!.margins[0].color)
+        val std = SamsungConvert.convert(read(listOf(SynthSdocx.Page("eeeeeeee-0000-4000-8000-000000000011", template = 11))), "a.sdocx", ConvertOptions(ImportMode.STANDARD))
+        assertEquals(Template.LINED, std.pages[0].spec.template)
+        assertTrue(std.has("Oxford"))
     }
 
     @Test fun plainPageHasNoBackgroundDescription() {
@@ -72,11 +104,11 @@ class SamsungConvertTest {
         val p = SamsungConvert.convert(sample, "a.sdocx", ConvertOptions(ImportMode.STANDARD)).pages[0]
         assertNull(p.background)
         assertEquals(Template.GRID, p.spec.template)
-        assertEquals(38.25f, p.spec.spacing, 1e-4f)
-        assertEquals(1.0f, p.spec.lineWidth, 1e-6f)
+        assertEquals(102.07f * 0.375f, p.spec.spacing, 1e-3f)
+        assertEquals(1.7f * 0.375f, p.spec.lineWidth, 1e-3f)
         assertEquals(0, p.spec.opts)
-        assertEquals(612.2f, p.spec.w, 0.01f)   // 16 · 38,25 + 2 · 0,10
-        assertEquals(874.92f, p.spec.h, 0.01f)  // 22 · 38,25 + 2 · 16,71
+        assertEquals(16 * 38.276f + 0.34f, p.spec.w, 0.05f)
+        assertEquals(22 * 38.276f + 33.75f, p.spec.h, 0.05f)
     }
 
     @Test fun fitSizeNeverShrinksBelowOneCell() {
@@ -157,7 +189,7 @@ class SamsungConvertTest {
 
     // --- raport ------------------------------------------------------------------------------------
 
-    @Test fun reportsUnverifiedPatternAndUnsupportedBackground() {
+    @Test fun reportsUnsupportedBackgroundButNotMeasuredPattern() {
         val d = read(
             listOf(
                 SynthSdocx.Page("eeeeeeee-0000-4000-8000-000000000001", template = 3, strokes = SynthSdocx.samplePages()[1].strokes),
@@ -165,12 +197,11 @@ class SamsungConvertTest {
             ),
         )
         val n = SamsungConvert.convert(d, "a.sdocx", ConvertOptions())
-        val unverified = n.report.first { "nie był sprawdzony" in it.pl }
-        assertEquals(listOf(1), unverified.pages)
+        assertFalse(n.has("nie był sprawdzony"))
         val unsupported = n.report.first { "własny obraz" in it.pl }
         assertEquals(Level.WARN, unsupported.level)
         assertEquals(listOf(2), unsupported.pages)
-        assertTrue(n.warnings >= 2)
+        assertTrue(n.warnings >= 1)
     }
 
     @Test fun repeatedWarningMergesPageNumbers() {

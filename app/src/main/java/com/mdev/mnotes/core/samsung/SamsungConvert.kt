@@ -35,19 +35,37 @@ object SamsungConvert {
         doubleArrayOf(1.75, 0.66), doubleArrayOf(2.5, 0.60), doubleArrayOf(6.5, 0.55),
     )
 
-    /** Siatka „średnia” (wzór 5) zmierzona na stronie 1600 × 2262: rozstaw 102 jednostki, linie ok. #C8C8C8. */
-    private const val GRID_PITCH_PT = 38.25
-    private const val GRID_OFFSET_X_PT = 0.10
-    private const val GRID_OFFSET_Y_PT = 16.71
-    private const val GRID_LINE = 0xFFC8C8C8.toInt()
-    private const val GRID_LINE_WIDTH_PT = 1.0f
-    private val PITCH_FACTOR = doubleArrayOf(2.0 / 3, 1.0, 4.0 / 3, 2.0 / 3, 1.0, 4.0 / 3, 2.0 / 3, 1.0, 4.0 / 3)
-    private val VERIFIED_TEMPLATES = setOf(5)
-    private val TEMPLATE_WORDS = listOf(
-        "wąskie linie" to "narrow lines", "średnie linie" to "medium lines", "szerokie linie" to "wide lines",
-        "wąska kratka" to "narrow grid", "średnia kratka" to "medium grid", "szeroka kratka" to "wide grid",
-        "wąskie kropki" to "narrow dots", "średnie kropki" to "medium dots", "szerokie kropki" to "wide dots",
+    /**
+     * Wzory tła 1–9 i 11 zmierzone na PDF-ie z eksportu Samsung Notes (strona 1600 × 2262 jednostek, 192 dpi, 1 px =
+     * 1 jednostka). Plik zawiera tylko numer wzoru, więc geometria pochodzi z pomiaru: rozstaw i pierwsza linia w
+     * jednostkach Samsunga (× [UNIT_PT] daje pt). Kropki mają inny rozstaw w poziomie niż w pionie, a pierwszy rząd
+     * kropek leży niżej niż pierwsza linia.
+     */
+    private class Pattern(
+        val kind: BgKind, val pitchX: Double, val pitchY: Double, val offX: Double, val offY: Double,
+        val lineWidth: Double, val line: Int, val dot: Double = 0.0, val oxford: Boolean = false,
     )
+    private const val GRID_LINE = 0xFFC8C8C8.toInt()
+    private const val GRID_LINE_WIDTH = 1.7          // jednostek; ok. 0,64 pt
+    private const val DOT_DIAMETER = 8.5             // jednostek; ok. 3,2 pt
+    private const val DOT_OFFSET_Y = 48.6
+    private const val LINES_OFFSET_Y = 45.0
+    private const val GRID_OFFSET_X = 0.45
+    private val PATTERNS = mapOf(
+        1 to Pattern(BgKind.LINES, 0.0, 72.05, 0.0, LINES_OFFSET_Y, GRID_LINE_WIDTH, GRID_LINE),
+        2 to Pattern(BgKind.LINES, 0.0, 102.07, 0.0, LINES_OFFSET_Y, GRID_LINE_WIDTH, GRID_LINE),
+        3 to Pattern(BgKind.LINES, 0.0, 168.13, 0.0, LINES_OFFSET_Y, GRID_LINE_WIDTH, GRID_LINE),
+        4 to Pattern(BgKind.GRID, 72.66, 72.05, GRID_OFFSET_X, LINES_OFFSET_Y, GRID_LINE_WIDTH, GRID_LINE),
+        5 to Pattern(BgKind.GRID, 102.29, 102.07, GRID_OFFSET_X, LINES_OFFSET_Y, GRID_LINE_WIDTH, GRID_LINE),
+        6 to Pattern(BgKind.GRID, 169.0, 168.13, GRID_OFFSET_X, LINES_OFFSET_Y, GRID_LINE_WIDTH, GRID_LINE),
+        7 to Pattern(BgKind.DOTS, 79.32, 72.05, 0.0, DOT_OFFSET_Y, GRID_LINE_WIDTH, GRID_LINE, DOT_DIAMETER),
+        8 to Pattern(BgKind.DOTS, 108.96, 102.07, 0.0, DOT_OFFSET_Y, GRID_LINE_WIDTH, GRID_LINE, DOT_DIAMETER),
+        9 to Pattern(BgKind.DOTS, 175.67, 168.13, 0.0, DOT_OFFSET_Y, GRID_LINE_WIDTH, GRID_LINE, DOT_DIAMETER),
+        11 to Pattern(BgKind.LINES, 0.0, 66.04, 0.0, 44.74, 1.5, 0xFFD8D8D8.toInt(), oxford = true),
+    )
+
+    /** Dwie czerwone linie marginesu papieru Oxford: środek, grubość (jednostki Samsunga) i kolor. */
+    private val OXFORD_MARGINS = listOf(Triple(235.5, 3.4, 0xFFF09E9C.toInt()), Triple(249.0, 2.75, 0xFFF09E9C.toInt()))
 
     private val OBJECT_NAMES = mapOf(
         2 to ("pole tekstowe" to "text box"), 3 to ("obraz" to "image"), 7 to ("kształt" to "shape"),
@@ -59,7 +77,7 @@ object SamsungConvert {
         24 to ("załącznik" to "attachment"),
     )
     private val TEMPLATE_NAMES = mapOf(
-        10 to ("lista zadań" to "task list"), 11 to ("papier Oxford" to "Oxford paper"),
+        10 to ("lista zadań" to "task list"),
         12 to ("własny obraz" to "custom image"), 13 to ("tygodniowy" to "weekly"),
         14 to ("miesięczny" to "monthly"), 15 to ("rękopis" to "manuscript"), 16 to ("PDF" to "PDF"),
     )
@@ -292,32 +310,39 @@ object SamsungConvert {
         var line = Paper.autoLineColor(paper)
         var lineWidth = 0.6f
         var bg: SdBackground? = null
-        val pattern = t in 1..9
-        if (pattern) {
-            val kind = BgKind.entries[(t - 1) / 3]
-            val pitch = GRID_PITCH_PT * PITCH_FACTOR[t - 1]
-            val k = pitch / GRID_PITCH_PT
-            val offX = GRID_OFFSET_X_PT * k
-            val offY = GRID_OFFSET_Y_PT * k
-            val lineColor = if (opts.dark) SamsungColor.invertArgb(GRID_LINE) else GRID_LINE
-            if (t !in VERIFIED_TEMPLATES) {
-                val (pl, en) = TEMPLATE_WORDS[t - 1]
-                rep.once(
-                    "tpl-$t", Level.WARN,
-                    "Wzór tła $t ($pl) nie był sprawdzony na próbce: rozstaw i położenie linii są przybliżone.",
-                    "Background pattern $t ($en) was not checked against a sample: spacing and line position are approximate.", page,
-                )
-            }
+        val pattern = PATTERNS[t]
+        if (pattern != null) {
+            val u = UNIT_PT.toDouble()
+            // wzór bez rozstawu poziomego (same linie) i tak ma jedną siatkę: rozstaw pionowy
+            val pitchY = pattern.pitchY * u
+            val pitchX = if (pattern.pitchX > 0) pattern.pitchX * u else pitchY
+            val offX = pattern.offX * u
+            val offY = pattern.offY * u
+            val lineWidthPt = (pattern.lineWidth * u).toFloat()
+            val lineColor = if (opts.dark) SamsungColor.invertArgb(pattern.line) else pattern.line
             if (opts.mode == ImportMode.ORIGINAL) {
-                bg = SdBackground(w.toFloat(), h.toFloat(), paper, kind, pitch.toFloat(), offX.toFloat(), offY.toFloat(), lineColor, GRID_LINE_WIDTH_PT)
+                val margins = if (pattern.oxford) OXFORD_MARGINS.map { (x, wd, col) ->
+                    SdMargin((x * u).toFloat(), (wd * u).toFloat(), if (opts.dark) SamsungColor.invertArgb(col) else col)
+                } else emptyList()
+                bg = SdBackground(
+                    w.toFloat(), h.toFloat(), paper, pattern.kind, pitchX.toFloat(), pitchY.toFloat(), offX.toFloat(), offY.toFloat(),
+                    lineColor, lineWidthPt, (pattern.dot * u).toFloat(), margins,
+                )
             } else {
-                template = when (kind) { BgKind.LINES -> Template.LINED; BgKind.GRID -> Template.GRID; BgKind.DOTS -> Template.DOTS }
-                spacing = pitch
+                template = when (pattern.kind) { BgKind.LINES -> Template.LINED; BgKind.GRID -> Template.GRID; BgKind.DOTS -> Template.DOTS }
+                spacing = pitchY
                 line = lineColor
-                lineWidth = GRID_LINE_WIDTH_PT
+                lineWidth = lineWidthPt
+                if (pattern.oxford) {
+                    rep.once(
+                        "oxford", Level.INFO,
+                        "Papier Oxford ma w trybie standardowym zwykłe linie bez czerwonego marginesu. Tryb „wygląd oryginału” go zachowuje.",
+                        "Oxford paper uses plain lines without the red margin in standard mode. “Original look” keeps it.", page,
+                    )
+                }
                 if (template != Template.LINED) {
-                    w = fitSize(w, offX, pitch)
-                    h = fitSize(h, offY, pitch)
+                    w = fitSize(w, offX, pitchY)
+                    h = fitSize(h, offY, pitchY)
                     rep.once(
                         "fit", Level.INFO,
                         "Strona ze wzorem ma powiększony rozmiar (${"%.1f".format(w)} × ${"%.1f".format(h)} pt), żeby siatka mNotes " +

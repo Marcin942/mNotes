@@ -32,9 +32,16 @@ object SamsungBackground {
         if (lines.isNotEmpty()) c.drawLines(lines, p)
         val dots = SdBackgroundGeometry.dots(bg)
         if (dots.isNotEmpty()) {
-            p.strokeWidth = bg.lineWidth * 2.6f
+            p.strokeWidth = if (bg.dot > 0f) bg.dot else bg.lineWidth * 2.6f
             p.strokeCap = Paint.Cap.ROUND
             c.drawPoints(dots, p)
+        }
+        val margins = SdBackgroundGeometry.margins(bg)
+        p.strokeCap = Paint.Cap.BUTT
+        bg.margins.forEachIndexed { i, m ->
+            p.color = m.color
+            p.strokeWidth = m.width
+            c.drawLine(margins[i * 4], margins[i * 4 + 1], margins[i * 4 + 2], margins[i * 4 + 3], p)
         }
     }
 

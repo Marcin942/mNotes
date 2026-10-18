@@ -32,21 +32,28 @@ class ReportItem(val level: Level, val pl: String, val en: String, val pages: Li
 
 enum class BgKind { LINES, GRID, DOTS }
 
+/** Pionowa linia marginesu (papier Oxford): od pierwszej linii wzoru do dołu strony; [x] i [width] w pt. */
+data class SdMargin(val x: Float, val width: Float, val color: Int)
+
 /**
  * Tło strony, którego mNotes nie ma jako wzoru (położenie linii Samsunga jest inne niż siatki mNotes), opisane
  * czysto: kolory są już końcowe (po odwróceniu dla wyglądu ciemnego), wymiary w pt. Warstwa `data/` rysuje je do PDF-a,
  * a strona odwołuje się do niego jak do tła zaimportowanego PDF-a. Równe opisy to to samo tło (jedna strona PDF-a).
+ * Rozstaw poziomy ([pitchX]) i pionowy ([pitchY]) bywają różne (kropki Samsunga); [dot] to średnica kropki.
  */
 data class SdBackground(
     val w: Float,
     val h: Float,
     val paper: Int,
     val kind: BgKind,
-    val pitch: Float,
+    val pitchX: Float,
+    val pitchY: Float,
     val offsetX: Float,
     val offsetY: Float,
     val line: Int,
     val lineWidth: Float,
+    val dot: Float = 0f,
+    val margins: List<SdMargin> = emptyList(),
 )
 
 /** Strona po konwersji. [background] niepusty = [spec] nie ma jeszcze [PageSpec.pdf], dopisuje je warstwa zapisu. */

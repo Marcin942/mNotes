@@ -56,6 +56,8 @@ object PageCodec {
     // Interlinia ≠ 1: f32 po tekście. Rekordy mają długość, więc starsza wersja pomija ten ogon i rysuje interlinię 1.
     private const val FLAG_TEXT_LINES = 256
     private const val FLAG_IMAGE_CROP = 512
+    /** Po czterech ułamkach wycinka jeszcze kąt jego obrotu (f32, radiany): przycięcie z prostowaniem. */
+    private const val FLAG_IMAGE_TILT = 1024
     private const val Q = 100f
 
     fun encode(content: PageContent): ByteArray {
@@ -204,11 +206,11 @@ object PageCodec {
     }
 
     private fun writeImage(w: ByteWriter, im: ImageEl) {
-        w.varint((if (im.locked) FLAG_LOCKED else 0) or (if (im.crop.isFull) 0 else FLAG_IMAGE_CROP))
+        w.varint((if (im.locked) FLAG_LOCKED else 0) or (if (im.crop.isFull) 0 else FLAG_IMAGE_CROP) or (if (im.crop.a != 0f) FLAG_IMAGE_TILT else 0))
         w.f32(im.cx); w.f32(im.cy); w.f32(im.w); w.f32(im.h); w.f32(im.rot)
         w.u8((im.alpha.coerceIn(0f, 1f) * 255f).roundToInt())
         w.string(im.asset)
-        if (!im.crop.isFull) { w.f32(im.crop.l); w.f32(im.crop.t); w.f32(im.crop.r); w.f32(im.crop.b) }
+        if (!im.crop.isFull) { w.f32(im.crop.l); w.f32(im.crop.t); w.f32(im.crop.r); w.f32(im.crop.b); if (im.crop.a != 0f) w.f32(im.crop.a) }
     }
 
     private fun readImage(r: ByteReader): ImageEl {
@@ -217,9 +219,13 @@ object PageCodec {
         val alpha = r.u8() / 255f
         val asset = r.string()
         val crop = if (flags and FLAG_IMAGE_CROP != 0) {
-            val l = r.f32().coerceIn(0f, 1f); val t = r.f32().coerceIn(0f, 1f)
-            val rr = r.f32().coerceIn(0f, 1f); val b = r.f32().coerceIn(0f, 1f)
-            if (rr > l && b > t) ImageCrop(l, t, rr, b) else ImageCrop.FULL
+            // z kątem nieobrócony prostokąt może wystawać poza plik, więc nie obcinamy go do 0..1
+            val tilted = flags and FLAG_IMAGE_TILT != 0
+            val lo = if (tilted) -64f else 0f; val hi = if (tilted) 65f else 1f
+            val l = r.f32().coerceIn(lo, hi); val t = r.f32().coerceIn(lo, hi)
+            val rr = r.f32().coerceIn(lo, hi); val b = r.f32().coerceIn(lo, hi)
+            val a = if (tilted) r.f32().takeIf { it.isFinite() } ?: 0f else 0f
+            if (rr > l && b > t) ImageCrop(l, t, rr, b, a) else ImageCrop.FULL
         } else ImageCrop.FULL
         return ImageEl(Ids.next(), asset, cx, cy, w, h, rot, alpha, flags and FLAG_LOCKED != 0, crop)
     }

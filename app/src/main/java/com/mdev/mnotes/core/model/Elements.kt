@@ -302,14 +302,18 @@ class TextBox(
     }
 }
 
-/** Wycinek obrazu jako ułamki pliku (0..1): lewa, górna, prawa i dolna krawędź. */
-class ImageCrop(val l: Float, val t: Float, val r: Float, val b: Float) {
-    val isFull: Boolean get() = l <= 0f && t <= 0f && r >= 1f && b >= 1f
+/**
+ * Wycinek obrazu jako ułamki pliku: lewa, górna, prawa i dolna krawędź prostokąta, który potem obraca się o [a]
+ * wokół jego środka (w pikselach pliku, dodatni kąt = zgodnie z ruchem wskazówek zegara na ekranie). Bez kąta
+ * ułamki mieszczą się w 0..1; przy [a] ≠ 0 nieobrócony prostokąt może wystawać poza plik, byle obrócony mieścił się w nim.
+ */
+class ImageCrop(val l: Float, val t: Float, val r: Float, val b: Float, val a: Float = 0f) {
+    val isFull: Boolean get() = a == 0f && l <= 0f && t <= 0f && r >= 1f && b >= 1f
     val width: Float get() = r - l
     val height: Float get() = b - t
 
-    override fun equals(other: Any?) = other is ImageCrop && l == other.l && t == other.t && r == other.r && b == other.b
-    override fun hashCode() = ((l.hashCode() * 31 + t.hashCode()) * 31 + r.hashCode()) * 31 + b.hashCode()
+    override fun equals(other: Any?) = other is ImageCrop && l == other.l && t == other.t && r == other.r && b == other.b && a == other.a
+    override fun hashCode() = (((l.hashCode() * 31 + t.hashCode()) * 31 + r.hashCode()) * 31 + b.hashCode()) * 31 + a.hashCode()
 
     companion object {
         val FULL = ImageCrop(0f, 0f, 1f, 1f)

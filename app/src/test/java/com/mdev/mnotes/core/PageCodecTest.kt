@@ -46,6 +46,7 @@ class PageCodecTest {
         list.add(TextBox(Ids.next(), 60f, 620f, 180f, 30f, 0f, "interlinia", 12f, 0xFF000000.toInt(), lineSpacing = 1.15f))
         list.add(ImageEl(Ids.next(), "img-1.webp", 250f, 400f, 120f, 80f, -0.2f, 0.5f, false))
         list.add(ImageEl(Ids.next(), "img-1.webp", 300f, 450f, 60f, 80f, 0f, 1f, true, com.mdev.mnotes.core.model.ImageCrop(0.25f, 0f, 0.75f, 0.5f)))
+        list.add(ImageEl(Ids.next(), "img-2.webp", 320f, 500f, 90f, 60f, 0.1f, 1f, false, com.mdev.mnotes.core.model.ImageCrop(-0.05f, 0.1f, 0.6f, 1.02f, -0.21f)))
         list.add(com.mdev.mnotes.core.model.FillEl(Ids.next(), 0xFF3366CC.toInt(), false, listOf(floatArrayOf(0f, 0f, 600f, 0f, 600f, 800f, 0f, 800f), floatArrayOf(100.5f, 100f, 200f, 100f, 150f, 180.25f))))
         val src = PageContent.of(list)
 

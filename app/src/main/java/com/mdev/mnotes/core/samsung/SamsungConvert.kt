@@ -1,5 +1,6 @@
 package com.mdev.mnotes.core.samsung
 
+import com.mdev.mnotes.core.model.Element
 import com.mdev.mnotes.core.model.Ids
 import com.mdev.mnotes.core.model.Paper
 import com.mdev.mnotes.core.model.PageSpec
@@ -26,6 +27,7 @@ object SamsungConvert {
     private const val BRUSH_B = 1.17       // szerokość/rozmiar = A + B · nacisk (pędzel Samsunga)
     private const val PRESSURE_MIN = 0.04  // PenSpec.factor przycina do 0,04
     private const val INK_HALF_WINDOW = 2
+    private const val TAPE_COLOR = 0xFFC8E9F2.toInt()
 
     /** Prędkość (jednostki Samsunga na ms) → współczynnik grubości InkPen2; zmierzone na kilkunastu kreskach. */
     private val INK_SPEED = arrayOf(
@@ -92,18 +94,22 @@ object SamsungConvert {
     }
 
     /** Strony bez żadnego obiektu na końcu odpadają (zostaje co najmniej jedna). */
-    fun trimTrailingEmpty(pages: List<SdPage>): List<SdPage> {
+    fun trimTrailingEmpty(pages: List<SdPage>, flow: SdFlow? = null): List<SdPage> {
+        fun hasText(i: Int) = flow != null && flow.pageRange(i).any { !flow.text[it].isWhitespace() }
         var n = pages.size
-        while (n > 1 && pages[n - 1].isEmpty) n--
+        while (n > 1 && pages[n - 1].isEmpty && !hasText(n - 1)) n--
         return pages.subList(0, n)
     }
 
     // --- konwersja całej notatki -------------------------------------------------------------------
 
-    fun convert(doc: SdDocument, fileName: String, opts: ConvertOptions, title: String? = null): ConvertedNote {
+    fun convert(
+        doc: SdDocument, fileName: String, opts: ConvertOptions, title: String? = null,
+        measure: SdFlowMeasure = SdApproxMeasure,
+    ): ConvertedNote {
         val rep = Report()
         val skipped = LinkedHashMap<Int, MutableMap<Int, Int>>() // typ obiektu → (strona → liczba)
-        val kept = trimTrailingEmpty(doc.pages)
+        val kept = trimTrailingEmpty(doc.pages, doc.flow)
         val dropped = doc.pages.size - kept.size
         if (dropped > 0) {
             val pl = when {
@@ -120,16 +126,26 @@ object SamsungConvert {
             )
         }
         var strokeCount = 0
+        var shapeCount = 0
+        val mixedPages = sortedSetOf<Int>()
+        val overflowPages = sortedSetOf<Int>()
+        val ignoredKinds = sortedSetOf<Int>()
         val pages = kept.mapIndexed { i, pg ->
             val page = i + 1
             val (spec, bg) = buildPage(pg, opts, rep, page)
             val strokes = ArrayList<Stroke>()
+            val objects = ArrayList<Element>()
             if (pg.error != null) {
                 rep.note(
                     Level.WARN, "Strona nie do odczytania (${pg.error}): zostaje pusta kartka.",
                     "Page could not be read (${pg.error}): left as an empty sheet.", page,
                 )
             }
+            val obstacles = ArrayList<SdRect>()
+            fun badObject(e: Exception) = rep.once(
+                "bad-object", Level.WARN, "Obiekt nie do odczytania (${e.message}): pominięty.",
+                "An object could not be read (${e.message}): skipped.", page,
+            )
             for (o in pg.allObjects()) {
                 when (o.type) {
                     1 -> try {
@@ -141,11 +157,47 @@ object SamsungConvert {
                     } catch (e: RuntimeException) {
                         rep.once("bad-stroke", Level.WARN, "Kreska nie do odczytania (${e.message}): pominięta.", "A stroke could not be read (${e.message}): skipped.", page)
                     }
+                    3 -> try {
+                        obstacles.add(unitsToPt(SdObjects.bounds(o.payload)))
+                        val img = SdObjects.image(o.payload)
+                        if (doc.media[img.mediaId] == null) {
+                            rep.once("no-media", Level.WARN, "Obraz bez pliku w notatce: pominięty.", "An image without a file in the note: skipped.", page)
+                        } else ImageConvert.element(img)?.let { objects.add(it) }
+                    } catch (e: SamsungFormatException) { badObject(e) } catch (e: RuntimeException) { badObject(e) }
+                    7 -> try {
+                        obstacles.add(unitsToPt(SdObjects.bounds(o.payload)))
+                        val shape = SdObjects.shape(o.payload)
+                        val color = if (opts.dark) SamsungColor.invertArgb(shape.color) else shape.color
+                        objects.addAll(SdShapes.strokes(shape, UNIT_PT, color))
+                        shapeCount++
+                    } catch (e: SamsungFormatException) { badObject(e) } catch (e: RuntimeException) { badObject(e) }
                     4, 100 -> Unit // kontenery: dzieci są już na liście
                     else -> skipped.getOrPut(o.type) { sortedMapOf() }.merge(page, 1, Int::plus)
                 }
             }
-            ConvertedPage(spec, bg, strokes, i)
+            val elements = ArrayList<Element>()
+            val flow = doc.flow
+            if (flow != null) {
+                val colorMap: (Int) -> Int = if (opts.dark) SamsungColor::invertArgb else { c -> c }
+                val laid = SdFlowLayout.layout(flow, i, spec.w, spec.h, obstacles, measure, colorMap)
+                elements.addAll(laid.elements)
+                if (laid.mixedStyles) mixedPages.add(page)
+                if (laid.overflow) overflowPages.add(page)
+                ignoredKinds.addAll(laid.ignoredSpanKinds)
+            }
+            elements.addAll(objects)
+            elements.addAll(strokes)
+            ConvertedPage(spec, bg, elements, i)
+        }
+        flowNotes(doc, rep, mixedPages, overflowPages, ignoredKinds)
+        if (shapeCount > 0) {
+            rep.note(
+                Level.INFO,
+                "Kształty ($shapeCount) są przeniesione jako edytowalne kreski z uchwytami (elipsy i wielokąty); wypełnienie kształtu " +
+                    "format nie udostępnia, więc kształt ma tylko obrys.",
+                "Shapes ($shapeCount) are carried over as editable strokes with handles (ellipses and polygons); the file format " +
+                    "does not expose shape fill, so a shape has only its outline.",
+            )
         }
         for ((type, perPage) in skipped) {
             val (pl, en) = OBJECT_NAMES[type] ?: ("obiekt typu $type" to "object of type $type")
@@ -167,7 +219,56 @@ object SamsungConvert {
                     "rule but were not checked against a screenshot.",
             )
         }
-        return ConvertedNote(title ?: defaultTitle(fileName), pages, rep.items(), strokeCount, dropped)
+        return ConvertedNote(title ?: defaultTitle(fileName), pages, rep.items(), strokeCount, dropped, doc.media)
+    }
+
+    private fun unitsToPt(r: SdRect) = SdRect(r.x0 * UNIT_PT, r.y0 * UNIT_PT, r.x1 * UNIT_PT, r.y1 * UNIT_PT)
+
+    /** Uwagi o tekście płynącym: tylko to, co faktycznie wystąpiło w notatce. */
+    private fun flowNotes(doc: SdDocument, rep: Report, mixed: Set<Int>, overflow: Set<Int>, ignored: Set<Int>) {
+        val flow = doc.flow ?: return
+        if (flow.text.isNotBlank()) {
+            rep.note(
+                Level.INFO,
+                "Tekst płynący (pisany klawiaturą w tle strony) jest przeniesiony jako pola tekstowe w tych samych miejscach, " +
+                    "w rozmiarze i kolorze oryginału; pola są zwykłe, więc tekst da się edytować i przesuwać. Wygląd liter zależy od " +
+                    "czcionki urządzenia (oryginał: Roboto), więc łamanie wierszy może się nieznacznie różnić.",
+                "Flowing text (typed in the page background) is carried over as text boxes at the same places, with the original " +
+                    "size and colour; the boxes are ordinary, so the text can be edited and moved. Glyphs depend on the device " +
+                    "font (original: Roboto), so line breaks may differ slightly.",
+            )
+        }
+        if (ignored.isNotEmpty()) {
+            rep.note(
+                Level.WARN,
+                "Formatowanie tekstu inne niż rozmiar i kolor (np. pogrubienie, kursywa, podkreślenie, rodzaje ${ignored.joinToString()}) " +
+                    "nie jest jeszcze przenoszone: tekst ma styl zwykły.",
+                "Text formatting other than size and colour (e.g. bold, italic, underline, kinds ${ignored.joinToString()}) is not " +
+                    "carried over yet: the text has plain style.",
+            )
+        }
+        if (mixed.isNotEmpty()) {
+            rep.note(
+                Level.WARN,
+                "W jednym akapicie jest tekst o różnym rozmiarze lub kolorze: pole przyjmuje styl pierwszego znaku akapitu.",
+                "A paragraph mixes text sizes or colours: the box takes the style of the paragraph's first character.", null,
+            )
+            rep.entries.last().pages.addAll(mixed)
+        }
+        if (overflow.isNotEmpty()) {
+            rep.note(
+                Level.WARN,
+                "Tekst wychodzi poza dół strony (inna czcionka urządzenia niż w oryginale): sprawdź i przesuń pola.",
+                "Text runs past the bottom of the page (device font differs from the original): check and move the boxes.", null,
+            )
+            rep.entries.last().pages.addAll(overflow)
+        }
+        if (!flow.imagesComplete) {
+            rep.note(
+                Level.WARN, "Obrazy wstawione w tekst nie dały się odczytać: pominięte, tekst przeniesiony.",
+                "Images inserted in the text could not be read: skipped, text carried over.",
+            )
+        }
     }
 
     // --- strona ------------------------------------------------------------------------------------
@@ -256,7 +357,7 @@ object SamsungConvert {
 
     // --- pióra -------------------------------------------------------------------------------------
 
-    private enum class Kind { MARKER, BRUSH, INK, OTHER }
+    private enum class Kind { MARKER, BRUSH, INK, TAPE, OTHER }
 
     private fun penKind(st: SdStroke): Kind {
         val name = (st.pen ?: "").lowercase()
@@ -264,6 +365,7 @@ object SamsungConvert {
             "marker" in name || "highlight" in name || st.props and 0x40L != 0L -> Kind.MARKER
             "brush" in name -> Kind.BRUSH
             "inkpen" in name -> Kind.INK
+            "tape" in name -> Kind.TAPE
             else -> Kind.OTHER
         }
     }
@@ -342,6 +444,15 @@ object SamsungConvert {
                         "ok. 0,55 rozmiaru), tak jak w oryginale (krzywa zmierzona i przybliżona).",
                     "Pen $short → mNotes fountain pen; width depends on writing speed (slow = full size, fast = about 0.55) " +
                         "like the original (curve measured, approximate).", page,
+                )
+            }
+            Kind.TAPE -> {
+                mapped = TAPE_COLOR; pen = PenKind.BALLPOINT; width = size.toDouble()
+                ps.fill(1.0)
+                rep.once(
+                    "tape", Level.WARN,
+                    "Taśma $short → długopis mNotes o stałej, dużej szerokości w kolorze jasnoniebieskim (kolor taśmy zmierzony na jednej próbce).",
+                    "Tape $short → mNotes ballpoint of fixed, large width in light blue (tape colour measured on a single sample).", page,
                 )
             }
             Kind.OTHER -> {

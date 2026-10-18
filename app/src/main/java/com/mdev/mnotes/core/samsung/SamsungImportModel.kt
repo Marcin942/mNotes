@@ -1,7 +1,10 @@
 package com.mdev.mnotes.core.samsung
 
+import com.mdev.mnotes.core.model.Element
+import com.mdev.mnotes.core.model.ImageEl
 import com.mdev.mnotes.core.model.PageSpec
 import com.mdev.mnotes.core.model.Stroke
+import com.mdev.mnotes.core.model.TextBox
 
 /**
  * Jak przenieść notatkę z Samsung Notes (LIB-016). Wybór jest osobny dla każdej notatki.
@@ -50,10 +53,15 @@ data class SdBackground(
 class ConvertedPage(
     val spec: PageSpec,
     val background: SdBackground?,
-    val strokes: List<Stroke>,
+    /** Wszystko, co leży na stronie, w kolejności rysowania; obrazy mają klucz `sd:<media>[:l,t,r,b]` zamiast nazwy pliku. */
+    val elements: List<Element>,
     /** Numer strony w pliku źródłowym (od 0). */
     val source: Int,
-)
+) {
+    val strokes: List<Stroke> get() = elements.filterIsInstance<Stroke>()
+    val textBoxes: List<TextBox> get() = elements.filterIsInstance<TextBox>()
+    val images: List<ImageEl> get() = elements.filterIsInstance<ImageEl>()
+}
 
 class ConvertedNote(
     val title: String,
@@ -62,6 +70,11 @@ class ConvertedNote(
     val strokeCount: Int,
     /** Ile końcowych pustych stron pominięto. */
     val droppedTrailing: Int,
+    /** Pliki obrazów dokumentu (numer → bajty) dla kluczy `sd:` z [ConvertedPage.elements]. */
+    val media: Map<Int, ByteArray> = emptyMap(),
 ) {
+    val textBoxCount: Int get() = pages.sumOf { it.textBoxes.size }
+    val imageCount: Int get() = pages.sumOf { it.images.size }
+
     val warnings: Int get() = report.count { it.level == Level.WARN }
 }

@@ -20,6 +20,7 @@ import android.view.animation.DecelerateInterpolator
 import android.widget.OverScroller
 import androidx.input.motionprediction.MotionEventPredictor
 import com.mdev.mnotes.core.edit.EraseMath
+import com.mdev.mnotes.core.edit.PipetteMath
 import com.mdev.mnotes.core.geom.Affine
 import com.mdev.mnotes.core.geom.Bounds
 import com.mdev.mnotes.core.geom.Ruler
@@ -1453,15 +1454,9 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
         return col or 0xFF000000.toInt()
     }
 
-    /** Pierwotny kolor kreski albo wypełnienia leżącego na wierzchu pod punktem strony (bez rozjaśnienia przez przezroczystość); null, gdy nic tam nie ma. */
-    private fun originalColorAt(page: PageState, px: Float, py: Float): Int? {
-        val r = 2f * dp / zoom
-        val top = doc.content(page).elements.lastOrNull {
-            (it is Stroke || it is FillEl) && it.bounds.inflate(r + 1f).contains(px, py) && EraseMath.hitsElement(it, px, py, r)
-        }
-        val c = when (top) { is Stroke -> top.color; is FillEl -> top.color; else -> return null }
-        return c or 0xFF000000.toInt()
-    }
+    /** Pierwotny kolor kreski albo wypełnienia pod punktem strony (zakreślacz ma pierwszeństwo przed pismem, bez rozjaśnienia przez przezroczystość); null, gdy nic tam nie ma. */
+    private fun originalColorAt(page: PageState, px: Float, py: Float): Int? =
+        PipetteMath.originalColor(doc.content(page).elements, px, py, 2f * dp / zoom)
 
     private fun pickDone() {
         val col = sampleColor(pickX, pickY)

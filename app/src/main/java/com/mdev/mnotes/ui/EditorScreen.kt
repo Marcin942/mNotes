@@ -938,7 +938,7 @@ private fun PipetteCard(set: com.mdev.mnotes.data.Settings) {
                 Chip(T.t("Pierwotny", "Original"), set.pipetteOriginal, { set.pipetteOriginal = true })
             }
             Text(
-                if (set.pipetteOriginal) T.t("Zakreślacz da swój kolor sprzed rozjaśnienia (przezroczystości). Poza kreskami i wypełnieniami pobierze kolor ze strony.", "A highlighter gives its own colour before the transparency lightens it. Away from strokes and fills it picks the colour from the page.")
+                if (set.pipetteOriginal) T.t("Kolor zapisany w narysowanym obiekcie. Zakreślacz ma pierwszeństwo przed pismem pod nim albo nad nim. Poza kreskami i wypełnieniami pobierze kolor ze strony.", "The colour stored in the drawn object. A highlighter takes priority over writing under or over it. Away from strokes and fills it picks the colour from the page.")
                 else T.t("Kolor dokładnie taki, jaki widać na stronie — zakreślacz wyjdzie jaśniejszy.", "The colour exactly as seen on the page — a highlighter comes out lighter."),
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }

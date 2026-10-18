@@ -12,6 +12,10 @@ import com.mdev.mnotes.core.model.DocEdit
 import com.mdev.mnotes.core.model.Element
 import com.mdev.mnotes.core.model.ElementsEdit
 import com.mdev.mnotes.core.model.FillEl
+import com.mdev.mnotes.core.edit.CropFrame
+import com.mdev.mnotes.core.edit.CropGeom
+import com.mdev.mnotes.core.edit.CropHandle
+import com.mdev.mnotes.core.edit.CropPlace
 import com.mdev.mnotes.core.edit.CutLine
 import com.mdev.mnotes.core.edit.FloodFill
 import com.mdev.mnotes.core.edit.ImageCut
@@ -51,6 +55,30 @@ class CutSession(val pageId: String, val imageId: Int) {
     var spread by mutableStateOf(true)
 }
 
+/** Proporcje ramki przycinania; [ratio] to szerokość/wysokość pliku w poziomie (null: dowolne). */
+enum class CropRatio(val ratio: Float?) { FREE(null), ORIGINAL(null), SQUARE(1f), R43(4f / 3f), R32(3f / 2f), R169(16f / 9f) }
+
+/**
+ * Trwające przycinanie obrazu. Ramka stoi na stronie w jednym miejscu i pod jednym kątem, a plik pod nią się przesuwa
+ * i obraca. Dopiero zatwierdzenie zapisuje wycinek w obrazie (jedno cofnięcie), anulowanie niczego nie zmienia.
+ * [iw], [ih] to wymiary pliku po obrocie z EXIF; [want] to ramka, jakiej chce użytkownik, zanim prostowanie ją zmniejszy.
+ */
+class CropSession(val pageId: String, val imageId: Int, val original: ImageEl, val iw: Float, val ih: Float, frame: CropFrame, place: CropPlace) {
+    var frame by mutableStateOf(frame)
+    var place by mutableStateOf(place)
+    var want: CropFrame = frame
+    var ratio by mutableStateOf(CropRatio.FREE)
+    /** Czy proporcje są odwrócone (pion zamiast poziomu). */
+    var portrait by mutableStateOf(false)
+
+    /** Szerokość/wysokość ramki, jaką wymusza wybrany wybór, albo null. */
+    val lockedRatio: Float?
+        get() {
+            val base = if (ratio == CropRatio.ORIGINAL) iw / ih else ratio.ratio ?: return null
+            return if (portrait) 1f / base else base
+        }
+}
+
 class TextRequest(val pageId: String, val existing: TextBox?, val x: Float, val y: Float, val initial: String = "")
 
 /** Prosty schowek wewnętrzny (elementy + zeszyt, z którego pochodzą — dla kopiowania zasobów obrazów). */
@@ -85,6 +113,7 @@ class Editor(val ctx: Context, val nbId: String) {
     var formatPick by mutableStateOf(false)
     var sel by mutableStateOf<Sel?>(null)
     var cut by mutableStateOf<CutSession?>(null)
+    var crop by mutableStateOf<CropSession?>(null)
     var selTick by mutableIntStateOf(0)
     /** Uchwyty skali i obrotu są widoczne i aktywne tylko po włączeniu przyciskiem na pasku zaznaczenia; nowe zaznaczenie je wyłącza. */
     var transformMode: Boolean
@@ -190,8 +219,8 @@ class Editor(val ctx: Context, val nbId: String) {
     fun say(msg: String) { toast = msg }
 
     // — Cofanie —
-    fun undo() { cancelCut(); clearSel(); val e = doc.doUndo(); undoTick++; e?.pageIds?.firstOrNull()?.let { view?.ensureVisible(it) } }
-    fun redo() { cancelCut(); clearSel(); val e = doc.doRedo(); undoTick++; e?.pageIds?.firstOrNull()?.let { view?.ensureVisible(it) } }
+    fun undo() { cancelCut(); cancelCrop(); clearSel(); val e = doc.doUndo(); undoTick++; e?.pageIds?.firstOrNull()?.let { view?.ensureVisible(it) } }
+    fun redo() { cancelCut(); cancelCrop(); clearSel(); val e = doc.doRedo(); undoTick++; e?.pageIds?.firstOrNull()?.let { view?.ensureVisible(it) } }
 
     /** Wykonanie z zapisem na stosie cofania. */
     fun exec(edit: DocEdit) { doc.exec(edit); undoTick++ }
@@ -460,7 +489,7 @@ class Editor(val ctx: Context, val nbId: String) {
     /** Zaznaczony pojedynczy, niezablokowany obraz można przeciąć. */
     fun canCutSel(): Boolean {
         val el = selElements().singleOrNull() as? ImageEl ?: return false
-        return !el.locked && !readOnly
+        return !el.locked && !readOnly && el.crop.a == 0f
     }
 
     fun startCut() {
@@ -507,6 +536,132 @@ class Editor(val ctx: Context, val nbId: String) {
         tool = Tool.LASSO
         select(page.id, pieces.map { it.id }.toSet())
         say(T.t("Przecięto na ${pieces.size} części", "Cut into ${pieces.size} pieces"))
+        view?.invalidate()
+    }
+
+    // — Przycinanie obrazu —
+
+    /** Przycinany obraz; gdy zniknął albo go zablokowano (cofnięcie, usunięcie), sesja się kończy. */
+    fun cropImage(): ImageEl? {
+        val c = crop ?: return null
+        val img = doc.page(c.pageId)?.let { p -> doc.content(p).elements.firstOrNull { it.id == c.imageId } } as? ImageEl
+        if (img == null || img.locked) { crop = null; view?.invalidate() }
+        return img
+    }
+
+    fun canCropSel(): Boolean {
+        val el = selElements().singleOrNull() as? ImageEl ?: return false
+        return !el.locked && !readOnly
+    }
+
+    fun startCrop() {
+        val s = sel ?: return
+        val img = selElements().singleOrNull() as? ImageEl
+        if (readOnly || img == null) return
+        if (img.locked) { say(T.t("Obraz jest zablokowany: odblokuj go, by go przyciąć", "The image is locked: unlock it to crop it")); return }
+        val size = Assets.imageSize(repo.assetFile(nbId, img.asset))
+        if (size == null) { say(T.t("Nie można odczytać obrazu", "Cannot read the image")); return }
+        val iw = size.first.toFloat(); val ih = size.second.toFloat()
+        cancelCut()
+        transformMode = false
+        val frame = CropGeom.frameOf(img.crop, iw, ih)
+        crop = CropSession(s.pageId, img.id, img, iw, ih, frame, CropGeom.placeOf(img, iw, ih))
+        view?.invalidate()
+    }
+
+    fun cancelCrop() { if (crop != null) { crop = null; view?.invalidate() } }
+
+    /** Najmniejsza połowa boku ramki w pikselach pliku (24 pt na stronie). */
+    private fun CropSession.minHalf() = CropGeom.MIN_SIZE_PT * 0.5f / place.s
+
+    private fun CropSession.set(f: CropFrame, keepWant: Boolean = false) {
+        frame = f
+        if (!keepWant) want = f
+        view?.invalidate()
+    }
+
+    /** Przeciągnięcie uchwytu do punktu pliku ([fx], [fy]); plik stoi w miejscu. */
+    fun cropResize(h: CropHandle, fx: Float, fy: Float) {
+        val c = crop ?: return
+        c.set(CropGeom.resized(c.frame, h, fx, fy, c.iw, c.ih, c.minHalf(), c.lockedRatio))
+    }
+
+    /** Ramka [base] przesunięta po pliku o ([dx], [dy]) pikseli pliku (liczone od początku gestu, więc brzeg pliku nie gubi palca). */
+    fun cropMove(base: CropFrame, dx: Float, dy: Float) {
+        val c = crop ?: return
+        val g = CropGeom.moved(base, dx, dy, c.iw, c.ih)
+        c.frame = g; c.want = c.want.copy(cx = g.cx, cy = g.cy)
+        view?.invalidate()
+    }
+
+    /** Kąt ramki względem pliku (prostowanie plus ćwierć obrotu); plik obraca się pod ramką wokół jej środka. */
+    fun cropSetAngle(a: Float) {
+        val c = crop ?: return
+        val f = c.frame
+        val na = CropGeom.normAngle(a)
+        if (na == f.a) return
+        val page = f.a + c.place.phi
+        c.place = c.place.turned(page - na, f.cx, f.cy, c.iw, c.ih)
+        c.set(CropGeom.fitted(c.want.copy(cx = f.cx, cy = f.cy, a = na), c.iw, c.ih), keepWant = true)
+    }
+
+    /** Ćwierć obrotu: ten sam fragment, zawartość obraca się o 90°. */
+    fun cropQuarter(clockwise: Boolean) {
+        val c = crop ?: return
+        val q = CropGeom.quarter(c.frame, clockwise)
+        val page = c.frame.a + c.place.phi
+        c.place = c.place.turned(page - q.a, c.frame.cx, c.frame.cy, c.iw, c.ih)
+        c.portrait = !c.portrait
+        c.want = CropGeom.quarter(c.want, clockwise).copy(cx = q.cx, cy = q.cy)
+        c.set(q, keepWant = true)
+    }
+
+    fun cropSetRatio(r: CropRatio) {
+        val c = crop ?: return
+        c.ratio = r
+        c.portrait = false
+        val k = c.lockedRatio
+        if (k != null) c.set(CropGeom.withRatio(c.frame, k, c.iw, c.ih)) else view?.invalidate()
+    }
+
+    fun cropSwapRatio() {
+        val c = crop ?: return
+        c.portrait = !c.portrait
+        val k = c.lockedRatio ?: run {
+            // swobodna ramka: po prostu zamień boki
+            val f = c.frame
+            c.set(CropGeom.fitted(f.copy(hw = f.hh, hh = f.hw), c.iw, c.ih)); return
+        }
+        c.set(CropGeom.withRatio(c.frame, k, c.iw, c.ih))
+    }
+
+    /** Cały plik, bez kąta: środek pliku staje tam, gdzie był środek ramki. */
+    fun cropReset() {
+        val c = crop ?: return
+        val f = c.frame
+        val at = c.place.toPage(f.cx, f.cy, c.iw, c.ih)
+        val page = f.a + c.place.phi
+        val full = CropGeom.full(c.iw, c.ih)
+        c.place = CropPlace(at[0], at[1], c.place.s, page)
+        c.ratio = CropRatio.FREE; c.portrait = false
+        c.set(full)
+    }
+
+    fun cropIsFull(): Boolean {
+        val c = crop ?: return true
+        return c.frame.a == 0f && CropGeom.cropOf(c.frame, c.iw, c.ih).isFull
+    }
+
+    fun applyCrop() {
+        val c = crop ?: return; val img = cropImage() ?: return
+        val page = doc.page(c.pageId) ?: return
+        val out = CropGeom.applied(img, c.frame, c.place, c.iw, c.ih)
+        crop = null
+        if (out.crop == img.crop && out.cx == img.cx && out.cy == img.cy && out.w == img.w && out.h == img.h && out.rot == img.rot) { view?.invalidate(); return }
+        val at = doc.content(page).elements.indexOfFirst { it.id == img.id }
+        if (at < 0) return
+        exec(DocEdit.Elements(page.id, ElementsEdit(listOf(Placed(at, img)), listOf(Placed(at, out)))))
+        select(page.id, setOf(img.id))
         view?.invalidate()
     }
 

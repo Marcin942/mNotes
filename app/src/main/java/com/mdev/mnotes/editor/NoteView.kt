@@ -19,6 +19,8 @@ import android.view.ViewConfiguration
 import android.view.animation.DecelerateInterpolator
 import android.widget.OverScroller
 import androidx.input.motionprediction.MotionEventPredictor
+import com.mdev.mnotes.core.edit.CropFrame
+import com.mdev.mnotes.core.edit.CropHandle
 import com.mdev.mnotes.core.edit.CutLine
 import com.mdev.mnotes.core.edit.EraseMath
 import com.mdev.mnotes.core.edit.ImageCut
@@ -113,7 +115,7 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
     private val tmpMatrix = Matrix()
 
     // — stan wejścia —
-    private enum class Mode { NONE, IGNORE, NAV, TOOL, RULER, PICK, CUT }
+    private enum class Mode { NONE, IGNORE, NAV, TOOL, RULER, PICK, CUT, CROP }
     private enum class LM { NONE, DRAW, MOVE, SCALE, ROTATE, VERTEX, RESIZE }
 
     private var mode = Mode.NONE
@@ -476,6 +478,7 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
         drawTapePreview(c)
         drawPicker(c)
         drawCut(c)
+        drawCrop(c)
         drawLasso(c)
         drawSelection(c)
         drawShapeLabel(c)
@@ -682,7 +685,7 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
     )
 
     private fun drawSelection(c: Canvas) {
-        if (ed.cut != null) return
+        if (ed.cut != null || ed.crop != null) return
         val s = ed.sel ?: return
         val pi = doc.indexOf(s.pageId); if (pi < 0) return
         val cs: FloatArray
@@ -1022,6 +1025,7 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
             invalidate(); return
         }
         if (ed.cut != null && cutDown(ev, t)) return
+        if (ed.crop != null && cropDown(ev, t)) return
         val rh = if (isStylus(t)) 0 else rulerHit(ev.x, ev.y)
         when {
             t == MotionEvent.TOOL_TYPE_MOUSE -> {
@@ -1066,6 +1070,7 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
             Mode.RULER -> if (isStylus(t) && !navOnly(ev, idx)) { mode = Mode.NONE; rulerGrab = 0; beginTool(ev, idx) } else rulerRebase(ev, -1)
             Mode.PICK -> {}
             Mode.CUT -> if (t == MotionEvent.TOOL_TYPE_FINGER && cutPid != -1 && cutType == MotionEvent.TOOL_TYPE_FINGER) { cutAbort(); startNav(ev); removeCallbacks(longPress) }
+            Mode.CROP -> if (t == MotionEvent.TOOL_TYPE_FINGER && cropPid != -1 && cropType == MotionEvent.TOOL_TYPE_FINGER) { cropAbort(); startNav(ev); removeCallbacks(longPress) }
             Mode.IGNORE, Mode.NONE -> {
                 if (isStylus(t) && !navOnly(ev, idx)) { stylusNear = true; lastStylusT = ev.eventTime; beginTool(ev, idx) }
                 else if (t == MotionEvent.TOOL_TYPE_FINGER && !rejectFinger(ev.eventTime)) {
@@ -1082,6 +1087,7 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
             Mode.RULER -> rulerMove(ev)
             Mode.PICK -> { pickX = ev.x; pickY = ev.y; pickColor = sampleColor(ev.x, ev.y); invalidate() }
             Mode.CUT -> cutMove(ev)
+            Mode.CROP -> cropMove(ev)
             Mode.TOOL -> { val idx = ev.findPointerIndex(toolPid); if (idx >= 0) toolMove(ev, idx) }
             else -> {}
         }
@@ -1106,6 +1112,7 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
             Mode.NAV -> navUp(ev, cancel)
             Mode.PICK -> if (!cancel) pickDone()
             Mode.CUT -> cutUp(ev, cancel)
+            Mode.CROP -> cropUp(ev, cancel)
             else -> {}
         }
         if (isStylus(ev.getToolType(0))) lastStylusT = ev.eventTime
@@ -1653,6 +1660,157 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
         }
         for ((i, l) in cut.lines.withIndex()) line(l, i == cutGrab && mode == Mode.CUT, false)
         if (mode == Mode.CUT && cutGrab < 0) cutNewLine(img)?.let { line(it, true, true) }
+    }
+
+    // ───────────────────────── przycinanie obrazu ─────────────────────────
+
+    private var cropPid = -1; private var cropType = 0
+    private var cropGrab: CropHandle? = null
+    private var cropMoving = false
+    private var cropBase: CropFrame? = null
+    private var cropDownFx = 0f; private var cropDownFy = 0f      // punkt pliku pod palcem na początku gestu
+    private var cropOffFx = 0f; private var cropOffFy = 0f        // różnica między uchwytem a palcem (bez skoku przy chwyceniu)
+
+    /** Punkt ekranu → punkt pliku (piksele) według położenia pliku w sesji. */
+    private fun cropFile(s: com.mdev.mnotes.editor.CropSession, pi: Int, sx: Float, sy: Float) = s.place.toFile(pgX(pi, sx), pgY(pi, sy), s.iw, s.ih)
+
+    /** Uchwyt pod punktem w osiach ramki (ekranowe piksele względem jej środka) albo null; poza ramką i uchwytami: null. */
+    private fun cropHit(s: com.mdev.mnotes.editor.CropSession, u: Float, v: Float): CropHandle? {
+        val hw = s.frame.hw * s.place.s * zoom; val hh = s.frame.hh * s.place.s * zoom
+        val corner = 22f * dp
+        val band = min(18f * dp, min(hw, hh) * 0.34f)
+        var best: CropHandle? = null; var bestD = Float.MAX_VALUE
+        for (h in CropHandle.values()) {
+            if (h.sx != 0 && h.sy != 0) {
+                val d = hypot(u - h.sx * hw, v - h.sy * hh)
+                if (d <= corner && d < bestD) { best = h; bestD = d }
+            }
+        }
+        if (best != null) return best
+        // krawędzie: pasmo wokół boku, od narożnika do narożnika (z tolerancją na zewnątrz)
+        for (h in CropHandle.values()) {
+            if (h.sx != 0 && h.sy != 0) continue
+            val d: Float; val along: Float; val lim: Float
+            if (h.sx != 0) { d = abs(u - h.sx * hw); along = abs(v); lim = hh } else { d = abs(v - h.sy * hh); along = abs(u); lim = hw }
+            if (d <= band && along <= lim + band * 0.5f && d < bestD) { best = h; bestD = d }
+        }
+        return best
+    }
+
+    private fun cropLocal(s: com.mdev.mnotes.editor.CropSession, pi: Int, sx: Float, sy: Float): FloatArray {
+        val c = s.place.toPage(s.frame.cx, s.frame.cy, s.iw, s.ih)
+        val dx = pgX(pi, sx) - c[0]; val dy = pgY(pi, sy) - c[1]
+        val a = s.frame.a + s.place.phi
+        val co = cos(a); val si = sin(a)
+        return floatArrayOf((dx * co + dy * si) * zoom, (-dx * si + dy * co) * zoom)
+    }
+
+    private fun cropDown(ev: MotionEvent, t: Int): Boolean {
+        val s = ed.crop ?: return false
+        if (ed.cropImage() == null) return false
+        val pi = doc.indexOf(s.pageId); if (pi < 0) return false
+        if (t == MotionEvent.TOOL_TYPE_MOUSE && ev.buttonState and MotionEvent.BUTTON_SECONDARY != 0) { ed.cancelCrop(); mode = Mode.IGNORE; return true }
+        if (t == MotionEvent.TOOL_TYPE_MOUSE && (ev.buttonState and MotionEvent.BUTTON_TERTIARY != 0 || navOnly(ev, 0))) return false
+        if (palmTouch(ev, 0)) return false
+        val uv = cropLocal(s, pi, ev.x, ev.y)
+        val h = cropHit(s, uv[0], uv[1])
+        val inside = abs(uv[0]) <= s.frame.hw * s.place.s * zoom && abs(uv[1]) <= s.frame.hh * s.place.s * zoom
+        if (h == null && !inside) {
+            if (t == MotionEvent.TOOL_TYPE_FINGER || t == MotionEvent.TOOL_TYPE_MOUSE) return false
+            mode = Mode.IGNORE; return true
+        }
+        val p = cropFile(s, pi, ev.x, ev.y)
+        cropDownFx = p[0]; cropDownFy = p[1]
+        cropBase = s.frame
+        cropGrab = h; cropMoving = h == null
+        if (h != null) {
+            // punkt uchwytu w pliku (dla krawędzi liczy się tylko jedna współrzędna ramki, więc środek boku wystarcza)
+            val f = s.frame
+            val co = cos(f.a); val si = sin(f.a)
+            val u = h.sx * f.hw; val v = h.sy * f.hh
+            cropOffFx = f.cx + u * co - v * si - p[0]; cropOffFy = f.cy + u * si + v * co - p[1]
+        }
+        mode = Mode.CROP; cropPid = ev.getPointerId(0); cropType = t
+        performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
+        invalidate(); return true
+    }
+
+    private fun cropAbort() { cropPid = -1; cropGrab = null; cropMoving = false; mode = Mode.NONE; invalidate() }
+
+    private fun cropMove(ev: MotionEvent) {
+        val s = ed.crop ?: return
+        val pi = doc.indexOf(s.pageId); if (pi < 0) return
+        val i = ev.findPointerIndex(cropPid); if (i < 0) return
+        val p = cropFile(s, pi, ev.getX(i), ev.getY(i))
+        val h = cropGrab
+        if (h != null) ed.cropResize(h, p[0] + cropOffFx, p[1] + cropOffFy)
+        else if (cropMoving) cropBase?.let { ed.cropMove(it, p[0] - cropDownFx, p[1] - cropDownFy) }
+    }
+
+    private fun cropUp(ev: MotionEvent, cancel: Boolean) {
+        cropPid = -1; cropGrab = null; cropMoving = false; cropBase = null
+        invalidate()
+    }
+
+    private val cropPaint = Paint(Paint.ANTI_ALIAS_FLAG)
+    private val cropMatrix = Matrix()
+    private val cropOut = Path()
+    private val cropIn = Path()
+
+    private fun drawCrop(c: Canvas) {
+        val s = ed.crop ?: return
+        val img = ed.cropImage() ?: return
+        val pi = doc.indexOf(s.pageId); if (pi < 0) return
+        val pl = s.place; val f = s.frame
+        fun sp(fx: Float, fy: Float): FloatArray { val p = pl.toPage(fx, fy, s.iw, s.ih); return floatArrayOf(scrX(pi, p[0]), scrY(pi, p[1])) }
+        // cały plik pod ramką
+        val bmp = ed.app.assets.bitmap(doc.id, img.asset, false)
+        if (bmp != null) {
+            cropMatrix.reset()
+            cropMatrix.postScale(s.iw / bmp.width, s.ih / bmp.height)
+            cropMatrix.postTranslate(-s.iw * 0.5f, -s.ih * 0.5f)
+            cropMatrix.postScale(pl.s, pl.s)
+            cropMatrix.postRotate(Math.toDegrees(pl.phi.toDouble()).toFloat())
+            cropMatrix.postTranslate(pl.ox, pl.oy)
+            cropMatrix.postScale(zoom, zoom)
+            cropMatrix.postTranslate(layout.left(pi) * zoom + tx, layout.top(pi) * zoom + ty)
+            cropPaint.style = Paint.Style.FILL; cropPaint.color = 0xFFFFFFFF.toInt(); cropPaint.isFilterBitmap = true
+            c.drawBitmap(bmp, cropMatrix, cropPaint)
+        }
+        val k = arrayOf(sp(0f, 0f), sp(s.iw, 0f), sp(s.iw, s.ih), sp(0f, s.ih))
+        cropOut.reset(); cropOut.moveTo(k[0][0], k[0][1]); for (i in 1..3) cropOut.lineTo(k[i][0], k[i][1]); cropOut.close()
+        val fc = com.mdev.mnotes.core.edit.CropGeom.corners(f)
+        cropIn.reset(); cropIn.moveTo(sp(fc[0], fc[1])[0], sp(fc[0], fc[1])[1])
+        for (i in 1..3) { val q = sp(fc[i * 2], fc[i * 2 + 1]); cropIn.lineTo(q[0], q[1]) }
+        cropIn.close()
+        // przyciemnienie poza ramką
+        cropOut.addPath(cropIn); cropOut.fillType = Path.FillType.EVEN_ODD
+        cropPaint.style = Paint.Style.FILL; cropPaint.color = 0x99000000.toInt(); c.drawPath(cropOut, cropPaint)
+        cropOut.fillType = Path.FillType.WINDING
+        cropPaint.style = Paint.Style.STROKE; cropPaint.strokeWidth = 1f * dp; cropPaint.color = 0x66FFFFFF
+        cropOut.reset(); cropOut.moveTo(k[0][0], k[0][1]); for (i in 1..3) cropOut.lineTo(k[i][0], k[i][1]); cropOut.close()
+        c.drawPath(cropOut, cropPaint)
+        // ramka i uchwyty rysujemy w jej własnych osiach
+        val mid = sp(f.cx, f.cy)
+        val hw = f.hw * pl.s * zoom; val hh = f.hh * pl.s * zoom
+        c.save(); c.translate(mid[0], mid[1]); c.rotate(Math.toDegrees((f.a + pl.phi).toDouble()).toFloat())
+        cropPaint.style = Paint.Style.STROKE; cropPaint.strokeWidth = 3.5f * dp; cropPaint.color = 0x55000000; c.drawRect(-hw, -hh, hw, hh, cropPaint)
+        cropPaint.strokeWidth = 1.6f * dp; cropPaint.color = 0xFFFFFFFF.toInt(); c.drawRect(-hw, -hh, hw, hh, cropPaint)
+        val len = min(20f * dp, min(hw, hh) * 0.5f)
+        val mark = min(14f * dp, min(hw, hh) * 0.3f)
+        cropPaint.strokeCap = Paint.Cap.ROUND
+        for (pass in 0..1) {
+            cropPaint.strokeWidth = (if (pass == 0) 7f else 4.5f) * dp
+            cropPaint.color = if (pass == 0) 0x66000000 else 0xFFFFFFFF.toInt()
+            for (sx in intArrayOf(-1, 1)) for (sy in intArrayOf(-1, 1)) {
+                val x = sx * hw; val y = sy * hh
+                c.drawLine(x, y, x - sx * len, y, cropPaint); c.drawLine(x, y, x, y - sy * len, cropPaint)
+            }
+            c.drawLine(-mark, -hh, mark, -hh, cropPaint); c.drawLine(-mark, hh, mark, hh, cropPaint)
+            c.drawLine(-hw, -mark, -hw, mark, cropPaint); c.drawLine(hw, -mark, hw, mark, cropPaint)
+        }
+        cropPaint.strokeCap = Paint.Cap.BUTT
+        c.restore()
     }
 
     // ───────────────────────── narzędzia: wspólne ─────────────────────────

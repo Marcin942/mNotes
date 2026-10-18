@@ -128,38 +128,111 @@ object CropGeom {
     /**
      * Ramka po przeciągnięciu uchwytu [h] do punktu pliku ([px], [py]): przeciwległy bok (narożnik) stoi w miejscu.
      * [minHalf] to najmniejsza połowa boku, [ratio] (szerokość/wysokość) blokuje proporcje. Gdy cel wychodzi poza
-     * plik, ramka rośnie tak daleko, jak się da.
+     * plik, każda oś zatrzymuje się osobno na brzegu, więc narożnik dociśnięty do jednego brzegu nadal jedzie
+     * wzdłuż niego, gdy palec rusza się w drugą stronę.
      */
     fun resized(f: CropFrame, h: CropHandle, px: Float, py: Float, iw: Float, ih: Float, minHalf: Float, ratio: Float? = null): CropFrame {
         val c = cos(f.a); val sn = sin(f.a)
         val dx = px - f.cx; val dy = py - f.cy
         val u = dx * c + dy * sn
         val v = -dx * sn + dy * c
-        var lo = -f.hw; var hi = f.hw; var vlo = -f.hh; var vhi = f.hh
         val min2 = 2f * minHalf
+        // prostokąt [lo, hi] × [vlo, vhi] w osiach ramki: najpierw obecny, potem to, czego chce palec
+        var lo = -f.hw; var hi = f.hw; var vlo = -f.hh; var vhi = f.hh
         if (h.sx < 0) lo = min(u, hi - min2) else if (h.sx > 0) hi = max(u, lo + min2)
         if (h.sy < 0) vlo = min(v, vhi - min2) else if (h.sy > 0) vhi = max(v, vlo + min2)
-        if (ratio != null && ratio > 0f) {
-            var w = hi - lo; var g = vhi - vlo
-            if (h.sx != 0 && h.sy != 0) { if (w / g > ratio) g = w / ratio else w = g * ratio }
-            else if (h.sx != 0) g = w / ratio
-            else w = g * ratio
-            val grow = max(1f, max(min2 / w, min2 / g))
-            w *= grow; g *= grow
-            if (h.sx < 0) lo = hi - w else if (h.sx > 0) hi = lo + w else { val m = (lo + hi) * 0.5f; lo = m - w * 0.5f; hi = m + w * 0.5f }
-            if (h.sy < 0) vlo = vhi - g else if (h.sy > 0) vhi = vlo + g else { val m = (vlo + vhi) * 0.5f; vlo = m - g * 0.5f; vhi = m + g * 0.5f }
+        fun build(l: Float, r: Float, t: Float, b: Float): CropFrame {
+            val mu = (l + r) * 0.5f; val mv = (t + b) * 0.5f
+            return CropFrame(f.cx + mu * c - mv * sn, f.cy + mu * sn + mv * c, (r - l) * 0.5f, (b - t) * 0.5f, f.a)
         }
-        val mu = (lo + hi) * 0.5f; val mv = (vlo + vhi) * 0.5f
-        val target = CropFrame(f.cx + mu * c - mv * sn, f.cy + mu * sn + mv * c, (hi - lo) * 0.5f, (vhi - vlo) * 0.5f, f.a)
+        if (!fits(f, iw, ih)) return fitted(toRatio(build(lo, hi, vlo, vhi), h, ratio, min2), iw, ih)
+        if (!fits(build(lo, hi, vlo, vhi), iw, ih)) {
+            val x = nearestFitting(doubleArrayOf(lo.toDouble(), hi.toDouble(), vlo.toDouble(), vhi.toDouble()), h, f, minHalf * 2f, iw, ih, ::build)
+            lo = x[0].toFloat(); hi = x[1].toFloat(); vlo = x[2].toFloat(); vhi = x[3].toFloat()
+        }
+        val target = toRatio(build(lo, hi, vlo, vhi), h, ratio, min2)
         if (fits(target, iw, ih)) return target
-        if (!fits(f, iw, ih)) return fitted(target, iw, ih)
-        // zbiór dozwolonych ramek (środek, połowy boków) jest wypukły, więc największy dozwolony krok znajdzie połowienie
+        // zablokowane proporcje: największy krok od ramki do celu, który jeszcze się mieści
         var okT = 0f; var badT = 1f
         repeat(24) {
             val t = (okT + badT) * 0.5f
             if (fits(lerp(f, target, t), iw, ih)) okT = t else badT = t
         }
         return lerp(f, target, okT)
+    }
+
+    /**
+     * Prostokąt `[l, r] × [t, b]` (osie ramki) najbliższy [want], który mieści się w pliku, przy czym ruszają się tylko
+     * boki uchwytu [h]. Luz każdego warunku (brzeg pliku, najmniejszy rozmiar) jest liniowy w ruszanych bokach, więc
+     * dozwolone położenia to wielokąt (najwyżej w dwóch wymiarach), a szukane jest rzutem celu na ten wielokąt. Dzięki
+     * temu narożnik dociśnięty do brzegu jedzie wzdłuż niego, gdy palec ruszy się w drugą stronę.
+     */
+    private fun nearestFitting(
+        want: DoubleArray, h: CropHandle, f: CropFrame, min2: Float, iw: Float, ih: Float,
+        build: (Float, Float, Float, Float) -> CropFrame,
+    ): DoubleArray {
+        val free = ArrayList<Int>()
+        if (h.sx < 0) free += 0 else if (h.sx > 0) free += 1
+        if (h.sy < 0) free += 2 else if (h.sy > 0) free += 3
+        val base = doubleArrayOf(-f.hw.toDouble(), f.hw.toDouble(), -f.hh.toDouble(), f.hh.toDouble())
+        val m = (margin(f.a) - EPS).toDouble()
+        fun slack(x: DoubleArray): DoubleArray {
+            val g = build(x[0].toFloat(), x[1].toFloat(), x[2].toFloat(), x[3].toFloat())
+            val ex = extentX(g); val ey = extentY(g)
+            return doubleArrayOf(
+                g.cx - ex - m, iw - m - (g.cx + ex), g.cy - ey - m, ih - m - (g.cy + ey),
+                (x[1] - x[0]) - min2, (x[3] - x[2]) - min2,
+            )
+        }
+        val d = free.size
+        fun at(v: DoubleArray) = base.copyOf().also { for (i in 0 until d) it[free[i]] = v[i] }
+        val s0 = slack(base)
+        // luz jest liniowy w ruszanych bokach, więc różnice jednostkowe dają jego dokładne pochodne
+        val jac = Array(s0.size) { DoubleArray(d) }
+        for (i in 0 until d) {
+            val s1 = slack(at(DoubleArray(d) { k -> base[free[k]] + if (k == i) 1.0 else 0.0 }))
+            for (k in s0.indices) jac[k][i] = s1[k] - s0[k]
+        }
+        // warunki, które dziś już nie są spełnione (np. bardzo mały plik), pomijamy
+        val used = s0.indices.filter { s0[it] >= -1e-3 && jac[it].any { j -> abs(j) > 1e-9 } }
+        val x0 = DoubleArray(d) { base[free[it]] }
+        val t = DoubleArray(d) { want[free[it]] }
+        fun sl(k: Int, x: DoubleArray): Double { var v = s0[k]; for (i in 0 until d) v += jac[k][i] * (x[i] - x0[i]); return v }
+        fun ok(x: DoubleArray) = used.all { sl(it, x) >= -1e-3 }
+        if (ok(t)) return want
+        val cands = ArrayList<DoubleArray>()
+        for (k in used) {
+            val n2 = jac[k].sumOf { it * it }
+            val x = DoubleArray(d) { t[it] - sl(k, t) / n2 * jac[k][it] }
+            if (ok(x)) cands += x
+        }
+        if (d == 2) for (i in used.indices) for (j in i + 1 until used.size) {
+            val p = used[i]; val q = used[j]
+            val det = jac[p][0] * jac[q][1] - jac[p][1] * jac[q][0]
+            if (abs(det) < 1e-9) continue
+            val rp = -s0[p] + jac[p][0] * x0[0] + jac[p][1] * x0[1]
+            val rq = -s0[q] + jac[q][0] * x0[0] + jac[q][1] * x0[1]
+            val x = doubleArrayOf((rp * jac[q][1] - jac[p][1] * rq) / det, (jac[p][0] * rq - rp * jac[q][0]) / det)
+            if (ok(x)) cands += x
+        }
+        val best = cands.minByOrNull { c -> (0 until d).sumOf { (c[it] - t[it]) * (c[it] - t[it]) } } ?: x0
+        return at(best)
+    }
+
+    /** Ramka [g] (po ruchu uchwytu [h]) doprowadzona do proporcji [ratio] przez rozszerzenie: kotwica pozostaje w miejscu. */
+    private fun toRatio(g: CropFrame, h: CropHandle, ratio: Float?, min2: Float): CropFrame {
+        if (ratio == null || ratio <= 0f) return g
+        var w = g.hw * 2f; var t = g.hh * 2f
+        if (h.sx != 0 && h.sy != 0) { if (w / t > ratio) t = w / ratio else w = t * ratio }
+        else if (h.sx != 0) t = w / ratio
+        else w = t * ratio
+        val grow = max(1f, max(min2 / w, min2 / t))
+        w *= grow; t *= grow
+        // kotwica: przeciwległy bok (narożnik) w osiach ramki; dla uchwytu bocznego druga oś rośnie symetrycznie
+        val cu = if (h.sx != 0) h.sx * (w * 0.5f - g.hw) else 0f
+        val cv = if (h.sy != 0) h.sy * (t * 0.5f - g.hh) else 0f
+        val c = cos(g.a); val sn = sin(g.a)
+        return CropFrame(g.cx + cu * c - cv * sn, g.cy + cu * sn + cv * c, w * 0.5f, t * 0.5f, g.a)
     }
 
     private fun lerp(a: CropFrame, b: CropFrame, t: Float) = CropFrame(

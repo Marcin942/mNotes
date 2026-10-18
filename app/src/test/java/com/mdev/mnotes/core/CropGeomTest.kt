@@ -77,6 +77,36 @@ class CropGeomTest {
         assertEquals(anchor[0], k[0], 0.05f); assertEquals(anchor[1], k[1], 0.05f)
     }
 
+    @Test fun cornerPressedToOneEdgeStillSlidesAlongIt() {
+        // prawy dolny narożnik stoi na prawym brzegu pliku; palec jedzie dalej w prawo, ale też w górę i w dół
+        val f = CropFrame(3000f, 1500f, 1000f, 600f, 0f)
+        val up = CropGeom.resized(f, CropHandle.BR, iw + 500f, 1700f, iw, ih, 30f)
+        assertEquals(iw, up.cx + up.hw, 1e-2f)
+        assertEquals(1700f, up.cy + up.hh, 1e-2f)
+        val down = CropGeom.resized(f, CropHandle.BR, iw + 500f, 2800f, iw, ih, 30f)
+        assertEquals(iw, down.cx + down.hw, 1e-2f)
+        assertEquals(2800f, down.cy + down.hh, 1e-2f)
+        assertEquals(f.cx - f.hw, down.cx - down.hw, 1e-2f)
+        assertEquals(f.cy - f.hh, down.cy - down.hh, 1e-2f)
+    }
+
+    @Test fun tiltedCornerAtTheEdgeStillMovesAcrossIt() {
+        val f = CropFrame(2000f, 1500f, 800f, 600f, deg(10f))
+        val wall = CropGeom.resized(f, CropHandle.BR, 9e6f, 1800f, iw, ih, 20f)
+        assertTrue(CropGeom.fits(wall, iw, ih))
+        val slid = CropGeom.resized(wall, CropHandle.BR, 9e6f, 2400f, iw, ih, 20f)
+        assertTrue(CropGeom.fits(slid, iw, ih))
+        val a = CropGeom.corners(wall); val b = CropGeom.corners(slid)
+        assertTrue("narożnik ma jechać dalej, a stoi", abs(b[4] - a[4]) + abs(b[5] - a[5]) > 20f)
+    }
+
+    @Test fun ratioLockedCornerStopsAtWallButNeverLeavesImage() {
+        val f = CropFrame(3000f, 1500f, 800f, 600f, 0f)
+        val g = CropGeom.resized(f, CropHandle.BR, iw + 800f, 2900f, iw, ih, 30f, 4f / 3f)
+        assertTrue(CropGeom.fits(g, iw, ih))
+        assertEquals(4f / 3f, g.hw / g.hh, 1e-3f)
+    }
+
     @Test fun resizeShrinksDownToMinimumOnly() {
         val f = CropFrame(2000f, 1500f, 800f, 600f, 0f)
         val g = CropGeom.resized(f, CropHandle.R, -9e6f, 1500f, iw, ih, 30f)

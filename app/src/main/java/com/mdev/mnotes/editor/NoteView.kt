@@ -412,7 +412,9 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
     override fun pageChanged(pageId: String, edit: ElementsEdit?) {
         val page = doc.page(pageId) ?: return
         if (edit == null) { invalidate(); return }   // zmiana wzoru/papieru: wymiary bez zmian, więc układ stron zostaje
-        cache.onChanged(page, edit)
+        val dirty = eraseApplyDirty?.takeIf { eraseApplyPage == pageId }
+        eraseApplyDirty = null; eraseApplyPage = null
+        cache.onChanged(page, edit, dirty)
         invalidate()
     }
 
@@ -2102,7 +2104,7 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
 
     private fun eraseDown() {
         eraseStart.clear(); eraseLastPage = -1
-        erasePending = null; erasePendingPage = null; eraseNextApply = 0L
+        erasePending = null; erasePendingPage = null; eraseNextApply = 0L; eraseDirty = Bounds.EMPTY
         if (settings.eraserMode == 2) { val pi = pageIdxAt(curX, curY); if (pi < 0) { mode = Mode.IGNORE; return }; lPage = pi; ln = 0; addLasso(pgX(pi, curX), pgY(pi, curY)) }
         else eraseTo(curX, curY)
         if (ed.sel != null) ed.clearSel()
@@ -2136,6 +2138,12 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
         if (wait <= 0) flushErase() else if (!eraseFlushPosted) { eraseFlushPosted = true; postDelayed(eraseFlushRun, wait) }
     }
 
+    /** Suma obszarów zmienionych przez kroki gumki, które jeszcze nie trafiły do dokumentu. */
+    private var eraseDirty = Bounds.EMPTY
+    /** Obszar przekazywany do przemalowania w [pageChanged] na czas [flushErase]. */
+    private var eraseApplyDirty: Bounds? = null
+    private var eraseApplyPage: String? = null
+
     private val eraseFlushRun = Runnable { eraseFlushPosted = false; flushErase() }
 
     /**
@@ -2151,7 +2159,10 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
         val page = doc.page(pid) ?: return
         val t0 = SystemClock.uptimeMillis()
         val cur = doc.content(page)
+        // Przemalowujemy tylko to, co gumka naprawdę zmieniła, a nie całe prostokąty przeciętych kresek.
+        eraseApplyDirty = eraseDirty; eraseApplyPage = pid; eraseDirty = Bounds.EMPTY
         doc.applyElements(pid, ElementsEdit.diff(cur, PageContent.of(work)))
+        eraseApplyDirty = null; eraseApplyPage = null
         val cost = SystemClock.uptimeMillis() - t0
         eraseNextApply = if (cost <= ERASE_FREE_MS) 0L else t0 + cost + (cost * ERASE_REST).toLong().coerceAtMost(ERASE_MAX_WAIT_MS)
     }
@@ -2171,10 +2182,13 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
             if (!skip) {
                 if (pixel) {
                     if (e is Stroke) {
-                        val pieces = EraseMath.erasePartial(e, px, py, r)
-                        if (pieces != null) { hit = true; repl = pieces.map { Stroke(Ids.next(), e.pen, e.color, e.width, it, false, line = e.line) } }
+                        val res = EraseMath.eraseLocal(e, px, py, r)
+                        if (res != null) {
+                            hit = true; eraseDirty = eraseDirty.union(res.dirty)
+                            repl = res.pieces.map { Stroke(Ids.next(), e.pen, e.color, e.width, it, false, line = e.line) }
+                        }
                     }
-                } else if (EraseMath.hitsElement(e, px, py, r)) hit = true
+                } else if (EraseMath.hitsElement(e, px, py, r)) { hit = true; eraseDirty = eraseDirty.union(e.bounds) }
             }
             if (hit && out == null) { out = ArrayList(src.size); for (j in 0 until i) out.add(src[j]) }
             if (out != null) { if (!hit) out.add(e) else if (repl != null) out.addAll(repl) }

@@ -89,6 +89,8 @@ class PageCache(
     private var baseBytes = 0L
     @Volatile private var closed = false
     @Volatile private var frame = 0L
+    /** Wygładzony czas naniesienia zmiany na jedną bitmapę w miejscu (ns), do budżetu w [onChanged]. */
+    private var patchNs = 0L
 
     private var lastZoom = 0f
     private var zoomChangedAt = 0L
@@ -378,8 +380,10 @@ class PageCache(
         if (!alive) return
         val page = t.page
         if (bmp == null) { t.retryAt = System.nanoTime() + RETRY_NS; return }
-        // Zmiana w trakcie renderu: wynik odrzucony (nowa kreska mogłaby zniknąć na chwilę) — kolejna klatka zażąda ponownie.
-        if (page != null && ver == page.version) {
+        // Wynik starszy od tego, co bitmapa już ma (np. świeża kreska naniesiona w miejscu), jest odrzucany, żeby nic
+        // nie zniknęło na chwilę. Nowszy, choć już nieaktualny, jest przyjmowany: przy ciągłej gumce wersja strony
+        // ucieka szybciej, niż wątki renderują, a bez tego kafelek pominięty przy łataniu stałby do końca ruchu.
+        if (page != null && (ver == page.version || ver > t.version || t.bmp == null)) {
             adopt(t, bmp, bg); t.bscale = baseSc; t.version = ver; t.readyAt = System.nanoTime()
             trim()
         }
@@ -388,20 +392,55 @@ class PageCache(
 
     // ───────────────────────── edycje ─────────────────────────
 
-    /** Wołane z wątku UI po zmianie zawartości lub wyglądu strony: nanosi świeże zmiany na bitmapy w miejscu. */
-    fun onChanged(page: PageState, edit: ElementsEdit?) {
+    /**
+     * Wołane z wątku UI po zmianie zawartości lub wyglądu strony: nanosi świeże zmiany na bitmapy w miejscu.
+     * [dirty] zawęża przemalowanie, gdy wołający wie dokładniej niż [ElementsEdit.dirtyBounds], co się zmieniło (gumka).
+     *
+     * Dopisana kreska trafia na wszystkie bitmapy od razu. Inna zmiana (gumka, przesunięcie) jest nanoszona w miejscu
+     * tylko w budżecie [PATCH_BUDGET_NS]: najpierw widoczne kafelki, potem baza. Reszta zostaje nieaktualna i dostaje
+     * nową bitmapę z wątków roboczych, więc ciężka strona (np. nakładające się zakreślacze) pokazuje zmianę z
+     * opóźnieniem, ale nie zatrzymuje wątku UI.
+     */
+    fun onChanged(page: PageState, edit: ElementsEdit?, dirty: Bounds? = null) {
         val e = entries[page.id] ?: return
         val content = page.content ?: return
         if (edit == null) return
         val n = content.size
         val appended = edit.removed.isEmpty() && edit.added.isNotEmpty() && edit.added.all { it.index >= n - edit.added.size }
+        val area = dirty?.takeUnless { it.isEmpty } ?: edit.dirtyBounds
         val spec = page.spec
-        patch(e.base, page, edit, appended, spec.w, spec.h, e.base.bscale, 0f, 0f)
+        if (appended) {
+            patch(e.base, page, edit, area, true, spec.w, spec.h, e.base.bscale, 0f, 0f)
+            for (lv in e.levels) for (t in lv.tiles.values)
+                patch(t, page, edit, area, true, spec.w, spec.h, lv.scale, t.ix * TileGrid.TILE / lv.scale, t.iy * TileGrid.TILE / lv.scale)
+            return
+        }
+        val t0 = System.nanoTime()
+        var patched = 0
+        var skipped = 0
+        fun tryPatch(t: Tile, sc: Float, ox: Float, oy: Float) {
+            if (t.bmp == null || t.version != page.version - 1) return
+            val vis = t.stamp >= frame - STALE_FRAMES
+            val tw = if (t.level == null) spec.w else t.bmp!!.width / sc
+            val th = if (t.level == null) spec.h else t.bmp!!.height / sc
+            if (!area.inflate(2.5f / sc).intersects(ox, oy, ox + tw, oy + th)) { t.version = page.version; return }
+            // Niewidoczne bitmapy nie są warte czasu wątku UI: odświeżą się w tle, gdy znów będą potrzebne.
+            if (!vis || System.nanoTime() - t0 + patchNs > PATCH_BUDGET_NS) { skipped++; return }
+            val s0 = System.nanoTime()
+            patch(t, page, edit, area, false, spec.w, spec.h, sc, ox, oy)
+            patchNs = (patchNs * 0.7f + (System.nanoTime() - s0) * 0.3f).toLong()
+            patched++
+        }
         for (lv in e.levels) for (t in lv.tiles.values)
-            patch(t, page, edit, appended, spec.w, spec.h, lv.scale, t.ix * TileGrid.TILE / lv.scale, t.iy * TileGrid.TILE / lv.scale)
+            if (t.stamp >= frame - STALE_FRAMES) tryPatch(t, lv.scale, t.ix * TileGrid.TILE / lv.scale, t.iy * TileGrid.TILE / lv.scale)
+        tryPatch(e.base, e.base.bscale, 0f, 0f)
+        for (lv in e.levels) for (t in lv.tiles.values)
+            if (t.stamp < frame - STALE_FRAMES) tryPatch(t, lv.scale, t.ix * TileGrid.TILE / lv.scale, t.iy * TileGrid.TILE / lv.scale)
+        // Gdy wszystko poszło do tła, oszacowanie maleje, żeby po chwili znów spróbować łatania w miejscu.
+        if (patched == 0 && skipped > 0) patchNs = (patchNs * 0.6f).toLong()
     }
 
-    private fun patch(t: Tile, page: PageState, edit: ElementsEdit, appended: Boolean, pw: Float, ph: Float, sc: Float, ox: Float, oy: Float) {
+    private fun patch(t: Tile, page: PageState, edit: ElementsEdit, area: Bounds, appended: Boolean, pw: Float, ph: Float, sc: Float, ox: Float, oy: Float) {
         val bmp = t.bmp ?: return
         if (t.version != page.version - 1) return   // nieaktualny: zostanie wyrenderowany od nowa
         val content = page.content ?: return
@@ -417,7 +456,7 @@ class PageCache(
                 if (p.element.bounds.inflate(1.5f / sc).intersects(tb)) ui.drawElement(c, doc.id, p.element, sc, false, spec.darkPaper)
             }
         } else {
-            val d = edit.dirtyBounds.inflate(2.5f / sc)
+            val d = area.inflate(2.5f / sc)
             val r = Bounds(maxOf(0f, d.l, ox), maxOf(0f, d.t, oy), minOf(spec.w, d.r, tb.r), minOf(spec.h, d.b, tb.b))
             if (r.isEmpty) { t.version = page.version; return }
             c.save()
@@ -522,6 +561,8 @@ class PageCache(
         const val STALE_FRAMES = 2L
         const val SETTLE_NS = 130_000_000L
         const val RETRY_NS = 1_500_000_000L
+        /** Czas wątku UI na jedno naniesienie zmiany w miejscu; więcej oznacza gubienie klatek przy ruchu rysika. */
+        const val PATCH_BUDGET_NS = 4_000_000L
         private const val IDLE = 0
         private const val QUEUED = 1
         private const val RUNNING = 2

@@ -479,6 +479,7 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
         val rvb = Bounds(vb.l - mx, vb.t - my, vb.r + mx, vb.b + my)
         val reqRange = if (mode == Mode.NAV) range else layout.visibleRange(rvb)
         cache.configure(settings.renderQuality)
+        ed.crop.let { cr -> if (cr == null) cache.hide(null, 0) else cache.hide(cr.pageId, cr.imageId) }
         cache.beginFrame(zoom, (vb.l + vb.r) / 2f, (vb.t + vb.b) / 2f)
         shadowPaint.color = if (darkUi) 0x66000000 else 0x24000000
         borderPaint.color = if (darkUi) 0x33FFFFFF else 0x14000000
@@ -533,7 +534,7 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
         if (!cache.draw(c, page, vis, req, r.l, r.t, zoom)) {
             renderer.drawPaper(c, spec, zoom, null)
             val content = page.content
-            if (content != null) renderer.drawElements(c, doc.id, content, 0, vis, zoom, false, spec.darkPaper)
+            if (content != null) renderer.drawElements(c, doc.id, cache.visible(page.id, content), 0, vis, zoom, false, spec.darkPaper)
         }
         c.restore()
         c.drawRect(r.l, r.t, r.r, r.b, borderPaint)
@@ -1780,6 +1781,9 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
     private val cropMatrix = Matrix()
     private val cropOut = Path()
     private val cropIn = Path()
+
+    /** Odkrywa przycinany obraz bez odświeżania kafelków: zaraz potem zatwierdzenie przycięcia nanosi go łatą. */
+    fun releaseCropHide() = cache.hide(null, 0, refresh = false)
 
     private fun drawCrop(c: Canvas) {
         val s = ed.crop ?: return

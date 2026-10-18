@@ -660,6 +660,7 @@ class Editor(val ctx: Context, val nbId: String) {
         if (out.crop == img.crop && out.cx == img.cx && out.cy == img.cy && out.w == img.w && out.h == img.h && out.rot == img.rot) { view?.invalidate(); return }
         val at = doc.content(page).elements.indexOfFirst { it.id == img.id }
         if (at < 0) return
+        view?.releaseCropHide()
         exec(DocEdit.Elements(page.id, ElementsEdit(listOf(Placed(at, img)), listOf(Placed(at, out)))))
         select(page.id, setOf(img.id))
         view?.invalidate()

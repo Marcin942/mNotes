@@ -117,6 +117,29 @@ class PageCache(
     /** Czy kafelki mają dokładną skalę widoku, więc origo strony warto przyciąć do pikseli (tylko tryby kafelkowe). */
     val pixelExact get() = settled && profile.tiled
 
+    /** Element (strona, id), którego nie rysujemy: przycinany obraz widać wtedy tylko w edytorze przycinania. Czysto graficzne, dokument się nie zmienia. */
+    @Volatile private var hidden: Pair<String, Int>? = null
+
+    /** [refresh] = false przy odkrywaniu tuż przed edycją dokumentu: łata z tej edycji sama naniesie element, więc kafelki nie muszą się renderować od nowa (obraz nie znika na chwilę). */
+    fun hide(pageId: String?, elementId: Int, refresh: Boolean = true) {
+        val now = if (pageId == null) null else pageId to elementId
+        val before = hidden
+        if (now == before) return
+        hidden = now
+        if (!refresh) return
+        for (id in listOfNotNull(before?.first, now?.first).distinct()) entries[id]?.let { e ->
+            e.base.version = -1; e.base.pending = Bounds.EMPTY
+            for (lv in e.levels) for (t in lv.tiles.values) { t.version = -1; t.pending = Bounds.EMPTY }
+        }
+        onReady()
+    }
+
+    /** Zawartość strony bez ukrytego elementu. */
+    fun visible(pageId: String, content: PageContent): PageContent {
+        val h = hidden ?: return content
+        return if (h.first != pageId) content else PageContent.of(content.elements.filter { it.id != h.second })
+    }
+
     /** Kod aktywnego profilu jakości. */
     val quality get() = profile.code
 
@@ -343,10 +366,11 @@ class PageCache(
             val page = t.page
             val ver = t.ver
             val baseSc = t.rscale
+            val hid = hidden
             var out: Bitmap? = null
             var bg: Bitmap? = null
             if (page != null) runCatching {
-                val content = doc.content(page)
+                val content = visible(page.id, doc.content(page))
                 val spec = page.spec
                 if (t.level == null) {
                     val w = TileGrid.pixels(spec.w, baseSc); val h = TileGrid.pixels(spec.h, baseSc)
@@ -374,7 +398,7 @@ class PageCache(
                 }
             }
             val res = out; val resBg = bg
-            main.post { finish(t, ver, baseSc, res, resBg) }
+            main.post { finish(t, ver, baseSc, res, resBg, hid) }
         }
     }
 
@@ -384,7 +408,7 @@ class PageCache(
         return entries[e.id] === e && (lv == null || (e.levels.contains(lv) && lv.tiles[key(t.ix, t.iy)] === t))
     }
 
-    private fun finish(t: Tile, ver: Int, baseSc: Float, bmp: Bitmap?, bg: Bitmap?) {
+    private fun finish(t: Tile, ver: Int, baseSc: Float, bmp: Bitmap?, bg: Bitmap?, hid: Pair<String, Int>?) {
         t.state = IDLE
         if (closed) return
         if (!alive(t)) return
@@ -399,6 +423,7 @@ class PageCache(
             // Podmiana bitmapy, która już była, nie przenika: spod przenikania wyzierałaby baza w innej wersji.
             val swap = t.bmp != null && t.version >= page.contentVersion
             adopt(t, bmp, bg); t.bscale = baseSc; t.version = ver; t.readyAt = if (swap) 0L else System.nanoTime()
+            if (hid != hidden) t.version = -1   // ukrycie zmieniło się w trakcie renderu: kafelek do odnowienia
             t.pending = Bounds.EMPTY
             trim()
         }
@@ -470,7 +495,7 @@ class PageCache(
     private fun schedulePatch(t: Tile, page: PageState) {
         if (!t.inflight.isEmpty || t.pending.isEmpty) return
         val bmp = t.bmp ?: run { t.pending = Bounds.EMPTY; return }
-        val content = page.content ?: return
+        val content = visible(page.id, page.content ?: return)
         val spec = page.spec
         val level = t.level
         val sc = level?.scale ?: t.bscale
@@ -528,7 +553,7 @@ class PageCache(
     private fun patch(t: Tile, page: PageState, edit: ElementsEdit, area: Bounds, appended: Boolean, pw: Float, ph: Float, sc: Float, ox: Float, oy: Float) {
         val bmp = t.bmp ?: return
         if (t.version != page.version - 1) return   // nieaktualny: zostanie wyrenderowany od nowa
-        val content = page.content ?: return
+        val content = visible(page.id, page.content ?: return)
         val spec = page.spec
         val changed = if (appended) edit.dirtyBounds else area
         if (!t.inflight.isEmpty) t.touched = t.touched.union(changed)
@@ -542,7 +567,7 @@ class PageCache(
         c.translate(-ox, -oy)
         if (appended) {
             for (p in edit.added.sortedBy { it.index }) {
-                if (p.element.bounds.inflate(1.5f / sc).intersects(tb)) ui.drawElement(c, doc.id, p.element, sc, false, spec.darkPaper)
+                if (p.element.bounds.inflate(1.5f / sc).intersects(tb) && hidden != page.id to p.element.id) ui.drawElement(c, doc.id, p.element, sc, false, spec.darkPaper)
             }
         } else {
             val d = area.inflate(2.5f / sc)

@@ -24,6 +24,12 @@ i stylu kodu są wspólne i leżą w mChochliku (jedno źródło, zmiana działa
   snapshotów i nie wpisuj tych wersji ręcznie jako obejścia.
 - **Zakres i stan prac:** `docs/features/BACKLOG.md` (jedyne źródło prawdy o zakresie) i `docs/STAN-PRACY.md`
   (zacznij tutaj po wznowieniu sesji; aktualizuj oba na końcu partii zmian).
+- **Formaty przyjmowane przez mNotes („Udostępnij”, „Otwórz w aplikacji”, importy).** Decyzja właściciela (2026-10-18):
+  do mNotes mogą trafić różne zdjęcia, dokumenty, `.sdocx` (Samsung Notes) i podobne pliki, **we wszystkich używanych
+  formatach**. Wybierając, jakie typy plików aplikacja przyjmuje (filtry intencji w `AndroidManifest.xml`, rozpoznanie
+  w `FileKinds`/`ImportProbe`, selektory plików), nie zawężaj ich do kilku typów „na oko”: przy SEND Android dopasowuje
+  tylko typ MIME, a aplikacje źródłowe podają własne albo ogólne typy. Domyślnie przyjmuj szeroko (`*/*`), a rodzaj pliku
+  ustalaj po zawartości; zawężaj tylko po zmierzeniu, jaki typ naprawdę przychodzi (BACKLOG LIB-017).
 - **Ograniczenia aplikacji:** w pełni offline (brak INTERNET, brak telemetrii), brak nowych zależności Gradle bez
   zgody właściciela. Czysta logika leży w `app/src/main/java/com/mdev/mnotes/core/` i ma testy jednostkowe.
 - **Tablet właściciela (adb `R5GL12C1HMT`) jest realnie używany**, nie jest sprzętem testowym. Zasady (sprawdzenie

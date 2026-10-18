@@ -69,7 +69,8 @@
             <!-- Cel udostępniania („Udostępnij” → mNotes): jeden plik albo kilka naraz. Przy SEND system dopasowuje tylko
                  typ MIME (nazwy pliku nie widzi), a Samsung Notes podaje .sdocx pod własnym, nieznanym nam typem, więc na
                  razie przyjmujemy każdy typ; rodzaj pliku ustala import po zawartości, a obcy plik kończy się komunikatem.
-                 Do zawężenia po odczytaniu typu z dymku (BACKLOG LIB-017). -->
+                 Do zawężenia po odczytaniu typu z dymku (BACKLOG LIB-017).
+                 Zasada właściciela: przyjmujemy zdjęcia, dokumenty, .sdocx itp. we wszystkich używanych formatach (CLAUDE.md). -->
             <intent-filter>
                 <action android:name="android.intent.action.SEND" />
                 <action android:name="android.intent.action.SEND_MULTIPLE" />

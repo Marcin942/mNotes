@@ -313,6 +313,7 @@ fun EditorScreen(ed: Editor, tabs: TabsCtl, onExit: () -> Unit, onSettings: () -
                     // Panele i okienka kotwiczą się do krawędzi strony, tuż przy pasku, z którego wyszły.
                     Box(Modifier.fillMaxSize().imePadding()) {
                         // Pod panelami: otwarty panel zasłania kapsułę, a pierwsze dotknięcie strony go zamyka.
+                        if (ed.pipette != null) Box(Modifier.align(Alignment.TopCenter).padding(top = 50.dp).panelEnter()) { PipetteCard(set) }
                         if (set.undoDock != 0) UndoCapsule(ed, Modifier.align(undoCorner(set.undoDock)).padding(8.dp).padding(start = if (!ed.chrome && set.undoDock == 1) 48.dp else 0.dp))
                         if (ed.chrome) {
                             panel?.takeIf { it == Panel.PEN || it == Panel.ERASER || it == Panel.LASSO || it == Panel.TAPE || it == Panel.PAINTER }?.let { p ->
@@ -922,6 +923,24 @@ private fun ToolPanel(ed: Editor, set: com.mdev.mnotes.data.Settings, panel: Pan
                     Text(T.t("Ctrl+A zaznacza wszystko na stronie.", "Ctrl+A selects everything on the page."), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
+        }
+    }
+}
+
+/** Karta widoczna podczas pobierania koloru: wybór, czy pipeta bierze kolor widoczny na stronie, czy pierwotny kolor kreski. */
+@Composable
+private fun PipetteCard(set: com.mdev.mnotes.data.Settings) {
+    FloatingCard(Modifier.width(320.dp)) {
+        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            SectionLabel(T.t("Pobierany kolor", "Colour to pick"))
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Chip(T.t("Rzeczywisty", "As seen"), !set.pipetteOriginal, { set.pipetteOriginal = false })
+                Chip(T.t("Pierwotny", "Original"), set.pipetteOriginal, { set.pipetteOriginal = true })
+            }
+            Text(
+                if (set.pipetteOriginal) T.t("Zakreślacz da swój kolor sprzed rozjaśnienia (przezroczystości). Poza kreskami i wypełnieniami pobierze kolor ze strony.", "A highlighter gives its own colour before the transparency lightens it. Away from strokes and fills it picks the colour from the page.")
+                else T.t("Kolor dokładnie taki, jaki widać na stronie — zakreślacz wyjdzie jaśniejszy.", "The colour exactly as seen on the page — a highlighter comes out lighter."),
+                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }

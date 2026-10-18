@@ -93,7 +93,9 @@ class Settings(ctx: Context) {
     var eraserMode by Pref("eraser.mode", 0)         // 0 obiektowa, 1 pikselowa
     var painterMode by Pref("painter.mode", 0)       // pędzel formatu: 0 obiekty pod rysikiem, 1 lasso
     var fillCloseGaps by Pref("fill.close_gaps", false) // wiaderko domyka szpary węższe niż ok. 2 pt
-    var pipetteKeep by Pref("pipette.keep", false)  // pobrany pipetą kolor zostaje w zestawie, gdy listwa nie jest pełna; domyślnie znika po zmianie koloru
+    var pipetteKeep by Pref("pipette.keep", false)
+    /** Pipeta na zakreślaczu: false = kolor widoczny na stronie (po multiply), true = kolor pierwotny kreski. */
+    var pipetteOriginal by Pref("pipette.original", false)  // pobrany pipetą kolor zostaje w zestawie, gdy listwa nie jest pełna; domyślnie znika po zmianie koloru
     var eraserSize by Pref("eraser.size", 14f)       // promień w pt
     var eraserKeepHighlighter by Pref("eraser.ignore_highlighter", false)
     var lassoRect by Pref("lasso.rect", false)

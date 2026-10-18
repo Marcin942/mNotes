@@ -10,6 +10,7 @@ import android.graphics.Paint
 import android.graphics.Typeface
 import android.graphics.Path
 import android.graphics.RectF
+import android.os.SystemClock
 import android.view.HapticFeedbackConstants
 import android.view.MotionEvent
 import android.view.VelocityTracker
@@ -178,6 +179,10 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
     // gumka
     private val eraseStart = LinkedHashMap<String, PageContent>()
     private var eraseLastPage = -1
+    private var erasePending: List<Element>? = null
+    private var erasePendingPage: String? = null
+    private var eraseNextApply = 0L
+    private var eraseFlushPosted = false
     private var eraseLx = 0f; private var eraseLy = 0f
 
     // lasso
@@ -1443,7 +1448,19 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
         if (pi < 0) return 0
         val page = doc.pages[pi]; val spec = page.spec
         val col = cache.pixel(page, pgX(pi, sx), pgY(pi, sy))
-        return if (col == 0) 0 else col or 0xFF000000.toInt()
+        if (col == 0) return 0
+        if (settings.pipetteOriginal) originalColorAt(page, pgX(pi, sx), pgY(pi, sy))?.let { return it }
+        return col or 0xFF000000.toInt()
+    }
+
+    /** Pierwotny kolor kreski albo wypełnienia leżącego na wierzchu pod punktem strony (bez rozjaśnienia przez przezroczystość); null, gdy nic tam nie ma. */
+    private fun originalColorAt(page: PageState, px: Float, py: Float): Int? {
+        val r = 2f * dp / zoom
+        val top = doc.content(page).elements.lastOrNull {
+            (it is Stroke || it is FillEl) && it.bounds.inflate(r + 1f).contains(px, py) && EraseMath.hitsElement(it, px, py, r)
+        }
+        val c = when (top) { is Stroke -> top.color; is FillEl -> top.color; else -> return null }
+        return c or 0xFF000000.toInt()
     }
 
     private fun pickDone() {
@@ -2090,6 +2107,7 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
 
     private fun eraseDown() {
         eraseStart.clear(); eraseLastPage = -1
+        erasePending = null; erasePendingPage = null; eraseNextApply = 0L
         if (settings.eraserMode == 2) { val pi = pageIdxAt(curX, curY); if (pi < 0) { mode = Mode.IGNORE; return }; lPage = pi; ln = 0; addLasso(pgX(pi, curX), pgY(pi, curY)) }
         else eraseTo(curX, curY)
         if (ed.sel != null) ed.clearSel()
@@ -2101,10 +2119,12 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
         if (pi < 0) { eraseLastPage = -1; return }
         val px = pgX(pi, sx); val py = pgY(pi, sy)
         val r = settings.eraserSize
-        // Wszystkie kroki jednego ruchu liczone w pamięci, a do dokumentu trafia jedna zmiana: przy małej gumce kroków są setki.
+        // Kroki liczone są w pamięci na roboczej liście; do dokumentu (a więc do przemalowania bitmap) trafiają
+        // rzadziej, gdy przemalowanie jest drogie, bo to ono, a nie liczenie, zacina aplikację.
         val page = doc.pages[pi]
+        if (erasePendingPage != null && erasePendingPage != page.id) flushErase()
         val cur = doc.content(page)
-        var work: List<Element> = cur.elements
+        var work: List<Element> = erasePending ?: cur.elements
         var changed = false
         if (eraseLastPage == pi) {
             val steps = ceil(hypot(px - eraseLx, py - eraseLy) / (r * 0.6f)).toInt().coerceAtLeast(1)
@@ -2116,7 +2136,29 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
         eraseLastPage = pi; eraseLx = px; eraseLy = py
         if (!changed) return
         eraseStart.getOrPut(page.id) { cur }
-        doc.applyElements(page.id, ElementsEdit.diff(cur, PageContent.of(work)))
+        erasePending = work; erasePendingPage = page.id
+        val wait = eraseNextApply - SystemClock.uptimeMillis()
+        if (wait <= 0) flushErase() else if (!eraseFlushPosted) { eraseFlushPosted = true; postDelayed(eraseFlushRun, wait) }
+    }
+
+    private val eraseFlushRun = Runnable { eraseFlushPosted = false; flushErase() }
+
+    /**
+     * Przenosi roboczy wynik gumki do dokumentu i mierzy, ile kosztowało przemalowanie: następne może nastąpić
+     * dopiero po kilkukrotności tego czasu (najwyżej [ERASE_MAX_WAIT_MS]), więc na ciężkiej stronie gumka
+     * odświeża się rzadziej, ale reszta aplikacji (przewijanie, pasek, rysik) ma wolny wątek.
+     */
+    private fun flushErase() {
+        val work = erasePending ?: return
+        val pid = erasePendingPage ?: return
+        erasePending = null; erasePendingPage = null
+        removeCallbacks(eraseFlushRun); eraseFlushPosted = false
+        val page = doc.page(pid) ?: return
+        val t0 = SystemClock.uptimeMillis()
+        val cur = doc.content(page)
+        doc.applyElements(pid, ElementsEdit.diff(cur, PageContent.of(work)))
+        val cost = SystemClock.uptimeMillis() - t0
+        eraseNextApply = if (cost <= ERASE_FREE_MS) 0L else t0 + cost + (cost * ERASE_REST).toLong().coerceAtMost(ERASE_MAX_WAIT_MS)
     }
 
     /** Jeden krok gumki w punkcie (px, py); null = nic nie zmienił. Lista powstaje dopiero przy pierwszym trafieniu. */
@@ -2146,6 +2188,7 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
     }
 
     private fun eraseUp(cancel: Boolean) {
+        flushErase(); eraseNextApply = 0L
         if (settings.eraserMode == 2) {
             val pi = lPage
             if (!cancel && ln >= 3 && pi in doc.pages.indices) {
@@ -2532,5 +2575,9 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
         private val TAP_SLOPS_DP = floatArrayOf(8f, 14f, 22f)
         /** Promień pędzla formatu w trybie obiektowym (dp ekranu). */
         private const val PAINT_R_DP = 7f
+        /** Gumka: przemalowanie do tylu ms nie wymusza przerw; dłuższe czeka ERASE_REST × własny czas (najwyżej ERASE_MAX_WAIT_MS). */
+        private const val ERASE_FREE_MS = 8L
+        private const val ERASE_REST = 2f
+        private const val ERASE_MAX_WAIT_MS = 250L
     }
 }

@@ -210,4 +210,31 @@ class FloodFillTest {
         val rings = FloodFill.fill(emptyList(), 600f, 800f, 10f, 10f)!!
         assertEquals(4, rings.single().size / 2)
     }
+
+    /** Domykanie szpar nie może zabierać kolorowi niczego, co sięga bez niego (ostre rogi zamkniętych figur). */
+    @Test
+    fun closingGapsNeverFillsLessThanPlainFillOnClosedShapes() {
+        val rnd = java.util.Random(7)
+        repeat(100) { k ->
+            val nv = 3 + rnd.nextInt(4)
+            val w = 1f + rnd.nextInt(4)
+            val ang = (0 until nv).map { rnd.nextDouble() * 2 * PI }.sorted()
+            val vs = ang.map { a -> val r = 60f + rnd.nextFloat() * 140f; floatArrayOf(300f + r * cos(a).toFloat(), 400f + r * sin(a).toFloat()) }
+            val strokes = (0 until nv).map { i ->
+                val a = vs[i]; val b = vs[(i + 1) % nv]
+                line(i + 1, a[0], a[1], b[0], b[1]).let { Stroke(it.id, it.pen, it.color, w, it.pts) }
+            }
+            val plain = fillOf(FloodFill.fill(strokes, 600f, 800f, 300f, 400f, false) ?: return@repeat)
+            val closed = fillOf(FloodFill.fill(strokes, 600f, 800f, 300f, 400f, true) ?: return@repeat)
+            var y = 0f
+            while (y < 800f) {
+                var x = 0f
+                while (x < 600f) {
+                    if (plain.containsPoint(x, y)) assertTrue("figura $k: brak koloru w ($x, $y) przy domykaniu szpar", closed.containsPoint(x, y))
+                    x += 1f
+                }
+                y += 1f
+            }
+        }
+    }
 }

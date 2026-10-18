@@ -41,6 +41,9 @@ object FloodFill {
      */
     private const val SLIVER_REACH = 24
 
+    /** Wolna kępa poza rdzeniem nie większa niż tyle komórek jest ziarnem rastra, a nie osobnym obszarem. */
+    private const val DUST_CELLS = 40
+
     /** Rozstaw próbek przy wygładzaniu konturu, w komórkach. */
     private const val SMOOTH_STEP = 0.5f
 
@@ -152,26 +155,60 @@ object FloodFill {
         val queue = IntArray(n)
         var tail = 0
         for (i in 0 until n) if (!thick[i]) own[i] = if (core[i]) 1 else 2
-        fun isBand(j: Int) = thick[j] && !thin[j]
+        // Drobne wolne kępki poza rdzeniem (zwykle ziarna rastra w zwężającym się klinie) nie są osobnym obszarem:
+        // są pasem zapasu i dostaje je najbliższy obszar, inaczej urywałyby kolor przed czubkiem kąta.
+        val dust = BooleanArray(n)
+        markDust(thick, core, own, gw, gh, dust)
+        fun isBand(j: Int) = (thick[j] && !thin[j]) || dust[j]
+        // 8-spójnie, jak samo wypełnienie: ostry czubek kąta łączy się z resztą obszaru tylko rogami komórek.
         for (i in 0 until n) {
             if (own[i].toInt() == 0) continue
             val cx = i % gw; val cy = i / gw
-            if ((cx > 0 && isBand(i - 1)) || (cx < gw - 1 && isBand(i + 1)) || (cy > 0 && isBand(i - gw)) || (cy < gh - 1 && isBand(i + gw))) queue[tail++] = i
+            var next = false
+            for (dy in -1..1) for (dx in -1..1) {
+                val x = cx + dx; val y = cy + dy
+                if (x in 0 until gw && y in 0 until gh && isBand(y * gw + x)) next = true
+            }
+            if (next) queue[tail++] = i
         }
         var head = 0
         while (head < tail) {
             val i = queue[head++]
             val o = own[i]
             val cx = i % gw; val cy = i / gw
-            fun visit(j: Int) { if (own[j].toInt() == 0 && isBand(j)) { own[j] = o; queue[tail++] = j } }
-            if (cx > 0) visit(i - 1)
-            if (cx < gw - 1) visit(i + 1)
-            if (cy > 0) visit(i - gw)
-            if (cy < gh - 1) visit(i + gw)
+            for (dy in -1..1) for (dx in -1..1) {
+                val x = cx + dx; val y = cy + dy
+                if (x !in 0 until gw || y !in 0 until gh) continue
+                val j = y * gw + x
+                if (own[j].toInt() == 0 && isBand(j)) { own[j] = o; queue[tail++] = j }
+            }
         }
         val region = BooleanArray(n)
         for (i in 0 until n) if (own[i].toInt() == 1) region[i] = true
         return region
+    }
+
+    /** Zaznacza w [dust] komórki wolnych kęp (8-spójnych) poza [core], które mają najwyżej [DUST_CELLS] komórek, i zeruje ich [own]. */
+    private fun markDust(thick: BooleanArray, core: BooleanArray, own: ByteArray, gw: Int, gh: Int, dust: BooleanArray) {
+        val n = thick.size
+        val seen = BooleanArray(n)
+        val queue = IntArray(n)
+        for (s in 0 until n) {
+            if (thick[s] || core[s] || seen[s]) continue
+            var head = 0; var tail = 0
+            seen[s] = true; queue[tail++] = s
+            while (head < tail) {
+                val i = queue[head++]
+                val cx = i % gw; val cy = i / gw
+                for (dy in -1..1) for (dx in -1..1) {
+                    val x = cx + dx; val y = cy + dy
+                    if (x !in 0 until gw || y !in 0 until gh) continue
+                    val j = y * gw + x
+                    if (!thick[j] && !core[j] && !seen[j]) { seen[j] = true; queue[tail++] = j }
+                }
+            }
+            if (tail <= DUST_CELLS) for (k in 0 until tail) { dust[queue[k]] = true; own[queue[k]] = 0 }
+        }
     }
 
     /** Najbliższa (BFS po komórkach wolnych od prawdziwych linii) komórka wolna także od pogrubionych ścian; -1, gdy brak. */

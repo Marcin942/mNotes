@@ -90,7 +90,8 @@ class ImageCutTest {
     fun nextLineGoesToMiddleOfBiggestGap() {
         val im = img()
         assertEquals(0.5f, ImageCut.nextPos(im, true, emptyList())!!, 0f)
-        assertEquals(0.75f, ImageCut.nextPos(im, true, listOf(CutLine(true, 0.5f)))!!, 0f)
+        assertEquals(0.25f, ImageCut.nextPos(im, true, listOf(CutLine(true, 0.5f)))!!, 0f)
+        assertEquals(0.625f, ImageCut.nextPos(im, true, listOf(CutLine(true, 0.25f)))!!, 0f)
         assertEquals(0.5f, ImageCut.nextPos(im, false, listOf(CutLine(true, 0.5f)))!!, 0f)
     }
 

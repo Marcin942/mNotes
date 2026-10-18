@@ -19,7 +19,9 @@ import android.view.ViewConfiguration
 import android.view.animation.DecelerateInterpolator
 import android.widget.OverScroller
 import androidx.input.motionprediction.MotionEventPredictor
+import com.mdev.mnotes.core.edit.CutLine
 import com.mdev.mnotes.core.edit.EraseMath
+import com.mdev.mnotes.core.edit.ImageCut
 import com.mdev.mnotes.core.edit.PipetteMath
 import com.mdev.mnotes.core.geom.Affine
 import com.mdev.mnotes.core.geom.Bounds
@@ -111,7 +113,7 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
     private val tmpMatrix = Matrix()
 
     // — stan wejścia —
-    private enum class Mode { NONE, IGNORE, NAV, TOOL, RULER, PICK }
+    private enum class Mode { NONE, IGNORE, NAV, TOOL, RULER, PICK, CUT }
     private enum class LM { NONE, DRAW, MOVE, SCALE, ROTATE, VERTEX, RESIZE }
 
     private var mode = Mode.NONE
@@ -473,6 +475,7 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
         drawSpace(c)
         drawTapePreview(c)
         drawPicker(c)
+        drawCut(c)
         drawLasso(c)
         drawSelection(c)
         drawShapeLabel(c)
@@ -679,6 +682,7 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
     )
 
     private fun drawSelection(c: Canvas) {
+        if (ed.cut != null) return
         val s = ed.sel ?: return
         val pi = doc.indexOf(s.pageId); if (pi < 0) return
         val cs: FloatArray
@@ -1017,6 +1021,7 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
             mode = Mode.PICK; pickX = ev.x; pickY = ev.y; pickColor = sampleColor(ev.x, ev.y)
             invalidate(); return
         }
+        if (ed.cut != null && cutDown(ev, t)) return
         val rh = if (isStylus(t)) 0 else rulerHit(ev.x, ev.y)
         when {
             t == MotionEvent.TOOL_TYPE_MOUSE -> {
@@ -1060,6 +1065,7 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
             Mode.NAV -> if (isStylus(t) && !navOnly(ev, idx)) { endNavQuiet(); beginTool(ev, idx) } else { navMax = max(navMax, liveCount(ev)); rebase(ev, -1) }
             Mode.RULER -> if (isStylus(t) && !navOnly(ev, idx)) { mode = Mode.NONE; rulerGrab = 0; beginTool(ev, idx) } else rulerRebase(ev, -1)
             Mode.PICK -> {}
+            Mode.CUT -> if (t == MotionEvent.TOOL_TYPE_FINGER && cutPid != -1 && cutType == MotionEvent.TOOL_TYPE_FINGER) { cutAbort(); startNav(ev); removeCallbacks(longPress) }
             Mode.IGNORE, Mode.NONE -> {
                 if (isStylus(t) && !navOnly(ev, idx)) { stylusNear = true; lastStylusT = ev.eventTime; beginTool(ev, idx) }
                 else if (t == MotionEvent.TOOL_TYPE_FINGER && !rejectFinger(ev.eventTime)) {
@@ -1075,6 +1081,7 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
             Mode.NAV -> navMove(ev)
             Mode.RULER -> rulerMove(ev)
             Mode.PICK -> { pickX = ev.x; pickY = ev.y; pickColor = sampleColor(ev.x, ev.y); invalidate() }
+            Mode.CUT -> cutMove(ev)
             Mode.TOOL -> { val idx = ev.findPointerIndex(toolPid); if (idx >= 0) toolMove(ev, idx) }
             else -> {}
         }
@@ -1098,6 +1105,7 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
             Mode.TOOL -> finishTool(ev, ev.findPointerIndex(toolPid).coerceAtLeast(0), cancel)
             Mode.NAV -> navUp(ev, cancel)
             Mode.PICK -> if (!cancel) pickDone()
+            Mode.CUT -> cutUp(ev, cancel)
             else -> {}
         }
         if (isStylus(ev.getToolType(0))) lastStylusT = ev.eventTime
@@ -1501,6 +1509,150 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
         rulerFill.color = rgbA(0xFF1F2933.toInt(), 0xE6)
         c.drawRoundRect(lx - w / 2, ly + r + 6f * dp, lx + w / 2, ly + r + 6f * dp + h, h / 2, h / 2, rulerFill)
         c.drawText(label, lx, ly + r + 6f * dp + h / 2 + 3.4f * dp, rulerText)
+    }
+
+    // ───────────────────────── przecinanie obrazu ─────────────────────────
+
+    private var cutPid = -1; private var cutType = 0
+    private var cutGrab = -1                      // indeks przeciąganej linii albo -1, gdy rysujemy nową
+    private var cutU0 = 0f; private var cutV0 = 0f; private var cutU1 = 0f; private var cutV1 = 0f
+    private var cutX0 = 0f; private var cutY0 = 0f; private var cutX1 = 0f; private var cutY1 = 0f
+    private var cutSnapped = false
+
+    private fun cutLocal(img: com.mdev.mnotes.core.model.ImageEl, pi: Int, sx: Float, sy: Float) = ImageCut.toLocal(img, pgX(pi, sx), pgY(pi, sy))
+
+    /** Czy ten dotyk należy do cięcia (na obrazie albo przy linii); nie: palec poza obrazem przewija, rysik nic nie robi. */
+    private fun cutDown(ev: MotionEvent, t: Int): Boolean {
+        val cut = ed.cut ?: return false
+        val img = ed.cutImage() ?: return false
+        val pi = doc.indexOf(cut.pageId); if (pi < 0) return false
+        if (t == MotionEvent.TOOL_TYPE_MOUSE && ev.buttonState and MotionEvent.BUTTON_SECONDARY != 0) { ed.cancelCut(); mode = Mode.IGNORE; return true }
+        if (t == MotionEvent.TOOL_TYPE_MOUSE && (ev.buttonState and MotionEvent.BUTTON_TERTIARY != 0 || navOnly(ev, 0))) return false
+        if (palmTouch(ev, 0)) return false
+        val uv = cutLocal(img, pi, ev.x, ev.y)
+        val tolU = 16f * dp / (img.w * zoom); val tolV = 16f * dp / (img.h * zoom)
+        var grab = -1; var best = Float.MAX_VALUE
+        for ((i, l) in cut.lines.withIndex()) {
+            val along = if (l.vertical) uv[1] else uv[0]
+            if (along < -0.08f || along > 1.08f) continue
+            val d = if (l.vertical) abs(uv[0] - l.pos) / tolU else abs(uv[1] - l.pos) / tolV
+            if (d <= 1f && d < best) { best = d; grab = i }
+        }
+        val onImage = uv[0] in 0f..1f && uv[1] in 0f..1f
+        if (grab < 0 && !onImage) {
+            if (t == MotionEvent.TOOL_TYPE_FINGER || t == MotionEvent.TOOL_TYPE_MOUSE) return false
+            mode = Mode.IGNORE; return true
+        }
+        mode = Mode.CUT; cutPid = ev.getPointerId(0); cutType = t; cutGrab = grab; cutSnapped = false
+        cutX0 = ev.x; cutY0 = ev.y; cutX1 = ev.x; cutY1 = ev.y
+        cutU0 = uv[0]; cutV0 = uv[1]; cutU1 = uv[0]; cutV1 = uv[1]
+        invalidate(); return true
+    }
+
+    private fun cutAbort() { cutPid = -1; cutGrab = -1; mode = Mode.NONE; invalidate() }
+
+    private fun cutMove(ev: MotionEvent) {
+        val cut = ed.cut ?: return
+        val img = ed.cutImage() ?: return
+        val pi = doc.indexOf(cut.pageId); if (pi < 0) return
+        val i = ev.findPointerIndex(cutPid); if (i < 0) return
+        cutX1 = ev.getX(i); cutY1 = ev.getY(i)
+        val uv = cutLocal(img, pi, cutX1, cutY1)
+        cutU1 = uv[0]; cutV1 = uv[1]
+        if (cutGrab in cut.lines.indices) {
+            val l = cut.lines[cutGrab]
+            val size = if (l.vertical) img.w else img.h
+            val raw = if (l.vertical) uv[0] else uv[1]
+            val min = ImageCut.MIN_PIECE_PT / size
+            var lo = min; var hi = 1f - min
+            for ((k, o) in cut.lines.withIndex()) {
+                if (k == cutGrab || o.vertical != l.vertical) continue
+                if (o.pos < l.pos) lo = max(lo, o.pos + min) else hi = min(hi, o.pos - min)
+            }
+            if (lo <= hi) {
+                val sn = ImageCut.snap(raw, size, 8f * dp / zoom)
+                val v = sn.coerceIn(lo, hi)
+                val snappedNow = sn != raw && v == sn
+                if (snappedNow && !cutSnapped) performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
+                cutSnapped = snappedNow
+                if (v != l.pos) cut.lines[cutGrab] = CutLine(l.vertical, v)
+            }
+        } else {
+            val cand = cutNewLine(img)
+            val snappedNow = cand != null && cand.pos != cutRaw
+            if (snappedNow && !cutSnapped) performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
+            cutSnapped = snappedNow
+        }
+        invalidate()
+    }
+
+    private var cutRaw = 0f
+
+    /** Linia, jaką da obecny pociągnięcie: orientacja z przeważającego kierunku ruchu, pozycja ze środka pociągnięcia (z przyciąganiem). */
+    private fun cutNewLine(img: com.mdev.mnotes.core.model.ImageEl): CutLine? {
+        val dxp = (cutU1 - cutU0) * img.w * zoom; val dyp = (cutV1 - cutV0) * img.h * zoom
+        if (hypot(dxp, dyp) < 18f * dp) return null
+        val vertical = abs(dyp) >= abs(dxp)
+        val raw = if (vertical) (cutU0 + cutU1) / 2f else (cutV0 + cutV1) / 2f
+        cutRaw = raw
+        val size = if (vertical) img.w else img.h
+        return CutLine(vertical, ImageCut.snap(raw, size, 8f * dp / zoom))
+    }
+
+    private fun cutUp(ev: MotionEvent, cancel: Boolean) {
+        val cut = ed.cut; val img = ed.cutImage()
+        val grab = cutGrab; val pid = cutPid
+        cutPid = -1; cutGrab = -1
+        if (cancel || cut == null || img == null || pid == -1) { invalidate(); return }
+        if (grab in cut.lines.indices) {
+            // Wyciągnięcie linii poza obraz usuwa ją (jak zdjęcie prowadnicy z linijki).
+            val outside = cutU1 < -0.02f || cutU1 > 1.02f || cutV1 < -0.02f || cutV1 > 1.02f
+            if (outside) { cut.lines.removeAt(grab); performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK) }
+            invalidate(); return
+        }
+        val l = cutNewLine(img)
+        if (l == null) { invalidate(); return }
+        val size = if (l.vertical) img.w else img.h
+        val near = cut.lines.any { it.vertical == l.vertical && abs(it.pos - l.pos) * size < ImageCut.MIN_PIECE_PT }
+        if (!ImageCut.fits(l.pos, size) || near) { ed.say(T.t("Za blisko krawędzi albo innej linii", "Too close to an edge or another line")); invalidate(); return }
+        ed.addCutLine(l.vertical, l.pos)
+        performHapticFeedback(HapticFeedbackConstants.CONFIRM)
+    }
+
+    private val cutCell = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
+    private val cutStroke = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE; strokeCap = Paint.Cap.ROUND }
+    private val cutPath = Path()
+
+    private fun drawCut(c: Canvas) {
+        val cut = ed.cut ?: return
+        val img = ed.cutImage() ?: return
+        val pi = doc.indexOf(cut.pageId); if (pi < 0) return
+        fun sp(u: Float, v: Float): FloatArray { val p = ImageCut.toPage(img, u, v); return floatArrayOf(scrX(pi, p[0]), scrY(pi, p[1])) }
+        fun seg(u0: Float, v0: Float, u1: Float, v1: Float, paint: Paint) { val a = sp(u0, v0); val b = sp(u1, v1); c.drawLine(a[0], a[1], b[0], b[1], paint) }
+        // obrys obrazu
+        val tl = sp(0f, 0f); val tr = sp(1f, 0f); val br = sp(1f, 1f); val bl = sp(0f, 1f)
+        cutPath.reset(); cutPath.moveTo(tl[0], tl[1]); cutPath.lineTo(tr[0], tr[1]); cutPath.lineTo(br[0], br[1]); cutPath.lineTo(bl[0], bl[1]); cutPath.close()
+        cutCell.color = rgbA(accent, 0x14); c.drawPath(cutPath, cutCell)
+        cutStroke.pathEffect = null; cutStroke.strokeWidth = 1.5f * dp; cutStroke.color = rgbA(accent, 0xCC); c.drawPath(cutPath, cutStroke)
+        val dash = DashPathEffect(floatArrayOf(9f * dp, 6f * dp), 0f)
+        fun line(l: CutLine, active: Boolean, preview: Boolean) {
+            val vExt = 12f * dp / (img.h * zoom); val uExt = 12f * dp / (img.w * zoom)
+            val (u0, v0, u1, v1) = if (l.vertical) floatArrayOf(l.pos, -vExt, l.pos, 1f + vExt) else floatArrayOf(-uExt, l.pos, 1f + uExt, l.pos)
+            cutStroke.pathEffect = null; cutStroke.strokeWidth = (if (active) 5f else 4f) * dp; cutStroke.color = 0xE6FFFFFF.toInt()
+            seg(u0, v0, u1, v1, cutStroke)
+            cutStroke.pathEffect = if (preview) dash else null
+            cutStroke.strokeWidth = (if (active) 3f else 2.2f) * dp; cutStroke.color = if (active) accent else 0xFF1F2933.toInt()
+            seg(u0, v0, u1, v1, cutStroke)
+            if (!preview) {
+                cutStroke.pathEffect = null
+                for ((u, v) in listOf(u0 to v0, u1 to v1)) {
+                    val p = sp(u, v); cutCell.color = 0xFFFFFFFF.toInt(); c.drawCircle(p[0], p[1], 6f * dp, cutCell)
+                    cutCell.color = if (active) accent else 0xFF1F2933.toInt(); c.drawCircle(p[0], p[1], 4f * dp, cutCell)
+                }
+            }
+        }
+        for ((i, l) in cut.lines.withIndex()) line(l, i == cutGrab && mode == Mode.CUT, false)
+        if (mode == Mode.CUT && cutGrab < 0) cutNewLine(img)?.let { line(it, true, true) }
     }
 
     // ───────────────────────── narzędzia: wspólne ─────────────────────────

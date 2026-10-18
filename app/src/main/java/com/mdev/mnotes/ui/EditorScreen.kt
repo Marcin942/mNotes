@@ -57,6 +57,8 @@ import androidx.compose.material.icons.rounded.FormatPaint
 import androidx.compose.material.icons.rounded.IosShare
 import androidx.compose.material.icons.rounded.Colorize
 import androidx.compose.material.icons.rounded.Straighten
+import androidx.compose.material.icons.rounded.VerticalSplit
+import androidx.compose.material.icons.rounded.HorizontalSplit
 import androidx.compose.material.icons.rounded.UnfoldMore
 import androidx.compose.material.icons.rounded.VisibilityOff
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
@@ -314,6 +316,7 @@ fun EditorScreen(ed: Editor, tabs: TabsCtl, onExit: () -> Unit, onSettings: () -
                     Box(Modifier.fillMaxSize().imePadding()) {
                         // Pod panelami: otwarty panel zasłania kapsułę, a pierwsze dotknięcie strony go zamyka.
                         if (ed.pipette != null) Box(Modifier.align(Alignment.TopCenter).padding(top = 50.dp).panelEnter()) { PipetteCard(set) }
+                        if (ed.cut != null) Box(Modifier.align(Alignment.TopCenter).padding(top = 50.dp, start = 8.dp, end = 8.dp).panelEnter()) { CutBar(ed) }
                         if (set.undoDock != 0) UndoCapsule(ed, Modifier.align(undoCorner(set.undoDock)).padding(8.dp).padding(start = if (!ed.chrome && set.undoDock == 1) 48.dp else 0.dp))
                         if (ed.chrome) {
                             panel?.takeIf { it == Panel.PEN || it == Panel.ERASER || it == Panel.LASSO || it == Panel.TAPE || it == Panel.PAINTER }?.let { p ->
@@ -927,6 +930,36 @@ private fun ToolPanel(ed: Editor, set: com.mdev.mnotes.data.Settings, panel: Pan
     }
 }
 
+/** Pasek przecinania obrazu: podpowiedź gestu, dodawanie linii bez przeciągania i zatwierdzenie. */
+@Composable
+private fun CutBar(ed: Editor) {
+    val c = ed.cut ?: return
+    val n = ed.cutPieceCount()
+    FloatingCard(Modifier.widthIn(max = 460.dp)) {
+        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            SectionLabel(T.t("Przecinanie obrazu", "Cut image"))
+            Text(
+                if (c.lines.isEmpty()) T.t("Przeciągnij palcem lub rysikiem w poprzek obrazu, by narysować linię cięcia. Linię można potem przesunąć, a wyciągnięcie jej poza obraz usuwa ją. Dwa palce przewijają stronę.", "Swipe across the image to draw a cut line. Drag a line to move it; pull it off the image to remove it. Two fingers scroll the page.")
+                else T.t("Linie pojawią się jako cięcia dopiero po zatwierdzeniu. Przeciągnij linię, by ją przesunąć; blisko 1/2, 1/3 i 1/4 sama się przyciągnie.", "Lines become cuts only after you confirm. Drag a line to move it; it snaps near 1/2, 1/3 and 1/4."),
+                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                Chip(T.t("Pionowa", "Vertical"), false, { ed.addCutLine(true) }, icon = Icons.Rounded.VerticalSplit)
+                Chip(T.t("Pozioma", "Horizontal"), false, { ed.addCutLine(false) }, icon = Icons.Rounded.HorizontalSplit)
+                if (c.lines.isNotEmpty()) IconBtn(Icons.AutoMirrored.Rounded.Undo, T.t("Cofnij ostatnią linię", "Undo last line"), { ed.undoCutLine() }, size = 36.dp, iconSize = 20.dp)
+                Spacer(Modifier.weight(1f))
+                Chip(T.t("Rozsuń", "Spread"), c.spread, { c.spread = !c.spread })
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                androidx.compose.material3.TextButton({ ed.cancelCut() }) { Text(T.t("Anuluj", "Cancel")) }
+                Spacer(Modifier.weight(1f))
+                androidx.compose.material3.Button({ ed.applyCut() }, enabled = n > 1) {
+                    Text(if (n > 1) T.t("Przetnij na $n części", "Cut into $n pieces") else T.t("Przetnij", "Cut"))
+                }
+            }
+        }
+    }
+}
+
 /** Karta widoczna podczas pobierania koloru: wybór, czy pipeta bierze kolor widoczny na stronie, czy pierwotny kolor kreski. */
 @Composable
 private fun PipetteCard(set: com.mdev.mnotes.data.Settings) {
@@ -1118,6 +1151,7 @@ private fun PenTester(p: ActivePen, smoothing: Float) {
 @Composable
 private fun SelectionBar(ed: Editor, panel: Panel?, toggle: (Panel) -> Unit, editText: () -> Unit) {
     val sel = ed.sel ?: return
+    if (ed.cut != null) return
     ed.selTick; ed.viewTick; ed.undoTick
     val v = ed.view ?: return
     val r = v.selScreenRect() ?: return
@@ -1146,6 +1180,7 @@ private fun SelectionBar(ed: Editor, panel: Panel?, toggle: (Panel) -> Unit, edi
                     BarSep(false)
                     IconBtn(Icons.Rounded.Palette, T.t("Kolor, grubość i styl linii", "Color, width & line style"), { toggle(Panel.SELCOLOR) }, selected = panel == Panel.SELCOLOR, size = 36.dp, iconSize = 20.dp)
                     if (!locked) IconBtn(Icons.Rounded.CropRotate, T.t("Skaluj i obracaj", "Resize & rotate"), { ed.transformMode = !ed.transformMode }, selected = ed.transformMode, size = 36.dp, iconSize = 20.dp)
+                    if (!locked && els.size == 1 && els[0] is ImageEl && !ed.readOnly) IconBtn(Icons.Rounded.VerticalSplit, T.t("Przetnij obraz na części", "Cut image into pieces"), { ed.startCut() }, size = 36.dp, iconSize = 20.dp)
                     IconBtn(Icons.Rounded.FlipToFront, T.t("Na wierzch", "Bring to front"), { ed.frontSel() }, size = 36.dp, iconSize = 20.dp)
                     IconBtn(Icons.Rounded.FlipToBack, T.t("Na spód", "Send to back"), { ed.backSel() }, size = 36.dp, iconSize = 20.dp)
                     IconBtn(if (locked) Icons.Rounded.LockOpen else Icons.Rounded.Lock, if (locked) T.t("Odblokuj", "Unlock") else T.t("Zablokuj", "Lock"), { ed.lockSel(!locked) }, size = 36.dp, iconSize = 20.dp)
@@ -1383,9 +1418,9 @@ private fun editorKey(e: androidx.compose.ui.input.key.KeyEvent, ed: Editor, cmd
         if (k == Key.P && shift) { openPalette(); return true }
     } else if (!fieldFocused) {
         when (k) {
-            Key.Backspace -> if (ed.sel != null && !ed.readOnly) { ed.deleteSel(); return true }
+            Key.Backspace -> if (ed.sel != null && !ed.readOnly && ed.cut == null) { ed.deleteSel(); return true }
             Key.Escape -> {
-                if (ed.pipette != null) ed.cancelPipette() else if (ed.searchOpen) ed.closeSearch() else if (ed.sel != null) ed.clearSel() else if (!ed.chrome) ed.chrome = true else return false
+                if (ed.pipette != null) ed.cancelPipette() else if (ed.cut != null) ed.cancelCut() else if (ed.searchOpen) ed.closeSearch() else if (ed.sel != null) ed.clearSel() else if (!ed.chrome) ed.chrome = true else return false
                 return true
             }
             Key.DirectionLeft, Key.DirectionRight, Key.DirectionUp, Key.DirectionDown -> if (ed.sel != null && !ed.readOnly) {

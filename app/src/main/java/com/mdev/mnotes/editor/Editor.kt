@@ -3,6 +3,7 @@ package com.mdev.mnotes.editor
 import android.content.Context
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import com.mdev.mnotes.app.MNotesApp
@@ -11,9 +12,12 @@ import com.mdev.mnotes.core.model.DocEdit
 import com.mdev.mnotes.core.model.Element
 import com.mdev.mnotes.core.model.ElementsEdit
 import com.mdev.mnotes.core.model.FillEl
+import com.mdev.mnotes.core.edit.CutLine
 import com.mdev.mnotes.core.edit.FloodFill
+import com.mdev.mnotes.core.edit.ImageCut
 import com.mdev.mnotes.core.model.ImageEl
 import com.mdev.mnotes.core.model.PageContent
+import com.mdev.mnotes.core.model.Placed
 import com.mdev.mnotes.core.model.PageSnapshot
 import com.mdev.mnotes.core.model.PageSpace
 import com.mdev.mnotes.core.model.PageSpec
@@ -40,6 +44,12 @@ import kotlin.math.min
 enum class Tool { PEN, ERASER, LASSO, TEXT, LASER, HAND, SPACE, TAPE, PAINTER, FILL }
 
 class Sel(val pageId: String, val ids: Set<Int>)
+
+/** Trwające przecinanie obrazu: linie czekają na zatwierdzenie, dopiero wtedy powstają kawałki (jedno cofnięcie). */
+class CutSession(val pageId: String, val imageId: Int) {
+    val lines = mutableStateListOf<CutLine>()
+    var spread by mutableStateOf(true)
+}
 
 class TextRequest(val pageId: String, val existing: TextBox?, val x: Float, val y: Float, val initial: String = "")
 
@@ -74,6 +84,7 @@ class Editor(val ctx: Context, val nbId: String) {
     /** Pędzel formatu w trybie „Pobierz format”: następne dotknięcie obiektu ustawia aktywne pióro według niego. */
     var formatPick by mutableStateOf(false)
     var sel by mutableStateOf<Sel?>(null)
+    var cut by mutableStateOf<CutSession?>(null)
     var selTick by mutableIntStateOf(0)
     /** Uchwyty skali i obrotu są widoczne i aktywne tylko po włączeniu przyciskiem na pasku zaznaczenia; nowe zaznaczenie je wyłącza. */
     var transformMode: Boolean
@@ -179,8 +190,8 @@ class Editor(val ctx: Context, val nbId: String) {
     fun say(msg: String) { toast = msg }
 
     // — Cofanie —
-    fun undo() { clearSel(); val e = doc.doUndo(); undoTick++; e?.pageIds?.firstOrNull()?.let { view?.ensureVisible(it) } }
-    fun redo() { clearSel(); val e = doc.doRedo(); undoTick++; e?.pageIds?.firstOrNull()?.let { view?.ensureVisible(it) } }
+    fun undo() { cancelCut(); clearSel(); val e = doc.doUndo(); undoTick++; e?.pageIds?.firstOrNull()?.let { view?.ensureVisible(it) } }
+    fun redo() { cancelCut(); clearSel(); val e = doc.doRedo(); undoTick++; e?.pageIds?.firstOrNull()?.let { view?.ensureVisible(it) } }
 
     /** Wykonanie z zapisem na stosie cofania. */
     fun exec(edit: DocEdit) { doc.exec(edit); undoTick++ }
@@ -434,6 +445,69 @@ class Editor(val ctx: Context, val nbId: String) {
         val snap = PageSnapshot(newId(), p.spec, doc.content(p))
         exec(DocEdit.InsertPages(listOf((i + 1) to snap)))
         view?.goToPage(i + 1)
+    }
+
+    // — Przecinanie obrazu —
+
+    /** Obraz przecinany w bieżącej sesji; gdy zniknął (cofnięcie, usunięcie), sesja się kończy. */
+    fun cutImage(): ImageEl? {
+        val c = cut ?: return null
+        val img = doc.page(c.pageId)?.let { p -> doc.content(p).elements.firstOrNull { it.id == c.imageId } } as? ImageEl
+        if (img == null || img.locked) { cut = null; view?.invalidate() }
+        return img
+    }
+
+    /** Zaznaczony pojedynczy, niezablokowany obraz można przeciąć. */
+    fun canCutSel(): Boolean {
+        val el = selElements().singleOrNull() as? ImageEl ?: return false
+        return !el.locked && !readOnly
+    }
+
+    fun startCut() {
+        val s = sel ?: return
+        val img = selElements().singleOrNull() as? ImageEl
+        if (readOnly || img == null) return
+        if (img.locked) { say(T.t("Obraz jest zablokowany: odblokuj go, by go przeciąć", "The image is locked: unlock it to cut it")); return }
+        transformMode = false
+        cut = CutSession(s.pageId, img.id)
+        view?.invalidate()
+    }
+
+    fun cancelCut() { if (cut != null) { cut = null; view?.invalidate() } }
+
+    /** Linia z paska (bez przeciągania): w środku największej luki; po przeciągnięciu w [pos]. */
+    fun addCutLine(vertical: Boolean, pos: Float? = null) {
+        val c = cut ?: return; val img = cutImage() ?: return
+        val p = pos ?: ImageCut.nextPos(img, vertical, c.lines)
+        if (p == null || !ImageCut.fits(p, if (vertical) img.w else img.h)) {
+            say(T.t("Za mało miejsca na kolejną linię", "No room for another line")); return
+        }
+        c.lines.add(CutLine(vertical, p))
+        view?.invalidate()
+    }
+
+    fun undoCutLine() { cut?.lines?.let { if (it.isNotEmpty()) it.removeAt(it.lastIndex) }; view?.invalidate() }
+
+    /** Liczba kawałków, jakie dadzą obecne linie. */
+    fun cutPieceCount(): Int {
+        val c = cut ?: return 0; val img = cutImage() ?: return 0
+        val n = ImageCut.normalize(img, c.lines)
+        return (n.count { it.vertical } + 1) * (n.count { !it.vertical } + 1)
+    }
+
+    fun applyCut() {
+        val c = cut ?: return; val img = cutImage() ?: return
+        val page = doc.page(c.pageId) ?: return
+        val pieces = ImageCut.split(img, c.lines.toList(), if (c.spread) ImageCut.DEFAULT_GAP_PT else 0f) { Ids.next() }
+        if (pieces.isEmpty()) { say(T.t("Najpierw narysuj linię cięcia", "Draw a cut line first")); return }
+        val at = doc.content(page).elements.indexOfFirst { it.id == img.id }
+        if (at < 0) return
+        exec(DocEdit.Elements(page.id, ElementsEdit(listOf(Placed(at, img)), pieces.mapIndexed { i, e -> Placed(at + i, e) })))
+        cut = null
+        tool = Tool.LASSO
+        select(page.id, pieces.map { it.id }.toSet())
+        say(T.t("Przecięto na ${pieces.size} części", "Cut into ${pieces.size} pieces"))
+        view?.invalidate()
     }
 
     fun startPipette(onPick: (Int) -> Unit) { pipette = onPick; view?.invalidate() }

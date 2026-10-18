@@ -199,6 +199,13 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
     private var lBounds = Bounds.EMPTY
     private var lM: Affine = Affine.IDENTITY
     private var lLifting = false
+    /** Przekształcenie z ostatniej narysowanej klatki: tam użytkownik widział obiekt, gdy puścił palec. */
+    private var lMShown: Affine? = null
+    /** Obiekty zatwierdzone po przesunięciu, rysowane na wierzchu, dopóki łaty kafelków w tle ich nie naniosą. */
+    private var ghostEls: List<Element> = emptyList()
+    private var ghostPage = -1
+    private var ghostArea = Bounds.EMPTY
+    private var ghostUntil = 0L
     private var lStartX = 0f; private var lStartY = 0f
     private var lAx = 0f; private var lAy = 0f; private var lHx = 0f; private var lHy = 0f
     private var lAngleStart = 0f
@@ -414,8 +421,9 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
     override fun pageChanged(pageId: String, edit: ElementsEdit?) {
         val page = doc.page(pageId) ?: return
         if (edit == null) { invalidate(); return }   // zmiana wzoru/papieru: wymiary bez zmian, więc układ stron zostaje
-        val dirty = eraseApplyDirty?.takeIf { eraseApplyPage == pageId }
-        eraseApplyDirty = null; eraseApplyPage = null
+        val dirty = applyDirty?.takeIf { applyPage == pageId }
+        applyDirty = null; applyPage = null
+        ghostEls = emptyList()
         cache.onChanged(page, edit, dirty)
         invalidate()
     }
@@ -552,7 +560,9 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
             val z = zoom * lM.scaleFactor
             for (el in lEls) renderer.drawElement(c, doc.id, el, z, false, spec.darkPaper)
             c.restore()
+            lMShown = lM
         }
+        drawGhost(c)
     }
 
     /** Etykieta regulacji kształtu (długość i kąt / wymiary) przy piórze. */
@@ -2292,9 +2302,9 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
 
     /** Suma obszarów zmienionych przez kroki gumki, które jeszcze nie trafiły do dokumentu. */
     private var eraseDirty = Bounds.EMPTY
-    /** Obszar przekazywany do przemalowania w [pageChanged] na czas [flushErase]. */
-    private var eraseApplyDirty: Bounds? = null
-    private var eraseApplyPage: String? = null
+    /** Obszar przekazywany do przemalowania w tle w [pageChanged] na czas [flushErase] i zatwierdzenia przesunięcia. */
+    private var applyDirty: Bounds? = null
+    private var applyPage: String? = null
 
     private val eraseFlushRun = Runnable { eraseFlushPosted = false; flushErase() }
 
@@ -2312,9 +2322,9 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
         val t0 = SystemClock.uptimeMillis()
         val cur = doc.content(page)
         // Przemalowujemy tylko to, co gumka naprawdę zmieniła, a nie całe prostokąty przeciętych kresek.
-        eraseApplyDirty = eraseDirty; eraseApplyPage = pid; eraseDirty = Bounds.EMPTY
+        applyDirty = eraseDirty; applyPage = pid; eraseDirty = Bounds.EMPTY
         doc.applyElements(pid, ElementsEdit.diff(cur, PageContent.of(work)))
-        eraseApplyDirty = null; eraseApplyPage = null
+        applyDirty = null; applyPage = null
         val cost = SystemClock.uptimeMillis() - t0
         eraseNextApply = if (cost <= ERASE_FREE_MS) 0L else t0 + cost + (cost * ERASE_REST).toLong().coerceAtMost(ERASE_MAX_WAIT_MS)
     }
@@ -2520,6 +2530,31 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
         doc.applyElements(page.id, ElementsEdit.remove(orig, lIds))
         lLifted = doc.content(page)
         lLifting = true
+        lMShown = null
+    }
+
+    private fun drawGhost(c: Canvas) {
+        if (ghostEls.isEmpty()) return
+        val page = doc.pages.getOrNull(ghostPage)
+        if (page == null || SystemClock.uptimeMillis() > ghostUntil || !cache.stale(page, ghostArea)) { ghostEls = emptyList(); return }
+        val spec = page.spec
+        c.save()
+        c.translate(layout.left(ghostPage), layout.top(ghostPage))
+        c.clipRect(0f, 0f, spec.w, spec.h)
+        for (el in ghostEls) renderer.drawElement(c, doc.id, el, zoom, false, spec.darkPaper)
+        c.restore()
+        postInvalidateOnAnimation()
+    }
+
+    /** Zatwierdza [els] na stronie [pi] bez przemalowania kafelków na wątku UI: łaty idą w tle, a do tego czasu rysuje je [drawGhost]. */
+    private fun applyInBackground(pi: Int, els: List<Element>, apply: () -> Unit) {
+        val page = doc.pages[pi]
+        var area = Bounds.EMPTY
+        for (e in els) area = area.union(e.bounds)
+        applyDirty = area; applyPage = page.id
+        apply()
+        applyDirty = null; applyPage = null
+        ghostEls = els; ghostPage = pi; ghostArea = area; ghostUntil = SystemClock.uptimeMillis() + GHOST_MAX_MS
     }
 
     private fun lassoMove() {
@@ -2593,6 +2628,9 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
         val page = doc.pages.getOrNull(lPage)
         val orig = lOrig; val lifted = lLifted
         val vertex = lm == LM.VERTEX || lm == LM.RESIZE
+        // Puszczenie palca nie przesuwa już obiektu: ruch z ostatniej, nienarysowanej paczki zdarzeń (drgnięcie przy
+        // odrywaniu palca) pomijamy, więc obiekt zostaje dokładnie tam, gdzie był widoczny.
+        if (!cancel && (lm == LM.MOVE || lm == LM.SCALE || lm == LM.ROTATE)) lMShown?.let { lM = it }
         val tgt = if (cancel) lPage else dropPage()
         lLifting = false
         lm = LM.NONE; ln = 0
@@ -2606,14 +2644,14 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
             val moved = lEls.map { it.transformed(PageDrop.inTarget(layout, lPage, tgt, m)) }
             val remove = DocEdit.Elements(page.id, ElementsEdit.remove(orig, lIds))
             val add = DocEdit.Elements(target.id, ElementsEdit.add(doc.content(target), moved))
-            add.apply(doc)
+            applyInBackground(tgt, moved) { add.apply(doc) }
             ed.record(DocEdit.Group(listOf(remove, add)))
             ed.select(target.id, moved.map { it.id }.toSet())
         } else {
             val map = HashMap<Int, Element>()
             for (e in lEls) map[e.id] = if (vertex) e else e.transformed(m)
             val final = PageContent.of(orig.elements.map { map[it.id] ?: it })
-            doc.applyElements(page.id, ElementsEdit.diff(lifted, final))
+            applyInBackground(lPage, lEls.map { map.getValue(it.id) }) { doc.applyElements(page.id, ElementsEdit.diff(lifted, final)) }
             ed.record(DocEdit.Elements(page.id, ElementsEdit.diff(orig, final)))
         }
         lOrig = null; lLifted = null; lEls = emptyList(); lM = Affine.IDENTITY
@@ -2740,5 +2778,7 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
         private const val ERASE_FREE_MS = 8L
         private const val ERASE_REST = 2f
         private const val ERASE_MAX_WAIT_MS = 250L
+        /** Najdłużej rysowany na wierzchu zatwierdzony obiekt, gdyby łata kafelka nie przyszła (kafelek usunięty z pamięci). */
+        private const val GHOST_MAX_MS = 1500L
     }
 }

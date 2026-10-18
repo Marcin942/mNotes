@@ -404,12 +404,14 @@ class PageCache(
 
     /**
      * Wołane z wątku UI po zmianie zawartości lub wyglądu strony: nanosi świeże zmiany na bitmapy w miejscu.
-     * [dirty] = obszar zmieniony przez gumkę (dokładniejszy niż [ElementsEdit.dirtyBounds]).
+     * [dirty] = obszar do naniesienia w tle (gumka, zatwierdzone przesunięcie); dokładniejszy niż [ElementsEdit.dirtyBounds].
      *
      * Dopisana kreska i zwykła edycja (przesunięcie, zmiana rozmiaru, cofanie) trafiają na bitmapy od razu, żeby obiekt
      * w ruchu nie rozrywał się między kafelkami. Gumka tylko oznacza obszar do naniesienia: łatę renderuje wątek
      * w tle, a wątek UI ją jedynie nakleja ([landPatch]), więc ciężka strona (nakładające się zakreślacze) pokazuje
-     * starcie z opóźnieniem, ale nie zatrzymuje aplikacji i nie podmienia całych kafelków.
+     * starcie z opóźnieniem, ale nie zatrzymuje aplikacji i nie podmienia całych kafelków. Tak samo idzie zatwierdzenie
+     * przesuniętego obiektu (duże zdjęcie na wszystkich kafelkach zatrzymywało wątek UI na ułamek sekundy); do naniesienia
+     * łat widok rysuje obiekt sam ([stale]).
      */
     fun onChanged(page: PageState, edit: ElementsEdit?, dirty: Bounds? = null) {
         val e = entries[page.id] ?: return
@@ -418,7 +420,7 @@ class PageCache(
         val n = content.size
         val appended = edit.removed.isEmpty() && edit.added.isNotEmpty() && edit.added.all { it.index >= n - edit.added.size }
         val spec = page.spec
-        if (dirty == null || dirty.isEmpty || appended) {
+        if (dirty == null || dirty.isEmpty) {
             patch(e.base, page, edit, edit.dirtyBounds, appended, spec.w, spec.h, e.base.bscale, 0f, 0f)
             for (lv in e.levels) for (t in lv.tiles.values)
                 patch(t, page, edit, edit.dirtyBounds, appended, spec.w, spec.h, lv.scale, t.ix * TileGrid.TILE / lv.scale, t.iy * TileGrid.TILE / lv.scale)
@@ -441,6 +443,22 @@ class PageCache(
         for (lv in e.levels) for (t in lv.tiles.values)
             if (t.stamp < frame - STALE_FRAMES) mark(t, lv.scale, t.ix * TileGrid.TILE / lv.scale, t.iy * TileGrid.TILE / lv.scale)
         for (t in marked) schedulePatch(t, page)
+    }
+
+    /** Czy któraś bitmapa strony z ostatniej klatki pokazuje w [area] stan sprzed zmiany (czeka łata albo pełny render). */
+    fun stale(page: PageState, area: Bounds): Boolean {
+        val e = entries[page.id] ?: return false
+        val spec = page.spec
+        fun old(t: Tile) = t.version != page.version || !t.pending.isEmpty || !t.inflight.isEmpty
+        val b = e.base
+        if (e.levels.isEmpty() && b.bmp != null && old(b)) return true
+        for (lv in e.levels) for (t in lv.tiles.values) {
+            val bmp = t.bmp ?: continue
+            if (t.stamp < frame || !old(t)) continue
+            val ox = t.ix * TileGrid.TILE / lv.scale; val oy = t.iy * TileGrid.TILE / lv.scale
+            if (area.intersects(ox, oy, min(spec.w, ox + bmp.width / lv.scale), min(spec.h, oy + bmp.height / lv.scale))) return true
+        }
+        return false
     }
 
     /** Zleca w tle render łaty [Tile.pending] w pikselach bitmapy kafelka; najwyżej jedna łata kafelka naraz (kolejność). */

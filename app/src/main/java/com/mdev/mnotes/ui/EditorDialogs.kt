@@ -151,7 +151,7 @@ fun commandList(
         "toolPen" to ({ !ed.readOnly } to { pickTool(Tool.PEN, null) }),
         "toolEraser" to ({ !ed.readOnly } to { pickTool(Tool.ERASER, null) }),
         "toolPainter" to ({ !ed.readOnly } to { pickTool(Tool.PAINTER, Panel.PAINTER) }),
-        "toolFill" to ({ !ed.readOnly } to { pickTool(Tool.FILL, null) }),
+        "toolFill" to ({ !ed.readOnly } to { pickTool(Tool.FILL, Panel.FILL) }),
         "toolLasso" to ({ !ed.readOnly } to { pickTool(Tool.LASSO, null) }),
         "toolText" to ({ !ed.readOnly } to { pickTool(Tool.TEXT, null) }),
         "toolLaser" to ({ true } to { pickTool(Tool.LASER, null) }),

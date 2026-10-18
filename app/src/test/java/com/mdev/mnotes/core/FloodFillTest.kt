@@ -149,4 +149,65 @@ class FloodFillTest {
         assertFalse(outside.containsPoint(300f, 400f))
         assertTrue(outside.containsPoint(300f - 101.6f, 400f))
     }
+
+    /** Trójkąt z bardzo ostrym wierzchołkiem u góry: kreski o grubości [w] rozchodzą się pod kątem 2·[deg]. */
+    private fun wedge(w: Float, deg: Float): List<Stroke> {
+        val t = kotlin.math.tan(deg * PI / 180).toFloat()
+        val h = 300f
+        fun ln(id: Int, vararg xy: Float) = line(id, *xy).let { Stroke(it.id, it.pen, it.color, w, it.pts) }
+        return listOf(
+            ln(1, 300f, 100f, 300f - h * t, 100f + h),
+            ln(2, 300f, 100f, 300f + h * t, 100f + h),
+            ln(3, 300f - h * t - 20f, 100f + h, 300f + h * t + 20f, 100f + h),
+        )
+    }
+
+    @Test
+    fun sharpWedgeIsFilledToItsTipAlsoWithClosedGaps() {
+        for (closeGaps in listOf(false, true)) for (deg in listOf(3f, 6f, 10f)) for (w in listOf(1f, 2f, 4f)) {
+            val t = kotlin.math.tan(deg * PI / 180).toFloat()
+            val f = fillOf(FloodFill.fill(wedge(w, deg), 600f, 800f, 300f, 380f, closeGaps)!!)
+            // Każdy punkt papieru w klinie (poza kreskami) musi mieć kolor, także w samej szczelinie węższej niż komórka siatki.
+            var y = 100f
+            while (y < 395f) {
+                val half = (y - 100f) * t
+                var x = 300f - half
+                while (x <= 300f + half) {
+                    val d = (half - abs(x - 300f)) / kotlin.math.sqrt(1f + t * t)
+                    if (d > w * 0.5f + 0.05f) assertTrue("kolor w ($x, $y) kąt $deg grubość $w domknięcie $closeGaps", f.containsPoint(x, y))
+                    x += 0.1f
+                }
+                y += 0.25f
+            }
+        }
+    }
+
+    @Test
+    fun filledOutlineIsSmoothNotStaircase() {
+        val rings = FloodFill.fill(listOf(circle(1, 300f, 400f, 120f)), 600f, 800f, 300f, 400f)!!
+        val ring = rings.single()
+        val n = ring.size / 2
+        assertTrue("za mało wierzchołków na gładkie koło: $n", n >= 40)
+        // Schodki dawałyby zakręty o 90°, gładki obrys nie ma ostrych zakrętów (okrąg r = 120 pt).
+        var maxTurn = 0.0
+        for (i in 0 until n) {
+            val a = (i + n - 1) % n; val b = (i + 1) % n
+            val v1x = ring[2 * i] - ring[2 * a]; val v1y = ring[2 * i + 1] - ring[2 * a + 1]
+            val v2x = ring[2 * b] - ring[2 * i]; val v2y = ring[2 * b + 1] - ring[2 * i + 1]
+            val ang = abs(kotlin.math.atan2(v1x * v2y - v1y * v2x, v1x * v2x + v1y * v2y).toDouble())
+            if (ang > maxTurn) maxTurn = ang
+        }
+        assertTrue("najostrzejszy zakręt ${maxTurn * 180 / PI}°", maxTurn < PI / 6)
+        // Odchylenie od okręgu poniżej pół punktu (wygładzanie nie przesuwa konturu).
+        for (i in 0 until n) {
+            val d = kotlin.math.hypot(ring[2 * i] - 300f, ring[2 * i + 1] - 400f)
+            assertTrue("promień $d", d in 118f..124f)
+        }
+    }
+
+    @Test
+    fun smoothingKeepsPageBorderAndCornersStraight() {
+        val rings = FloodFill.fill(emptyList(), 600f, 800f, 10f, 10f)!!
+        assertEquals(4, rings.single().size / 2)
+    }
 }

@@ -35,18 +35,37 @@ object FloodFill {
     private const val UNDERLAP = 3
 
     /**
+     * Wąska szczelina między dwiema liniami (ostry klin) bywa węższa niż komórka: nie ma w niej środka komórki, więc zwykły
+     * obszar się w niej kończy. Wypełnienie idzie wtedy dalej po brzegowych komórkach kresek (dalej niż [UNDERLAP]), ale
+     * nie głębiej w grubą kreskę, bo tam nie ma papieru do pokrycia.
+     */
+    private const val SLIVER_REACH = 24
+
+    /** Rozstaw próbek przy wygładzaniu konturu, w komórkach. */
+    private const val SMOOTH_STEP = 0.5f
+
+    /** Odchylenie standardowe wygładzania, w próbkach (3 próbki = 1,5 komórki). */
+    private const val SMOOTH_SIGMA = 3f
+
+    /** Najdalsze przesunięcie wierzchołka przez wygładzanie, w komórkach: mniej niż [UNDERLAP], więc skuteczność się nie zmienia. */
+    private const val SMOOTH_MAX_SHIFT = 0.6f
+
+    /**
      * Kontury obszaru wokół (x, y) na stronie [pageW]×[pageH] (pt). Null, gdy punkt leży poza stroną albo na linii
      * (na linii nie ma czego wypełniać). Istniejące wypełnienia i zablokowane obrazy (tło strony) nie są ścianami.
      * [closeGaps] domyka szpary węższe niż ok. 2 pt.
      */
-    fun fill(elements: List<Element>, pageW: Float, pageH: Float, x: Float, y: Float, closeGaps: Boolean = false, maxCells: Int = MAX_CELLS): List<FloatArray>? {
+    fun fill(elements: List<Element>, pageW: Float, pageH: Float, x: Float, y: Float, closeGaps: Boolean = false, maxCells: Int = MAX_CELLS, longSide: Int = CELLS_LONG_SIDE): List<FloatArray>? {
         if (pageW <= 0f || pageH <= 0f || x < 0f || y < 0f || x >= pageW || y >= pageH) return null
-        var cell = max(pageW, pageH) / CELLS_LONG_SIDE
+        var cell = max(pageW, pageH) / longSide
         cell = max(cell, sqrt(pageW * pageH / maxCells))
         val gw = ceil(pageW / cell).toInt().coerceAtLeast(1)
         val gh = ceil(pageH / cell).toInt().coerceAtLeast(1)
         val wall = BooleanArray(gw * gh)
         for (e in elements) rasterize(e, wall, gw, gh, cell, 0f)
+        // Komórki głęboko pod grubą kreską: tam wypełnienie nie szuka szczelin (patrz SLIVER_REACH).
+        val deep = BooleanArray(gw * gh)
+        for (e in elements) rasterize(e, deep, gw, gh, cell, 0f, inset = cell)
 
         val sx = min(gw - 1, (x / cell).toInt()); val sy = min(gh - 1, (y / cell).toInt())
         val s = sy * gw + sx
@@ -56,13 +75,14 @@ object FloodFill {
             for (e in elements) rasterize(e, thick, gw, gh, cell, wallPad(cell))
             bridged(wall, thick, gw, gh, s)
         }
-        repeat(UNDERLAP) { grow(region, wall, gw, gh) }
+        underlap(region, wall, deep, gw, gh)
         return trace(region, gw, gh).mapNotNull { ring ->
-            for (i in ring.indices step 2) {
-                ring[i] = min(ring[i] * cell, pageW)
-                ring[i + 1] = min(ring[i + 1] * cell, pageH)
+            val smooth = smoothRing(ring, gw, gh)
+            for (i in smooth.indices step 2) {
+                smooth[i] = min(smooth[i] * cell, pageW)
+                smooth[i + 1] = min(smooth[i + 1] * cell, pageH)
             }
-            val s = simplifyRing(ring, cell * 0.7f)
+            val s = simplifyRing(smooth, cell * 0.08f)
             if (s.size >= 6 && abs(area(s)) >= cell * cell * 2f) s else null
         }
     }
@@ -70,7 +90,8 @@ object FloodFill {
     /** O tyle ściana jest szersza od kreski, żeby wąskie szpary między liniami (np. niedomknięty rysunek) nie przeciekały. */
     private fun wallPad(cell: Float) = max(cell, 1f)
 
-    private fun rasterize(e: Element, wall: BooleanArray, gw: Int, gh: Int, cell: Float, pad: Float) {
+    /** [inset] > 0 zaznacza tylko rdzeń kresek: komórki głębiej niż [inset] pod brzegiem prawdziwej kreski. */
+    private fun rasterize(e: Element, wall: BooleanArray, gw: Int, gh: Int, cell: Float, pad: Float, inset: Float = 0f) {
         when (e) {
             is FillEl -> return
             is Stroke -> {
@@ -79,11 +100,12 @@ object FloodFill {
                 if (n == 0) return
                 val half = e.width * 0.5f
                 // Co najmniej 0,75 komórki: cieńsza kreska ukośna zostawiałaby dziury między komórkami, przez które przecieka wypełnienie.
-                val minR = max(0.5f, cell * 0.75f)
-                fun rad(i: Int) = max(half * p[3 * i + 2], minR) + pad
-                if (n == 1) { segment(wall, gw, gh, cell, p[0], p[1], p[0], p[1], rad(0)); return }
+                val minR = if (inset > 0f) 0f else max(0.5f, cell * 0.75f)
+                fun rad(i: Int) = max(half * p[3 * i + 2] - inset, minR) + pad
+                if (n == 1) { if (rad(0) > 0f) segment(wall, gw, gh, cell, p[0], p[1], p[0], p[1], rad(0)); return }
                 for (i in 0 until n - 1) {
-                    segment(wall, gw, gh, cell, p[3 * i], p[3 * i + 1], p[3 * i + 3], p[3 * i + 4], max(rad(i), rad(i + 1)))
+                    val r = max(rad(i), rad(i + 1))
+                    if (r > 0f) segment(wall, gw, gh, cell, p[3 * i], p[3 * i + 1], p[3 * i + 3], p[3 * i + 4], r)
                 }
             }
             is BoxElement -> {
@@ -171,7 +193,11 @@ object FloodFill {
         return -1
     }
 
-    /** Wypełnienie 4-spójne od komórki [s] po komórkach bez ścian. */
+    /**
+     * Wypełnienie 8-spójne od komórki [s] po komórkach bez ścian. Ściany mają promień co najmniej 0,75 komórki, więc żadna
+     * linia nie zostawia przekątnej szpary, którą przeciekałoby wypełnienie, a wąskie szczeliny łączące się tylko rogami
+     * komórek (ostre klinowate końce) są wypełniane do końca.
+     */
     private fun flood(wall: BooleanArray, gw: Int, gh: Int, s: Int): BooleanArray {
         val region = BooleanArray(gw * gh)
         var stack = IntArray(1024)
@@ -185,24 +211,51 @@ object FloodFill {
         while (top > 0) {
             val i = stack[--top]
             val cx = i % gw; val cy = i / gw
-            if (cx > 0 && !wall[i - 1] && !region[i - 1]) { region[i - 1] = true; push(i - 1) }
-            if (cx < gw - 1 && !wall[i + 1] && !region[i + 1]) { region[i + 1] = true; push(i + 1) }
-            if (cy > 0 && !wall[i - gw] && !region[i - gw]) { region[i - gw] = true; push(i - gw) }
-            if (cy < gh - 1 && !wall[i + gw] && !region[i + gw]) { region[i + gw] = true; push(i + gw) }
+            for (dy in -1..1) {
+                val ny = cy + dy
+                if (ny < 0 || ny >= gh) continue
+                for (dx in -1..1) {
+                    val nx = cx + dx
+                    if (nx < 0 || nx >= gw) continue
+                    val j = ny * gw + nx
+                    if (!wall[j] && !region[j]) { region[j] = true; push(j) }
+                }
+            }
         }
         return region
     }
 
-    /** Poszerza obszar o jedną komórkę, ale tylko w ściany (pod linie), nigdy w sąsiednie wolne obszary. */
-    private fun grow(region: BooleanArray, wall: BooleanArray, gw: Int, gh: Int) {
-        val add = ArrayList<Int>()
-        for (i in region.indices) {
-            if (!wall[i] || region[i]) continue
-            val cx = i % gw; val cy = i / gw
-            if ((cx > 0 && region[i - 1]) || (cx < gw - 1 && region[i + 1]) ||
-                (cy > 0 && region[i - gw]) || (cy < gh - 1 && region[i + gw])) add.add(i)
+    /**
+     * Poszerza obszar w ściany (pod linie), nigdy w sąsiednie wolne obszary: o [UNDERLAP] komórek wszędzie, a po brzegowych
+     * komórkach kresek (poza [deep]) do [SLIVER_REACH], żeby dojść do końca wąskiej, ostrej szczeliny.
+     */
+    private fun underlap(region: BooleanArray, wall: BooleanArray, deep: BooleanArray, gw: Int, gh: Int) {
+        val depth = ByteArray(region.size)
+        var queue = IntArray(4096)
+        var tail = 0
+        fun push(i: Int) {
+            if (tail == queue.size) queue = queue.copyOf(queue.size * 2)
+            queue[tail++] = i
         }
-        for (i in add) region[i] = true
+        for (i in region.indices) {
+            if (!region[i]) continue
+            val cx = i % gw; val cy = i / gw
+            if ((cx > 0 && wall[i - 1]) || (cx < gw - 1 && wall[i + 1]) || (cy > 0 && wall[i - gw]) || (cy < gh - 1 && wall[i + gw])) push(i)
+        }
+        var head = 0
+        while (head < tail) {
+            val i = queue[head++]
+            val nd = depth[i] + 1
+            val cx = i % gw; val cy = i / gw
+            fun visit(j: Int) {
+                if (!wall[j] || region[j]) return
+                if (nd <= UNDERLAP || (!deep[j] && nd <= SLIVER_REACH)) { region[j] = true; depth[j] = nd.toByte(); push(j) }
+            }
+            if (cx > 0) visit(i - 1)
+            if (cx < gw - 1) visit(i + 1)
+            if (cy > 0) visit(i - gw)
+            if (cy < gh - 1) visit(i + gw)
+        }
     }
 
     /**
@@ -243,6 +296,50 @@ object FloodFill {
             if (pts.size >= 6) rings.add(pts.toArray())
         }
         return rings
+    }
+
+    /**
+     * Wygładza schodkowy pierścień z [trace] (współrzędne w komórkach): próbkuje go gęsto, rozmywa po łuku (Gauss) i
+     * zostawia każdy punkt najdalej [SMOOTH_MAX_SHIFT] od oryginału, więc kształt (i skuteczność wypełnienia) się nie zmienia,
+     * znikają tylko schodki. Punkty na krawędzi strony stoją w miejscu, żeby prosty brzeg i rogi strony zostały proste.
+     */
+    internal fun smoothRing(ring: FloatArray, gw: Int, gh: Int): FloatArray {
+        val n = ring.size / 2
+        if (n < 4) return ring
+        val xs = com.mdev.mnotes.core.geom.FloatList(256)
+        for (i in 0 until n) {
+            val ax = ring[2 * i]; val ay = ring[2 * i + 1]
+            val k = (i + 1) % n
+            val bx = ring[2 * k]; val by = ring[2 * k + 1]
+            val parts = max(1, ceil(sqrt((bx - ax) * (bx - ax) + (by - ay) * (by - ay)) / SMOOTH_STEP).toInt())
+            for (q in 0 until parts) {
+                val t = q.toFloat() / parts
+                xs.add(ax + (bx - ax) * t, ay + (by - ay) * t)
+            }
+        }
+        val src = xs.toArray()
+        val m = src.size / 2
+        val radius = ceil(SMOOTH_SIGMA * 3f).toInt()
+        if (m <= 2 * radius + 1) return ring
+        val w = FloatArray(radius + 1) { kotlin.math.exp(-(it * it) / (2f * SMOOTH_SIGMA * SMOOTH_SIGMA)) }
+        var wsum = w[0]
+        for (j in 1..radius) wsum += 2f * w[j]
+        val out = FloatArray(src.size)
+        val eps = 0.001f
+        for (i in 0 until m) {
+            val px = src[2 * i]; val py = src[2 * i + 1]
+            if (px <= eps || py <= eps || px >= gw - eps || py >= gh - eps) { out[2 * i] = px; out[2 * i + 1] = py; continue }
+            var sx = w[0] * px; var sy = w[0] * py
+            for (j in 1..radius) {
+                val a = (i - j + m) % m; val b = (i + j) % m
+                sx += w[j] * (src[2 * a] + src[2 * b]); sy += w[j] * (src[2 * a + 1] + src[2 * b + 1])
+            }
+            var dx = sx / wsum - px; var dy = sy / wsum - py
+            val d = sqrt(dx * dx + dy * dy)
+            if (d > SMOOTH_MAX_SHIFT) { dx *= SMOOTH_MAX_SHIFT / d; dy *= SMOOTH_MAX_SHIFT / d }
+            out[2 * i] = px + dx; out[2 * i + 1] = py + dy
+        }
+        return out
     }
 
     /** Douglas–Peucker dla zamkniętego pierścienia (pary x, y), bez powtórzonego ostatniego punktu. */

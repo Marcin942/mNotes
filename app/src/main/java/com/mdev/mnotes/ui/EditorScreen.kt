@@ -1037,10 +1037,10 @@ private fun PenPanel(ed: Editor, set: com.mdev.mnotes.data.Settings, onColorSets
 }
 
 @Composable
-fun MSlider(value: Float, min: Float, max: Float, onChange: (Float) -> Unit) {
+fun MSlider(value: Float, min: Float, max: Float, onFinish: (() -> Unit)? = null, onChange: (Float) -> Unit) {
     val m = mint
     Slider(
-        value.coerceIn(min, max), onChange, valueRange = min..max, modifier = Modifier.fillMaxWidth().height(32.dp),
+        value.coerceIn(min, max), onChange, valueRange = min..max, onValueChangeFinished = onFinish, modifier = Modifier.fillMaxWidth().height(32.dp),
         colors = SliderDefaults.colors(thumbColor = m.accent, activeTrackColor = m.accent, inactiveTrackColor = m.line),
     )
 }
@@ -1292,10 +1292,43 @@ fun MenuRow(icon: ImageVector, text: String, hint: String, onClick: () -> Unit) 
     }
 }
 
+/**
+ * Suwak rozstawu wzoru. Położenie trzyma lokalnie (palec nie czeka na dokument), a zmianę strony stosuje na żywo
+ * najwyżej co [PREVIEW_MS], bo każda zmiana przemalowuje kafelki strony. Gest kończy jeden wpis cofania.
+ */
+@Composable
+private fun SpacingSlider(spec: com.mdev.mnotes.core.model.PageSpec, default: Float, preview: (Float) -> Unit, commit: () -> Unit, reset: () -> Unit) {
+    var drag by remember { mutableStateOf<Float?>(null) }
+    val shown = drag ?: spec.spacing
+    val latest = androidx.compose.runtime.rememberUpdatedState(preview)
+    var applied by remember { mutableStateOf<Float?>(null) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            delay(PREVIEW_MS)
+            val v = drag
+            if (v != null && v != applied) { latest.value(v); applied = v }
+        }
+    }
+    androidx.compose.runtime.DisposableEffect(Unit) { onDispose { commit() } }
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Box(Modifier.weight(1f)) {
+            MSlider(shown, 4f, 60f, onFinish = {
+                drag?.let { if (it != applied) latest.value(it) }
+                commit(); drag = null; applied = null
+            }) { drag = it }
+        }
+        Text(String.format(java.util.Locale.US, "%.1f", shown), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+    Chip(T.t("Domyślny rozstaw", "Default spacing"), kotlin.math.abs(shown - default) < 0.005f, { drag = null; applied = null; reset() })
+}
+
+private const val PREVIEW_MS = 70L
+
 @Composable
 private fun StylePanel(ed: Editor, close: () -> Unit) {
     val m = mint
     ed.structTick
+    ed.undoTick   // zmiany stylu idą przez stos cofania; bez odczytu panel pokazywał stary stan (suwak stał w miejscu)
     val idx = ed.pageIndex.coerceIn(0, (ed.doc.pages.size - 1).coerceAtLeast(0))
     val spec = ed.doc.pages.getOrNull(idx)?.spec ?: return
     var all by remember { mutableStateOf(false) }
@@ -1322,7 +1355,10 @@ private fun StylePanel(ed: Editor, close: () -> Unit) {
                 }
                 if (spec.template.defaultSpacing > 0f) {
                     SectionLabel(T.t("Rozstaw wzoru", "Pattern spacing"))
-                    MSlider(spec.spacing, 4f, 60f) { v -> apply { it.copy(spacing = v) } }
+                    SpacingSlider(spec, spec.template.defaultSpacing,
+                        preview = { v -> ed.previewSpec(all, idx) { if (it.pdf != null) it else it.copy(spacing = v) } },
+                        commit = { ed.commitSpecPreview() },
+                        reset = { apply { it.copy(spacing = it.template.defaultSpacing) } })
                 }
                 SectionLabel(T.t("Rozmiar", "Size"))
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {

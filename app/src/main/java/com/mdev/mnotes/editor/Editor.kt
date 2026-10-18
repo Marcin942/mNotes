@@ -515,6 +515,25 @@ class Editor(val ctx: Context, val nbId: String) {
         if (p.spec != spec) exec(DocEdit.Spec(p.id, p.spec, spec))
     }
 
+    private var specPreview: Map<String, PageSpec>? = null
+
+    /**
+     * Podgląd zmiany stylu na żywo (suwak): stosuje [f] do stanu sprzed gestu, bez wpisu na stosie cofania.
+     * [all] = wszystkie strony, inaczej tylko strona [i]. Gest kończy [commitSpecPreview] (jeden wpis cofania).
+     */
+    fun previewSpec(all: Boolean, i: Int, f: (PageSpec) -> PageSpec) {
+        val before = specPreview ?: (if (all) doc.pages else listOfNotNull(doc.pages.getOrNull(i)))
+            .associate { it.id to it.spec }.also { specPreview = it }
+        for ((id, b) in before) { val n = f(b); if (doc.spec(id) != n) doc.setSpec(id, n) }
+    }
+
+    fun commitSpecPreview() {
+        val before = specPreview ?: return
+        specPreview = null
+        val edits = before.mapNotNull { (id, b) -> if (doc.page(id) == null) null else doc.spec(id).takeIf { it != b }?.let { DocEdit.Spec(id, b, it) } }
+        if (edits.isNotEmpty()) record(if (edits.size == 1) edits[0] else DocEdit.Group(edits))
+    }
+
     /** Zmiana wzoru/papieru dla wszystkich stron (zachowuje rozmiary stron). */
     fun restyleAll(f: (PageSpec) -> PageSpec) {
         val edits = doc.pages.mapNotNull { p -> val n = f(p.spec); if (n != p.spec) DocEdit.Spec(p.id, p.spec, n) else null }

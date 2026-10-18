@@ -411,7 +411,7 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
 
     override fun pageChanged(pageId: String, edit: ElementsEdit?) {
         val page = doc.page(pageId) ?: return
-        if (edit == null) { rebuildLayout(); moved(); return }
+        if (edit == null) { invalidate(); return }   // zmiana wzoru/papieru: wymiary bez zmian, więc układ stron zostaje
         cache.onChanged(page, edit)
         invalidate()
     }

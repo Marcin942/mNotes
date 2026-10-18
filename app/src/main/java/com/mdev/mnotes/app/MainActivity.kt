@@ -234,6 +234,8 @@ open class MainActivity : FragmentActivity() {
             Intent.ACTION_VIEW, Intent.ACTION_SEND, Intent.ACTION_SEND_MULTIPLE -> {
                 // Pliki z innych aplikacji („Otwórz w mNotes”, „Udostępnij”) stają się nowymi zeszytami.
                 val uris = incomingUris(i)
+                // Chwilowo (BACKLOG LIB-017): pokazuje typ MIME od aplikacji źródłowej, żeby zawęzić filtr „Udostępnij”.
+                if (i.action != Intent.ACTION_VIEW) android.widget.Toast.makeText(this, T.t("Typ udostępnionego pliku: ${i.type}", "Shared file type: ${i.type}"), android.widget.Toast.LENGTH_LONG).show()
                 if (uris.isEmpty()) return
                 lifecycleScope.launch {
                     var handed = false

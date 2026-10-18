@@ -66,18 +66,15 @@
                 <data android:pathPattern=".*\\..*\\..*\\.sdocx" />
                 <data android:pathPattern=".*\\..*\\..*\\..*\\.sdocx" />
             </intent-filter>
-            <!-- Cel udostępniania („Udostępnij” → mNotes): jeden plik albo kilka naraz; .sdocx i .mnotes bywają
-                 podawane jako octet-stream albo zip, więc te typy też zgłaszamy. -->
+            <!-- Cel udostępniania („Udostępnij” → mNotes): jeden plik albo kilka naraz. Przy SEND system dopasowuje tylko
+                 typ MIME (nazwy pliku nie widzi), a Samsung Notes podaje .sdocx pod własnym, nieznanym nam typem, więc na
+                 razie przyjmujemy każdy typ; rodzaj pliku ustala import po zawartości, a obcy plik kończy się komunikatem.
+                 Do zawężenia po odczytaniu typu z dymku (BACKLOG LIB-017). -->
             <intent-filter>
                 <action android:name="android.intent.action.SEND" />
                 <action android:name="android.intent.action.SEND_MULTIPLE" />
                 <category android:name="android.intent.category.DEFAULT" />
-                <data android:mimeType="application/pdf" />
-                <data android:mimeType="application/x-mnotes" />
-                <data android:mimeType="application/octet-stream" />
-                <data android:mimeType="application/zip" />
-                <data android:mimeType="application/x-zip-compressed" />
-                <data android:mimeType="image/*" />
+                <data android:mimeType="*/*" />
             </intent-filter>
         </activity>
 

@@ -3,6 +3,7 @@ package com.mdev.mnotes.core.codec
 import com.mdev.mnotes.core.model.Element
 import com.mdev.mnotes.core.model.FillEl
 import com.mdev.mnotes.core.model.Ids
+import com.mdev.mnotes.core.model.ImageCrop
 import com.mdev.mnotes.core.model.ImageEl
 import com.mdev.mnotes.core.model.PageContent
 import com.mdev.mnotes.core.model.PenKind
@@ -54,6 +55,7 @@ object PageCodec {
     private const val FLAG_TEXT_FIXED = 128
     // Interlinia ≠ 1: f32 po tekście. Rekordy mają długość, więc starsza wersja pomija ten ogon i rysuje interlinię 1.
     private const val FLAG_TEXT_LINES = 256
+    private const val FLAG_IMAGE_CROP = 512
     private const val Q = 100f
 
     fun encode(content: PageContent): ByteArray {
@@ -202,10 +204,11 @@ object PageCodec {
     }
 
     private fun writeImage(w: ByteWriter, im: ImageEl) {
-        w.varint(if (im.locked) FLAG_LOCKED else 0)
+        w.varint((if (im.locked) FLAG_LOCKED else 0) or (if (im.crop.isFull) 0 else FLAG_IMAGE_CROP))
         w.f32(im.cx); w.f32(im.cy); w.f32(im.w); w.f32(im.h); w.f32(im.rot)
         w.u8((im.alpha.coerceIn(0f, 1f) * 255f).roundToInt())
         w.string(im.asset)
+        if (!im.crop.isFull) { w.f32(im.crop.l); w.f32(im.crop.t); w.f32(im.crop.r); w.f32(im.crop.b) }
     }
 
     private fun readImage(r: ByteReader): ImageEl {
@@ -213,7 +216,12 @@ object PageCodec {
         val cx = r.f32(); val cy = r.f32(); val w = r.f32(); val h = r.f32(); val rot = r.f32()
         val alpha = r.u8() / 255f
         val asset = r.string()
-        return ImageEl(Ids.next(), asset, cx, cy, w, h, rot, alpha, flags and FLAG_LOCKED != 0)
+        val crop = if (flags and FLAG_IMAGE_CROP != 0) {
+            val l = r.f32().coerceIn(0f, 1f); val t = r.f32().coerceIn(0f, 1f)
+            val rr = r.f32().coerceIn(0f, 1f); val b = r.f32().coerceIn(0f, 1f)
+            if (rr > l && b > t) ImageCrop(l, t, rr, b) else ImageCrop.FULL
+        } else ImageCrop.FULL
+        return ImageEl(Ids.next(), asset, cx, cy, w, h, rot, alpha, flags and FLAG_LOCKED != 0, crop)
     }
 
     private fun writeTape(w: ByteWriter, t: TapeEl) {

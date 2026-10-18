@@ -302,6 +302,20 @@ class TextBox(
     }
 }
 
+/** Wycinek obrazu jako ułamki pliku (0..1): lewa, górna, prawa i dolna krawędź. */
+class ImageCrop(val l: Float, val t: Float, val r: Float, val b: Float) {
+    val isFull: Boolean get() = l <= 0f && t <= 0f && r >= 1f && b >= 1f
+    val width: Float get() = r - l
+    val height: Float get() = b - t
+
+    override fun equals(other: Any?) = other is ImageCrop && l == other.l && t == other.t && r == other.r && b == other.b
+    override fun hashCode() = ((l.hashCode() * 31 + t.hashCode()) * 31 + r.hashCode()) * 31 + b.hashCode()
+
+    companion object {
+        val FULL = ImageCrop(0f, 0f, 1f, 1f)
+    }
+}
+
 class ImageEl(
     override val id: Int,
     /** Nazwa pliku zasobu w katalogu zeszytu. */
@@ -313,6 +327,8 @@ class ImageEl(
     override val rot: Float = 0f,
     val alpha: Float = 1f,
     override val locked: Boolean = false,
+    /** Wycinek pliku, który obraz pokazuje (po przecięciu kawałki dzielą jeden plik). */
+    val crop: ImageCrop = ImageCrop.FULL,
 ) : BoxElement() {
 
     override fun withId(newId: Int): ImageEl = copy(id = newId)
@@ -321,8 +337,8 @@ class ImageEl(
     fun copy(
         id: Int = this.id, asset: String = this.asset, cx: Float = this.cx, cy: Float = this.cy,
         w: Float = this.w, h: Float = this.h, rot: Float = this.rot, alpha: Float = this.alpha,
-        locked: Boolean = this.locked,
-    ) = ImageEl(id, asset, cx, cy, w, h, rot, alpha, locked)
+        locked: Boolean = this.locked, crop: ImageCrop = this.crop,
+    ) = ImageEl(id, asset, cx, cy, w, h, rot, alpha, locked, crop)
 
     override fun transformed(m: Affine): ImageEl {
         val g = mapBox(m)

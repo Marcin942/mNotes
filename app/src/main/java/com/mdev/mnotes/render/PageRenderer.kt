@@ -33,6 +33,7 @@ import com.mdev.mnotes.core.pen.StrokeDash
 import com.mdev.mnotes.core.pen.StrokeOutline
 import com.mdev.mnotes.core.text.TextMeasure
 import kotlin.math.max
+import kotlin.math.roundToInt
 
 /**
  * Rysowanie strony (papier, wzór, elementy) na dowolnym Canvasie w układzie strony (pt).
@@ -49,6 +50,7 @@ class PageRenderer(private val assets: Assets?) {
     private val sm = FloatList()
     private val dash = StrokeDash.Pieces()
     private val rect = RectF()
+    private val src = android.graphics.Rect()
     private val multiply = PorterDuffXfermode(PorterDuff.Mode.MULTIPLY)
     private val screen = PorterDuffXfermode(PorterDuff.Mode.SCREEN)
     private val geoms = HashMap<PageSpec, TemplateGeom>()
@@ -315,7 +317,13 @@ class PageRenderer(private val assets: Assets?) {
         rect.set(im.cx - im.w * 0.5f, im.cy - im.h * 0.5f, im.cx + im.w * 0.5f, im.cy + im.h * 0.5f)
         if (bmp != null) {
             bmpPaint.alpha = (im.alpha * 255f).toInt().coerceIn(0, 255)
-            c.drawBitmap(bmp, null, rect, bmpPaint)
+            val cr = im.crop
+            if (cr.isFull) c.drawBitmap(bmp, null, rect, bmpPaint)
+            else {
+                val bw = bmp.width; val bh = bmp.height
+                src.set((cr.l * bw).roundToInt(), (cr.t * bh).roundToInt(), (cr.r * bw).roundToInt().coerceAtLeast(1), (cr.b * bh).roundToInt().coerceAtLeast(1))
+                c.drawBitmap(bmp, src, rect, bmpPaint)
+            }
             bmpPaint.alpha = 255
         } else {
             paint.reset(); paint.isAntiAlias = true; paint.color = 0x22888888

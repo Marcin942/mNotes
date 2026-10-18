@@ -56,6 +56,9 @@ class PageCache(
         @Volatile var ver = 0
         @Volatile var rscale = 0f         // żądana skala bazy
         @Volatile var page: PageState? = null
+        var pending = Bounds.EMPTY        // obszar (pt) zmieniony przez gumkę, jeszcze nie naniesiony na bitmapę
+        var inflight = Bounds.EMPTY       // obszar łaty renderowanej właśnie w tle
+        var touched = Bounds.EMPTY        // obszar zmieniony w miejscu w trakcie renderu łaty (łata byłaby starsza)
         val bytes get() = (bmp?.allocationByteCount ?: 0) + (bg?.allocationByteCount ?: 0)
     }
 
@@ -89,8 +92,12 @@ class PageCache(
     private var baseBytes = 0L
     @Volatile private var closed = false
     @Volatile private var frame = 0L
-    /** Wygładzony czas naniesienia zmiany na jedną bitmapę w miejscu (ns), do budżetu w [onChanged]. */
-    private var patchNs = 0L
+    /** Jeden wątek renderuje łaty gumki; FIFO, więc widoczne kafelki (zlecane pierwsze) są gotowe najpierw. */
+    private val patchExec = Executors.newSingleThreadExecutor { Thread(it, "mnotes-patch").apply { priority = Thread.NORM_PRIORITY - 1; isDaemon = true } }
+    private val patchRenderer = PageRenderer(assets)
+    private val patchRect = RectF()
+    private val patchPaint = Paint(Paint.FILTER_BITMAP_FLAG)
+    private val srcPaint = Paint().apply { xfermode = android.graphics.PorterDuffXfermode(android.graphics.PorterDuff.Mode.SRC) }
 
     private var lastZoom = 0f
     private var zoomChangedAt = 0L
@@ -371,20 +378,23 @@ class PageCache(
         }
     }
 
+    private fun alive(t: Tile): Boolean {
+        val e = t.owner
+        val lv = t.level
+        return entries[e.id] === e && (lv == null || (e.levels.contains(lv) && lv.tiles[key(t.ix, t.iy)] === t))
+    }
+
     private fun finish(t: Tile, ver: Int, baseSc: Float, bmp: Bitmap?, bg: Bitmap?) {
         t.state = IDLE
         if (closed) return
-        val e = t.owner
-        val lv = t.level
-        val alive = entries[e.id] === e && (lv == null || (e.levels.contains(lv) && lv.tiles[key(t.ix, t.iy)] === t))
-        if (!alive) return
+        if (!alive(t)) return
         val page = t.page
         if (bmp == null) { t.retryAt = System.nanoTime() + RETRY_NS; return }
-        // Wynik starszy od tego, co bitmapa już ma (np. świeża kreska naniesiona w miejscu), jest odrzucany, żeby nic
-        // nie zniknęło na chwilę. Nowszy, choć już nieaktualny, jest przyjmowany: przy ciągłej gumce wersja strony
-        // ucieka szybciej, niż wątki renderują, a bez tego kafelek pominięty przy łataniu stałby do końca ruchu.
-        if (page != null && (ver == page.version || ver > t.version || t.bmp == null)) {
+        // Zmiana w trakcie renderu: wynik odrzucony. Przyjęcie nieaktualnego pokazywałoby na chwilę stan sprzed kilku
+        // kroków (np. przesuwany obiekt w starym miejscu), a nowa bitmapa wnika z przenikaniem, spod którego widać bazę.
+        if (page != null && ver == page.version) {
             adopt(t, bmp, bg); t.bscale = baseSc; t.version = ver; t.readyAt = System.nanoTime()
+            t.pending = Bounds.EMPTY
             trim()
         }
         onReady()
@@ -394,12 +404,12 @@ class PageCache(
 
     /**
      * Wołane z wątku UI po zmianie zawartości lub wyglądu strony: nanosi świeże zmiany na bitmapy w miejscu.
-     * [dirty] zawęża przemalowanie, gdy wołający wie dokładniej niż [ElementsEdit.dirtyBounds], co się zmieniło (gumka).
+     * [dirty] = obszar zmieniony przez gumkę (dokładniejszy niż [ElementsEdit.dirtyBounds]).
      *
-     * Dopisana kreska trafia na wszystkie bitmapy od razu. Inna zmiana (gumka, przesunięcie) jest nanoszona w miejscu
-     * tylko w budżecie [PATCH_BUDGET_NS]: najpierw widoczne kafelki, potem baza. Reszta zostaje nieaktualna i dostaje
-     * nową bitmapę z wątków roboczych, więc ciężka strona (np. nakładające się zakreślacze) pokazuje zmianę z
-     * opóźnieniem, ale nie zatrzymuje wątku UI.
+     * Dopisana kreska i zwykła edycja (przesunięcie, zmiana rozmiaru, cofanie) trafiają na bitmapy od razu, żeby obiekt
+     * w ruchu nie rozrywał się między kafelkami. Gumka tylko oznacza obszar do naniesienia: łatę renderuje wątek
+     * w tle, a wątek UI ją jedynie nakleja ([landPatch]), więc ciężka strona (nakładające się zakreślacze) pokazuje
+     * starcie z opóźnieniem, ale nie zatrzymuje aplikacji i nie podmienia całych kafelków.
      */
     fun onChanged(page: PageState, edit: ElementsEdit?, dirty: Bounds? = null) {
         val e = entries[page.id] ?: return
@@ -407,37 +417,89 @@ class PageCache(
         if (edit == null) return
         val n = content.size
         val appended = edit.removed.isEmpty() && edit.added.isNotEmpty() && edit.added.all { it.index >= n - edit.added.size }
-        val area = dirty?.takeUnless { it.isEmpty } ?: edit.dirtyBounds
         val spec = page.spec
-        if (appended) {
-            patch(e.base, page, edit, area, true, spec.w, spec.h, e.base.bscale, 0f, 0f)
+        if (dirty == null || dirty.isEmpty || appended) {
+            patch(e.base, page, edit, edit.dirtyBounds, appended, spec.w, spec.h, e.base.bscale, 0f, 0f)
             for (lv in e.levels) for (t in lv.tiles.values)
-                patch(t, page, edit, area, true, spec.w, spec.h, lv.scale, t.ix * TileGrid.TILE / lv.scale, t.iy * TileGrid.TILE / lv.scale)
+                patch(t, page, edit, edit.dirtyBounds, appended, spec.w, spec.h, lv.scale, t.ix * TileGrid.TILE / lv.scale, t.iy * TileGrid.TILE / lv.scale)
             return
         }
-        val t0 = System.nanoTime()
-        var patched = 0
-        var skipped = 0
-        fun tryPatch(t: Tile, sc: Float, ox: Float, oy: Float) {
-            if (t.bmp == null || t.version != page.version - 1) return
-            val vis = t.stamp >= frame - STALE_FRAMES
-            val tw = if (t.level == null) spec.w else t.bmp!!.width / sc
-            val th = if (t.level == null) spec.h else t.bmp!!.height / sc
-            if (!area.inflate(2.5f / sc).intersects(ox, oy, ox + tw, oy + th)) { t.version = page.version; return }
-            // Niewidoczne bitmapy nie są warte czasu wątku UI: odświeżą się w tle, gdy znów będą potrzebne.
-            if (!vis || System.nanoTime() - t0 + patchNs > PATCH_BUDGET_NS) { skipped++; return }
-            val s0 = System.nanoTime()
-            patch(t, page, edit, area, false, spec.w, spec.h, sc, ox, oy)
-            patchNs = (patchNs * 0.7f + (System.nanoTime() - s0) * 0.3f).toLong()
-            patched++
+        val marked = ArrayList<Tile>()
+        fun mark(t: Tile, sc: Float, ox: Float, oy: Float) {
+            val bmp = t.bmp ?: return
+            if (t.version != page.version - 1) return   // nieaktualny: zostanie wyrenderowany od nowa
+            t.version = page.version
+            val tw = if (t.level == null) spec.w else bmp.width / sc
+            val th = if (t.level == null) spec.h else bmp.height / sc
+            if (!dirty.inflate(2.5f / sc).intersects(ox, oy, ox + tw, oy + th)) return
+            t.pending = t.pending.union(dirty)
+            marked.add(t)
         }
         for (lv in e.levels) for (t in lv.tiles.values)
-            if (t.stamp >= frame - STALE_FRAMES) tryPatch(t, lv.scale, t.ix * TileGrid.TILE / lv.scale, t.iy * TileGrid.TILE / lv.scale)
-        tryPatch(e.base, e.base.bscale, 0f, 0f)
+            if (t.stamp >= frame - STALE_FRAMES) mark(t, lv.scale, t.ix * TileGrid.TILE / lv.scale, t.iy * TileGrid.TILE / lv.scale)
+        mark(e.base, e.base.bscale, 0f, 0f)
         for (lv in e.levels) for (t in lv.tiles.values)
-            if (t.stamp < frame - STALE_FRAMES) tryPatch(t, lv.scale, t.ix * TileGrid.TILE / lv.scale, t.iy * TileGrid.TILE / lv.scale)
-        // Gdy wszystko poszło do tła, oszacowanie maleje, żeby po chwili znów spróbować łatania w miejscu.
-        if (patched == 0 && skipped > 0) patchNs = (patchNs * 0.6f).toLong()
+            if (t.stamp < frame - STALE_FRAMES) mark(t, lv.scale, t.ix * TileGrid.TILE / lv.scale, t.iy * TileGrid.TILE / lv.scale)
+        for (t in marked) schedulePatch(t, page)
+    }
+
+    /** Zleca w tle render łaty [Tile.pending] w pikselach bitmapy kafelka; najwyżej jedna łata kafelka naraz (kolejność). */
+    private fun schedulePatch(t: Tile, page: PageState) {
+        if (!t.inflight.isEmpty || t.pending.isEmpty) return
+        val bmp = t.bmp ?: run { t.pending = Bounds.EMPTY; return }
+        val content = page.content ?: return
+        val spec = page.spec
+        val level = t.level
+        val sc = level?.scale ?: t.bscale
+        val sx = if (level == null) bmp.width / spec.w else sc
+        val sy = if (level == null) bmp.height / spec.h else sc
+        val ox = if (level == null) 0f else t.ix * TileGrid.TILE / sc
+        val oy = if (level == null) 0f else t.iy * TileGrid.TILE / sc
+        val area = t.pending
+        t.pending = Bounds.EMPTY
+        val d = area.inflate(2.5f / sc)
+        val px0 = floor((d.l - ox) * sx).toInt().coerceIn(0, bmp.width)
+        val py0 = floor((d.t - oy) * sy).toInt().coerceIn(0, bmp.height)
+        val px1 = ceil((d.r - ox) * sx).toInt().coerceIn(0, bmp.width)
+        val py1 = ceil((d.b - oy) * sy).toInt().coerceIn(0, bmp.height)
+        if (px1 <= px0 || py1 <= py0) return
+        t.inflight = area
+        t.touched = Bounds.EMPTY
+        val bg = t.bg
+        patchExec.execute {
+            val out = runCatching {
+                val w = px1 - px0; val h = py1 - py0
+                val pb = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+                val c = Canvas(pb)
+                c.scale(sx, sy)
+                // Przesunięcie o całe piksele: łata ma dokładnie te same piksele, które dałby render całego kafelka.
+                val gx = ox + px0 / sx; val gy = oy + py0 / sy
+                c.translate(-gx, -gy)
+                val r = Bounds(gx, gy, gx + w / sx, gy + h / sy)
+                if (level != null && spec.pdf != null) {
+                    patchRenderer.drawPaper(c, spec, sc, null)
+                    bg?.let { patchRect.set(ox, oy, ox + it.width / sx, oy + it.height / sy); c.drawBitmap(it, null, patchRect, patchPaint) }
+                } else patchRenderer.drawPaper(c, spec, sc, bg)
+                patchRenderer.drawElements(c, doc.id, content, 0, r, sc, false, spec.darkPaper)
+                pb
+            }.getOrNull()
+            main.post { landPatch(t, page, bmp, out, px0, py0) }
+        }
+    }
+
+    private fun landPatch(t: Tile, page: PageState, target: Bitmap, out: Bitmap?, px: Int, py: Int) {
+        val area = t.inflight
+        t.inflight = Bounds.EMPTY
+        if (closed || !alive(t) || t.bmp !== target) return   // kafelek podmieniony całym, świeższym renderem
+        when {
+            out == null -> t.version = -1   // nieudana łata: cały kafelek od nowa
+            // W trakcie renderu ten obszar zmieniono w miejscu — łata jest starsza, więc idzie od nowa ze świeżą treścią.
+            t.touched.intersects(area) -> t.pending = t.pending.union(area)
+            else -> Canvas(target).drawBitmap(out, px.toFloat(), py.toFloat(), srcPaint)
+        }
+        t.touched = Bounds.EMPTY
+        if (t.version == page.version) schedulePatch(t, page) else t.pending = Bounds.EMPTY
+        onReady()
     }
 
     private fun patch(t: Tile, page: PageState, edit: ElementsEdit, area: Bounds, appended: Boolean, pw: Float, ph: Float, sc: Float, ox: Float, oy: Float) {
@@ -445,6 +507,10 @@ class PageCache(
         if (t.version != page.version - 1) return   // nieaktualny: zostanie wyrenderowany od nowa
         val content = page.content ?: return
         val spec = page.spec
+        val changed = if (appended) edit.dirtyBounds else area
+        if (!t.inflight.isEmpty) t.touched = t.touched.union(changed)
+        // Zaległa łata gumki obejmie też ten obszar, żeby jej starsza treść nie przykryła zmiany.
+        if (!t.pending.isEmpty || !t.inflight.isEmpty) t.pending = t.pending.union(changed)
         val sx = if (t.level == null) bmp.width / pw else sc
         val sy = if (t.level == null) bmp.height / ph else sc
         val tb = Bounds(ox, oy, ox + bmp.width / sx, oy + bmp.height / sy)
@@ -472,7 +538,10 @@ class PageCache(
     }
 
     fun invalidateAll() {
-        for (e in entries.values) { e.base.version = -1; for (lv in e.levels) for (t in lv.tiles.values) t.version = -1 }
+        for (e in entries.values) {
+            e.base.version = -1; e.base.pending = Bounds.EMPTY
+            for (lv in e.levels) for (t in lv.tiles.values) { t.version = -1; t.pending = Bounds.EMPTY }
+        }
     }
 
     fun forget(pageId: String) { entries.remove(pageId)?.let { for (lv in it.levels) release(lv); drop(it.base) } }
@@ -515,7 +584,7 @@ class PageCache(
 
     private fun drop(t: Tile) {
         account(t, -t.bytes)
-        t.bmp = null; t.bg = null; t.version = -1
+        t.bmp = null; t.bg = null; t.version = -1; t.pending = Bounds.EMPTY
     }
 
     private fun account(t: Tile, d: Int) { if (t.level == null) baseBytes += d else tileBytes += d }
@@ -549,6 +618,7 @@ class PageCache(
     fun dispose() {
         closed = true
         main.removeCallbacks(tick)
+        patchExec.shutdownNow()
         synchronized(lock) { queue.clear(); lock.notifyAll() }
         entries.clear()
     }
@@ -561,8 +631,6 @@ class PageCache(
         const val STALE_FRAMES = 2L
         const val SETTLE_NS = 130_000_000L
         const val RETRY_NS = 1_500_000_000L
-        /** Czas wątku UI na jedno naniesienie zmiany w miejscu; więcej oznacza gubienie klatek przy ruchu rysika. */
-        const val PATCH_BUDGET_NS = 4_000_000L
         private const val IDLE = 0
         private const val QUEUED = 1
         private const val RUNNING = 2

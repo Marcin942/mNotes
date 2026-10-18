@@ -58,6 +58,10 @@ import androidx.compose.material.icons.rounded.IosShare
 import androidx.compose.material.icons.rounded.Colorize
 import androidx.compose.material.icons.rounded.Straighten
 import androidx.compose.material.icons.rounded.VerticalSplit
+import androidx.compose.material.icons.rounded.Crop
+import androidx.compose.material.icons.rounded.RotateLeft
+import androidx.compose.material.icons.rounded.RotateRight
+import androidx.compose.material.icons.rounded.SwapHoriz
 import androidx.compose.material.icons.rounded.HorizontalSplit
 import androidx.compose.material.icons.rounded.UnfoldMore
 import androidx.compose.material.icons.rounded.VisibilityOff
@@ -179,6 +183,7 @@ import com.mdev.mnotes.core.pen.InkColor
 import com.mdev.mnotes.core.pen.LineStyle
 import com.mdev.mnotes.core.pen.PenKit
 import com.mdev.mnotes.editor.Clip
+import com.mdev.mnotes.editor.CropRatio
 import com.mdev.mnotes.editor.Editor
 import com.mdev.mnotes.editor.NoteView
 import com.mdev.mnotes.editor.T
@@ -317,6 +322,7 @@ fun EditorScreen(ed: Editor, tabs: TabsCtl, onExit: () -> Unit, onSettings: () -
                         // Pod panelami: otwarty panel zasłania kapsułę, a pierwsze dotknięcie strony go zamyka.
                         if (ed.pipette != null) Box(Modifier.align(Alignment.TopCenter).padding(top = 50.dp).panelEnter()) { PipetteCard(set) }
                         if (ed.cut != null) Box(Modifier.align(Alignment.TopCenter).padding(top = 50.dp, start = 8.dp, end = 8.dp).panelEnter()) { CutBar(ed) }
+                        if (ed.crop != null) Box(Modifier.align(Alignment.TopCenter).padding(top = 50.dp, start = 8.dp, end = 8.dp).panelEnter()) { CropBar(ed) }
                         if (set.undoDock != 0) UndoCapsule(ed, Modifier.align(undoCorner(set.undoDock)).padding(8.dp).padding(start = if (!ed.chrome && set.undoDock == 1) 48.dp else 0.dp))
                         if (ed.chrome) {
                             panel?.takeIf { it == Panel.PEN || it == Panel.ERASER || it == Panel.LASSO || it == Panel.TAPE || it == Panel.PAINTER }?.let { p ->
@@ -960,6 +966,62 @@ private fun CutBar(ed: Editor) {
     }
 }
 
+/** Nazwa proporcji ramki na chipie. */
+private fun cropRatioName(r: CropRatio) = when (r) {
+    CropRatio.FREE -> T.t("Dowolne", "Free")
+    CropRatio.ORIGINAL -> T.t("Oryginał", "Original")
+    CropRatio.SQUARE -> "1:1"
+    CropRatio.R43 -> "4:3"
+    CropRatio.R32 -> "3:2"
+    CropRatio.R169 -> "16:9"
+}
+
+/** Pasek przycinania obrazu: proporcje, prostowanie suwakiem, ćwierć obrotu, powrót do całości i zatwierdzenie. */
+@Composable
+private fun CropBar(ed: Editor) {
+    val c = ed.crop ?: return
+    val half = (Math.PI / 2).toFloat()
+    val a = c.frame.a
+    val q = Math.round(a / half)
+    val deg = Math.toDegrees((a - q * half).toDouble()).toFloat()
+    val changed = !ed.cropIsFull()
+    FloatingCard(Modifier.widthIn(max = 460.dp)) {
+        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                SectionLabel(T.t("Przycinanie obrazu", "Crop image"))
+                Spacer(Modifier.weight(1f))
+                Text(String.format("%+.1f°", deg), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            Text(
+                T.t("Przeciągnij narożnik lub bok ramki, by zawęzić widoczną część; przeciągnij wnętrze ramki, by ją przesunąć. Suwak prostuje krzywo zrobione zdjęcie. Przycięcie można potem poprawić, a eksport zapisuje tylko widoczną część.",
+                    "Drag a corner or edge of the frame to narrow the visible part; drag inside to move it. The slider straightens a tilted photo. You can edit the crop later, and exports keep only the visible part."),
+                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                IconBtn(Icons.Rounded.RotateLeft, T.t("Obróć o 90° w lewo", "Rotate 90° left"), { ed.cropQuarter(false) }, size = 36.dp, iconSize = 20.dp)
+                Box(Modifier.weight(1f)) {
+                    MSlider(deg, -45f, 45f) { v ->
+                        val snapped = if (kotlin.math.abs(v) < 1f) 0f else v
+                        ed.cropSetAngle(q * half + Math.toRadians(snapped.toDouble()).toFloat())
+                    }
+                }
+                IconBtn(Icons.Rounded.RotateRight, T.t("Obróć o 90° w prawo", "Rotate 90° right"), { ed.cropQuarter(true) }, size = 36.dp, iconSize = 20.dp)
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                Row(Modifier.weight(1f).horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    for (r in CropRatio.values()) Chip(cropRatioName(r), c.ratio == r, { ed.cropSetRatio(r) })
+                }
+                IconBtn(Icons.Rounded.SwapHoriz, T.t("Zamień poziom z pionem", "Swap landscape and portrait"), { ed.cropSwapRatio() }, size = 36.dp, iconSize = 20.dp)
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                androidx.compose.material3.TextButton({ ed.cancelCrop() }) { Text(T.t("Anuluj", "Cancel")) }
+                androidx.compose.material3.TextButton({ ed.cropReset() }, enabled = changed || c.frame.a != 0f) { Text(T.t("Cały obraz", "Whole image")) }
+                Spacer(Modifier.weight(1f))
+                androidx.compose.material3.Button({ ed.applyCrop() }) { Text(T.t("Zastosuj", "Apply")) }
+            }
+        }
+    }
+}
+
 /** Karta widoczna podczas pobierania koloru: wybór, czy pipeta bierze kolor widoczny na stronie, czy pierwotny kolor kreski. */
 @Composable
 private fun PipetteCard(set: com.mdev.mnotes.data.Settings) {
@@ -1151,7 +1213,7 @@ private fun PenTester(p: ActivePen, smoothing: Float) {
 @Composable
 private fun SelectionBar(ed: Editor, panel: Panel?, toggle: (Panel) -> Unit, editText: () -> Unit) {
     val sel = ed.sel ?: return
-    if (ed.cut != null) return
+    if (ed.cut != null || ed.crop != null) return
     ed.selTick; ed.viewTick; ed.undoTick
     val v = ed.view ?: return
     val r = v.selScreenRect() ?: return
@@ -1180,7 +1242,7 @@ private fun SelectionBar(ed: Editor, panel: Panel?, toggle: (Panel) -> Unit, edi
                     BarSep(false)
                     IconBtn(Icons.Rounded.Palette, T.t("Kolor, grubość i styl linii", "Color, width & line style"), { toggle(Panel.SELCOLOR) }, selected = panel == Panel.SELCOLOR, size = 36.dp, iconSize = 20.dp)
                     if (!locked) IconBtn(Icons.Rounded.CropRotate, T.t("Skaluj i obracaj", "Resize & rotate"), { ed.transformMode = !ed.transformMode }, selected = ed.transformMode, size = 36.dp, iconSize = 20.dp)
-                    if (!locked && els.size == 1 && els[0] is ImageEl && !ed.readOnly) IconBtn(Icons.Rounded.VerticalSplit, T.t("Przetnij obraz na części", "Cut image into pieces"), { ed.startCut() }, size = 36.dp, iconSize = 20.dp)
+                    if (!locked && els.size == 1 && els[0] is ImageEl && !ed.readOnly) IconBtn(Icons.Rounded.Crop, T.t("Przytnij", "Crop"), { ed.startCrop() }, size = 36.dp, iconSize = 20.dp)
                     IconBtn(Icons.Rounded.FlipToFront, T.t("Na wierzch", "Bring to front"), { ed.frontSel() }, size = 36.dp, iconSize = 20.dp)
                     IconBtn(Icons.Rounded.FlipToBack, T.t("Na spód", "Send to back"), { ed.backSel() }, size = 36.dp, iconSize = 20.dp)
                     IconBtn(if (locked) Icons.Rounded.LockOpen else Icons.Rounded.Lock, if (locked) T.t("Odblokuj", "Unlock") else T.t("Zablokuj", "Lock"), { ed.lockSel(!locked) }, size = 36.dp, iconSize = 20.dp)
@@ -1418,9 +1480,9 @@ private fun editorKey(e: androidx.compose.ui.input.key.KeyEvent, ed: Editor, cmd
         if (k == Key.P && shift) { openPalette(); return true }
     } else if (!fieldFocused) {
         when (k) {
-            Key.Backspace -> if (ed.sel != null && !ed.readOnly && ed.cut == null) { ed.deleteSel(); return true }
+            Key.Backspace -> if (ed.sel != null && !ed.readOnly && ed.cut == null && ed.crop == null) { ed.deleteSel(); return true }
             Key.Escape -> {
-                if (ed.pipette != null) ed.cancelPipette() else if (ed.cut != null) ed.cancelCut() else if (ed.searchOpen) ed.closeSearch() else if (ed.sel != null) ed.clearSel() else if (!ed.chrome) ed.chrome = true else return false
+                if (ed.pipette != null) ed.cancelPipette() else if (ed.cut != null) ed.cancelCut() else if (ed.crop != null) ed.cancelCrop() else if (ed.searchOpen) ed.closeSearch() else if (ed.sel != null) ed.clearSel() else if (!ed.chrome) ed.chrome = true else return false
                 return true
             }
             Key.DirectionLeft, Key.DirectionRight, Key.DirectionUp, Key.DirectionDown -> if (ed.sel != null && !ed.readOnly) {

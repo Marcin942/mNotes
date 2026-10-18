@@ -23,6 +23,7 @@ import com.mdev.mnotes.core.pen.StrokeDash
 import com.mdev.mnotes.core.pen.StrokeOutline
 import com.mdev.mnotes.editor.T
 import com.mdev.mnotes.render.Assets
+import com.mdev.mnotes.render.CropBake
 import com.mdev.mnotes.render.PageRenderer
 import com.mdev.mnotes.render.PdfPool
 import java.io.ByteArrayOutputStream
@@ -79,6 +80,7 @@ class Exporter(private val repo: Repository, private val assets: Assets, private
 
     private fun pdfOut(nb: String, meta: NotebookMeta, idx: List<Int>, out: OutputStream) {
         val doc = PdfDocument()
+        renderer.bakeCrops = true
         try {
             var n = 0
             for (i in idx) {
@@ -89,7 +91,12 @@ class Exporter(private val repo: Repository, private val assets: Assets, private
                 doc.finishPage(page)
             }
             doc.writeTo(out)
-        } finally { doc.close() }
+        } finally {
+            doc.close()
+            // Skia może trzymać bitmapy do zamknięcia dokumentu, więc kopie przyciętych obrazów zwalniamy dopiero tu
+            renderer.bakeCrops = false
+            renderer.releaseBaked()
+        }
     }
 
     /** Rysuje stronę w układzie punktów; [bgScale] = px/pt dla tła PDF. */
@@ -177,10 +184,11 @@ class Exporter(private val repo: Repository, private val assets: Assets, private
                 if (cr.isFull) {
                     sb.append("<image x=\"${f(e.cx - e.w / 2)}\" y=\"${f(e.cy - e.h / 2)}\" width=\"${f(e.w)}\" height=\"${f(e.h)}\" opacity=\"${f(e.alpha)}\"$tr preserveAspectRatio=\"none\" xlink:href=\"data:image/png;base64,${pngB64(b)}\"/>\n")
                 } else {
-                    // wycinek: zagnieżdżone <svg> z viewBox na ułamku pliku i własnym przycięciem
-                    val bw = b.width; val bh = b.height
-                    sb.append("<g opacity=\"${f(e.alpha)}\"$tr><svg x=\"${f(e.cx - e.w / 2)}\" y=\"${f(e.cy - e.h / 2)}\" width=\"${f(e.w)}\" height=\"${f(e.h)}\" viewBox=\"${f(cr.l * bw)} ${f(cr.t * bh)} ${f(cr.width * bw)} ${f(cr.height * bh)}\" preserveAspectRatio=\"none\">")
-                    sb.append("<image x=\"0\" y=\"0\" width=\"$bw\" height=\"$bh\" preserveAspectRatio=\"none\" xlink:href=\"data:image/png;base64,${pngB64(b)}\"/></svg></g>\n")
+                    // wycinek: do pliku trafia tylko widoczna część (wyprostowana), a nie cały obraz z maską
+                    val kept = CropBake.bake(b, cr, (e.w * 4f).roundToInt(), (e.h * 4f).roundToInt())
+                    try {
+                        sb.append("<image x=\"${f(e.cx - e.w / 2)}\" y=\"${f(e.cy - e.h / 2)}\" width=\"${f(e.w)}\" height=\"${f(e.h)}\" opacity=\"${f(e.alpha)}\"$tr preserveAspectRatio=\"none\" xlink:href=\"data:image/png;base64,${pngB64(kept)}\"/>\n")
+                    } finally { kept.recycle() }
                 }
             }
         }

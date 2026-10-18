@@ -51,6 +51,20 @@ class PageRenderer(private val assets: Assets?) {
     private val dash = StrokeDash.Pieces()
     private val rect = RectF()
     private val src = android.graphics.Rect()
+    private val tiltPaint = Paint(Paint.FILTER_BITMAP_FLAG or Paint.ANTI_ALIAS_FLAG)
+    private val tiltMatrix = android.graphics.Matrix()
+
+    /**
+     * Gdy włączone (eksport do PDF), przycięty obraz trafia na płótno jako kopia samej widocznej części, a nie cały plik
+     * z maską: wektorowy format zachowałby całość. Kopie zwalnia [releaseBaked] po zamknięciu dokumentu.
+     */
+    var bakeCrops = false
+    private val baked = ArrayList<Bitmap>()
+
+    fun releaseBaked() {
+        for (b in baked) b.recycle()
+        baked.clear()
+    }
     private val multiply = PorterDuffXfermode(PorterDuff.Mode.MULTIPLY)
     private val screen = PorterDuffXfermode(PorterDuff.Mode.SCREEN)
     private val geoms = HashMap<PageSpec, TemplateGeom>()
@@ -319,6 +333,11 @@ class PageRenderer(private val assets: Assets?) {
             bmpPaint.alpha = (im.alpha * 255f).toInt().coerceIn(0, 255)
             val cr = im.crop
             if (cr.isFull) c.drawBitmap(bmp, null, rect, bmpPaint)
+            else if (bakeCrops) {
+                val b = CropBake.bake(bmp, cr, (im.w * BAKE_PX_PER_PT).roundToInt(), (im.h * BAKE_PX_PER_PT).roundToInt())
+                baked.add(b)
+                c.drawBitmap(b, null, rect, bmpPaint)
+            } else if (cr.a != 0f) drawTilted(c, bmp, im)
             else {
                 val bw = bmp.width; val bh = bmp.height
                 src.set((cr.l * bw).roundToInt(), (cr.t * bh).roundToInt(), (cr.r * bw).roundToInt().coerceAtLeast(1), (cr.b * bh).roundToInt().coerceAtLeast(1))
@@ -330,5 +349,30 @@ class PageRenderer(private val assets: Assets?) {
             c.drawRect(rect, paint)
         }
         c.restore()
+    }
+
+    /**
+     * Wycinek obrócony w pliku: bitmapa jako cieniowanie prostokąta obrazu (krawędzie wygładzone, bez przycinania maską).
+     * Płótno jest już obrócone o obrót obrazu; dołożony kąt wycinka prostuje plik pod ramką.
+     */
+    private fun drawTilted(c: Canvas, bmp: Bitmap, im: ImageEl) {
+        val f = com.mdev.mnotes.core.edit.CropGeom.frameOf(im.crop, bmp.width.toFloat(), bmp.height.toFloat())
+        val s = im.w / (2f * f.hw)
+        tiltMatrix.reset()
+        tiltMatrix.postTranslate(-f.cx, -f.cy)
+        tiltMatrix.postRotate(Math.toDegrees(-f.a.toDouble()).toFloat())
+        tiltMatrix.postScale(s, s)
+        tiltMatrix.postTranslate(im.cx, im.cy)
+        val sh = android.graphics.BitmapShader(bmp, android.graphics.Shader.TileMode.CLAMP, android.graphics.Shader.TileMode.CLAMP)
+        sh.setLocalMatrix(tiltMatrix)
+        tiltPaint.shader = sh
+        tiltPaint.alpha = (im.alpha * 255f).toInt().coerceIn(0, 255)
+        c.drawRect(rect, tiltPaint)
+        tiltPaint.shader = null
+    }
+
+    private companion object {
+        /** Gęstość kopii przyciętego obrazu w eksporcie (px na pt): ok. 290 dpi, więcej niż potrzeba do druku. */
+        const val BAKE_PX_PER_PT = 4f
     }
 }

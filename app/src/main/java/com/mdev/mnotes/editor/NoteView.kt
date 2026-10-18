@@ -400,6 +400,20 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
         return RectF((ox + b.l) * zoom + tx, (oy + b.t) * zoom + ty, (ox + b.r) * zoom + tx, (oy + b.b) * zoom + ty)
     }
 
+    /** Prostokąt (w pikselach widoku) opisany na ramce przycinania; do ustawiania panelu tak, by jej nie zasłaniał. */
+    fun cropScreenRect(): RectF? {
+        val s = ed.crop ?: return null
+        val pi = doc.indexOf(s.pageId); if (pi < 0) return null
+        val fc = com.mdev.mnotes.core.edit.CropGeom.corners(s.frame)
+        var l = Float.MAX_VALUE; var t = Float.MAX_VALUE; var r = -Float.MAX_VALUE; var b = -Float.MAX_VALUE
+        for (i in 0..3) {
+            val p = s.place.toPage(fc[i * 2], fc[i * 2 + 1], s.iw, s.ih)
+            val x = scrX(pi, p[0]); val y = scrY(pi, p[1])
+            l = minOf(l, x); r = maxOf(r, x); t = minOf(t, y); b = maxOf(b, y)
+        }
+        return RectF(l, t, r, b)
+    }
+
     private fun selBounds(): Bounds? {
         val s = ed.sel ?: return null
         val p = doc.page(s.pageId) ?: return null

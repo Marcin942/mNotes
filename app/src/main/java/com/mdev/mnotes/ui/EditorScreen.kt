@@ -184,6 +184,9 @@ import com.mdev.mnotes.core.pen.LineStyle
 import com.mdev.mnotes.core.pen.PenKit
 import com.mdev.mnotes.editor.Clip
 import com.mdev.mnotes.core.edit.CropGeom
+import com.mdev.mnotes.core.edit.CardPlacement
+import com.mdev.mnotes.core.edit.CardSide
+import androidx.compose.foundation.layout.PaddingValues
 import com.mdev.mnotes.editor.CropRatio
 import com.mdev.mnotes.editor.Editor
 import com.mdev.mnotes.editor.NoteView
@@ -323,7 +326,7 @@ fun EditorScreen(ed: Editor, tabs: TabsCtl, onExit: () -> Unit, onSettings: () -
                         // Pod panelami: otwarty panel zasłania kapsułę, a pierwsze dotknięcie strony go zamyka.
                         if (ed.pipette != null) Box(Modifier.align(Alignment.TopCenter).padding(top = 50.dp).panelEnter()) { PipetteCard(set) }
                         if (ed.cut != null) Box(Modifier.align(Alignment.TopCenter).padding(top = 50.dp, start = 8.dp, end = 8.dp).panelEnter()) { CutBar(ed) }
-                        if (ed.crop != null) Box(Modifier.align(Alignment.TopCenter).padding(top = 50.dp, start = 8.dp, end = 8.dp).panelEnter()) { CropBar(ed) }
+                        if (ed.crop != null) CropBarHost(ed)
                         if (set.undoDock != 0) UndoCapsule(ed, Modifier.align(undoCorner(set.undoDock)).padding(8.dp).padding(start = if (!ed.chrome && set.undoDock == 1) 48.dp else 0.dp))
                         if (ed.chrome) {
                             panel?.takeIf { it == Panel.PEN || it == Panel.ERASER || it == Panel.LASSO || it == Panel.TAPE || it == Panel.PAINTER }?.let { p ->
@@ -977,7 +980,35 @@ private fun cropRatioName(r: CropRatio) = when (r) {
     CropRatio.R169 -> "16:9"
 }
 
-/** Pasek przycinania obrazu: proporcje, prostowanie suwakiem, ćwierć obrotu, powrót do całości i zatwierdzenie. */
+/**
+ * Pasek przycinania leży przy ramce, a nie na stałe u góry: stoi pod nią, nad nią albo z boku, zależnie od tego, gdzie
+ * jest miejsce, i zasłania obraz jak najmniej (jak pasek zaznaczenia). Dotychczasowa strona trzyma się, dopóki
+ * pasuje, więc pasek nie skacze przy każdym ruchu ramki.
+ */
+@Composable
+private fun CropBarHost(ed: Editor) {
+    val c = ed.crop ?: return
+    c.frame; c.place; ed.viewTick
+    val v = ed.view
+    val r = v?.cropScreenRect()
+    val dens = androidx.compose.ui.platform.LocalDensity.current.density
+    val side = remember { arrayOfNulls<CardSide>(1) }
+    Box(
+        Modifier.fillMaxSize().layout { mm, cs ->
+            val p = mm.measure(cs.copy(minWidth = 0, minHeight = 0))
+            layout(cs.maxWidth, cs.maxHeight) {
+                // górny pas zajmuje listwa narzędzi, więc pasek nie wchodzi pod nią
+                val top = (48 * dens).toInt().coerceAtMost(cs.maxHeight / 3)
+                val spot = if (r == null) CardPlacement.place(0f, 0f, 0f, 0f, p.width, p.height, cs.maxWidth, cs.maxHeight - top, 12 * dens, side[0])
+                else CardPlacement.place(r.left, r.top - top, r.right, r.bottom - top, p.width, p.height, cs.maxWidth, cs.maxHeight - top, 12 * dens, side[0])
+                side[0] = spot.side
+                p.place(spot.x, spot.y + top)
+            }
+        },
+    ) { Box(Modifier.panelEnter()) { CropBar(ed) } }
+}
+
+/** Zwarty pasek przycinania: prostowanie, proporcje i zatwierdzenie w trzech wierszach (bez opisów, podpowiedzi są w opisach przycisków). */
 @Composable
 private fun CropBar(ed: Editor) {
     val c = ed.crop ?: return
@@ -985,38 +1016,30 @@ private fun CropBar(ed: Editor) {
     val q = c.quarter
     val deg = Math.toDegrees(CropGeom.tiltOf(c.frame.a, q).toDouble()).toFloat()
     val changed = !ed.cropIsFull()
-    FloatingCard(Modifier.widthIn(max = 460.dp)) {
-        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                SectionLabel(T.t("Przycinanie obrazu", "Crop image"))
-                Spacer(Modifier.weight(1f))
-                Text(String.format("%+.1f°", deg), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-            Text(
-                T.t("Przeciągnij narożnik lub bok ramki, by zawęzić widoczną część; przeciągnij wnętrze ramki, by ją przesunąć. Suwak prostuje krzywo zrobione zdjęcie. Przycięcie można potem poprawić, a eksport zapisuje tylko widoczną część.",
-                    "Drag a corner or edge of the frame to narrow the visible part; drag inside to move it. The slider straightens a tilted photo. You can edit the crop later, and exports keep only the visible part."),
-                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-                IconBtn(Icons.Rounded.RotateLeft, T.t("Obróć o 90° w lewo", "Rotate 90° left"), { ed.cropQuarter(false) }, size = 36.dp, iconSize = 20.dp)
+    FloatingCard(Modifier.width(300.dp)) {
+        Column(Modifier.padding(horizontal = 8.dp, vertical = 4.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(2.dp), verticalAlignment = Alignment.CenterVertically) {
+                IconBtn(Icons.Rounded.RotateLeft, T.t("Obróć o 90° w lewo", "Rotate 90° left"), { ed.cropQuarter(false) }, size = 32.dp, iconSize = 18.dp)
                 Box(Modifier.weight(1f)) {
                     MSlider(deg, -45f, 45f) { v ->
                         val snapped = if (kotlin.math.abs(v) < 1f) 0f else v
                         ed.cropSetAngle(q * half + Math.toRadians(snapped.toDouble()).toFloat())
                     }
                 }
-                IconBtn(Icons.Rounded.RotateRight, T.t("Obróć o 90° w prawo", "Rotate 90° right"), { ed.cropQuarter(true) }, size = 36.dp, iconSize = 20.dp)
+                IconBtn(Icons.Rounded.RotateRight, T.t("Obróć o 90° w prawo", "Rotate 90° right"), { ed.cropQuarter(true) }, size = 32.dp, iconSize = 18.dp)
+                Text(String.format("%+.1f°", deg), Modifier.width(44.dp), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
             }
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-                Row(Modifier.weight(1f).horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
+                Row(Modifier.weight(1f).horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                     for (r in CropRatio.values()) Chip(cropRatioName(r), c.ratio == r, { ed.cropSetRatio(r) })
                 }
-                IconBtn(Icons.Rounded.SwapHoriz, T.t("Zamień poziom z pionem", "Swap landscape and portrait"), { ed.cropSwapRatio() }, size = 36.dp, iconSize = 20.dp)
+                IconBtn(Icons.Rounded.SwapHoriz, T.t("Zamień poziom z pionem", "Swap landscape and portrait"), { ed.cropSwapRatio() }, size = 32.dp, iconSize = 18.dp)
             }
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                androidx.compose.material3.TextButton({ ed.cancelCrop() }) { Text(T.t("Anuluj", "Cancel")) }
-                androidx.compose.material3.TextButton({ ed.cropReset() }, enabled = changed || c.frame.a != 0f) { Text(T.t("Cały obraz", "Whole image")) }
+            Row(horizontalArrangement = Arrangement.spacedBy(2.dp), verticalAlignment = Alignment.CenterVertically) {
+                androidx.compose.material3.TextButton({ ed.cancelCrop() }, contentPadding = PaddingValues(horizontal = 8.dp)) { Text(T.t("Anuluj", "Cancel"), style = MaterialTheme.typography.labelLarge) }
+                androidx.compose.material3.TextButton({ ed.cropReset() }, enabled = changed || c.frame.a != 0f, contentPadding = PaddingValues(horizontal = 8.dp)) { Text(T.t("Cały obraz", "Whole image"), style = MaterialTheme.typography.labelLarge) }
                 Spacer(Modifier.weight(1f))
-                androidx.compose.material3.Button({ ed.applyCrop() }) { Text(T.t("Zastosuj", "Apply")) }
+                androidx.compose.material3.Button({ ed.applyCrop() }, contentPadding = PaddingValues(horizontal = 14.dp), modifier = Modifier.height(34.dp)) { Text(T.t("Zastosuj", "Apply")) }
             }
         }
     }

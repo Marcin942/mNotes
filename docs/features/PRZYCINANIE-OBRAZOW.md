@@ -11,6 +11,12 @@ Zaznaczony pojedynczy, niezablokowany obraz → przycisk „Przytnij” na pasku
 
 - **Ramka:** uchwyty w narożnikach i na środkach boków (bez siatki). Przeciągnięcie uchwytu zmienia ramkę, plik stoi
   w miejscu; przeciągnięcie wnętrza przesuwa ramkę po pliku. Ramka nie wychodzi poza plik, najmniejszy bok to 24 pt.
+  Róg lub bok, który dotarł do brzegu pliku, **nie grzęźnie**: `resized` rzutuje cel (palec) na najbliższy dozwolony
+  punkt (wielokąt ograniczeń liniowych), więc ruch wzdłuż brzegu nadal przesuwa uchwyt. Przy zablokowanych proporcjach
+  ramka zatrzymuje się na ścianie, ale nigdy nie wychodzi poza obraz.
+- **Pasek:** zwarty (suwak z kątem, proporcje, Anuluj / Cały obraz / Zastosuj), bez opisów. Leży przy ramce, nie na
+  stałe u góry: `CropBarHost` + czysta `core/edit/CardPlacement` wybierają pod / nad / z prawej / z lewej, a gdy obraz
+  zajmuje prawie cały widok, miejsce zasłaniające najmniej. Dotychczasowa strona trzyma się, dopóki pasuje.
 - **Prostowanie:** suwak ±45° wokół najbliższej wielokrotności 90° (z przyciąganiem do 0°) oraz przyciski obrotu
   o 90°. Plik obraca się pod stałą ramką wokół jej środka. Gdy obrócony plik nie wypełnia ramki, ramka się
   zmniejsza; wraca do zamierzonego rozmiaru po wyprostowaniu (`CropSession.want`).
@@ -45,9 +51,9 @@ ruchem wskazówek zegara na ekranie). Ułamki mogą wychodzić poza 0..1 tylko w
 | Geometria | `core/edit/CropGeom.kt` | ramka, uchwyty, `resized`, `moved`, `fitted`, `quarter`, `CropPlace`, `applied` |
 | Stan | `editor/Editor.kt` | `CropSession`, `startCrop`, `cropResize`, `cropMove`, `cropSetAngle`, `cropQuarter`, `applyCrop` |
 | Gesty/rysunek | `editor/NoteView.kt` | `Mode.CROP`, `cropDown/Move/Up/Abort`, `drawCrop` |
-| UI | `ui/EditorScreen.kt` | `CropBar`, przycisk w `SelectionBar`, Esc/Backspace |
+| UI | `ui/EditorScreen.kt`, `core/edit/CardPlacement.kt` | `CropBarHost`, `CropBar`, przycisk w `SelectionBar`, Esc/Backspace |
 | Rysowanie/eksport | `render/PageRenderer.kt`, `render/CropBake.kt`, `data/Transfer.kt` | rysunek pod kątem, `bake` |
-| Testy | `CropGeomTest`, `PageCodecTest` | geometria, zaokrąglenia, kodek |
+| Testy | `CropGeomTest`, `CardPlacementTest`, `PageCodecTest` | geometria, zaokrąglenia, kodek |
 
 Przecinanie na części (`canCutSel`) nie działa na obrazach z kątem ≠ 0.
 

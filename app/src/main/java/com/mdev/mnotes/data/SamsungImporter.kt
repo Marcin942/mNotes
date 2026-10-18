@@ -1,11 +1,14 @@
 package com.mdev.mnotes.data
 
 import com.mdev.mnotes.core.codec.PageCodec
+import com.mdev.mnotes.core.model.Element
+import com.mdev.mnotes.core.model.ImageEl
 import com.mdev.mnotes.core.model.PageContent
 import com.mdev.mnotes.core.model.PdfRef
 import com.mdev.mnotes.core.samsung.ConvertedNote
 import com.mdev.mnotes.core.samsung.SdBackground
 import com.mdev.mnotes.render.SamsungBackground
+import com.mdev.mnotes.render.SamsungImages
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 
@@ -28,11 +31,21 @@ class SamsungImporter(private val repo: Repository) {
                 val asset = repo.importAsset(id, ByteArrayInputStream(pdf), "pdf")
                 backgrounds.forEachIndexed { i, bg -> refs[bg] = PdfRef(asset, i) }
             }
+            // ten sam obraz (i ten sam kadr) na wielu stronach to jeden plik w zeszycie; brak pliku = obraz pominięty
+            val assets = HashMap<String, String?>()
+            fun resolve(e: Element): Element? {
+                if (e !is ImageEl || !e.asset.startsWith("sd:")) return e
+                val name = assets.getOrPut(e.asset) {
+                    SamsungImages.encode(note.media, e.asset)?.let { repo.importAsset(id, ByteArrayInputStream(it.bytes), it.ext) }
+                }
+                return name?.let { e.copy(asset = it) }
+            }
             val now = System.currentTimeMillis()
             val pages = note.pages.map { cp ->
                 val pageId = newId()
                 val spec = cp.background?.let { cp.spec.copy(pdf = refs.getValue(it)) } ?: cp.spec
-                if (cp.strokes.isNotEmpty()) repo.writePage(id, pageId, PageCodec.encode(PageContent.of(cp.strokes)))
+                val els = cp.elements.mapNotNull(::resolve)
+                if (els.isNotEmpty()) repo.writePage(id, pageId, PageCodec.encode(PageContent.of(els)))
                 PageMeta(pageId, spec)
             }
             return NotebookMeta(id, title, folderId, now, now, now, cover, CoverStyle.PLAIN, pages = pages)

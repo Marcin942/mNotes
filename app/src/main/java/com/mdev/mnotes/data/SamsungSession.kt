@@ -10,6 +10,7 @@ import com.mdev.mnotes.core.samsung.ConvertOptions
 import com.mdev.mnotes.core.samsung.ConvertedNote
 import com.mdev.mnotes.core.samsung.ImportMode
 import com.mdev.mnotes.core.samsung.SamsungConvert
+import com.mdev.mnotes.render.SdAndroidMeasure
 import com.mdev.mnotes.core.samsung.SdDocument
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -127,7 +128,7 @@ class SamsungSession(
             item.busy = true
             try {
                 val doc = item.doc ?: withContext(Dispatchers.IO) { SamsungLoad.read(app, item.source) }.also { item.doc = it }
-                val note = withContext(Dispatchers.Default) { SamsungConvert.convert(doc, item.source.name, opts) }
+                val note = withContext(Dispatchers.Default) { SamsungConvert.convert(doc, item.source.name, opts, measure = SdAndroidMeasure()) }
                 item.note = note
                 item.noteOpts = opts
                 item.pages = note.pages.size

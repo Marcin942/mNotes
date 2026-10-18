@@ -190,7 +190,7 @@ class SamsungConvertTest {
         val text = n.report.first { "pole tekstowe" in it.pl }
         assertTrue("2 szt." in text.pl)
         assertEquals(listOf(1), text.pages)
-        assertNotNull(n.report.firstOrNull { "obraz" in it.pl })
+        assertNotNull(n.report.firstOrNull { "nie do odczytania" in it.pl })
         assertEquals(1, n.strokeCount)
     }
 

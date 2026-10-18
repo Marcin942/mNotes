@@ -221,9 +221,10 @@ internal object ImageConvert {
         if (full == null || full.w <= 0 || full.h <= 0) return "sd:${img.mediaId}"
         fun f(v: Double) = "%.4f".format(java.util.Locale.ROOT, v.coerceIn(0.0, 1.0))
         val r = img.rect
-        return "sd:${img.mediaId}:" + listOf(
-            (r.x0 - full.x0) / full.w, (r.y0 - full.y0) / full.h, (r.x1 - full.x0) / full.w, (r.y1 - full.y0) / full.h,
-        ).joinToString(",") { f(it) }
+        val c = listOf((r.x0 - full.x0) / full.w, (r.y0 - full.y0) / full.h, (r.x1 - full.x0) / full.w, (r.y1 - full.y0) / full.h)
+        // bez kadru plik zostaje bajt w bajt taki, jaki był w notatce
+        if (c[0] < 0.0005 && c[1] < 0.0005 && c[2] > 0.9995 && c[3] > 0.9995) return "sd:${img.mediaId}"
+        return "sd:${img.mediaId}:" + c.joinToString(",") { f(it) }
     }
 
     fun element(img: SdImage): ImageEl? {
@@ -235,5 +236,18 @@ internal object ImageConvert {
             Ids.next(), key(img), (r.cx * SamsungConvert.UNIT_PT).toFloat(), (r.cy * SamsungConvert.UNIT_PT).toFloat(),
             w, h, Math.toRadians(img.rotationDeg).toFloat(),
         )
+    }
+}
+
+/** Rozbiór klucza zasobu `sd:<media>[:l,t,r,b]` (ułamki kadru względem całego obrazu). */
+object SdImageKey {
+    fun parse(key: String): Pair<Int, DoubleArray?>? {
+        if (!key.startsWith("sd:")) return null
+        val parts = key.substring(3).split(':')
+        val id = parts[0].toIntOrNull() ?: return null
+        if (parts.size < 2) return id to null
+        val v = parts[1].split(',').mapNotNull { it.toDoubleOrNull() }
+        if (v.size != 4 || v[2] <= v[0] || v[3] <= v[1]) return id to null
+        return id to doubleArrayOf(v[0], v[1], v[2], v[3])
     }
 }

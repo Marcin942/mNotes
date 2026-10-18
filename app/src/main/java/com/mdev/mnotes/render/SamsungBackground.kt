@@ -4,10 +4,13 @@ import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Paint
 import android.graphics.pdf.PdfDocument
+import android.graphics.RectF
+import com.mdev.mnotes.core.model.ImageEl
 import com.mdev.mnotes.core.samsung.ConvertedPage
 import com.mdev.mnotes.core.samsung.SdBackground
 import com.mdev.mnotes.core.samsung.SdBackgroundGeometry
 import java.io.OutputStream
+import kotlin.math.max
 import kotlin.math.roundToInt
 
 /**
@@ -55,8 +58,11 @@ object SamsungBackground {
         } finally { doc.close() }
     }
 
-    /** Podgląd strony po konwersji (tło + kreski) o szerokości [widthPx]; [renderer] rysuje kreski jak w edytorze. */
-    fun preview(page: ConvertedPage, widthPx: Int, renderer: PageRenderer): Bitmap {
+    /**
+     * Podgląd strony po konwersji (tło + wszystkie elementy) o szerokości [widthPx]; [renderer] rysuje elementy jak w
+     * edytorze, a obrazy biorą pliki z [media] (klucze `sd:`).
+     */
+    fun preview(page: ConvertedPage, widthPx: Int, renderer: PageRenderer, media: Map<Int, ByteArray> = emptyMap()): Bitmap {
         val spec = page.spec
         val sc = widthPx / spec.w
         val bmp = Bitmap.createBitmap(widthPx.coerceAtLeast(1), (spec.h * sc).roundToInt().coerceAtLeast(1), Bitmap.Config.ARGB_8888)
@@ -64,7 +70,16 @@ object SamsungBackground {
         c.scale(sc, sc)
         val bg = page.background
         if (bg != null) draw(c, bg) else renderer.drawPaper(c, spec, sc)
-        for (s in page.strokes) renderer.drawElement(c, "", s, sc, false, spec.darkPaper)
+        val paint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
+        for (e in page.elements) {
+            if (e !is ImageEl) { renderer.drawElement(c, "", e, sc, false, spec.darkPaper); continue }
+            val img = SamsungImages.decode(media, e.asset, (max(e.w, e.h) * sc * 1.5f).toInt().coerceAtLeast(64)) ?: continue
+            c.save()
+            c.rotate(Math.toDegrees(e.rot.toDouble()).toFloat(), e.cx, e.cy)
+            c.drawBitmap(img, null, RectF(e.cx - e.w / 2, e.cy - e.h / 2, e.cx + e.w / 2, e.cy + e.h / 2), paint)
+            c.restore()
+            img.recycle()
+        }
         return bmp
     }
 }

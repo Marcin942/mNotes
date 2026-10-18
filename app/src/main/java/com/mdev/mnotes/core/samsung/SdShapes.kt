@@ -106,24 +106,34 @@ internal object SdShapes {
      * Elipsa mNotes (49 punktów, punkt 0 na osi głównej) dopasowana do obrysu: środek i osie z momentów punktów, a
      * półosie z ich największego rzutu. Przyjmowana tylko wtedy, gdy obrys naprawdę jest elipsą; inaczej zostaje kreska.
      */
-    private fun ellipseStroke(p: List<DoubleArray>, width: Float, color: Int): Stroke? {
+    private fun ellipseStroke(all: List<DoubleArray>, width: Float, color: Int): Stroke? {
+        // ostatni punkt zamkniętego obrysu leży na pierwszym; liczony dwa razy przesuwałby środek
+        val p = if (all.size > 1 && all.first()[0] == all.last()[0] && all.first()[1] == all.last()[1]) all.dropLast(1) else all
         val n = p.size
-        var cx = 0.0; var cy = 0.0
-        for (q in p) { cx += q[0]; cy += q[1] }
-        cx /= n; cy /= n
+        var mx = 0.0; var my = 0.0
+        for (q in p) { mx += q[0]; my += q[1] }
+        mx /= n; my /= n
         var sxx = 0.0; var syy = 0.0; var sxy = 0.0
         for (q in p) {
-            val dx = q[0] - cx; val dy = q[1] - cy
+            val dx = q[0] - mx; val dy = q[1] - my
             sxx += dx * dx; syy += dy * dy; sxy += dx * dy
         }
         val th = 0.5 * atan2(2 * sxy, sxx - syy)
         var ux = cos(th); var uy = sin(th)
         var vx = -uy; var vy = ux
-        var a = 0.0; var b = 0.0
+        // środek i półosie z zakresu rzutów na osie (nie ze średniej punktów, bo ta zależy od gęstości próbkowania)
+        var u0 = Double.MAX_VALUE; var u1 = -Double.MAX_VALUE; var v0 = Double.MAX_VALUE; var v1 = -Double.MAX_VALUE
         for (q in p) {
-            a = max(a, abs((q[0] - cx) * ux + (q[1] - cy) * uy))
-            b = max(b, abs((q[0] - cx) * vx + (q[1] - cy) * vy))
+            val pu = (q[0] - mx) * ux + (q[1] - my) * uy
+            val pv = (q[0] - mx) * vx + (q[1] - my) * vy
+            u0 = minOf(u0, pu); u1 = max(u1, pu); v0 = minOf(v0, pv); v1 = max(v1, pv)
         }
+        var a = (u1 - u0) / 2
+        var b = (v1 - v0) / 2
+        val cu = (u0 + u1) / 2
+        val cv = (v0 + v1) / 2
+        val cx = mx + cu * ux + cv * vx
+        val cy = my + cu * uy + cv * vy
         if (a < 1.0 || b < 1.0) return null
         if (a < b) {
             val tx = ux; val ty = uy

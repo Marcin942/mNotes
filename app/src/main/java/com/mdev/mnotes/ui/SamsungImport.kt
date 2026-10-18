@@ -325,7 +325,7 @@ private fun PagePager(note: ConvertedNote, modifier: Modifier) {
     val scope = rememberCoroutineScope()
     Column(modifier) {
         HorizontalPager(pager, Modifier.weight(1f).fillMaxWidth(), contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp), pageSpacing = 16.dp) { i ->
-            PagePreview(note.pages[i], Modifier.fillMaxSize())
+            PagePreview(note.pages[i], note.media, Modifier.fillMaxSize())
         }
         if (count > 1) Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
             IconBtn(Icons.Rounded.ChevronLeft, T.t("Poprzednia strona", "Previous page"), { scope.launch { pager.animateScrollToPage(pager.currentPage - 1) } }, enabled = pager.currentPage > 0)
@@ -340,11 +340,11 @@ private fun PagePager(note: ConvertedNote, modifier: Modifier) {
 
 /** Jedna strona po konwersji, narysowana tym samym kodem co w edytorze i w pliku PDF z tłem. */
 @Composable
-private fun PagePreview(page: ConvertedPage, modifier: Modifier) {
+private fun PagePreview(page: ConvertedPage, media: Map<Int, ByteArray>, modifier: Modifier) {
     val m = mint
     val bmp by produceState<ImageBitmap?>(null, page) {
         value = withContext(Dispatchers.Default) {
-            runCatching { SamsungBackground.preview(page, 1100, PageRenderer(null)).asImageBitmap() }.getOrNull()
+            runCatching { SamsungBackground.preview(page, 1100, PageRenderer(null), media).asImageBitmap() }.getOrNull()
         }
     }
     BoxWithConstraints(modifier, Alignment.Center) {
@@ -370,7 +370,10 @@ private fun SettingsPane(session: SamsungSession, item: SamsungItem, modifier: M
         MField(item.title, { item.title = it }, Modifier.fillMaxWidth(), hint = T.t("Nazwa zeszytu", "Notebook name"))
         item.note?.let {
             Text(
-                T.t("${pagesText(it.pages.size)}, kresek: ${it.strokeCount}", "${it.pages.size} pages, ${it.strokeCount} strokes"),
+                T.t(
+                    "${pagesText(it.pages.size)}, kresek: ${it.strokeCount}, pól tekstowych: ${it.textBoxCount}, obrazów: ${it.imageCount}",
+                    "${it.pages.size} pages, ${it.strokeCount} strokes, ${it.textBoxCount} text boxes, ${it.imageCount} images",
+                ),
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 6.dp),
             )
         }

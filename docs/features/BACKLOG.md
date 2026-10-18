@@ -53,9 +53,9 @@ Założenie projektowe: „Linux Mint user” = osoba ceniąca kontrolę, skrót
 - [x] EDT-008 Ołówek
 - [x] EDT-005/006 Wygładzanie/stabilizator, krzywa nacisku
 - [x] EDT-009 Próbnik pióra — `PenTester` w panelu pióra; bez testu na urządzeniu
-- [x] EDT-010 Gumka obiektowa · EDT-011 pikselowa · EDT-012 opcje (ignoruj zakreślacz) · EDT-013 wyczyść stronę · EDT-014 gumka lasso _(2026-10-18: rozmiar gumki od 1 pt; gumka pikselowa liczy kroki ruchu wsadowo, bez zacinania na zakreślaczu i pędzlu)_
+- [x] EDT-010 Gumka obiektowa · EDT-011 pikselowa · EDT-012 opcje (ignoruj zakreślacz) · EDT-013 wyczyść stronę · EDT-014 gumka lasso _(2026-10-18: rozmiar gumki od 1 pt; gumka pikselowa liczy kroki ruchu wsadowo, bez zacinania na zakreślaczu i pędzlu)_ _(2026-10-18: przemalowanie strony po gumce z budżetem czasu — na ciężkiej stronie rzadziej, żeby aplikacja się nie zacinała)_
 - [x] EDT-080 Presety piór (sloty, ulubione kolory) · EDT-081 popover koloru i grubości · EDT-083 szybkie przełączanie
-- [x] EDT-084 Pipeta (próbnik koloru ze strony) _(klawisz I lub przycisk w selektorze koloru; lupa z hexem; próbkuje bitmapę strony; Esc/PPM anuluje; nie działa w dialogach modalnych; bez testu na urządzeniu)_ _(2026-10-18: pipeta także jako narzędzie na pasku; ustawienie „Pobrany kolor zostaje w palecie”, domyślnie wyłączone)_
+- [x] EDT-084 Pipeta (próbnik koloru ze strony) _(klawisz I lub przycisk w selektorze koloru; lupa z hexem; próbkuje bitmapę strony; Esc/PPM anuluje; nie działa w dialogach modalnych; bez testu na urządzeniu)_ _(2026-10-18: pipeta także jako narzędzie na pasku; ustawienie „Pobrany kolor zostaje w palecie”, domyślnie wyłączone)_ _(2026-10-18: karta „Pobierany kolor” — rzeczywisty (domyślnie) albo pierwotny kolor kreski/wypełnienia)_
 - [x] EDT-085 Nowa paleta kolorów — stonowane atramenty (3×8) i osobna, pastelowa paleta zakreślaczy (miniatury pokazują efekt na papierze; ciemne barwy są łagodzone) _(bez testu na urządzeniu)_
 - [x] EDT-020/021 Lasso swobodne/prostokątne · EDT-022 uchwyty (przesuń, skaluj, obróć) · EDT-023 pasek kontekstowy
 - [x] EDT-024 wytnij/kopiuj/wklej/duplikuj (schowek wewn.) · EDT-025 kolor/grubość zaznaczenia · EDT-027 kolejność/blokada · EDT-029 wyrównanie

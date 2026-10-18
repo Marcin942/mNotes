@@ -105,8 +105,11 @@ object CropGeom {
         val k = min(1f, min((iw - 2f * m) / (2f * ex), (ih - 2f * m) / (2f * ey)))
         val g = if (k < 1f) f.copy(hw = f.hw * k, hh = f.hh * k) else f
         val nx = extentX(g); val ny = extentY(g)
-        return g.copy(cx = g.cx.coerceIn(m + nx, iw - m - nx), cy = g.cy.coerceIn(m + ny, ih - m - ny))
+        return g.copy(cx = clampMid(g.cx, m + nx, iw - m - nx), cy = clampMid(g.cy, m + ny, ih - m - ny))
     }
+
+    /** Jak `coerceIn`, ale gdy zaokrąglenie zrobi zakres pusty (ramka tak duża jak plik), daje jego środek zamiast wyjątku. */
+    private fun clampMid(v: Float, lo: Float, hi: Float) = if (lo > hi) (lo + hi) * 0.5f else v.coerceIn(lo, hi)
 
     /** Ramka przesunięta o ([dx], [dy]) pikseli pliku, zatrzymana na brzegu pliku. */
     fun moved(f: CropFrame, dx: Float, dy: Float, iw: Float, ih: Float): CropFrame =

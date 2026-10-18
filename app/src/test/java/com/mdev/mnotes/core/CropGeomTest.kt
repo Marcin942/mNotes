@@ -162,4 +162,19 @@ class CropGeomTest {
         assertEquals(out.w / out.h, f.hw / f.hh, 1e-4f)
         assertTrue(abs(out.crop.a - deg(10f)) < 1e-5f)
     }
+
+    @Test fun straighteningSliderNeverThrowsAtAnyAngle() {
+        // suwak prostowania przechodzi przez setki kątów; zaokrąglenie przy zmniejszaniu ramki nie może dać pustego zakresu
+        for ((w, h) in listOf(4000f to 3000f, 4032f to 3024f, 3024f to 4032f, 1080f to 2400f, 777f to 333f, 100f to 100f)) {
+            val want = CropGeom.full(w, h)
+            var d = -45f
+            while (d <= 45f) {
+                for (q in -2..2) {
+                    val g = CropGeom.fitted(want.copy(a = CropGeom.normAngle(q * CropGeom.HALF_PI + deg(d))), w, h)
+                    assertTrue(g.hw > 0f && g.hh > 0f && !g.cx.isNaN() && !g.cy.isNaN())
+                }
+                d += 0.037f
+            }
+        }
+    }
 }

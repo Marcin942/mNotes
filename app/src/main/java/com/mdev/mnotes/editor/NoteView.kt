@@ -2676,7 +2676,8 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
             }
             ed.clearSel()
         }
-        val pi = pageIdxAt(curX, curY)
+        // Start poza stroną (ciemne tło, szczelina) liczy się do najbliższej strony: zaznaczanie przy krawędzi ma ruszać.
+        val pi = layout.nearest(docX(curX), docY(curY))
         if (pi < 0) { mode = Mode.IGNORE; return }
         lPage = pi; lm = LM.DRAW; ln = 0
         addLasso(pgX(pi, curX), pgY(pi, curY))
@@ -2783,7 +2784,7 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
             LM.DRAW -> {
                 var len = 0f
                 for (i in 1 until ln) len += hypot(lp[2 * i] - lp[2 * i - 2], lp[2 * i + 1] - lp[2 * i - 1])
-                if (len * zoom < 14f * dp || ln < 3) { lassoTap(page, pgX(pi, downX), pgY(pi, downY)); ln = 0; lm = LM.NONE; return }
+                if (len * zoom < 14f * dp || ln < (if (settings.lassoRect) 2 else 3)) { lassoTap(page, pgX(pi, downX), pgY(pi, downY)); ln = 0; lm = LM.NONE; return }
                 val poly: FloatArray = if (settings.lassoRect) {
                     val x0 = lp[0]; val y0 = lp[1]; val x1 = lp[2 * (ln - 1)]; val y1 = lp[2 * (ln - 1) + 1]
                     floatArrayOf(x0, y0, x1, y0, x1, y1, x0, y1)

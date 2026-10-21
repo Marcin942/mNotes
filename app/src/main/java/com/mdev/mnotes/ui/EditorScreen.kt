@@ -329,7 +329,7 @@ fun EditorScreen(ed: Editor, tabs: TabsCtl, onExit: () -> Unit, onSettings: () -
                         if (ed.pipette != null) Box(Modifier.align(Alignment.TopCenter).padding(top = 50.dp).panelEnter()) { PipetteCard(set) }
                         if (ed.cut != null) Box(Modifier.align(Alignment.TopCenter).padding(top = 50.dp, start = 8.dp, end = 8.dp).panelEnter()) { CutBar(ed) }
                         if (ed.crop != null) CropBarHost(ed)
-                        if (set.undoDock != 0) UndoCapsule(ed, Modifier.align(undoCorner(set.undoDock)).padding(8.dp).padding(start = if (!ed.chrome && set.undoDock == 1) 48.dp else 0.dp))
+                        if (set.undoDock != 0) UndoCapsule(ed, set.undoDock, Modifier.align(undoCorner(set.undoDock)).padding(8.dp).padding(start = if (!ed.chrome && set.undoDock == 1) 48.dp else 0.dp))
                         if (ed.chrome) {
                             panel?.takeIf { it == Panel.PEN || it == Panel.ERASER || it == Panel.LASSO || it == Panel.TAPE || it == Panel.PAINTER || it == Panel.FILL }?.let { p ->
                                 val pa = when {
@@ -535,16 +535,32 @@ private fun undoCorner(dock: Int): Alignment = when (dock) {
  * kciuk sięgał po nie bez wędrowania po całym ekranie, a pasek zyskał dwa miejsca.
  */
 @Composable
-private fun UndoCapsule(ed: Editor, modifier: Modifier = Modifier) {
+private fun UndoCapsule(ed: Editor, dock: Int, modifier: Modifier = Modifier) {
     val ro = ed.readOnly
     val isz = 22.dp
-    FloatingCard(modifier, radius = 26) {
-        Row(Modifier.padding(horizontal = 2.dp, vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
-            ToolBtn(T.t("Cofnij", "Undo"), { ed.undo() }, enabled = ed.canUndo && !ro, size = 44.dp, shortcut = "Ctrl+Z") { c -> Icon(Icons.AutoMirrored.Rounded.Undo, null, Modifier.size(isz), tint = c) }
-            ToolBtn(T.t("Ponów", "Redo"), { ed.redo() }, enabled = ed.canRedo && !ro, size = 44.dp, shortcut = "Ctrl+Y") { c -> Icon(Icons.AutoMirrored.Rounded.Redo, null, Modifier.size(isz), tint = c) }
+    // Niewidoczne pole dotyku jest większe od kapsuły i dzieli się w połowie na Cofnij i Ponów. Bez niego palec
+    // celujący w przycisk łatwo trafiał w obiekt tuż obok i go zaznaczał. Pole zjada też dotknięcia, gdy przycisk
+    // jest wyłączony. Przesunięcie o margines w stronę rogu zostawia kapsułę dokładnie tam, gdzie była.
+    val dx = if (dock == 1 || dock == 3) -UNDO_HIT_MARGIN else UNDO_HIT_MARGIN
+    val dy = if (dock == 1 || dock == 2) -UNDO_HIT_MARGIN else UNDO_HIT_MARGIN
+    Box(modifier.offset(dx, dy)) {
+        Row(Modifier.matchParentSize()) {
+            listOf({ if (ed.canUndo && !ro) ed.undo() }, { if (ed.canRedo && !ro) ed.redo() }).forEach { act ->
+                Box(Modifier.weight(1f).fillMaxHeight().clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = act))
+            }
+        }
+        Box(Modifier.padding(UNDO_HIT_MARGIN)) {
+            FloatingCard(Modifier, radius = 26) {
+                Row(Modifier.padding(horizontal = 2.dp, vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
+                    ToolBtn(T.t("Cofnij", "Undo"), { ed.undo() }, enabled = ed.canUndo && !ro, size = 44.dp, shortcut = "Ctrl+Z") { c -> Icon(Icons.AutoMirrored.Rounded.Undo, null, Modifier.size(isz), tint = c) }
+                    ToolBtn(T.t("Ponów", "Redo"), { ed.redo() }, enabled = ed.canRedo && !ro, size = 44.dp, shortcut = "Ctrl+Y") { c -> Icon(Icons.AutoMirrored.Rounded.Redo, null, Modifier.size(isz), tint = c) }
+                }
+            }
         }
     }
 }
+
+private val UNDO_HIT_MARGIN = 14.dp
 
 /** Stała część nagłówka poza tytułem i paskiem: powrót, marginesy i prawa grupa (strona, powiększenie, cztery przyciski). */
 private const val HEADER_FIXED = 352f

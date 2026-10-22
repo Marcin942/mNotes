@@ -224,8 +224,8 @@ class Editor(val ctx: Context, val nbId: String) {
     fun say(msg: String) { toast = msg }
 
     // — Cofanie —
-    fun undo() { cancelCut(); cancelCrop(); clearSel(); val e = doc.doUndo(); undoTick++; e?.pageIds?.firstOrNull()?.let { view?.ensureVisible(it) } }
-    fun redo() { cancelCut(); cancelCrop(); clearSel(); val e = doc.doRedo(); undoTick++; e?.pageIds?.firstOrNull()?.let { view?.ensureVisible(it) } }
+    fun undo() { commitSelPreview(); cancelCut(); cancelCrop(); clearSel(); val e = doc.doUndo(); undoTick++; e?.pageIds?.firstOrNull()?.let { view?.ensureVisible(it) } }
+    fun redo() { commitSelPreview(); cancelCut(); cancelCrop(); clearSel(); val e = doc.doRedo(); undoTick++; e?.pageIds?.firstOrNull()?.let { view?.ensureVisible(it) } }
 
     /** Wykonanie z zapisem na stosie cofania. */
     fun exec(edit: DocEdit) { doc.exec(edit); undoTick++ }
@@ -316,10 +316,40 @@ class Editor(val ctx: Context, val nbId: String) {
 
     fun setSelLine(line: LineStyle) = replaceSel { e -> if (e is Stroke) e.withStyle(line = line) else e }
 
-    fun setSelAlpha(a: Float) = replaceSel { e -> if (e is ImageEl) e.copy(alpha = a) else e }
-
     /** Zmienia efekty kolorystyczne zaznaczonych obrazów; [f] dostaje bieżące efekty danego obrazu. */
     fun setSelImageFx(f: (ImageFx) -> ImageFx) = replaceSel { e -> if (e is ImageEl) e.copy(fx = f(e.fx)) else e }
+
+    private class ElPreview(val pageId: String, val before: Map<Int, ImageEl>)
+    private var elPreview: ElPreview? = null
+
+    /**
+     * Podgląd zmiany obrazów na żywo (suwaki efektów): stosuje [f] do stanu sprzed gestu bez wpisu cofania i bez
+     * przemalowania kafelków na wątku UI. Gest kończy [commitSelPreview] (jeden wpis cofania na cały gest).
+     */
+    fun previewSelImages(f: (ImageEl) -> ImageEl) {
+        val p = selPage() ?: return
+        val prev = elPreview ?: ElPreview(p.id, selElements().filterIsInstance<ImageEl>().associateBy { it.id }).also { elPreview = it }
+        if (prev.pageId != p.id || prev.before.isEmpty()) return
+        val map = prev.before.mapValues { f(it.value) }
+        val edit = ElementsEdit.replace(doc.content(p), map)
+        if (edit.isEmpty) return
+        val v = view
+        if (v != null) v.applyElementsInBackground(p.id, map.values.toList()) { doc.applyElements(p.id, edit) }
+        else doc.applyElements(p.id, edit)
+    }
+
+    fun commitSelPreview() {
+        val prev = elPreview ?: return
+        elPreview = null
+        val p = doc.page(prev.pageId) ?: return
+        val rem = ArrayList<Placed>(); val add = ArrayList<Placed>()
+        doc.content(p).elements.forEachIndexed { i, e ->
+            val b = prev.before[e.id] ?: return@forEachIndexed
+            if (b != e && (e !is ImageEl || b.fx != e.fx || b.alpha != e.alpha)) { rem.add(Placed(i, b)); add.add(Placed(i, e)) }
+        }
+        if (rem.isNotEmpty()) record(DocEdit.Elements(p.id, ElementsEdit(rem, add)))
+        selTick++
+    }
 
     fun lockSel(lock: Boolean) = replaceSel { it.withLocked(lock) }
 

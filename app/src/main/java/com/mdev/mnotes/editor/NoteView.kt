@@ -37,6 +37,7 @@ import com.mdev.mnotes.core.model.DocEdit
 import com.mdev.mnotes.core.model.Element
 import com.mdev.mnotes.core.model.TapeEl
 import com.mdev.mnotes.core.model.ElementsEdit
+import com.mdev.mnotes.core.model.ImageEl
 import com.mdev.mnotes.core.model.FillEl
 import com.mdev.mnotes.core.model.Ids
 import com.mdev.mnotes.core.model.PageContent
@@ -2739,14 +2740,26 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
     }
 
     /** Zatwierdza [els] na stronie [pi] bez przemalowania kafelków na wątku UI: łaty idą w tle, a do tego czasu rysuje je [drawGhost]. */
-    private fun applyInBackground(pi: Int, els: List<Element>, apply: () -> Unit) {
+    private fun applyInBackground(pi: Int, els: List<Element>, ghost: Boolean = true, apply: () -> Unit) {
         val page = doc.pages[pi]
         var area = Bounds.EMPTY
         for (e in els) area = area.union(e.bounds)
         applyDirty = area; applyPage = page.id
         apply()
         applyDirty = null; applyPage = null
+        if (!ghost) return
         ghostEls = els; ghostPage = pi; ghostArea = area; ghostUntil = SystemClock.uptimeMillis() + GHOST_MAX_MS
+    }
+
+    /**
+     * Podgląd zmiany wyglądu elementów [els] (suwak efektów obrazu): kafelki przemalowują się w tle, a wątek UI tylko
+     * podmienia dokument. Duch zasłania stary wygląd tylko dla w pełni kryjących obrazów; półprzezroczysty
+     * prześwitywałby przez stare kafelki, więc wtedy podgląd czeka na łatę.
+     */
+    fun applyElementsInBackground(pageId: String, els: List<Element>, apply: () -> Unit) {
+        val pi = doc.indexOf(pageId)
+        if (pi < 0) { apply(); return }
+        applyInBackground(pi, els, ghost = els.all { it !is ImageEl || it.alpha >= 0.999f }, apply = apply)
     }
 
     private fun lassoMove() {

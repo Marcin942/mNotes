@@ -138,6 +138,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -209,6 +210,7 @@ import com.mdev.mnotes.editor.T
 import com.mdev.mnotes.editor.Tool
 import kotlin.math.roundToInt
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.conflate
 
 enum class Panel { PEN, ERASER, LASSO, TAPE, PAINTER, FILL, PAGES, STYLE, MORE, SELCOLOR, IMAGEFX, ALIGN }
 
@@ -1418,6 +1420,7 @@ private fun SelectionBar(ed: Editor, panel: Panel?, toggle: (Panel) -> Unit, edi
 @Composable
 private fun ImageFxPanel(ed: Editor, img: ImageEl) {
     val fx = img.fx
+    val pct: (Float) -> String = { " ${(it * 100).roundToInt()}%" }
     FloatingCard(Modifier.width(300.dp)) {
         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
             SectionLabel(T.t("Efekt", "Effect"))
@@ -1428,23 +1431,41 @@ private fun ImageFxPanel(ed: Editor, img: ImageEl) {
                 Chip(T.t("Odwróć kolory", "Invert colors"), fx.invert, { ed.setSelImageFx { it.copy(invert = !it.invert) } }, icon = Icons.Rounded.InvertColors)
             }
             if (fx.mode == ImageFx.MODE_BW) {
-                SectionLabel(T.t("Próg bieli", "White threshold"))
-                MSlider(fx.threshold, 0f, 1f) { v -> ed.setSelImageFx { it.copy(threshold = v) } }
+                FxSlider(ed, T.t("Próg bieli", "White threshold"), fx.threshold, 0f, 1f, { "" }) { v -> { im -> im.copy(fx = im.fx.copy(threshold = v)) } }
             }
-            SectionLabel(T.t("Czerwony", "Red") + " ${(fx.r * 100).roundToInt()}%")
-            MSlider(fx.r, 0f, ImageFx.GAIN_MAX) { v -> ed.setSelImageFx { it.copy(r = v) } }
-            SectionLabel(T.t("Zielony", "Green") + " ${(fx.g * 100).roundToInt()}%")
-            MSlider(fx.g, 0f, ImageFx.GAIN_MAX) { v -> ed.setSelImageFx { it.copy(g = v) } }
-            SectionLabel(T.t("Niebieski", "Blue") + " ${(fx.b * 100).roundToInt()}%")
-            MSlider(fx.b, 0f, ImageFx.GAIN_MAX) { v -> ed.setSelImageFx { it.copy(b = v) } }
-            SectionLabel(T.t("Krycie obrazu", "Image opacity"))
-            MSlider(img.alpha, 0.1f, 1f) { ed.setSelAlpha(it) }
+            FxSlider(ed, T.t("Czerwony", "Red"), fx.r, 0f, ImageFx.GAIN_MAX, pct) { v -> { im -> im.copy(fx = im.fx.copy(r = v)) } }
+            FxSlider(ed, T.t("Zielony", "Green"), fx.g, 0f, ImageFx.GAIN_MAX, pct) { v -> { im -> im.copy(fx = im.fx.copy(g = v)) } }
+            FxSlider(ed, T.t("Niebieski", "Blue"), fx.b, 0f, ImageFx.GAIN_MAX, pct) { v -> { im -> im.copy(fx = im.fx.copy(b = v)) } }
+            FxSlider(ed, T.t("Krycie obrazu", "Image opacity"), img.alpha, 0.1f, 1f, { "" }) { v -> { im -> im.copy(alpha = v) } }
             if (!fx.isNone) {
                 Spacer(Modifier.height(6.dp))
                 Chip(T.t("Przywróć oryginał", "Reset effects"), false, { ed.setSelImageFx { ImageFx.NONE } }, icon = Icons.Rounded.RestartAlt)
             }
         }
     }
+}
+
+/**
+ * Suwak efektów obrazu. Położenie i podpis trzyma lokalnie (palec nie czeka na dokument), a zmianę stosuje na żywo
+ * najwyżej co [PREVIEW_MS] jako podgląd bez wpisu cofania; kafelki przemalowują się w tle. Gest kończy jeden wpis cofania.
+ */
+@Composable
+private fun FxSlider(ed: Editor, label: String, value: Float, min: Float, max: Float, suffix: (Float) -> String, change: (Float) -> (ImageEl) -> ImageEl) {
+    var drag by remember { mutableStateOf<Float?>(null) }
+    val latest = androidx.compose.runtime.rememberUpdatedState(change)
+    LaunchedEffect(Unit) {
+        // conflate: między krokami podglądu zostaje tylko ostatnie położenie palca
+        snapshotFlow { drag }.conflate().collect { v ->
+            if (v != null) { ed.previewSelImages(latest.value(v)); delay(PREVIEW_MS) }
+        }
+    }
+    androidx.compose.runtime.DisposableEffect(Unit) { onDispose { ed.commitSelPreview() } }
+    val shown = drag ?: value
+    SectionLabel(label + suffix(shown))
+    MSlider(shown, min, max, onFinish = {
+        drag?.let { ed.previewSelImages(latest.value(it)) }
+        ed.commitSelPreview(); drag = null
+    }) { drag = it }
 }
 
 /** Kolor elementu, albo null, gdy element nie ma koloru (obraz, taśma). */

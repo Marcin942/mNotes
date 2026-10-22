@@ -1,5 +1,6 @@
 package com.mdev.mnotes.ui
 
+import com.mdev.mnotes.core.edit.AngleSnap
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -378,6 +379,19 @@ private fun EditorPrefs(set: com.mdev.mnotes.data.Settings) {
         ToggleRow(T.t("Gumka pomija zakreślacz", "Eraser ignores highlighter"), set.eraserKeepHighlighter, keys = "eraser wymaż zakreślacz marker") { set.eraserKeepHighlighter = it }
         Opt(T.t("Kształt lassa", "Lasso shape"), "zaznaczanie zaznacz odręczne prostokąt") { Choice(listOf(T.t("Odręczne", "Freehand"), T.t("Prostokąt", "Rectangle")), if (set.lassoRect) 1 else 0) { set.lassoRect = it == 1 } }
         ToggleRow(T.t("Przyciągaj do siatki", "Snap to grid"), set.snapGrid, keys = "grid siatka magnes snap") { set.snapGrid = it }
+    }
+    Group(T.t("Obracanie i kąty", "Rotation & angles"), keys = "$ROTATION_QUERY przyciąganie równe kąty obrót obracanie kątomierz tarcza stopnie rotate snap protractor dial degrees") {
+        ToggleRow(T.t("Przyciągaj do równych kątów", "Snap to even angles"), set.rotSnap, keys = "obrót obracanie kąt snap rotate angle") { set.rotSnap = it }
+        Opt(T.t("Siła przyciągania: ±${AngleSnap.label(set.rotTolerance)}°", "Snap range: ±${AngleSnap.label(set.rotTolerance)}°"), "tolerancja zasięg strefa tolerance range") {
+            MSlider(set.rotTolerance, AngleSnap.MIN_TOLERANCE, AngleSnap.MAX_TOLERANCE) { set.rotTolerance = Math.round(it).toFloat() }
+        }
+        Extra {
+            Text(
+                T.t("Przy obracaniu zaznaczenia lassem obiekt zatrzyma się na wybranych kątach, gdy zbliżysz się do nich na odległość podaną wyżej.", "When you rotate a lasso selection, it stops at the chosen angles once you get within the range above."),
+                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(bottom = 4.dp),
+            )
+            AngleSetEditor(set.rotAngles, set.rotTolerance) { set.rotAngles = it }
+        }
     }
 }
 

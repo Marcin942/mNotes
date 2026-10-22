@@ -23,6 +23,7 @@ import com.mdev.mnotes.core.edit.CropFrame
 import com.mdev.mnotes.core.edit.CropHandle
 import com.mdev.mnotes.core.edit.CutLine
 import com.mdev.mnotes.core.edit.EraseMath
+import com.mdev.mnotes.core.edit.FillErase
 import com.mdev.mnotes.core.edit.ImageCut
 import com.mdev.mnotes.core.edit.PipetteMath
 import com.mdev.mnotes.core.geom.Affine
@@ -2526,8 +2527,10 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
         var out: ArrayList<Element>? = null
         for (i in src.indices) {
             val e = src[i]
-            // Wypełnienie leży pod pismem: gumka przeciągana po zamalowanym obszarze ściera tylko kreski (usunąć je można lassem gumki).
-            val skip = e.locked || e is TapeEl || e is FillEl || (keepHl && e is Stroke && e.pen == PenKind.HIGHLIGHTER) || !e.bounds.inflate(r + 1f).contains(px, py)
+            // Wypełnienie leży pod pismem: gumka obiektowa przeciągana po zamalowanym obszarze ściera tylko kreski (całe
+            // wypełnienie usuwa lasso gumki), a pikselowa ściera z wypełnienia to, nad czym przejdzie.
+            val skip = e.locked || e is TapeEl || (e is FillEl && (!pixel || keepHl && e.hl)) ||
+                (keepHl && e is Stroke && e.pen == PenKind.HIGHLIGHTER) || !e.bounds.inflate(r + 1f).contains(px, py)
             var repl: List<Element>? = null
             var hit = false
             if (!skip) {
@@ -2537,6 +2540,12 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
                         if (res != null) {
                             hit = true; eraseDirty = eraseDirty.union(res.dirty)
                             repl = res.pieces.map { Stroke(Ids.next(), e.pen, e.color, e.width, it, false, line = e.line) }
+                        }
+                    } else if (e is FillEl) {
+                        val res = FillErase.erase(e, px, py, r)
+                        if (res != null) {
+                            hit = true; eraseDirty = eraseDirty.union(res.dirty)
+                            if (res.rings.isNotEmpty()) repl = listOf(FillEl(Ids.next(), e.color, e.hl, res.rings))
                         }
                     }
                 } else if (EraseMath.hitsElement(e, px, py, r)) { hit = true; eraseDirty = eraseDirty.union(e.bounds) }

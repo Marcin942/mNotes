@@ -29,6 +29,7 @@ import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.ArrowDownward
 import androidx.compose.material.icons.rounded.ArrowUpward
 import androidx.compose.material.icons.rounded.Bookmark
+import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.BookmarkBorder
 import androidx.compose.material.icons.rounded.ContentCopy
 import androidx.compose.material.icons.rounded.Delete
@@ -77,6 +78,7 @@ import com.mdev.mnotes.core.model.Ids
 import com.mdev.mnotes.core.model.PenKind
 import com.mdev.mnotes.core.model.TextBox
 import com.mdev.mnotes.editor.Clip
+import com.mdev.mnotes.data.Bookmark
 import com.mdev.mnotes.editor.Editor
 import com.mdev.mnotes.editor.T
 import com.mdev.mnotes.editor.TextRequest
@@ -337,6 +339,8 @@ fun PagesPanel(ed: Editor, close: () -> Unit, pickImage: () -> Unit, docked: Boo
     val nb = ed.repo.meta(ed.nbId)
     ed.structTick; ed.undoTick
     val pages = ed.doc.pages.toList() // kopia: żywa lista kurczy się przy usuwaniu strony, a LazyColumn mierzy jeszcze po starym rozmiarze
+    var renaming by remember { mutableStateOf<Bookmark?>(null) }
+    renaming?.let { RenameBookmarkDialog(ed, it.pageId, it.title) { renaming = null } }
     val ls = rememberLazyListState()
     LaunchedEffect(ed.pageIndex) { if (tab == 0) runCatching { ls.animateScrollToItem(ed.pageIndex.coerceIn(0, (pages.size - 1).coerceAtLeast(0))) } }
     Column(
@@ -368,16 +372,29 @@ fun PagesPanel(ed: Editor, close: () -> Unit, pickImage: () -> Unit, docked: Boo
                 itemsIndexed(marks) { _, b ->
                     val idx = pages.indexOfFirst { it.id == b.pageId }
                     if (idx >= 0) Row(
-                        Modifier.fillMaxWidth().clickable { ed.view?.goToPage(idx) }.padding(horizontal = 14.dp, vertical = 10.dp),
+                        Modifier.fillMaxWidth().clickable { ed.view?.goToPage(idx) }.padding(start = 14.dp, top = 2.dp, bottom = 2.dp, end = 4.dp),
                         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp),
                     ) {
                         androidx.compose.material3.Icon(Icons.Rounded.Bookmark, null, Modifier.size(18.dp), tint = m.accent)
                         Text(b.title.ifBlank { T.t("Strona", "Page") + " ${idx + 1}" }, Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodyMedium)
                         Text("${idx + 1}", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        IconBtn(Icons.Rounded.Edit, T.t("Zmień nazwę zakładki", "Rename bookmark"), { renaming = b }, size = 32.dp, iconSize = 16.dp)
                     }
                 }
             }
         }
+    }
+}
+
+/** Nazwa zakładki oznacza temat albo grupę zadań i trafia do nazw plików przy eksporcie od zakładki do zakładki. */
+@Composable
+private fun RenameBookmarkDialog(ed: Editor, pageId: String, current: String, onDismiss: () -> Unit) {
+    var text by remember { mutableStateOf(current) }
+    MDialog(
+        T.t("Nazwa zakładki", "Bookmark name"), onDismiss, confirm = T.t("Zapisz", "Save"),
+        onConfirm = { ed.renameBookmark(pageId, text); onDismiss() },
+    ) {
+        MField(text, { text = it }, hint = T.t("np. Zestaw 3 — całki", "e.g. Set 3 — integrals"))
     }
 }
 
@@ -397,6 +414,11 @@ private fun PageThumbItem(ed: Editor, index: Int, pageId: String, current: Boole
         LaunchedEffect(key) { thumbs.async(key, { thumbs.render(ed.nbId, spec, content, wPx) }) { bmp = it } }
     }
     var menu by remember { mutableStateOf(false) }
+    var renamingMark by remember { mutableStateOf(false) }
+    if (renamingMark) {
+        val cur = ed.repo.meta(ed.nbId)?.bookmarks?.firstOrNull { it.pageId == page.id }?.title.orEmpty()
+        RenameBookmarkDialog(ed, page.id, cur) { renamingMark = false }
+    }
     Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
         Box(
             Modifier.fillMaxWidth().aspectRatio(spec.w / spec.h).clip(RoundedCornerShape(6.dp)).background(Color(spec.paper))
@@ -414,6 +436,7 @@ private fun PageThumbItem(ed: Editor, index: Int, pageId: String, current: Boole
                 It(T.t("Wytnij stronę", "Cut page"), total > 1) { ed.cutPage(index) }
                 It(T.t("Wklej stronę po tej", "Paste page after"), Clip.page != null) { ed.pastePage(index) }
                 It(if (ed.isBookmarked(index)) T.t("Usuń zakładkę", "Remove bookmark") else T.t("Dodaj zakładkę", "Add bookmark")) { ed.toggleBookmark(index) }
+                if (ed.isBookmarked(index)) It(T.t("Zmień nazwę zakładki", "Rename bookmark")) { renamingMark = true }
                 It(T.t("Przesuń w górę", "Move up"), index > 0) { ed.movePage(index, index - 1) }
                 It(T.t("Przesuń w dół", "Move down"), index < total - 1) { ed.movePage(index, index + 1) }
                 It(T.t("Wyczyść", "Clear")) { ed.clearPage(index) }

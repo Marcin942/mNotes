@@ -340,6 +340,85 @@ class ImageCrop(val l: Float, val t: Float, val r: Float, val b: Float, val a: F
     }
 }
 
+/**
+ * Efekty kolorystyczne obrazu (nie zmieniają pliku, tylko sposób rysowania). Kolejność: odcienie szarości albo czerń i biel
+ * ([mode]), wzmocnienie kanałów [r], [g], [b] (1 = bez zmiany), na końcu odwrócenie kolorów [invert].
+ */
+class ImageFx(
+    val invert: Boolean = false,
+    val mode: Int = MODE_COLOR,
+    /** Próg czerni i bieli (0..1): jaśniejsze od niego piksele stają się białe. Działa tylko w [MODE_BW]. */
+    val threshold: Float = 0.5f,
+    val r: Float = 1f,
+    val g: Float = 1f,
+    val b: Float = 1f,
+) {
+    val isNone: Boolean get() = !invert && mode == MODE_COLOR && r == 1f && g == 1f && b == 1f
+
+    fun copy(
+        invert: Boolean = this.invert, mode: Int = this.mode, threshold: Float = this.threshold,
+        r: Float = this.r, g: Float = this.g, b: Float = this.b,
+    ) = ImageFx(invert, mode, threshold, r, g, b)
+
+    /** Macierz 4×5 w układzie `android.graphics.ColorMatrix` (wiersze R, G, B, A; przesunięcia w skali 0..255). */
+    fun matrix(): FloatArray {
+        var m = IDENTITY.copyOf()
+        when (mode) {
+            MODE_GRAY -> m = floatArrayOf(
+                LR, LG, LB, 0f, 0f,
+                LR, LG, LB, 0f, 0f,
+                LR, LG, LB, 0f, 0f,
+                0f, 0f, 0f, 1f, 0f,
+            )
+            MODE_BW -> {
+                val k = BW_STEEPNESS; val o = -k * threshold * 255f
+                m = floatArrayOf(
+                    LR * k, LG * k, LB * k, 0f, o,
+                    LR * k, LG * k, LB * k, 0f, o,
+                    LR * k, LG * k, LB * k, 0f, o,
+                    0f, 0f, 0f, 1f, 0f,
+                )
+            }
+        }
+        m = times(floatArrayOf(r, 0f, 0f, 0f, 0f, 0f, g, 0f, 0f, 0f, 0f, 0f, b, 0f, 0f, 0f, 0f, 0f, 1f, 0f), m)
+        if (invert) m = times(floatArrayOf(-1f, 0f, 0f, 0f, 255f, 0f, -1f, 0f, 0f, 255f, 0f, 0f, -1f, 0f, 255f, 0f, 0f, 0f, 1f, 0f), m)
+        return m
+    }
+
+    override fun equals(other: Any?) = other is ImageFx && invert == other.invert && mode == other.mode && threshold == other.threshold &&
+        r == other.r && g == other.g && b == other.b
+    override fun hashCode() = ((((invert.hashCode() * 31 + mode) * 31 + threshold.hashCode()) * 31 + r.hashCode()) * 31 + g.hashCode()) * 31 + b.hashCode()
+
+    companion object {
+        const val MODE_COLOR = 0
+        const val MODE_GRAY = 1
+        const val MODE_BW = 2
+        const val GAIN_MAX = 2f
+        val NONE = ImageFx()
+
+        private const val LR = 0.299f
+        private const val LG = 0.587f
+        private const val LB = 0.114f
+        /** Ostre przejście progu: po obcięciu do 0..255 zostaje czysta czerń albo biel. */
+        private const val BW_STEEPNESS = 64f
+        private val IDENTITY = floatArrayOf(1f, 0f, 0f, 0f, 0f, 0f, 1f, 0f, 0f, 0f, 0f, 0f, 1f, 0f, 0f, 0f, 0f, 0f, 1f, 0f)
+
+        /** Złożenie: najpierw [first], potem [then] (jak `ColorMatrix.postConcat`). */
+        private fun times(then: FloatArray, first: FloatArray): FloatArray {
+            val out = FloatArray(20)
+            for (row in 0 until 4) {
+                for (col in 0 until 5) {
+                    var v = 0f
+                    for (k in 0 until 4) v += then[row * 5 + k] * first[k * 5 + col]
+                    if (col == 4) v += then[row * 5 + 4]
+                    out[row * 5 + col] = v
+                }
+            }
+            return out
+        }
+    }
+}
+
 class ImageEl(
     override val id: Int,
     /** Nazwa pliku zasobu w katalogu zeszytu. */
@@ -353,6 +432,7 @@ class ImageEl(
     override val locked: Boolean = false,
     /** Wycinek pliku, który obraz pokazuje (po przecięciu kawałki dzielą jeden plik). */
     val crop: ImageCrop = ImageCrop.FULL,
+    val fx: ImageFx = ImageFx.NONE,
     /** Obraz odbity w osi lokalnej x (po wycinku); patrz [BoxElement.mirror]. */
     override val mirror: Boolean = false,
 ) : BoxElement() {
@@ -363,8 +443,8 @@ class ImageEl(
     fun copy(
         id: Int = this.id, asset: String = this.asset, cx: Float = this.cx, cy: Float = this.cy,
         w: Float = this.w, h: Float = this.h, rot: Float = this.rot, alpha: Float = this.alpha,
-        locked: Boolean = this.locked, crop: ImageCrop = this.crop, mirror: Boolean = this.mirror,
-    ) = ImageEl(id, asset, cx, cy, w, h, rot, alpha, locked, crop, mirror)
+        locked: Boolean = this.locked, crop: ImageCrop = this.crop, fx: ImageFx = this.fx, mirror: Boolean = this.mirror,
+    ) = ImageEl(id, asset, cx, cy, w, h, rot, alpha, locked, crop, fx, mirror)
 
     override fun transformed(m: Affine): ImageEl {
         val g = mapBox(m)

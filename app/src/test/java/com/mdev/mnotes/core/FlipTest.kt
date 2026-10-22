@@ -10,6 +10,7 @@ import com.mdev.mnotes.core.model.Element
 import com.mdev.mnotes.core.model.FillEl
 import com.mdev.mnotes.core.model.ImageCrop
 import com.mdev.mnotes.core.model.ImageEl
+import com.mdev.mnotes.core.model.ImageFx
 import com.mdev.mnotes.core.model.PageContent
 import com.mdev.mnotes.core.model.PenKind
 import com.mdev.mnotes.core.model.Stroke
@@ -32,7 +33,7 @@ class FlipTest {
         TextBox(1, 200f, 300f, 120f, 40f, rot, "Ala", 14f, 0, mirror = mirror)
 
     private fun image(rot: Float, mirror: Boolean = false, crop: ImageCrop = ImageCrop.FULL) =
-        ImageEl(2, "a.webp", 200f, 300f, 160f, 90f, rot, 1f, false, crop, mirror)
+        ImageEl(2, "a.webp", 200f, 300f, 160f, 90f, rot, 1f, false, crop, mirror = mirror)
 
     private fun tape(rot: Float) = TapeEl(3, 200f, 300f, 100f, 20f, rot, 0x55FFFF00)
 
@@ -155,6 +156,17 @@ class FlipTest {
         val back = PageCodec.decode(PageCodec.encode(src)).elements
         assertEquals(listOf(true, false, true, false), back.map { (it as? TextBox)?.mirror ?: (it as ImageEl).mirror })
         assertEquals(ImageCrop(0.1f, 0.2f, 0.9f, 0.8f), (back[2] as ImageEl).crop)
+    }
+
+    @Test
+    fun mirrorAndColorEffectSurviveTheCodecTogether() {
+        val fx = ImageFx(invert = true)
+        val img = image(0.3f, true).copy(fx = fx)
+        val back = PageCodec.decode(PageCodec.encode(PageContent.of(listOf(img)))).elements.single() as ImageEl
+        assertTrue(back.mirror)
+        assertTrue(back.fx.invert)
+        assertEquals(fx.mode, back.fx.mode)
+        assertEquals(fx, img.transformed(Affine.scale(-1f, 1f, 0f, 0f)).fx)
     }
 
     @Test

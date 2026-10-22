@@ -20,6 +20,7 @@ import com.mdev.mnotes.core.edit.CutLine
 import com.mdev.mnotes.core.edit.FloodFill
 import com.mdev.mnotes.core.edit.ImageCut
 import com.mdev.mnotes.core.model.ImageEl
+import com.mdev.mnotes.core.model.ImageFx
 import com.mdev.mnotes.core.model.PageContent
 import com.mdev.mnotes.core.model.Placed
 import com.mdev.mnotes.core.model.PageSnapshot
@@ -316,6 +317,9 @@ class Editor(val ctx: Context, val nbId: String) {
     fun setSelLine(line: LineStyle) = replaceSel { e -> if (e is Stroke) e.withStyle(line = line) else e }
 
     fun setSelAlpha(a: Float) = replaceSel { e -> if (e is ImageEl) e.copy(alpha = a) else e }
+
+    /** Zmienia efekty kolorystyczne zaznaczonych obrazów; [f] dostaje bieżące efekty danego obrazu. */
+    fun setSelImageFx(f: (ImageFx) -> ImageFx) = replaceSel { e -> if (e is ImageEl) e.copy(fx = f(e.fx)) else e }
 
     fun lockSel(lock: Boolean) = replaceSel { it.withLocked(lock) }
 
@@ -754,10 +758,15 @@ class Editor(val ctx: Context, val nbId: String) {
         exec(DocEdit.Elements(p.id, ElementsEdit.remove(c, c.elements.map { it.id }.toSet())))
     }
 
+    /** Przestawia stronę; bieżąca strona zostaje na ekranie (także gdy to ona jest przenoszona), bez skoku widoku. */
     fun movePage(from: Int, to: Int) {
-        if (from == to) return
+        val t = to.coerceIn(0, doc.pages.size - 1)
+        if (from == t) return
         val p = doc.pages.getOrNull(from) ?: return
-        exec(DocEdit.MovePage(p.id, from, to.coerceIn(0, doc.pages.size - 1)))
+        val edit = DocEdit.MovePage(p.id, from, t)
+        val keep = doc.pages.getOrNull(curIndex())?.id
+        val v = view
+        if (keep != null && v != null) v.keepPageInPlace(keep) { exec(edit) } else exec(edit)
     }
 
     fun setSpec(i: Int, spec: PageSpec) {
@@ -796,6 +805,12 @@ class Editor(val ctx: Context, val nbId: String) {
             if (m.bookmarks.any { it.pageId == p.id }) m.copy(bookmarks = m.bookmarks.filter { it.pageId != p.id })
             else m.copy(bookmarks = m.bookmarks + Bookmark(p.id, "${T.t("Strona", "Page")} ${i + 1}"))
         }
+        structTick++
+    }
+
+    /** Zmienia tytuł zakładki strony [pageId]; pusty tytuł wraca do nazwy domyślnej („Strona N”). */
+    fun renameBookmark(pageId: String, title: String) {
+        repo.update(nbId) { m -> m.copy(bookmarks = m.bookmarks.map { if (it.pageId == pageId) it.copy(title = title.trim()) else it }) }
         structTick++
     }
 

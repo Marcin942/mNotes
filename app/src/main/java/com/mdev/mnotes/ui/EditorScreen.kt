@@ -120,6 +120,8 @@ import androidx.compose.material.icons.rounded.ArrowDownward
 import androidx.compose.material.icons.rounded.ArrowUpward
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Tune
+import androidx.compose.material.icons.rounded.InvertColors
+import androidx.compose.material.icons.rounded.RestartAlt
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
@@ -169,6 +171,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import com.mdev.mnotes.app.app
 import com.mdev.mnotes.core.model.ImageEl
+import com.mdev.mnotes.core.model.ImageFx
 import com.mdev.mnotes.core.model.TextBox
 import com.mdev.mnotes.core.model.PenKind
 import com.mdev.mnotes.core.model.Stroke as InkStroke
@@ -204,9 +207,10 @@ import com.mdev.mnotes.editor.Editor
 import com.mdev.mnotes.editor.NoteView
 import com.mdev.mnotes.editor.T
 import com.mdev.mnotes.editor.Tool
+import kotlin.math.roundToInt
 import kotlinx.coroutines.delay
 
-enum class Panel { PEN, ERASER, LASSO, TAPE, PAINTER, FILL, PAGES, STYLE, MORE, SELCOLOR, ALIGN }
+enum class Panel { PEN, ERASER, LASSO, TAPE, PAINTER, FILL, PAGES, STYLE, MORE, SELCOLOR, IMAGEFX, ALIGN }
 
 /** Własne ikony tam, gdzie Material Icons nie ma odpowiednika (gumka). */
 object MIcons {
@@ -1332,6 +1336,8 @@ private fun SelectionBar(ed: Editor, panel: Panel?, toggle: (Panel) -> Unit, edi
     val els = ed.selElements()
     if (els.isEmpty()) return
     val locked = els.all { it.locked }
+    val hasImage = els.any { it is ImageEl }
+    val hasColorable = els.any { it !is ImageEl }
     val dens = androidx.compose.ui.platform.LocalDensity.current.density
     Box(
         Modifier.fillMaxSize().layout { mm, c ->
@@ -1352,7 +1358,9 @@ private fun SelectionBar(ed: Editor, panel: Panel?, toggle: (Panel) -> Unit, edi
                     IconBtn(Icons.Rounded.ContentCopy, T.t("Kopiuj", "Copy"), { ed.copySel() }, size = 36.dp, iconSize = 20.dp, shortcut = "Ctrl+C")
                     IconBtn(Icons.Rounded.ContentCopy, T.t("Duplikuj", "Duplicate"), { ed.duplicateSel() }, size = 36.dp, iconSize = 20.dp, shortcut = "Ctrl+D", tint = mint.accentText)
                     BarSep(false)
-                    IconBtn(Icons.Rounded.Palette, T.t("Kolor, grubość i styl linii", "Color, width & line style"), { toggle(Panel.SELCOLOR) }, selected = panel == Panel.SELCOLOR, size = 36.dp, iconSize = 20.dp)
+                    // sam obraz nie ma koloru do zmiany: dostaje własny panel efektów zamiast wyboru koloru
+                    if (hasColorable) IconBtn(Icons.Rounded.Palette, T.t("Kolor, grubość i styl linii", "Color, width & line style"), { toggle(Panel.SELCOLOR) }, selected = panel == Panel.SELCOLOR, size = 36.dp, iconSize = 20.dp)
+                    if (hasImage) IconBtn(Icons.Rounded.Tune, T.t("Efekty obrazu", "Image effects"), { toggle(Panel.IMAGEFX) }, selected = panel == Panel.IMAGEFX, size = 36.dp, iconSize = 20.dp)
                     if (!locked) IconBtn(Icons.Rounded.CropRotate, T.t("Skaluj i obracaj", "Resize & rotate"), { ed.transformMode = !ed.transformMode }, selected = ed.transformMode, size = 36.dp, iconSize = 20.dp)
                     if (!locked && els.size == 1 && els[0] is ImageEl && !ed.readOnly) IconBtn(Icons.Rounded.Crop, T.t("Przytnij", "Crop"), { ed.startCrop() }, size = 36.dp, iconSize = 20.dp)
                     if (ed.canFlipSel()) {
@@ -1379,12 +1387,11 @@ private fun SelectionBar(ed: Editor, panel: Panel?, toggle: (Panel) -> Unit, edi
                     IconBtn(Icons.Rounded.Delete, T.t("Usuń", "Delete"), { ed.deleteSel() }, size = 36.dp, iconSize = 20.dp, shortcut = "Del", tint = MaterialTheme.colorScheme.error)
                 }
             }
-            if (panel == Panel.SELCOLOR) FloatingCard(Modifier.width(300.dp)) {
+            if (panel == Panel.SELCOLOR && hasColorable) FloatingCard(Modifier.width(300.dp)) {
                 Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     val colors = els.mapNotNull { colorOf(it) }.map { it and 0xFFFFFF }.distinct()
                     val first = els.firstOrNull { colorOf(it) != null }
                     val hasStroke = els.any { it is InkStroke }
-                    val img = els.firstOrNull { it is ImageEl } as? ImageEl
                     SectionLabel(T.t("Kolor", "Color"))
                     ColorPicker(first?.let { colorOf(it) } ?: 0xFF000000.toInt(), { ed.recolorSel(it) }, mixed = colors.size > 1, recent = ed.kit.sets.filter { !it.hl }.flatMap { it.colors.take(it.visible) }.distinct(), onPipette = { ed.startPipette { c -> ed.recolorSel(c) } })
                     if (hasStroke) {
@@ -1394,15 +1401,47 @@ private fun SelectionBar(ed: Editor, panel: Panel?, toggle: (Panel) -> Unit, edi
                         SectionLabel(T.t("Styl linii", "Line style"))
                         LineStyleRow(els.filterIsInstance<InkStroke>().map { it.line }.distinct().singleOrNull()) { ed.setSelLine(it) }
                     }
-                    if (img != null) { SectionLabel(T.t("Krycie obrazu", "Image opacity")); MSlider(img.alpha, 0.1f, 1f) { ed.setSelAlpha(it) } }
                 }
             }
+            if (panel == Panel.IMAGEFX && hasImage) ImageFxPanel(ed, els.first { it is ImageEl } as ImageEl)
             if (panel == Panel.ALIGN) FloatingCard {
                 Row(Modifier.padding(3.dp)) {
                     val icons = listOf(Icons.Rounded.AlignHorizontalLeft, Icons.Rounded.AlignHorizontalCenter, Icons.Rounded.AlignHorizontalRight, Icons.Rounded.AlignVerticalTop, Icons.Rounded.AlignVerticalCenter, Icons.Rounded.AlignVerticalBottom)
                     val names = listOf(T.t("Do lewej", "Left"), T.t("Środek poziomo", "Center H"), T.t("Do prawej", "Right"), T.t("Do góry", "Top"), T.t("Środek pionowo", "Center V"), T.t("Do dołu", "Bottom"))
                     icons.forEachIndexed { i, ic -> IconBtn(ic, names[i], { ed.alignSel(i) }, size = 36.dp, iconSize = 20.dp) }
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ImageFxPanel(ed: Editor, img: ImageEl) {
+    val fx = img.fx
+    FloatingCard(Modifier.width(300.dp)) {
+        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            SectionLabel(T.t("Efekt", "Effect"))
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Chip(T.t("Kolor", "Color"), fx.mode == ImageFx.MODE_COLOR, { ed.setSelImageFx { it.copy(mode = ImageFx.MODE_COLOR) } })
+                Chip(T.t("Odcienie szarości", "Grayscale"), fx.mode == ImageFx.MODE_GRAY, { ed.setSelImageFx { it.copy(mode = ImageFx.MODE_GRAY) } })
+                Chip(T.t("Czarno-biały", "Black & white"), fx.mode == ImageFx.MODE_BW, { ed.setSelImageFx { it.copy(mode = ImageFx.MODE_BW) } })
+                Chip(T.t("Odwróć kolory", "Invert colors"), fx.invert, { ed.setSelImageFx { it.copy(invert = !it.invert) } }, icon = Icons.Rounded.InvertColors)
+            }
+            if (fx.mode == ImageFx.MODE_BW) {
+                SectionLabel(T.t("Próg bieli", "White threshold"))
+                MSlider(fx.threshold, 0f, 1f) { v -> ed.setSelImageFx { it.copy(threshold = v) } }
+            }
+            SectionLabel(T.t("Czerwony", "Red") + " ${(fx.r * 100).roundToInt()}%")
+            MSlider(fx.r, 0f, ImageFx.GAIN_MAX) { v -> ed.setSelImageFx { it.copy(r = v) } }
+            SectionLabel(T.t("Zielony", "Green") + " ${(fx.g * 100).roundToInt()}%")
+            MSlider(fx.g, 0f, ImageFx.GAIN_MAX) { v -> ed.setSelImageFx { it.copy(g = v) } }
+            SectionLabel(T.t("Niebieski", "Blue") + " ${(fx.b * 100).roundToInt()}%")
+            MSlider(fx.b, 0f, ImageFx.GAIN_MAX) { v -> ed.setSelImageFx { it.copy(b = v) } }
+            SectionLabel(T.t("Krycie obrazu", "Image opacity"))
+            MSlider(img.alpha, 0.1f, 1f) { ed.setSelAlpha(it) }
+            if (!fx.isNone) {
+                Spacer(Modifier.height(6.dp))
+                Chip(T.t("Przywróć oryginał", "Reset effects"), false, { ed.setSelImageFx { ImageFx.NONE } }, icon = Icons.Rounded.RestartAlt)
             }
         }
     }

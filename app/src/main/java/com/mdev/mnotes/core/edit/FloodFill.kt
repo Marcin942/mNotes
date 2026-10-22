@@ -263,30 +263,81 @@ object FloodFill {
     }
 
     /**
-     * Poszerza obszar w ściany (pod linie), nigdy w sąsiednie wolne obszary: o [UNDERLAP] komórek wszędzie, a po brzegowych
-     * komórkach kresek (poza [deep]) do [SLIVER_REACH], żeby dojść do końca wąskiej, ostrej szczeliny.
+     * Poszerza obszar w ściany (pod linie), nigdy w sąsiednie wolne obszary. Każdą komórkę ściany w zasięgu [UNDERLAP]
+     * dostaje najbliższy wolny obszar (BFS z wielu źródeł naraz), więc kolor kończy się w połowie kreski, a nie wychodzi
+     * spod niej po drugiej stronie ani nie biegnie wzdłuż kreski poza róg kształtu.
+     *
+     * Dalej, do [SLIVER_REACH], obszar idzie tylko komórkami szczeliny: brzegowymi komórkami kresek (poza [deep]), które
+     * nie stykają się bokiem z innym wolnym obszarem. Tak dochodzi do końca wąskiego, ostrego klina, a nie pełznie po
+     * kresce wystającej z kształtu (jej komórki zawsze stykają się z papierem po obu stronach).
      */
     private fun underlap(region: BooleanArray, wall: BooleanArray, deep: BooleanArray, gw: Int, gh: Int) {
-        val depth = ByteArray(region.size)
-        var queue = IntArray(4096)
+        val n = region.size
+        // 1 = nasz obszar, 2 = inny wolny obszar, 0 = komórka ściany jeszcze bez właściciela.
+        val own = ByteArray(n)
+        val depth = ByteArray(n)
+        val queue = IntArray(n)
         var tail = 0
-        fun push(i: Int) {
-            if (tail == queue.size) queue = queue.copyOf(queue.size * 2)
-            queue[tail++] = i
-        }
-        for (i in region.indices) {
-            if (!region[i]) continue
+        // Nasz obszar wchodzi do kolejki pierwszy, więc remis (środek kreski o nieparzystej szerokości) jest nasz.
+        for (ours in booleanArrayOf(true, false)) for (i in 0 until n) {
+            if (wall[i] || region[i] != ours) continue
+            own[i] = if (ours) 1 else 2
             val cx = i % gw; val cy = i / gw
-            if ((cx > 0 && wall[i - 1]) || (cx < gw - 1 && wall[i + 1]) || (cy > 0 && wall[i - gw]) || (cy < gh - 1 && wall[i + gw])) push(i)
+            if ((cx > 0 && wall[i - 1]) || (cx < gw - 1 && wall[i + 1]) || (cy > 0 && wall[i - gw]) || (cy < gh - 1 && wall[i + gw])) queue[tail++] = i
         }
         var head = 0
         while (head < tail) {
             val i = queue[head++]
             val nd = depth[i] + 1
+            if (nd > UNDERLAP) continue
+            val o = own[i]
+            val cx = i % gw; val cy = i / gw
+            fun visit(j: Int) { if (own[j].toInt() == 0) { own[j] = o; depth[j] = nd.toByte(); queue[tail++] = j } }
+            if (cx > 0) visit(i - 1)
+            if (cx < gw - 1) visit(i + 1)
+            if (cy > 0) visit(i - gw)
+            if (cy < gh - 1) visit(i + gw)
+        }
+        fun touchesOther(j: Int): Boolean {
+            val cx = j % gw; val cy = j / gw
+            fun other(k: Int) = !wall[k] && !region[k]
+            return (cx > 0 && other(j - 1)) || (cx < gw - 1 && other(j + 1)) || (cy > 0 && other(j - gw)) || (cy < gh - 1 && other(j + gw))
+        }
+        // Komórka, którą wcześniej dostał inny obszar, jest szczeliną tylko wtedy, gdy inny obszar leży po obu jej stronach
+        // (szew między dwiema zbiegającymi się kreskami). Środek zwykłej kreski ma nasz obszar z jednej strony: tam
+        // zabranie komórki dałoby postrzępiony brzeg.
+        fun reachesOther(j: Int, dx: Int, dy: Int): Boolean {
+            var x = j % gw; var y = j / gw
+            for (s in 1..UNDERLAP + 1) {
+                x += dx; y += dy
+                if (x < 0 || y < 0 || x >= gw || y >= gh) return false
+                val k = y * gw + x
+                if (own[k].toInt() == 1) return false
+                if (!wall[k]) return true
+            }
+            return false
+        }
+        fun betweenOthers(j: Int) =
+            (reachesOther(j, 1, 0) && reachesOther(j, -1, 0)) || (reachesOther(j, 0, 1) && reachesOther(j, 0, -1)) ||
+                (reachesOther(j, 1, 1) && reachesOther(j, -1, -1)) || (reachesOther(j, 1, -1) && reachesOther(j, -1, 1))
+        // Szczeliny: od komórek obszaru (także tych spod linii) dalej, z odległością liczoną od nowa w głąb ściany.
+        tail = 0
+        for (i in 0 until n) {
+            if (own[i].toInt() != 1) continue
+            region[i] = true
+            if (wall[i]) queue[tail++] = i
+        }
+        val sliver = BooleanArray(n)
+        head = 0
+        while (head < tail) {
+            val i = queue[head++]
+            val nd = depth[i] + 1
+            if (nd > SLIVER_REACH) continue
             val cx = i % gw; val cy = i / gw
             fun visit(j: Int) {
-                if (!wall[j] || region[j]) return
-                if (nd <= UNDERLAP || (!deep[j] && nd <= SLIVER_REACH)) { region[j] = true; depth[j] = nd.toByte(); push(j) }
+                if (!wall[j] || region[j] || sliver[j] || deep[j] || touchesOther(j)) return
+                if (own[j].toInt() == 2 && !betweenOthers(j)) return
+                sliver[j] = true; region[j] = true; depth[j] = nd.toByte(); queue[tail++] = j
             }
             if (cx > 0) visit(i - 1)
             if (cx < gw - 1) visit(i + 1)

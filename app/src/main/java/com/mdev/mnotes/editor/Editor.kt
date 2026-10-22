@@ -740,10 +740,15 @@ class Editor(val ctx: Context, val nbId: String) {
         exec(DocEdit.Elements(p.id, ElementsEdit.remove(c, c.elements.map { it.id }.toSet())))
     }
 
+    /** Przestawia stronę; bieżąca strona zostaje na ekranie (także gdy to ona jest przenoszona), bez skoku widoku. */
     fun movePage(from: Int, to: Int) {
-        if (from == to) return
+        val t = to.coerceIn(0, doc.pages.size - 1)
+        if (from == t) return
         val p = doc.pages.getOrNull(from) ?: return
-        exec(DocEdit.MovePage(p.id, from, to.coerceIn(0, doc.pages.size - 1)))
+        val edit = DocEdit.MovePage(p.id, from, t)
+        val keep = doc.pages.getOrNull(curIndex())?.id
+        val v = view
+        if (keep != null && v != null) v.keepPageInPlace(keep) { exec(edit) } else exec(edit)
     }
 
     fun setSpec(i: Int, spec: PageSpec) {
@@ -782,6 +787,12 @@ class Editor(val ctx: Context, val nbId: String) {
             if (m.bookmarks.any { it.pageId == p.id }) m.copy(bookmarks = m.bookmarks.filter { it.pageId != p.id })
             else m.copy(bookmarks = m.bookmarks + Bookmark(p.id, "${T.t("Strona", "Page")} ${i + 1}"))
         }
+        structTick++
+    }
+
+    /** Zmienia tytuł zakładki strony [pageId]; pusty tytuł wraca do nazwy domyślnej („Strona N”). */
+    fun renameBookmark(pageId: String, title: String) {
+        repo.update(nbId) { m -> m.copy(bookmarks = m.bookmarks.map { if (it.pageId == pageId) it.copy(title = title.trim()) else it }) }
         structTick++
     }
 

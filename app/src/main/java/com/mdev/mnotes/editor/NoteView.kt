@@ -335,6 +335,19 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
         if (animate) animateView(z, x, y, 300L) else { zoom = z; tx = x; ty = y; moved() }
     }
 
+    /** Wykonuje [change] (zmianę kolejności stron) tak, by strona [pageId] została w tym samym miejscu ekranu. */
+    fun keepPageInPlace(pageId: String, change: () -> Unit) {
+        val i0 = doc.indexOf(pageId)
+        val before = if (i0 in 0 until layout.count) layout.rect(i0) else null
+        change()
+        val i1 = doc.indexOf(pageId)
+        if (before == null || i1 !in 0 until layout.count) return
+        val after = layout.rect(i1)
+        stopAnim()
+        tx -= (after.l - before.l) * zoom; ty -= (after.t - before.t) * zoom
+        moved()
+    }
+
     fun ensureVisible(pageId: String) {
         val i = doc.indexOf(pageId)
         if (i < 0 || width == 0) return

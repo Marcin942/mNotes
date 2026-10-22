@@ -14,7 +14,20 @@ import android.provider.DocumentsContract
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.RadioButton
+import androidx.compose.material3.RadioButtonDefaults
+import androidx.compose.runtime.produceState
+import androidx.compose.ui.text.style.TextOverflow
+import com.mdev.mnotes.core.nav.BookmarkSections
+import com.mdev.mnotes.core.nav.Mark
+import com.mdev.mnotes.core.nav.SectionEnd
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
@@ -29,6 +42,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -74,7 +88,30 @@ private fun fmtInfo(f: ExportFormat) = when (f) {
     ExportFormat.MNOTES -> T.t("Pełna kopia zeszytu (otwarty format ZIP) — do przeniesienia na inne urządzenie lub kopii zapasowej.", "Full notebook copy (open ZIP format) — for moving to another device or backup.")
 }
 
-private enum class ExportScope { ALL, PAGE, SPAN }
+private enum class ExportScope { ALL, PAGE, SPAN, MARKS }
+
+/** Gdzie kończy się przedział liczony od zakładki. */
+private enum class MarkEnd { NEXT, MARK, END }
+
+/** Wiersz wyboru z przyciskiem radiowym: [detail] (np. zakres stron) po prawej. */
+@Composable
+private fun PickRow(selected: Boolean, title: String, detail: String, enabled: Boolean = true, onClick: () -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().clickable(enabled = enabled, onClick = onClick),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        RadioButton(selected, onClick.takeIf { enabled }, enabled = enabled, colors = RadioButtonDefaults.colors(selectedColor = mint.accent))
+        Text(title, Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodyMedium)
+        Text(detail, Modifier.padding(start = 8.dp, end = 8.dp), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
+/** „str. 3” albo „str. 3–7 (5)” (numery od 1). */
+private fun pagesLabel(r: IntRange?): String = when {
+    r == null -> "—"
+    r.first == r.last -> T.t("str. ${r.first + 1}", "p. ${r.first + 1}")
+    else -> T.t("str. ${r.first + 1}–${r.last + 1} (${r.last - r.first + 1})", "p. ${r.first + 1}–${r.last + 1} (${r.last - r.first + 1})")
+}
 
 /** Eksport zeszytu: zapis do wybranego miejsca (SAF), udostępnienie lub wydruk. [prepare] zapisuje stan edytora przed odczytem z dysku. */
 @OptIn(ExperimentalLayoutApi::class)
@@ -91,21 +128,64 @@ fun ExportDialog(nb: String, currentPage: Int, prepare: () -> Unit, onDismiss: (
     var busy by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
 
+    // Zakładki w kolejności stron (kolejność dodawania nic nie znaczy); pusty albo samoczynny tytuł → bieżące „Strona N”.
+    val marks = remember(nb) {
+        val m = app.repo.meta(nb)
+        val raw = m?.bookmarks.orEmpty().mapNotNull { b ->
+            val i = m?.pages?.indexOfFirst { it.id == b.pageId } ?: -1
+            if (i < 0) null else Mark(i, com.mdev.mnotes.core.model.PageOrder.bookmarkTitle(b.title, i, T.t("Strona", "Page")))
+        }
+        BookmarkSections.normalize(raw, pageCount)
+    }
+    val hasIntro = BookmarkSections.hasIntro(marks)
+    var fromMark by remember { mutableIntStateOf(BookmarkSections.sectionOf(marks, currentPage).let { if (it < 0 && !hasIntro) 0 else it }) }
+    var endMode by remember { mutableStateOf(MarkEnd.NEXT) }
+    var endMark by remember { mutableIntStateOf(-1) }
+    var includeEnd by remember { mutableStateOf(false) }
+    var splitFiles by remember { mutableStateOf(false) }
+    var skipBlank by remember { mutableStateOf(false) }
+    val blank by produceState(emptySet<Int>(), nb) { value = withContext(Dispatchers.IO) { exporter.blankPages(nb) } }
+
     val canScope = pageCount > 1 && fmt != ExportFormat.MNOTES
+    val inMarks = canScope && scopeMode == ExportScope.MARKS
+    val effEndMark = if (endMark > fromMark) endMark else fromMark + 1
+    val markEnd: SectionEnd? = when (endMode) {
+        MarkEnd.NEXT -> SectionEnd.Next
+        MarkEnd.END -> SectionEnd.NotebookEnd
+        MarkEnd.MARK -> if (effEndMark in marks.indices) SectionEnd.At(effEndMark) else null
+    }
+    val parts = if (inMarks && markEnd != null && fromMark in -1 until marks.size)
+        BookmarkSections.parts(marks, pageCount, fromMark, markEnd, includeEnd, T.t("Początek zeszytu", "Start of notebook"))
+    else emptyList()
     val spanPages = if (canScope && scopeMode == ExportScope.SPAN) PageSpan.parse(spanText, pageCount) else null
-    val spanInvalid = canScope && scopeMode == ExportScope.SPAN && spanPages == null
-    val pages: List<Int>? = when {
+    val basePages: List<Int>? = when {
         !canScope -> null
         scopeMode == ExportScope.PAGE -> listOf(currentPage.coerceIn(0, pageCount - 1))
         scopeMode == ExportScope.SPAN -> spanPages
+        scopeMode == ExportScope.MARKS -> parts.flatMap { it.pages }
         else -> null
     }
+    val dropBlank = canScope && skipBlank && blank.isNotEmpty()
+    val pages: List<Int>? = if (dropBlank) (basePages ?: (0 until pageCount).toList()).filter { it !in blank } else basePages
+    val outParts: List<Pair<String, List<Int>>> = parts.map { it.title to it.pages.filter { p -> !dropBlank || p !in blank } }.filter { it.second.isNotEmpty() }
+    val split = inMarks && splitFiles && outParts.size > 1
+    val invalid = canScope && when (scopeMode) {
+        ExportScope.SPAN -> spanPages == null
+        ExportScope.MARKS -> outParts.isEmpty()
+        else -> false
+    } || (canScope && pages != null && pages.isEmpty())
     val count = if (fmt == ExportFormat.MNOTES) pageCount else pages?.size ?: pageCount
-    val zip = !fmt.multi && count > 1
+    val zip = split || (!fmt.multi && count > 1)
+    val spanLabel = when {
+        split -> T.t("wg zakładek", "by bookmarks")
+        inMarks -> outParts.firstOrNull()?.let { "${it.first} (${T.t("str.", "p.")} ${PageSpan.label(pages.orEmpty())})" }
+        scopeMode == ExportScope.SPAN -> spanPages?.let { PageSpan.label(it) }
+        else -> null
+    }
     val name = exporter.fileName(
-        title, fmt, if (!fmt.multi && count == 1 && pageCount > 1) (pages?.first() ?: 0) else null, zip,
-        span = if (scopeMode == ExportScope.SPAN) spanPages?.let { PageSpan.label(it) } else null,
+        title, fmt, if (!fmt.multi && count == 1 && pageCount > 1 && spanLabel == null) (pages?.first() ?: 0) else null, zip, span = spanLabel,
     )
+    fun write(out: java.io.OutputStream) = if (split) exporter.writeParts(nb, fmt, outParts, out) else exporter.write(nb, fmt, pages, out)
     val mime = if (zip) "application/zip" else fmt.mime
     // Dla własnego rozszerzenia SAF dostaje typ ogólny, żeby nie dopisywać „.bin” ani „.zip”.
     val safMime = if (fmt == ExportFormat.MNOTES) "application/octet-stream" else mime
@@ -115,7 +195,7 @@ fun ExportDialog(nb: String, currentPage: Int, prepare: () -> Unit, onDismiss: (
         exporter.awaitWrites()
         val dir = File(ctx.cacheDir, "share").apply { mkdirs(); listFiles()?.forEach { it.delete() } }
         val f = File(dir, name)
-        val ok = FileOutputStream(f).use { exporter.write(nb, fmt, pages, it) }
+        val ok = FileOutputStream(f).use { write(it) }
         if (ok) f else { f.delete(); null }
     }
 
@@ -125,7 +205,7 @@ fun ExportDialog(nb: String, currentPage: Int, prepare: () -> Unit, onDismiss: (
         scope.launch {
             val ok = withContext(Dispatchers.IO) {
                 exporter.awaitWrites()
-                val good = runCatching { ctx.contentResolver.openOutputStream(uri)?.use { exporter.write(nb, fmt, pages, it) } ?: false }.getOrDefault(false)
+                val good = runCatching { ctx.contentResolver.openOutputStream(uri)?.use { write(it) } ?: false }.getOrDefault(false)
                 if (!good) runCatching { DocumentsContract.deleteDocument(ctx.contentResolver, uri) }
                 good
             }
@@ -175,8 +255,9 @@ fun ExportDialog(nb: String, currentPage: Int, prepare: () -> Unit, onDismiss: (
 
     MDialog(
         T.t("Eksport i udostępnianie", "Export & share"), { if (!busy) onDismiss() },
-        confirm = T.t("Zapisz jako…", "Save as…"), onConfirm = { saver.launch(name) }, confirmEnabled = !busy && pageCount > 0 && !spanInvalid,
+        confirm = T.t("Zapisz jako…", "Save as…"), onConfirm = { saver.launch(name) }, confirmEnabled = !busy && pageCount > 0 && !invalid,
     ) {
+        Column(Modifier.verticalScroll(rememberScrollState())) {
         Text(title, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         SectionLabel(T.t("Format", "Format"))
         FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -189,26 +270,82 @@ fun ExportDialog(nb: String, currentPage: Int, prepare: () -> Unit, onDismiss: (
                 Chip(T.t("Cały zeszyt ($pageCount)", "Whole notebook ($pageCount)"), scopeMode == ExportScope.ALL, { if (!busy) scopeMode = ExportScope.ALL })
                 Chip(T.t("Strona ${currentPage + 1}", "Page ${currentPage + 1}"), scopeMode == ExportScope.PAGE, { if (!busy) scopeMode = ExportScope.PAGE })
                 Chip(T.t("Przedział stron", "Page range"), scopeMode == ExportScope.SPAN, { if (!busy) scopeMode = ExportScope.SPAN })
+                Chip(T.t("Zakładki", "Bookmarks"), scopeMode == ExportScope.MARKS, { if (!busy) scopeMode = ExportScope.MARKS })
             }
             if (scopeMode == ExportScope.SPAN) {
                 MField(spanText, { if (!busy) spanText = it }, Modifier.padding(top = 8.dp), hint = T.t("np. 2-5, 8, 10-", "e.g. 2-5, 8, 10-"))
                 Text(
-                    if (spanInvalid) T.t("Podaj numery stron od 1 do $pageCount, np. 2-5 lub 1-3, 8.", "Enter page numbers from 1 to $pageCount, e.g. 2-5 or 1-3, 8.")
+                    if (invalid) T.t("Podaj numery stron od 1 do $pageCount, np. 2-5 lub 1-3, 8.", "Enter page numbers from 1 to $pageCount, e.g. 2-5 or 1-3, 8.")
                     else T.t("Wybrano ${spanPages?.size ?: 0} z $pageCount stron.", "${spanPages?.size ?: 0} of $pageCount pages selected."),
                     style = MaterialTheme.typography.bodySmall,
-                    color = if (spanInvalid) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = if (invalid) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(top = 4.dp),
                 )
             }
+            if (scopeMode == ExportScope.MARKS) {
+                if (marks.isEmpty()) {
+                    Text(
+                        T.t("Ten zeszyt nie ma zakładek. Dodaj je ikoną zakładki w nagłówku edytora (Ctrl+B) i nazwij tematy w panelu stron → Zakładki.",
+                            "This notebook has no bookmarks. Add them with the bookmark icon in the editor header (Ctrl+B) and name the topics in the pages panel → Bookmarks."),
+                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(top = 8.dp),
+                    )
+                } else {
+                    Text(
+                        T.t("Zakładka otwiera sekcję, która trwa do następnej zakładki (bez jej strony).", "A bookmark opens a section that lasts until the next bookmark (not including its page)."),
+                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 8.dp),
+                    )
+                    SectionLabel(T.t("Od zakładki", "From bookmark"))
+                    Column(Modifier.heightIn(max = 168.dp).verticalScroll(rememberScrollState())) {
+                        if (hasIntro) PickRow(fromMark == -1, T.t("Początek zeszytu", "Start of notebook"), pagesLabel(BookmarkSections.range(marks, pageCount, -1, SectionEnd.Next))) { if (!busy) fromMark = -1 }
+                        marks.forEachIndexed { i, mk ->
+                            PickRow(fromMark == i, mk.title, pagesLabel(BookmarkSections.range(marks, pageCount, i, SectionEnd.Next))) { if (!busy) fromMark = i }
+                        }
+                    }
+                    SectionLabel(T.t("Do", "Until"))
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Chip(T.t("Następnej zakładki", "Next bookmark"), endMode == MarkEnd.NEXT, { if (!busy) endMode = MarkEnd.NEXT })
+                        if (fromMark + 1 < marks.size) Chip(T.t("Wybranej zakładki", "Chosen bookmark"), endMode == MarkEnd.MARK, { if (!busy) endMode = MarkEnd.MARK })
+                        Chip(T.t("Końca zeszytu", "End of notebook"), endMode == MarkEnd.END, { if (!busy) endMode = MarkEnd.END })
+                    }
+                    if (endMode == MarkEnd.MARK && fromMark + 1 < marks.size) {
+                        Text(T.t("Strony przed wybraną zakładką:", "Pages before the chosen bookmark:"), Modifier.padding(top = 6.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Column(Modifier.heightIn(max = 140.dp).verticalScroll(rememberScrollState())) {
+                            for (i in fromMark + 1 until marks.size) PickRow(effEndMark == i, marks[i].title, pagesLabel(BookmarkSections.range(marks, pageCount, fromMark, SectionEnd.At(i), includeEnd))) { if (!busy) endMark = i }
+                        }
+                    }
+                    if (endMode == MarkEnd.MARK || (endMode == MarkEnd.NEXT && fromMark + 1 < marks.size)) {
+                        ToggleRow(T.t("Wlicz też stronę zakładki końcowej", "Include the end bookmark's page"), includeEnd) { if (!busy) includeEnd = it }
+                    }
+                    if (outParts.size > 1 && fmt != ExportFormat.MNOTES) {
+                        ToggleRow(T.t("Osobny plik dla każdej zakładki (ZIP, ${outParts.size} plików)", "Separate file per bookmark (ZIP, ${outParts.size} files)"), splitFiles) { if (!busy) splitFiles = it }
+                    }
+                }
+            }
+            if (blank.isNotEmpty()) {
+                ToggleRow(T.t("Pomijaj puste strony (${blank.size} w zeszycie)", "Skip blank pages (${blank.size} in notebook)"), skipBlank) { if (!busy) skipBlank = it }
+            }
+            val shown = pages ?: (0 until pageCount).toList()
+            if (!invalid && scopeMode != ExportScope.SPAN && shown.isNotEmpty() && (scopeMode != ExportScope.ALL || dropBlank)) {
+                val skipped = if (dropBlank) (basePages?.size ?: pageCount) - shown.size else 0
+                Text(
+                    T.t("Do pliku trafi ${shown.size} z $pageCount stron (str. ${PageSpan.label(shown).replace("_", ", ")})", "${shown.size} of $pageCount pages will be exported (p. ${PageSpan.label(shown).replace("_", ", ")})") +
+                        (if (skipped > 0) T.t(", pominięto puste: $skipped", ", skipped blank: $skipped") else "") + ".",
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 6.dp),
+                )
+            } else if (invalid && scopeMode != ExportScope.SPAN && !(scopeMode == ExportScope.MARKS && marks.isEmpty())) {
+                Text(T.t("Wybrany zakres jest pusty.", "The selected range is empty."), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(top = 6.dp))
+            }
+            if (scopeMode != ExportScope.ALL || dropBlank) Text(name, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 4.dp))
         }
         SectionLabel(T.t("Inne działania", "Other actions"))
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-            Chip(T.t("Udostępnij…", "Share…"), false, { if (!busy && !spanInvalid) share() }, icon = Icons.Rounded.IosShare)
-            if (fmt == ExportFormat.PDF) Chip(T.t("Drukuj…", "Print…"), false, { if (!busy && !spanInvalid) print() }, icon = Icons.Rounded.Print)
+            Chip(T.t("Udostępnij…", "Share…"), false, { if (!busy && !invalid) share() }, icon = Icons.Rounded.IosShare)
+            if (fmt == ExportFormat.PDF) Chip(T.t("Drukuj…", "Print…"), false, { if (!busy && !invalid) print() }, icon = Icons.Rounded.Print)
             if (busy) {
                 CircularProgressIndicator(Modifier.padding(start = 8.dp).size(20.dp), strokeWidth = 2.dp, color = mint.accent)
                 Text(T.t("Przygotowuję…", "Preparing…"), style = MaterialTheme.typography.bodySmall, modifier = Modifier.width(110.dp))
             }
+        }
         }
     }
 }

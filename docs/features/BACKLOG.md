@@ -94,7 +94,7 @@ Założenie projektowe: „Linux Mint user” = osoba ceniąca kontrolę, skrót
 ## E. Nawigacja i widok (NAV)
 - [x] NAV-001 Zoom/pan (pinch, kółko, Ctrl+kółko, przeciągnięcie), dopasuj do szerokości/strony, zoom do zaznaczenia
 - [x] NAV-002 Układ: ciągły pionowy / poziomy / pojedyncza strona
-- [x] NAV-003 Panel miniatur stron (przeciąganie, menu, dodaj)
+- [x] NAV-003 Panel miniatur stron (przeciąganie, menu, dodaj) _(2026-10-22: przytrzymanie miniatury podnosi ją i przeciąganie przenosi stronę (sąsiednie miniatury rozsuwają się na żywo, lista sama przewija się przy krawędzi, jedno cofnięcie), puszczenie bez ruchu otwiera menu, przycisk „⋮” też; menu z ikonami: „Przesuń wcześniej/dalej (na stronę N)”, „Przenieś na początek/koniec”, „Przenieś na stronę…”; pod listą „Strona X z N”, duplikuj, usuń, „Wcześniej”/„Dalej”, „Dodaj stronę”; tryb tylko do odczytu blokuje zmiany; przestawianie stron nie zmienia strony na ekranie; nazwy zakładek „Strona N” idą za stroną, zakładkę można usunąć z listy. `core/model/PageOrder.kt` + `PageOrderTest`; bez testu na urządzeniu)_
 - [x] NAV-004 Spis treści (Outline) i zakładki
 - [x] NAV-005 Wyszukiwanie w zeszycie (tekst z pól, nazwy zakładek)
 - [x] NAV-006 Tryb prezentacji (ukryj UI) / pełny ekran (F11) / tryb tylko do odczytu
@@ -105,7 +105,7 @@ Założenie projektowe: „Linux Mint user” = osoba ceniąca kontrolę, skrót
 
 ## F. Pliki, kopie, wymiana (FIL)
 - [x] FIL-001 Zapis automatyczny (debounce) + zapis przy wyjściu, odporność na crash (zapis atomowy)
-- [~] FIL-002 Eksport PDF (adnotacje wektorowe), PNG (strona/zakres), SVG (wektor), Markdown/TXT z pól tekstowych _(PDF/SVG sprawdzone; PNG i Markdown z edytora bez testu na urządzeniu; Markdown tylko pola tekstowe; 2026-10-22: zakres „Przedział stron” w oknie eksportu — zapis jak w druku: `2-5`, `1-3, 8`, `7-` (do końca), `-3`; `core/text/PageSpan.kt` + `PageSpanTest`, nazwa pliku dostaje przedział, np. `Zeszyt-2-5.pdf`; bez testu na urządzeniu)_
+- [~] FIL-002 Eksport PDF (adnotacje wektorowe), PNG (strona/zakres), SVG (wektor), Markdown/TXT z pól tekstowych _(PDF/SVG sprawdzone; PNG i Markdown z edytora bez testu na urządzeniu; Markdown tylko pola tekstowe; 2026-10-22: zakres „Przedział stron” w oknie eksportu — zapis jak w druku: `2-5`, `1-3, 8`, `7-` (do końca), `-3`; `core/text/PageSpan.kt` + `PageSpanTest`, nazwa pliku dostaje przedział, np. `Zeszyt-2-5.pdf`; 2026-10-22: zakres „Zakładki” — eksport od wybranej zakładki do następnej / wybranej / końca zeszytu, domyślnie bez strony zakładki końcowej (przełącznik ją wlicza), opcjonalnie osobny plik na zakładkę w ZIP-ie (`01 Temat.pdf`), „Pomijaj puste strony” dla każdego zakresu; `core/nav/BookmarkSections.kt` + `BookmarkSectionsTest`, `Exporter.writeParts`/`blankPages`; zakładkę można nazwać w panelu stron (ołówek, menu strony); bez testu na urządzeniu)_
 - [~] FIL-003 `.mnotes` (ZIP: manifest JSON + strony + zasoby), import/eksport, udostępnianie (Share) _(`.mnotes` zaimplementowane; Share bez testu na urządzeniu)_
 - [~] FIL-004 Folder synchronizacji (SAF) — lustro w otwartych plikach dla Syncthing/Nextcloud/rsync; kopia ręczna i automatyczna _(folder synchronizacji (SAF, lustro PDF/MD/.mnotes) zaimplementowany; brak testu zeszytów zablokowanych i zagnieżdżonych folderów)_
 - [~] FIL-005 Drukowanie (PrintManager) _(PrintManager zaimplementowany — brak testu na urządzeniu)_

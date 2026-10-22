@@ -54,15 +54,48 @@ class Exporter(private val repo: Repository, private val assets: Assets, private
     /** Czeka, aż wszystkie zaplanowane zapisy stron trafią na dysk. */
     fun awaitWrites() { runCatching { repo.io.submit {}.get() } }
 
-    /** [span] = opis przedziału stron (np. „2-5”) dopisywany do nazwy; ma pierwszeństwo przed [pageNo]. */
+    private fun safeName(s: String) = s.replace(Regex("[\\\\/:*?\"<>|\\p{Cntrl}]"), "_").trim()
+
+    /** [span] = opis przedziału stron lub sekcji (np. „2-5”) dopisywany do nazwy; ma pierwszeństwo przed [pageNo]. */
     fun fileName(title: String, fmt: ExportFormat, pageNo: Int? = null, zip: Boolean = false, span: String? = null): String {
-        val base = title.replace(Regex("[\\\\/:*?\"<>|\\p{Cntrl}]"), "_").trim().ifEmpty { "mNotes" }.take(80)
+        val base = safeName(title).ifEmpty { "mNotes" }.take(80)
         val suffix = when {
-            span != null -> "-$span"
+            span != null -> "-" + safeName(span).take(60)
             pageNo != null && !fmt.multi -> "-${pageNo + 1}"
             else -> ""
         }
         return base + suffix + "." + (if (zip) "zip" else fmt.ext)
+    }
+
+    /** Indeksy stron bez żadnej treści (ani elementów, ani tła PDF) — papier w kratkę bez notatek też jest pusty. */
+    fun blankPages(nb: String): Set<Int> {
+        val meta = repo.meta(nb) ?: return emptySet()
+        return meta.pages.indices.filterTo(HashSet()) { i ->
+            val p = meta.pages[i]
+            p.spec.pdf == null && repo.readPage(nb, p.id).elements.isEmpty()
+        }
+    }
+
+    /**
+     * Archiwum ZIP z osobnym plikiem dla każdej części ([parts] = tytuł i indeksy stron): `01 Tytuł.pdf`. Dla PNG i SVG
+     * część z jedną stroną to jeden plik, z kilkoma — folder `01 Tytuł/page-004.png`. Zwraca false przy błędzie.
+     */
+    fun writeParts(nb: String, fmt: ExportFormat, parts: List<Pair<String, List<Int>>>, out: OutputStream): Boolean {
+        val meta = repo.meta(nb) ?: return false
+        if (fmt == ExportFormat.MNOTES || parts.isEmpty()) return false
+        return try {
+            ZipOutputStream(out).use { z ->
+                parts.forEachIndexed { n, (title, idx) ->
+                    val base = "%02d %s".format(Locale.ROOT, n + 1, safeName(title).ifEmpty { "-" }.take(60))
+                    when (fmt) {
+                        ExportFormat.PDF -> { z.putNextEntry(ZipEntry("$base.pdf")); pdfOut(nb, meta, idx, z); z.closeEntry() }
+                        ExportFormat.MD -> { z.putNextEntry(ZipEntry("$base.md")); z.write(markdown(nb, meta, idx).toByteArray()); z.closeEntry() }
+                        else -> imagesInto(z, nb, meta, idx, svg = fmt == ExportFormat.SVG, single = "$base.${fmt.ext}", folder = base)
+                    }
+                }
+            }
+            true
+        } catch (_: Throwable) { false }
     }
 
     /** [pages] = indeksy stron do wyeksportowania (null = wszystkie). Zwraca false przy błędzie. */
@@ -116,19 +149,26 @@ class Exporter(private val repo: Repository, private val assets: Assets, private
     // — PNG i SVG: jedna strona = jeden plik; więcej stron = archiwum ZIP —
 
     private fun imagesOut(nb: String, meta: NotebookMeta, idx: List<Int>, out: OutputStream, svg: Boolean) {
-        val ext = if (svg) "svg" else "png"
-        fun one(i: Int, o: OutputStream) {
-            val p = meta.pages[i]
-            if (svg) o.write(svgPage(nb, p).toByteArray(Charsets.UTF_8)) else pngPage(nb, p, o)
-        }
         val valid = idx.filter { it in meta.pages.indices }
-        if (valid.size == 1) { one(valid[0], out); return }
-        ZipOutputStream(out).use { z ->
-            for (i in valid) {
-                z.putNextEntry(ZipEntry("page-%03d.%s".format(Locale.ROOT, i + 1, ext)))
-                one(i, z)
-                z.closeEntry()
-            }
+        if (valid.size == 1) { imagePage(nb, meta, valid[0], out, svg); return }
+        ZipOutputStream(out).use { z -> imagesInto(z, nb, meta, valid, svg, single = null, folder = null) }
+    }
+
+    private fun imagePage(nb: String, meta: NotebookMeta, i: Int, o: OutputStream, svg: Boolean) {
+        val p = meta.pages[i]
+        if (svg) o.write(svgPage(nb, p).toByteArray(Charsets.UTF_8)) else pngPage(nb, p, o)
+    }
+
+    /** Wpisuje strony do otwartego archiwum: jedna strona jako wpis [single] (gdy podany), inaczej `page-NNN` w [folder]. */
+    private fun imagesInto(z: ZipOutputStream, nb: String, meta: NotebookMeta, idx: List<Int>, svg: Boolean, single: String?, folder: String?) {
+        val ext = if (svg) "svg" else "png"
+        val valid = idx.filter { it in meta.pages.indices }
+        for (i in valid) {
+            val entry = if (single != null && valid.size == 1) single
+            else (if (folder != null) "$folder/" else "") + "page-%03d.%s".format(Locale.ROOT, i + 1, ext)
+            z.putNextEntry(ZipEntry(entry))
+            imagePage(nb, meta, i, z, svg)
+            z.closeEntry()
         }
     }
 

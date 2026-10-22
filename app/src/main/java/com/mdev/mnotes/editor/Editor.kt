@@ -734,10 +734,15 @@ class Editor(val ctx: Context, val nbId: String) {
         exec(DocEdit.Elements(p.id, ElementsEdit.remove(c, c.elements.map { it.id }.toSet())))
     }
 
+    /** Przestawia stronę; bieżąca strona zostaje na ekranie (także gdy to ona jest przenoszona), bez skoku widoku. */
     fun movePage(from: Int, to: Int) {
-        if (from == to) return
+        val t = to.coerceIn(0, doc.pages.size - 1)
+        if (from == t) return
         val p = doc.pages.getOrNull(from) ?: return
-        exec(DocEdit.MovePage(p.id, from, to.coerceIn(0, doc.pages.size - 1)))
+        val edit = DocEdit.MovePage(p.id, from, t)
+        val keep = doc.pages.getOrNull(curIndex())?.id
+        val v = view
+        if (keep != null && v != null) v.keepPageInPlace(keep) { exec(edit) } else exec(edit)
     }
 
     fun setSpec(i: Int, spec: PageSpec) {

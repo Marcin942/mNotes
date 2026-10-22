@@ -61,9 +61,11 @@ class FloodFillTest {
         assertFalse("środek r1 nie jest wypełniony", f.containsPoint(300f, 400f))
         assertFalse("poza r2 nie jest wypełnione", f.containsPoint(300f, 400f + 200f))
         assertFalse(f.containsPoint(20f, 20f))
-        // Wypełnienie wchodzi pod linie: na samych okręgach też jest kolor.
-        assertTrue(f.containsPoint(300f + 150f, 400f))
-        assertTrue(f.containsPoint(300f + 50f, 400f))
+        // Wypełnienie wchodzi pod linie do ich środka (dalej leży już inny obszar).
+        assertTrue(f.containsPoint(300f + 149f, 400f))
+        assertTrue(f.containsPoint(300f + 51f, 400f))
+        assertFalse(f.containsPoint(300f + 151f, 400f))
+        assertFalse(f.containsPoint(300f + 49f, 400f))
         // Pole ≈ π(r2² − r1²), z zapasem na wejście pod linie.
         val area = rings.sumOf { FloodFill.area(it).toDouble() }.let { abs(it) }
         val expect = PI * (150.0 * 150.0 - 50.0 * 50.0)
@@ -235,6 +237,31 @@ class FloodFillTest {
                 }
                 y += 1f
             }
+        }
+    }
+
+    /** Czworokąt z przecinających się kresek, które wystają za rogi (jak krata narysowana ręką). */
+    @Test
+    fun fillDoesNotCreepAlongLinesPastCornersNorOutsideThem() {
+        for (w in listOf(1f, 1.5f, 2f, 3f)) for (closeGaps in listOf(false, true)) {
+            fun ln(id: Int, vararg xy: Float) = line(id, *xy).let { Stroke(it.id, it.pen, it.color, w, it.pts) }
+            val els = listOf(
+                ln(1, 200f, 100f, 205f, 500f), ln(2, 400f, 120f, 402f, 520f),
+                ln(3, 100f, 200f, 500f, 210f), ln(4, 120f, 400f, 520f, 395f),
+            )
+            val f = fillOf(FloodFill.fill(els, 600f, 800f, 300f, 300f, closeGaps)!!)
+            val tag = "grubość $w domknięcie $closeGaps"
+            assertTrue(tag, f.containsPoint(300f, 300f))
+            // Kreski wystające za rogi zostają bez koloru już tuż za skrzyżowaniem.
+            for (d in listOf(3f, 6f, 12f, 20f)) {
+                assertFalse("w górę po lewej kresce $d pt, $tag", f.containsPoint(200f + 5f * (205f - d - 100f) / 400f, 205f - w - d))
+                assertFalse("w dół po prawej kresce $d pt, $tag", f.containsPoint(401.8f, 397f + w + d))
+                assertFalse("w lewo po górnej kresce $d pt, $tag", f.containsPoint(202f - w - d, 202.5f))
+                assertFalse("w prawo po dolnej kresce $d pt, $tag", f.containsPoint(402f + w + d, 396f))
+            }
+            // Kolor kończy się pod kreską, a nie wychodzi spod niej na zewnątrz.
+            assertFalse("za lewą kreską, $tag", f.containsPoint(202.5f - w * 0.5f - 0.3f, 300f))
+            assertFalse("pod dolną kreską, $tag", f.containsPoint(300f, 398f + w * 0.5f + 0.3f))
         }
     }
 }

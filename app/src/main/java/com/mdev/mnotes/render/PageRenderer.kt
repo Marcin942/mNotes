@@ -313,6 +313,7 @@ class PageRenderer(private val assets: Assets?) {
     private fun drawText(c: Canvas, t: TextBox) {
         c.save()
         c.rotate(Math.toDegrees(t.rot.toDouble()).toFloat(), t.cx, t.cy)
+        if (t.mirror) c.scale(-1f, 1f, t.cx, t.cy)
         c.translate(t.cx - t.w * 0.5f, t.cy - t.h * 0.5f)
         if (t.fill != 0) {
             paint.reset(); paint.isAntiAlias = true; paint.color = t.fill
@@ -340,6 +341,7 @@ class PageRenderer(private val assets: Assets?) {
         val bmp = assets?.bitmap(nb, im.asset, decode)
         c.save()
         c.rotate(Math.toDegrees(im.rot.toDouble()).toFloat(), im.cx, im.cy)
+        if (im.mirror) c.scale(-1f, 1f, im.cx, im.cy)
         rect.set(im.cx - im.w * 0.5f, im.cy - im.h * 0.5f, im.cx + im.w * 0.5f, im.cy + im.h * 0.5f)
         if (bmp != null) {
             bmpPaint.alpha = (im.alpha * 255f).toInt().coerceIn(0, 255)

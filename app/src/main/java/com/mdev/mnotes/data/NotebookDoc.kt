@@ -157,7 +157,11 @@ class NotebookDoc(val repo: Repository, val id: String) : DocHost {
         }
     }
 
-    fun setLastPage(index: Int, layout: Int) {
-        if (meta.lastPage != index || meta.layout != layout) repo.update(id) { it.copy(lastPage = index, layout = layout) }
+    fun setLastPage(index: Int) {
+        if (meta.lastPage != index) repo.update(id) { it.copy(lastPage = index) }
+    }
+
+    fun setViewMode(mode: Int) {
+        if (meta.viewMode != mode) repo.update(id) { it.copy(viewMode = mode) }
     }
 }

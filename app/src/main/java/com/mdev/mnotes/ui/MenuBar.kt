@@ -47,9 +47,9 @@ fun menuBarVisible(mode: Int, widthDp: Int) = mode == 2 || (mode == 1 && widthDp
 
 /** Znacznik „zaznaczone” dla pozycji przełączanych (układ, narzędzie, pasek narzędzi, tryb tylko do odczytu). */
 private fun checked(ed: Editor, set: com.mdev.mnotes.data.Settings, id: String): Boolean = when (id) {
-    "layoutV" -> set.layoutMode == 0
-    "layoutH" -> set.layoutMode == 1
-    "layoutS" -> set.layoutMode == 2
+    "layoutV" -> ed.layoutMode == 0
+    "layoutH" -> ed.layoutMode == 1
+    "layoutS" -> ed.layoutMode == 2
     "readOnly" -> ed.readOnly
     "pagesDock" -> set.dockPages
     "zoomWindow" -> ed.zoomWin

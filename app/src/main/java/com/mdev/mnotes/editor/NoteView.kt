@@ -38,6 +38,7 @@ import com.mdev.mnotes.core.model.DocEdit
 import com.mdev.mnotes.core.model.Element
 import com.mdev.mnotes.core.model.TapeEl
 import com.mdev.mnotes.core.model.ElementsEdit
+import com.mdev.mnotes.core.model.ImageEl
 import com.mdev.mnotes.core.model.FillEl
 import com.mdev.mnotes.core.model.Ids
 import com.mdev.mnotes.core.model.PageContent
@@ -244,7 +245,7 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
     // ───────────────────────── układ i widok ─────────────────────────
 
     private fun rebuildLayout() {
-        val mode = if (settings.layoutMode == 0) LayoutMode.VERTICAL else LayoutMode.HORIZONTAL
+        val mode = if (ed.layoutMode == 0) LayoutMode.VERTICAL else LayoutMode.HORIZONTAL
         layout = DocLayout.of(doc.pages.map { it.spec }, mode)
         ed.pageCount = doc.pages.size
     }
@@ -266,7 +267,7 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
     /** „100%”: dopasowanie do szerokości (pion), wysokości (poziom) lub całej strony (pojedyncza). */
     fun baseZoom(): Float {
         if (width == 0 || layout.count == 0) return 1f
-        return when (settings.layoutMode) {
+        return when (ed.layoutMode) {
             0 -> width / layout.docWidth
             1 -> height / layout.docHeight
             else -> fitPageZoom(ed.pageIndex.coerceIn(0, layout.count - 1))
@@ -318,7 +319,7 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
 
     private fun targetFor(i: Int): Triple<Float, Float, Float> {
         val spec = doc.pages[i].spec
-        return when (settings.layoutMode) {
+        return when (ed.layoutMode) {
             0 -> Triple(zoom, clampX(tx, zoom), clampY(-(layout.top(i) - layout.pad * 0.5f) * zoom, zoom))
             1 -> Triple(zoom, clampX(-(layout.left(i) - layout.pad * 0.5f) * zoom, zoom), clampY(ty, zoom))
             else -> {
@@ -360,7 +361,7 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
     fun fitWidth() {
         if (width == 0 || layout.count == 0) return
         val i = ed.pageIndex.coerceIn(0, layout.count - 1)
-        val z = if (settings.layoutMode == 2) fitPageZoom(i) else baseZoom()
+        val z = if (ed.layoutMode == 2) fitPageZoom(i) else baseZoom()
         val k = z / zoom
         val cx = width / 2f; val cy = height / 2f
         animateView(z, clampX(cx - (cx - tx) * k, z), clampY(cy - (cy - ty) * k, z))
@@ -500,7 +501,7 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
         borderPaint.strokeWidth = 1f / zoom
 
         val pullOff = pullOffset()
-        if (pullOff > 0f) { c.save(); if (settings.layoutMode == 1) c.translate(-pullOff, 0f) else c.translate(0f, -pullOff) }
+        if (pullOff > 0f) { c.save(); if (ed.layoutMode == 1) c.translate(-pullOff, 0f) else c.translate(0f, -pullOff) }
         c.save()
         c.translate(tx, ty); c.scale(zoom, zoom)
         for (i in range) drawPage(c, i, vb, rvb)
@@ -847,7 +848,7 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
     fun showHit(pi: Int, b: Bounds?) {
         if (doc.pages.isEmpty() || width == 0 || pi !in 0 until layout.count) return
         stopAnim()
-        if (b == null || settings.layoutMode == 2) { goToPage(pi); return }
+        if (b == null || ed.layoutMode == 2) { goToPage(pi); return }
         val cx = layout.left(pi) + (b.l + b.r) / 2; val cy = layout.top(pi) + (b.t + b.b) / 2
         animateView(zoom, clampX(width / 2f - cx * zoom, zoom), clampY(height / 2f - cy * zoom, zoom), 260L)
     }
@@ -924,7 +925,7 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
     }
 
     private fun snapIfNeeded() {
-        if (settings.layoutMode != 2 || layout.count == 0 || mode == Mode.NAV) return
+        if (ed.layoutMode != 2 || layout.count == 0 || mode == Mode.NAV) return
         val i = layout.nearest(docX(width / 2f), docY(height / 2f))
         if (zoom <= fitPageZoom(i) * 1.08f) {
             val (z, x, y) = targetFor(i)
@@ -1266,11 +1267,11 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
     private fun pullEnabled() = settings.pullAddPage && !ed.readOnly && layout.count > 0
     private fun pullThreshold() = 120f * dp
     private fun pullLimit(): Float =
-        if (settings.layoutMode == 1) clampX(Float.NEGATIVE_INFINITY, zoom) else clampY(Float.NEGATIVE_INFINITY, zoom)
+        if (ed.layoutMode == 1) clampX(Float.NEGATIVE_INFINITY, zoom) else clampY(Float.NEGATIVE_INFINITY, zoom)
 
     /** Czy widok stoi na końcu dokumentu (dół albo prawa krawędź w układzie poziomym). */
     private fun atDocEnd(): Boolean {
-        val cur = if (settings.layoutMode == 1) tx else ty
+        val cur = if (ed.layoutMode == 1) tx else ty
         return cur <= pullLimit() + 4f * dp
     }
 
@@ -1282,7 +1283,7 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
 
     /** Przesuwa widok o (dx, dy); nadmiar poza koniec dokumentu zamienia w odciągnięcie. */
     private fun panWithPull(dx: Float, dy: Float, pullOk: Boolean) {
-        val ax = settings.layoutMode == 1
+        val ax = ed.layoutMode == 1
         var d = if (ax) dx else dy
         val other = if (ax) dy else dx
         if (pullOk && pull > 0f) {
@@ -1323,7 +1324,7 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
         val armed = pull >= pullThreshold()
         val r = 13f * dp
         val ink = if (darkUi) 0xFFE8EAED.toInt() else 0xFF3C4043.toInt()
-        val ax = settings.layoutMode == 1
+        val ax = ed.layoutMode == 1
         val label = if (armed) T.t("Puść, aby dodać stronę", "Release to add a page") else T.t("Pociągnij, aby dodać stronę", "Pull to add a page")
         pullText.textSize = 13.5f * dp
         val tw = if (ax) 0f else pullText.measureText(label)
@@ -1811,6 +1812,7 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
             cropMatrix.reset()
             cropMatrix.postScale(s.iw / bmp.width, s.ih / bmp.height)
             cropMatrix.postTranslate(-s.iw * 0.5f, -s.ih * 0.5f)
+            if (img.mirror) cropMatrix.postScale(-1f, 1f)
             cropMatrix.postScale(pl.s, pl.s)
             cropMatrix.postRotate(Math.toDegrees(pl.phi.toDouble()).toFloat())
             cropMatrix.postTranslate(pl.ox, pl.oy)
@@ -2747,14 +2749,26 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
     }
 
     /** Zatwierdza [els] na stronie [pi] bez przemalowania kafelków na wątku UI: łaty idą w tle, a do tego czasu rysuje je [drawGhost]. */
-    private fun applyInBackground(pi: Int, els: List<Element>, apply: () -> Unit) {
+    private fun applyInBackground(pi: Int, els: List<Element>, ghost: Boolean = true, apply: () -> Unit) {
         val page = doc.pages[pi]
         var area = Bounds.EMPTY
         for (e in els) area = area.union(e.bounds)
         applyDirty = area; applyPage = page.id
         apply()
         applyDirty = null; applyPage = null
+        if (!ghost) return
         ghostEls = els; ghostPage = pi; ghostArea = area; ghostUntil = SystemClock.uptimeMillis() + GHOST_MAX_MS
+    }
+
+    /**
+     * Podgląd zmiany wyglądu elementów [els] (suwak efektów obrazu): kafelki przemalowują się w tle, a wątek UI tylko
+     * podmienia dokument. Duch zasłania stary wygląd tylko dla w pełni kryjących obrazów; półprzezroczysty
+     * prześwitywałby przez stare kafelki, więc wtedy podgląd czeka na łatę.
+     */
+    fun applyElementsInBackground(pageId: String, els: List<Element>, apply: () -> Unit) {
+        val pi = doc.indexOf(pageId)
+        if (pi < 0) { apply(); return }
+        applyInBackground(pi, els, ghost = els.all { it !is ImageEl || it.alpha >= 0.999f }, apply = apply)
     }
 
     private fun lassoMove() {

@@ -4,6 +4,7 @@ import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.pdf.PdfDocument
 import android.util.Base64
+import com.mdev.mnotes.core.model.BoxElement
 import com.mdev.mnotes.core.model.FillEl
 import com.mdev.mnotes.core.model.ImageEl
 import com.mdev.mnotes.core.model.PageContent
@@ -209,7 +210,7 @@ class Exporter(private val repo: Repository, private val assets: Assets, private
             is Stroke -> svgStroke(sb, e, fl, spec.darkPaper)
             is TextBox -> svgText(sb, e)
             is TapeEl -> {
-                val tr = if (e.rot != 0f) " transform=\"rotate(${f(Math.toDegrees(e.rot.toDouble()).toFloat())} ${f(e.cx)} ${f(e.cy)})\"" else ""
+                val tr = svgBoxTransform(e)
                 val rad = f(minOf(e.w, e.h) * 0.12f)
                 sb.append("<rect x=\"${f(e.cx - e.w / 2)}\" y=\"${f(e.cy - e.h / 2)}\" width=\"${f(e.w)}\" height=\"${f(e.h)}\" rx=\"$rad\" fill=\"${hex(e.color)}\" fill-opacity=\"${if (e.hidden) "1" else "0.18"}\"$tr/>\n")
             }
@@ -225,7 +226,7 @@ class Exporter(private val repo: Repository, private val assets: Assets, private
                 sb.append("\"/>\n")
             }
             is ImageEl -> assets.load(nb, e.asset)?.let { b ->
-                val tr = if (e.rot != 0f) " transform=\"rotate(${f(Math.toDegrees(e.rot.toDouble()).toFloat())} ${f(e.cx)} ${f(e.cy)})\"" else ""
+                val tr = svgBoxTransform(e)
                 val cr = e.crop
                 val filter = svgFx(sb, e.fx)
                 if (cr.isFull) {
@@ -333,11 +334,19 @@ class Exporter(private val repo: Repository, private val assets: Assets, private
         sb.append("Z")
     }
 
+    /** Atrybut `transform` ramki: obrót wokół środka, a przy odbiciu jeszcze lustro w jej osi x (po obrocie). */
+    private fun svgBoxTransform(e: BoxElement): String {
+        val parts = ArrayList<String>(2)
+        if (e.rot != 0f) parts += "rotate(${f(Math.toDegrees(e.rot.toDouble()).toFloat())} ${f(e.cx)} ${f(e.cy)})"
+        if (e.mirror) parts += "translate(${f(e.cx)} ${f(e.cy)}) scale(-1 1) translate(${f(-e.cx)} ${f(-e.cy)})"
+        return if (parts.isEmpty()) "" else " transform=\"${parts.joinToString(" ")}\""
+    }
+
     private fun svgText(sb: StringBuilder, t: TextBox) {
         val lay = renderer.layoutFor(t)
         val x0 = t.cx - t.w / 2; val y0 = t.cy - t.h / 2
         sb.append("<g")
-        if (t.rot != 0f) sb.append(" transform=\"rotate(${f(Math.toDegrees(t.rot.toDouble()).toFloat())} ${f(t.cx)} ${f(t.cy)})\"")
+        sb.append(svgBoxTransform(t))
         sb.append(">\n")
         if (t.fill != 0) sb.append("<rect x=\"${f(x0)}\" y=\"${f(y0)}\" width=\"${f(t.w)}\" height=\"${f(t.h)}\" rx=\"4\" fill=\"${hex(t.fill)}\"/>\n")
         // ręcznie ustawiona ramka przycina tekst tak samo jak na ekranie
@@ -418,7 +427,7 @@ class Importer(private val repo: Repository, private val pdf: PdfPool) {
             val (w, h) = pdf.pageSize(id, asset, i) ?: (595f to 842f)
             PageMeta(newId(), PageSpec(w = w, h = h, paper = Paper.WHITE, template = Template.BLANK, pdf = PdfRef(asset, i)))
         }
-        return NotebookMeta(id, title, folderId, now, now, now, cover, CoverStyle.PLAIN, pages = pages)
+        return NotebookMeta(id, title, folderId, now, now, now, cover, CoverStyle.PLAIN, pdfDoc = true, pages = pages)
     }
 
     /** Każdy obraz staje się stroną o proporcjach obrazu (dłuższy bok = 842 pt), obraz leży na stronie jako element. */

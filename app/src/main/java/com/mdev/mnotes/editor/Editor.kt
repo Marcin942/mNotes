@@ -3,6 +3,7 @@ package com.mdev.mnotes.editor
 import android.content.Context
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import com.mdev.mnotes.core.layout.ViewMode
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -104,6 +105,18 @@ class Editor(val ctx: Context, val nbId: String) {
     val settings = app.settings
     val doc = NotebookDoc(repo, nbId)
     var view: NoteView? = null
+
+    /** Układ stron tego dokumentu ([com.mdev.mnotes.core.layout.ViewMode]): własny wybór zapisany w zeszycie albo domyślny dla jego rodzaju. */
+    var layoutMode by mutableIntStateOf(doc.meta.let { ViewMode.resolve(it.viewMode, it.pdfDoc, settings.viewNotebook, settings.viewPdf) })
+        private set
+
+    /** Zmiana układu przez użytkownika: pamiętana w tym dokumencie, więc przy następnym otwarciu wraca. */
+    fun chooseLayoutMode(mode: Int) {
+        if (!ViewMode.valid(mode)) return
+        layoutMode = mode
+        doc.setViewMode(mode)
+        view?.applyLayoutMode()
+    }
 
     var tool by mutableStateOf(Tool.PEN)
     var ruler by mutableStateOf(false)
@@ -224,8 +237,8 @@ class Editor(val ctx: Context, val nbId: String) {
     fun say(msg: String) { toast = msg }
 
     // — Cofanie —
-    fun undo() { cancelCut(); cancelCrop(); clearSel(); val e = doc.doUndo(); undoTick++; e?.pageIds?.firstOrNull()?.let { view?.ensureVisible(it) } }
-    fun redo() { cancelCut(); cancelCrop(); clearSel(); val e = doc.doRedo(); undoTick++; e?.pageIds?.firstOrNull()?.let { view?.ensureVisible(it) } }
+    fun undo() { commitSelPreview(); cancelCut(); cancelCrop(); clearSel(); val e = doc.doUndo(); undoTick++; e?.pageIds?.firstOrNull()?.let { view?.ensureVisible(it) } }
+    fun redo() { commitSelPreview(); cancelCut(); cancelCrop(); clearSel(); val e = doc.doRedo(); undoTick++; e?.pageIds?.firstOrNull()?.let { view?.ensureVisible(it) } }
 
     /** Wykonanie z zapisem na stosie cofania. */
     fun exec(edit: DocEdit) { doc.exec(edit); undoTick++ }
@@ -316,10 +329,40 @@ class Editor(val ctx: Context, val nbId: String) {
 
     fun setSelLine(line: LineStyle) = replaceSel { e -> if (e is Stroke) e.withStyle(line = line) else e }
 
-    fun setSelAlpha(a: Float) = replaceSel { e -> if (e is ImageEl) e.copy(alpha = a) else e }
-
     /** Zmienia efekty kolorystyczne zaznaczonych obrazów; [f] dostaje bieżące efekty danego obrazu. */
     fun setSelImageFx(f: (ImageFx) -> ImageFx) = replaceSel { e -> if (e is ImageEl) e.copy(fx = f(e.fx)) else e }
+
+    private class ElPreview(val pageId: String, val before: Map<Int, ImageEl>)
+    private var elPreview: ElPreview? = null
+
+    /**
+     * Podgląd zmiany obrazów na żywo (suwaki efektów): stosuje [f] do stanu sprzed gestu bez wpisu cofania i bez
+     * przemalowania kafelków na wątku UI. Gest kończy [commitSelPreview] (jeden wpis cofania na cały gest).
+     */
+    fun previewSelImages(f: (ImageEl) -> ImageEl) {
+        val p = selPage() ?: return
+        val prev = elPreview ?: ElPreview(p.id, selElements().filterIsInstance<ImageEl>().associateBy { it.id }).also { elPreview = it }
+        if (prev.pageId != p.id || prev.before.isEmpty()) return
+        val map = prev.before.mapValues { f(it.value) }
+        val edit = ElementsEdit.replace(doc.content(p), map)
+        if (edit.isEmpty) return
+        val v = view
+        if (v != null) v.applyElementsInBackground(p.id, map.values.toList()) { doc.applyElements(p.id, edit) }
+        else doc.applyElements(p.id, edit)
+    }
+
+    fun commitSelPreview() {
+        val prev = elPreview ?: return
+        elPreview = null
+        val p = doc.page(prev.pageId) ?: return
+        val rem = ArrayList<Placed>(); val add = ArrayList<Placed>()
+        doc.content(p).elements.forEachIndexed { i, e ->
+            val b = prev.before[e.id] ?: return@forEachIndexed
+            if (b != e && (e !is ImageEl || b.fx != e.fx || b.alpha != e.alpha)) { rem.add(Placed(i, b)); add.add(Placed(i, e)) }
+        }
+        if (rem.isNotEmpty()) record(DocEdit.Elements(p.id, ElementsEdit(rem, add)))
+        selTick++
+    }
 
     fun lockSel(lock: Boolean) = replaceSel { it.withLocked(lock) }
 
@@ -364,6 +407,22 @@ class Editor(val ctx: Context, val nbId: String) {
 
     /** Przesuwa zaznaczenie o (dx, dy) pt — strzałki (Shift = 10 pt). */
     fun nudgeSel(dx: Float, dy: Float) = replaceSel { it.transformed(com.mdev.mnotes.core.geom.Affine.translation(dx, dy)) }
+
+    /** Czy zaznaczenie da się odbić: jak przy obrocie, żaden zaznaczony element nie może być zablokowany. */
+    fun canFlipSel(): Boolean = !readOnly && selElements().let { it.isNotEmpty() && it.none { e -> e.locked } }
+
+    /**
+     * Odbija zaznaczenie jak jedną całość: względem pionowej ([horizontal]) albo poziomej osi przez środek wspólnej ramki.
+     * Jedna zmiana w historii; dwa odbicia dają dokładnie stan wyjściowy.
+     */
+    fun flipSel(horizontal: Boolean) {
+        if (!canFlipSel()) return
+        var b = Bounds.EMPTY
+        for (e in selElements()) b = b.union(e.bounds)
+        if (b.isEmpty) return
+        val m = if (horizontal) com.mdev.mnotes.core.geom.Affine.scale(-1f, 1f, b.cx, b.cy) else com.mdev.mnotes.core.geom.Affine.scale(1f, -1f, b.cx, b.cy)
+        replaceSel { it.transformed(m) }
+    }
 
     // — Tekst i obrazy —
     private val textMeasure by lazy { com.mdev.mnotes.render.PageRenderer(app.assets).textMeasure }
@@ -572,8 +631,10 @@ class Editor(val ctx: Context, val nbId: String) {
         val iw = size.first.toFloat(); val ih = size.second.toFloat()
         cancelCut()
         transformMode = false
-        val frame = CropGeom.frameOf(img.crop, iw, ih)
-        crop = CropSession(s.pageId, img.id, img, iw, ih, frame, CropGeom.placeOf(img, iw, ih))
+        // odbity obraz przycina się w odwróconym pliku (patrz CropGeom.mirrorCrop); rysowanie odwraca bitmapę tak samo
+        val flat = CropGeom.unmirrored(img)
+        val frame = CropGeom.frameOf(flat.crop, iw, ih)
+        crop = CropSession(s.pageId, img.id, img, iw, ih, frame, CropGeom.placeOf(flat, iw, ih))
         view?.invalidate()
     }
 
@@ -661,7 +722,7 @@ class Editor(val ctx: Context, val nbId: String) {
     fun applyCrop() {
         val c = crop ?: return; val img = cropImage() ?: return
         val page = doc.page(c.pageId) ?: return
-        val out = CropGeom.applied(img, c.frame, c.place, c.iw, c.ih)
+        val out = CropGeom.remirrored(CropGeom.applied(CropGeom.unmirrored(img), c.frame, c.place, c.iw, c.ih), img.mirror)
         crop = null
         if (out.crop == img.crop && out.cx == img.cx && out.cy == img.cy && out.w == img.w && out.h == img.h && out.rot == img.rot) { view?.invalidate(); return }
         val at = doc.content(page).elements.indexOfFirst { it.id == img.id }
@@ -800,7 +861,7 @@ class Editor(val ctx: Context, val nbId: String) {
 
     fun close() {
         doc.flush()
-        doc.setLastPage(pageIndex, settings.layoutMode)
+        doc.setLastPage(pageIndex)
         view?.dispose()
         view = null
     }

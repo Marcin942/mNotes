@@ -46,6 +46,12 @@ import com.mdev.mnotes.editor.T
 /** Otwiera Ustawienia na układzie paska; edytor dostarcza to menu przytrzymanego przycisku, bez przeciągania parametrów. */
 val LocalBarSettings = staticCompositionLocalOf<() -> Unit> { {} }
 
+/** Otwiera ustawienia pędzla formatu (zębatka w jego panelu). */
+val LocalPainterSettings = staticCompositionLocalOf<() -> Unit> { {} }
+
+/** Zapytanie, które w wyszukiwarce ustawień zostawia tylko grupę pędzla formatu. */
+const val PAINTER_QUERY = "pędzel formatu"
+
 /** Nazwa pozycji paska narzędzi o stabilnym id z [BarConfig.DEFAULT_ORDER]. */
 internal fun barName(id: String): String = when (id) {
     "undo" -> T.t("Cofnij", "Undo")

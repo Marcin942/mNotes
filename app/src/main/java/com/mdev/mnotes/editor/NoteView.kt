@@ -2576,6 +2576,7 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
         if (ed.formatPick) { takeFormatAt(); mode = Mode.IGNORE; return }
         if (ed.sel != null) ed.clearSel()
         if (ed.readOnly) { mode = Mode.IGNORE; return }
+        if (settings.painterQuickFadeUse) ed.quickFormat = false
         if (settings.painterMode == 1) { val pi = pageIdxAt(curX, curY); if (pi < 0) { mode = Mode.IGNORE; return }; lPage = pi; ln = 0; addLasso(pgX(pi, curX), pgY(pi, curY)) }
         else paintTo(curX, curY)
     }
@@ -2589,7 +2590,7 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
         val els = doc.content(doc.pages[pi]).elements
         val top = els.lastOrNull { it !is TapeEl && it.bounds.inflate(r + 1f).contains(px, py) && EraseMath.hitsElement(it, px, py, r) }
         if (top == null) { ed.say(T.t("Dotknij obiektu, z którego chcesz pobrać format", "Tap the object to take the format from")); return }
-        if (ed.takeFormat(top)) ed.formatPick = false
+        if (ed.takeFormat(top)) { ed.formatPick = false; if (settings.painterQuickFadeTake) ed.quickFormat = false }
         else ed.say(T.t("Ten obiekt nie ma formatu do pobrania", "This object has no format to take"))
     }
 

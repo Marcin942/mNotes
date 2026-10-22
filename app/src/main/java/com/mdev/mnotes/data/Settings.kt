@@ -92,6 +92,10 @@ class Settings(ctx: Context) {
     // — Narzędzia —
     var eraserMode by Pref("eraser.mode", 0)         // 0 obiektowa, 1 pikselowa
     var painterMode by Pref("painter.mode", 0)       // pędzel formatu: 0 obiekty pod rysikiem, 1 lasso
+    var painterQuick by Pref("painter.quick", true)  // pierwsze dotknięcie pędzla pokazuje pod nim szybki przycisk „Pobierz format”
+    var painterQuickFadeUse by Pref("painter.quick_fade_use", true)    // przycisk gaśnie, gdy zaczynasz malować pędzlem
+    var painterQuickFadeTake by Pref("painter.quick_fade_take", true)  // przycisk gaśnie po pobraniu formatu
+    var painterQuickSec by Pref("painter.quick_sec", 6)                // przycisk gaśnie po tylu sekundach bez dotknięcia; 0 = nigdy
     var fillCloseGaps by Pref("fill.close_gaps", false) // wiaderko domyka szpary węższe niż ok. 2 pt
     var pipetteKeep by Pref("pipette.keep", false)
     /** Pipeta na zakreślaczu: false = kolor widoczny na stronie (po multiply), true = kolor pierwotny kreski. */

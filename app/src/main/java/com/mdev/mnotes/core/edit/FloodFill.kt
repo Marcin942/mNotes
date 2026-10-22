@@ -5,6 +5,7 @@ import com.mdev.mnotes.core.model.BoxElement
 import com.mdev.mnotes.core.model.Element
 import com.mdev.mnotes.core.model.FillEl
 import com.mdev.mnotes.core.model.ImageEl
+import com.mdev.mnotes.core.model.PenKind
 import com.mdev.mnotes.core.model.Stroke
 import kotlin.math.abs
 import kotlin.math.ceil
@@ -44,6 +45,9 @@ object FloodFill {
     /** Wolna kępa poza rdzeniem nie większa niż tyle komórek jest ziarnem rastra, a nie osobnym obszarem. */
     private const val DUST_CELLS = 40
 
+    /** Odchylenie kanału (0..255) od bieli albo czerni, przy którym zakreślacz jeszcze uznajemy za niewidoczny. */
+    private const val INVISIBLE_TOL = 4
+
     /** Rozstaw próbek przy wygładzaniu konturu, w komórkach. */
     private const val SMOOTH_STEP = 0.5f
 
@@ -56,15 +60,16 @@ object FloodFill {
     /**
      * Kontury obszaru wokół (x, y) na stronie [pageW]×[pageH] (pt). Null, gdy punkt leży poza stroną albo na linii
      * (na linii nie ma czego wypełniać). Istniejące wypełnienia i zablokowane obrazy (tło strony) nie są ścianami.
-     * [closeGaps] domyka szpary węższe niż ok. 2 pt.
+     * [closeGaps] domyka szpary węższe niż ok. 2 pt. [darkPaper] mówi, jak strona rysuje zakreślacz (patrz [invisible]).
      */
-    fun fill(elements: List<Element>, pageW: Float, pageH: Float, x: Float, y: Float, closeGaps: Boolean = false, maxCells: Int = MAX_CELLS, longSide: Int = CELLS_LONG_SIDE): List<FloatArray>? {
+    fun fill(elements: List<Element>, pageW: Float, pageH: Float, x: Float, y: Float, closeGaps: Boolean = false, darkPaper: Boolean = false, maxCells: Int = MAX_CELLS, longSide: Int = CELLS_LONG_SIDE): List<FloatArray>? {
         if (pageW <= 0f || pageH <= 0f || x < 0f || y < 0f || x >= pageW || y >= pageH) return null
         var cell = max(pageW, pageH) / longSide
         cell = max(cell, sqrt(pageW * pageH / maxCells))
         val gw = ceil(pageW / cell).toInt().coerceAtLeast(1)
         val gh = ceil(pageH / cell).toInt().coerceAtLeast(1)
         val wall = BooleanArray(gw * gh)
+        @Suppress("NAME_SHADOWING") val elements = elements.filterNot { invisible(it, darkPaper) }
         for (e in elements) rasterize(e, wall, gw, gh, cell, 0f)
         // Komórki głęboko pod grubą kreską: tam wypełnienie nie szuka szczelin (patrz SLIVER_REACH).
         val deep = BooleanArray(gw * gh)
@@ -88,6 +93,17 @@ object FloodFill {
             val s = simplifyRing(smooth, cell * 0.08f)
             if (s.size >= 6 && abs(area(s)) >= cell * cell * 2f) s else null
         }
+    }
+
+    /**
+     * Zakreślacz, którego nie widać: na jasnym papierze kolor się mnoży, więc biały nic nie zmienia, a na ciemnym
+     * rozjaśnia („screen”), więc nic nie zmienia czarny. Taka kreska nie może być ścianą, bo wypełnienie urywałoby się
+     * na niewidocznej granicy.
+     */
+    private fun invisible(e: Element, darkPaper: Boolean): Boolean {
+        if (e !is Stroke || e.pen != PenKind.HIGHLIGHTER) return false
+        val r = e.color shr 16 and 0xFF; val g = e.color shr 8 and 0xFF; val b = e.color and 0xFF
+        return if (darkPaper) max(r, max(g, b)) <= INVISIBLE_TOL else min(r, min(g, b)) >= 255 - INVISIBLE_TOL
     }
 
     /** O tyle ściana jest szersza od kreski, żeby wąskie szpary między liniami (np. niedomknięty rysunek) nie przeciekały. */

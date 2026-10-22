@@ -84,6 +84,21 @@ class FloodFillTest {
     }
 
     @Test
+    fun invisibleHighlighterIsNotAWall() {
+        // Biały zakreślacz na jasnym papierze (mnożenie) i czarny na ciemnym („screen”) nic nie rysują, więc nie dzielą obszaru.
+        fun hl(color: Int) = line(2, 80f, 400f, 520f, 400f).let { Stroke(it.id, PenKind.HIGHLIGHTER, color, 20f, it.pts) }
+        val box = line(1, 100f, 300f, 500f, 300f, 500f, 500f, 100f, 500f, 100f, 300f)
+        val white = 0xFFFFFFFF.toInt()
+        val blue = 0xFF929AFB.toInt()
+        fun filled(color: Int, dark: Boolean) = fillOf(FloodFill.fill(listOf(box, hl(color)), 600f, 800f, 300f, 350f, darkPaper = dark)!!).containsPoint(300f, 450f)
+        assertTrue(filled(white, dark = false))
+        assertTrue(filled(black, dark = true))
+        assertFalse(filled(white, dark = true))
+        assertFalse(filled(black, dark = false))
+        assertFalse(filled(blue, dark = false))
+    }
+
+    @Test
     fun emptyPageFillsEverything() {
         val f = fillOf(FloodFill.fill(emptyList(), 600f, 800f, 300f, 400f)!!)
         assertEquals(1, f.rings.size)

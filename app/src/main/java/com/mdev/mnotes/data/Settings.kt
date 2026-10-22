@@ -5,6 +5,7 @@ import android.content.SharedPreferences
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import com.mdev.mnotes.core.edit.AngleSnap
 import com.mdev.mnotes.core.layout.BarConfig
 import com.mdev.mnotes.core.layout.ViewMode
 import com.mdev.mnotes.core.model.PenKind
@@ -109,6 +110,18 @@ class Settings(ctx: Context) {
     var zoomMag by Pref("zoomwin.mag", 3f)          // powiększenie okna powiększenia (EXT-003): 2–5×
     var tapeColor by Pref("tape.color", 0xFFFFD54F.toInt())
     var snapGrid by Pref("ruler.snap", false)
+    var rotSnap by Pref("rotate.snap", true)         // obrót lassem przyciąga do równych kątów
+    private var rotAnglesRaw by Pref("rotate.angles", AngleSnap.format(AngleSnap.every(AngleSnap.DEFAULT_STEP)))   // kąty przyciągania: „0;15;30…” w stopniach
+    var rotTolerance by Pref("rotate.tolerance", AngleSnap.DEFAULT_TOLERANCE)   // zasięg przyciągania w stopniach
+    private var rotAnglesCache: Pair<String, List<Float>>? = null
+    /** Kąty przyciągania obrotu; zapis normalizuje zbiór (zakres, kolejność, bez powtórzeń). */
+    var rotAngles: List<Float>
+        get() {
+            val raw = rotAnglesRaw
+            rotAnglesCache?.let { if (it.first == raw) return it.second }
+            return AngleSnap.parse(raw).also { rotAnglesCache = raw to it }
+        }
+        set(v) { rotAnglesRaw = AngleSnap.format(v) }
 
     // — Strony —
     var newFormat by Pref("new.format", "a4")

@@ -65,6 +65,8 @@ import com.mdev.mnotes.ui.COLORS_CAT
 import com.mdev.mnotes.ui.EDITOR_CAT
 import com.mdev.mnotes.ui.LocalBarSettings
 import com.mdev.mnotes.ui.LocalPainterSettings
+import com.mdev.mnotes.ui.LocalRotationSettings
+import com.mdev.mnotes.ui.ROTATION_QUERY
 import com.mdev.mnotes.ui.PAINTER_QUERY
 import com.mdev.mnotes.ui.SHORTCUTS_CAT
 import com.mdev.mnotes.ui.SettingsScreen
@@ -299,7 +301,7 @@ open class MainActivity : FragmentActivity() {
                     Screen.EDITOR -> {
                         val ed = ui.editor
                         if (ed == null) { ui.screen = Screen.LIBRARY } else key(ed.nbId) {
-                            CompositionLocalProvider(LocalBarSettings provides { ui.openSettings(EDITOR_CAT) }, LocalPainterSettings provides { ui.openSettings(EDITOR_CAT, PAINTER_QUERY) }) {
+                            CompositionLocalProvider(LocalBarSettings provides { ui.openSettings(EDITOR_CAT) }, LocalPainterSettings provides { ui.openSettings(EDITOR_CAT, PAINTER_QUERY) }, LocalRotationSettings provides { ui.openSettings(EDITOR_CAT, ROTATION_QUERY) }) {
                                 EditorScreen(ed, tabsCtl, onExit = ui::leave, onSettings = { ui.openSettings(0) }, onShortcuts = { ui.openSettings(SHORTCUTS_CAT) }, onColorSets = { ui.openSettings(COLORS_CAT) })
                             }
                         }

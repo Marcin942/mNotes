@@ -1022,12 +1022,18 @@ private fun ToolPanel(ed: Editor, set: com.mdev.mnotes.data.Settings, panel: Pan
                     Text(T.t("Kolor i styl bierze z aktywnego pióra.", "Colour and style come from the active pen."), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 else -> {
-                    SectionLabel(T.t("Kształt lassa", "Lasso shape"))
+                    val openRotationSettings = LocalRotationSettings.current
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        SectionLabel(T.t("Kształt lassa", "Lasso shape")); Spacer(Modifier.weight(1f))
+                        IconBtn(Icons.Rounded.Settings, T.t("Ustawienia kątów obrotu", "Rotation angle settings"), { close(); openRotationSettings() }, size = 32.dp, iconSize = 18.dp)
+                    }
                     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         Chip(T.t("Odręczne", "Freehand"), !set.lassoRect, { set.lassoRect = false }, icon = Icons.Rounded.Gesture)
                         Chip(T.t("Prostokąt", "Rectangle"), set.lassoRect, { set.lassoRect = true }, icon = Icons.Rounded.HighlightAlt)
                     }
                     ToggleRow(T.t("Przyciągaj do siatki", "Snap to grid"), ed.gridSnap) { ed.gridSnap = it; set.snapGrid = it }
+                    ToggleRow(T.t("Przyciągaj do równych kątów", "Snap to even angles"), set.rotSnap) { set.rotSnap = it }
+                    Text(rotationHint(set), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Text(T.t("Ctrl+A zaznacza wszystko na stronie.", "Ctrl+A selects everything on the page."), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }

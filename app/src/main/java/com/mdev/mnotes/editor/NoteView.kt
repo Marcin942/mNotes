@@ -19,6 +19,7 @@ import android.view.ViewConfiguration
 import android.view.animation.DecelerateInterpolator
 import android.widget.OverScroller
 import androidx.input.motionprediction.MotionEventPredictor
+import com.mdev.mnotes.core.edit.AngleSnap
 import com.mdev.mnotes.core.edit.CropFrame
 import com.mdev.mnotes.core.edit.CropHandle
 import com.mdev.mnotes.core.edit.CutLine
@@ -170,6 +171,7 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
     private var rulerSide = 0              // ±1: pióro przyklejone do krawędzi, 0 swobodne
     private var rulerU0 = 0f; private var rulerU1 = 0f
     private var rulerSnapped = false
+    private var rotSnapped = false
     private var rLastX = 0f; private var rLastY = 0f; private var rLastAng = 0f
     private val rulerFill = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
     private val rulerEdge = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE; strokeWidth = 1.6f * dp }
@@ -2712,7 +2714,7 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
 
     private fun prepareTransform(kind: LM, s: Sel, b: Bounds, px: Float, py: Float) {
         lm = kind; lIds = s.ids; lBounds = b; lStartX = px; lStartY = py
-        lM = Affine.IDENTITY; lLifting = false
+        lM = Affine.IDENTITY; lLifting = false; rotSnapped = false
     }
 
     private fun liftSelection() {
@@ -2783,9 +2785,14 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
                     }
                     else -> {
                         var a = atan2(py - lBounds.cy, px - lBounds.cx) - lAngleStart
-                        val step = (PI / 12).toFloat()
-                        val snapped = (a / step).roundToInt() * step
-                        if (abs(snapped - a) < 0.07f) a = snapped
+                        var on = false
+                        if (settings.rotSnap) {
+                            val angles = settings.rotAngles
+                            a = AngleSnap.snap(a, angles, settings.rotTolerance)
+                            on = AngleSnap.isSnapped(a, angles)
+                        }
+                        if (on && !rotSnapped) performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
+                        rotSnapped = on
                         Affine.rotation(a, lBounds.cx, lBounds.cy)
                     }
                 }

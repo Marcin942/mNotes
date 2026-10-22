@@ -5,17 +5,20 @@ import android.view.HapticFeedbackConstants
 import androidx.compose.animation.core.animate
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
-import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -31,7 +34,9 @@ import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.ArrowDownward
@@ -50,7 +55,7 @@ import androidx.compose.material.icons.rounded.MoreVert
 import androidx.compose.material.icons.rounded.SwapVert
 import androidx.compose.material.icons.rounded.VerticalAlignBottom
 import androidx.compose.material.icons.rounded.VerticalAlignTop
-import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.Surface
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -83,9 +88,17 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntRect
+import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Popup
+import androidx.compose.ui.window.PopupPositionProvider
+import androidx.compose.ui.window.PopupProperties
 import androidx.compose.ui.zIndex
 import com.mdev.mnotes.app.app
 import com.mdev.mnotes.core.model.PageOrder
@@ -146,10 +159,12 @@ private class PageDrag(private val ls: LazyListState, private val scope: Corouti
         val next = items.getOrNull(k + 1)?.takeIf { it.index == idx + 1 }
         val to = PageOrder.step(idx, start + delta + cur.size / 2f, prev?.let { it.offset + it.size / 2f }, next?.let { it.offset + it.size / 2f })
         if (to == idx) return false
-        // Lista trzyma pozycję przy kluczu pierwszej widocznej pozycji; bez tego zamiana z nią przewija listę.
+        // Lista trzyma pozycję przy kluczu pierwszej widocznej pozycji: gdy to przeciągana miniatura, po zamianie
+        // lista przewinęłaby się za nią, pod palcem znów byłby sąsiad i strona przeleciałaby na koniec. Pozycję
+        // trzeba przywrócić w tym samym przeliczeniu listy, w którym wchodzi nowa kolejność (nie korutyną po nim).
         val fi = ls.firstVisibleItemIndex; val fo = ls.firstVisibleItemScrollOffset
         PageOrder.move(order, idx, to)
-        if (idx == fi || to == fi) scope.launch { ls.scrollToItem(fi, fo) }
+        if (idx == fi || to == fi) ls.requestScrollToItem(fi, fo)
         return true
     }
 
@@ -212,7 +227,8 @@ fun PagesPanel(ed: Editor, close: () -> Unit, @Suppress("UNUSED_PARAMETER") pick
                 y > h - edge -> (y - (h - edge)) / edge
                 else -> 0f
             }.coerceIn(-1.5f, 1.5f)
-            if (f != 0f && ls.scrollBy(f * speed) != 0f && drag.swap()) buzz(HapticFeedbackConstants.CLOCK_TICK)
+            // Bez blokady przewijania listy (scrollBy), żeby nie walczyć z przywracaniem pozycji po zamianie.
+            if (f != 0f && ls.dispatchRawDelta(f * speed) != 0f && drag.swap()) buzz(HapticFeedbackConstants.CLOCK_TICK)
         }
     }
 
@@ -370,16 +386,16 @@ private fun PageThumbItem(
             Modifier.fillMaxWidth().graphicsLayer { scaleX = scale; scaleY = scale }
                 .shadow(if (lifted) 14.dp else 0.dp, RoundedCornerShape(6.dp))
                 .aspectRatio(spec.w / spec.h).clip(RoundedCornerShape(6.dp)).background(Color(spec.paper))
-                .border(if (current || lifted) 2.5.dp else 1.dp, if (current || lifted) m.accent else m.line, RoundedCornerShape(6.dp)),
+                .border(if (current || lifted || menu) 2.5.dp else 1.dp, if (current || lifted || menu) m.accent else m.line, RoundedCornerShape(6.dp)),
         ) {
             bmp?.let { Image(it.asImageBitmap(), null, Modifier.fillMaxWidth(), contentScale = ContentScale.FillWidth) }
             if (marked) Icon(Icons.Rounded.Bookmark, null, Modifier.align(Alignment.TopEnd).padding(2.dp).size(18.dp), tint = m.accent)
-            DropdownMenu(menu, closeMenu) {
+            SideMenu(menu, closeMenu) {
                 @Composable
                 fun It(t: String, icon: ImageVector, en: Boolean = true, danger: Boolean = false, f: () -> Unit) = DropdownMenuItem(
                     text = { Text(t, color = if (danger && en) MaterialTheme.colorScheme.error else Color.Unspecified) },
                     leadingIcon = { Icon(icon, null, Modifier.size(20.dp), tint = if (danger && en) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant) },
-                    enabled = en, onClick = { closeMenu(); f() },
+                    enabled = en, onClick = { closeMenu(); f() }, modifier = Modifier.height(40.dp),
                 )
                 val i = ed.doc.indexOf(page.id)
                 if (i >= 0) {
@@ -412,6 +428,44 @@ private fun PageThumbItem(
                 style = MaterialTheme.typography.labelMedium, color = if (current) m.onAccent else MaterialTheme.colorScheme.onSurfaceVariant,
             )
             IconBtn(Icons.Rounded.MoreVert, T.t("Działania na stronie", "Page actions"), openMenu, Modifier.align(Alignment.CenterEnd), size = 28.dp, iconSize = 18.dp)
+        }
+    }
+}
+
+/**
+ * Menu strony obok panelu, a nie na nim, żeby miniatury zostały widoczne. Otwiera się po tej stronie panelu, gdzie jest
+ * miejsce (panel pływający stoi przy prawej krawędzi, zadokowany przy lewej), na wysokości miniatury.
+ */
+@Composable
+private fun SideMenu(open: Boolean, onDismiss: () -> Unit, content: @Composable ColumnScope.() -> Unit) {
+    if (!open) return
+    val d = LocalDensity.current
+    // Miniatura stoi 10 dp od brzegu panelu; menu ma ominąć też jego ramkę.
+    val gap = with(d) { 16.dp.roundToPx() }
+    val margin = with(d) { 8.dp.roundToPx() }
+    val provider = remember(gap, margin) {
+        object : PopupPositionProvider {
+            override fun calculatePosition(anchorBounds: IntRect, windowSize: IntSize, layoutDirection: LayoutDirection, popupContentSize: IntSize): IntOffset {
+                val w = popupContentSize.width
+                val left = anchorBounds.left - gap - w
+                val right = anchorBounds.right + gap
+                val fitsLeft = left >= margin
+                val fitsRight = right + w <= windowSize.width - margin
+                val x = when {
+                    anchorBounds.center.x > windowSize.width / 2 && fitsLeft -> left
+                    fitsRight -> right
+                    fitsLeft -> left
+                    else -> (windowSize.width - w - margin).coerceAtLeast(0) // wąski ekran: nie ma boku, menu na wierzchu
+                }
+                val y = anchorBounds.top.coerceIn(margin, (windowSize.height - popupContentSize.height - margin).coerceAtLeast(margin))
+                return IntOffset(x, y)
+            }
+        }
+    }
+    val maxH = with(d) { LocalWindowInfo.current.containerSize.height.toDp() } - 16.dp
+    Popup(provider, onDismissRequest = onDismiss, properties = PopupProperties(focusable = true)) {
+        Surface(shape = RoundedCornerShape(12.dp), color = MaterialTheme.colorScheme.surface, shadowElevation = 8.dp, border = BorderStroke(1.dp, mint.line)) {
+            Column(Modifier.heightIn(max = maxH).width(IntrinsicSize.Max).verticalScroll(rememberScrollState()).padding(vertical = 6.dp), content = content)
         }
     }
 }

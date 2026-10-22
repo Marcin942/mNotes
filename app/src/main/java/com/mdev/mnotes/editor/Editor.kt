@@ -786,6 +786,12 @@ class Editor(val ctx: Context, val nbId: String) {
         structTick++
     }
 
+    /** Zmienia tytuł zakładki strony [pageId]; pusty tytuł wraca do nazwy domyślnej („Strona N”). */
+    fun renameBookmark(pageId: String, title: String) {
+        repo.update(nbId) { m -> m.copy(bookmarks = m.bookmarks.map { if (it.pageId == pageId) it.copy(title = title.trim()) else it }) }
+        structTick++
+    }
+
     fun isBookmarked(i: Int): Boolean { structTick; return doc.pages.getOrNull(i)?.let { p -> repo.meta(nbId)?.bookmarks?.any { it.pageId == p.id } } ?: false }
 
     fun close() {

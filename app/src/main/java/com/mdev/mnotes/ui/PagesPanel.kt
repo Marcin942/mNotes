@@ -44,6 +44,7 @@ import androidx.compose.material.icons.rounded.ContentCopy
 import androidx.compose.material.icons.rounded.ContentCut
 import androidx.compose.material.icons.rounded.ContentPaste
 import androidx.compose.material.icons.rounded.Delete
+import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.FileCopy
 import androidx.compose.material.icons.rounded.MoreVert
 import androidx.compose.material.icons.rounded.SwapVert
@@ -88,6 +89,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import com.mdev.mnotes.app.app
 import com.mdev.mnotes.core.model.PageOrder
+import com.mdev.mnotes.data.Bookmark
 import com.mdev.mnotes.data.PageState
 import com.mdev.mnotes.editor.Clip
 import com.mdev.mnotes.editor.Editor
@@ -180,6 +182,7 @@ fun PagesPanel(ed: Editor, close: () -> Unit, @Suppress("UNUSED_PARAMETER") pick
     val drag = remember(ls) { PageDrag(ls, scope) }
     var menuFor by remember { mutableStateOf<String?>(null) }
     var moveTo by remember { mutableStateOf<String?>(null) }
+    var renaming by remember { mutableStateOf<String?>(null) }
     val view = LocalView.current
     val haptics = LocalHaptics.current
     fun buzz(c: Int) { if (haptics) view.performHapticFeedback(c) }
@@ -286,7 +289,7 @@ fun PagesPanel(ed: Editor, close: () -> Unit, @Suppress("UNUSED_PARAMETER") pick
                     ) {
                         PageThumbItem(
                             ed, p, i, ids.size, current = id == curId, lifted = lifted, menu = menuFor == id,
-                            openMenu = { menuFor = id }, closeMenu = { menuFor = null }, moveTo = { moveTo = id },
+                            openMenu = { menuFor = id }, closeMenu = { menuFor = null }, moveTo = { moveTo = id }, rename = { renaming = id },
                         )
                     }
                 }
@@ -294,10 +297,14 @@ fun PagesPanel(ed: Editor, close: () -> Unit, @Suppress("UNUSED_PARAMETER") pick
             HorizontalDivider(color = m.line)
             PageActions(ed, cur, pages.size, ro)
         } else {
-            BookmarksList(ed, nb?.bookmarks.orEmpty(), pages, cur)
+            BookmarksList(ed, nb?.bookmarks.orEmpty(), pages, cur) { renaming = it }
         }
     }
     moveTo?.let { id -> MoveToDialog(ed, id) { moveTo = null } }
+    renaming?.let { id ->
+        val b = nb?.bookmarks?.firstOrNull { it.pageId == id }
+        if (b == null) renaming = null else RenameBookmarkDialog(ed, id, b.title, ed.doc.indexOf(id)) { renaming = null }
+    }
 }
 
 /** Działania na bieżącej stronie, zawsze pod ręką pod listą miniatur. */
@@ -342,7 +349,7 @@ private fun PanelBtn(icon: ImageVector, text: String, enabled: Boolean, modifier
 @Composable
 private fun PageThumbItem(
     ed: Editor, page: PageState, index: Int, total: Int, current: Boolean, lifted: Boolean, menu: Boolean,
-    openMenu: () -> Unit, closeMenu: () -> Unit, moveTo: () -> Unit,
+    openMenu: () -> Unit, closeMenu: () -> Unit, moveTo: () -> Unit, rename: () -> Unit,
 ) {
     val m = mint
     val thumbs = LocalContext.current.app.thumbs
@@ -385,6 +392,7 @@ private fun PageThumbItem(
                     It(T.t("Wytnij stronę", "Cut page"), Icons.Rounded.ContentCut, !ro && total > 1) { ed.cutPage(i) }
                     It(T.t("Wklej stronę po tej", "Paste page after"), Icons.Rounded.ContentPaste, !ro && Clip.page != null) { ed.pastePage(i) }
                     It(if (marked) T.t("Usuń zakładkę", "Remove bookmark") else T.t("Dodaj zakładkę", "Add bookmark"), if (marked) Icons.Rounded.BookmarkBorder else Icons.Rounded.Bookmark) { ed.toggleBookmark(i) }
+                    if (marked) It(T.t("Zmień nazwę zakładki", "Rename bookmark"), Icons.Rounded.Edit) { rename() }
                     HorizontalDivider(color = m.line)
                     It(if (i > 0) T.t("Przesuń wcześniej (na stronę $i)", "Move earlier (to page $i)") else T.t("Przesuń wcześniej", "Move earlier"), Icons.Rounded.ArrowUpward, !ro && i > 0) { ed.movePage(i, i - 1) }
                     It(if (i < total - 1) T.t("Przesuń dalej (na stronę ${i + 2})", "Move later (to page ${i + 2})") else T.t("Przesuń dalej", "Move later"), Icons.Rounded.ArrowDownward, !ro && i < total - 1) { ed.movePage(i, i + 1) }
@@ -409,7 +417,7 @@ private fun PageThumbItem(
 }
 
 @Composable
-private fun BookmarksList(ed: Editor, marks: List<com.mdev.mnotes.data.Bookmark>, pages: List<PageState>, cur: Int) {
+private fun BookmarksList(ed: Editor, marks: List<Bookmark>, pages: List<PageState>, cur: Int, rename: (pageId: String) -> Unit) {
     val m = mint
     val rows = marks.mapNotNull { b -> pages.indexOfFirst { it.id == b.pageId }.takeIf { it >= 0 }?.let { it to b } }.sortedBy { it.first }
     if (rows.isEmpty()) {
@@ -426,6 +434,7 @@ private fun BookmarksList(ed: Editor, marks: List<com.mdev.mnotes.data.Bookmark>
                 Icon(Icons.Rounded.Bookmark, null, Modifier.size(18.dp), tint = m.accent)
                 Text(PageOrder.bookmarkTitle(b.title, idx, T.t("Strona", "Page")), Modifier.weight(1f).padding(vertical = 10.dp), maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodyMedium, color = if (here) m.accentText else MaterialTheme.colorScheme.onSurface)
                 Text("${idx + 1}", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                IconBtn(Icons.Rounded.Edit, T.t("Zmień nazwę zakładki", "Rename bookmark"), { rename(b.pageId) }, size = 32.dp, iconSize = 16.dp)
                 IconBtn(Icons.Rounded.Close, T.t("Usuń zakładkę", "Remove bookmark"), { ed.toggleBookmark(idx) }, size = 32.dp, iconSize = 16.dp)
             }
         }
@@ -446,5 +455,18 @@ private fun MoveToDialog(ed: Editor, pageId: String, onDismiss: () -> Unit) {
     MDialog(T.t("Przenieś stronę ${from + 1}", "Move page ${from + 1}"), onDismiss, T.t("Przenieś", "Move"), ::go, ok) {
         Text(T.t("Na którym miejscu ma stanąć ta strona?", "Which position should this page take?"), Modifier.padding(bottom = 8.dp), style = MaterialTheme.typography.bodyMedium)
         MField(t, { t = it.filter(Char::isDigit) }, Modifier.fillMaxWidth().focusRequester(focus), hint = "1 – $total", number = true, onDone = ::go)
+    }
+}
+
+/** Nazwa zakładki oznacza temat albo grupę zadań i trafia do nazw plików przy eksporcie od zakładki do zakładki. */
+@Composable
+private fun RenameBookmarkDialog(ed: Editor, pageId: String, current: String, index: Int, onDismiss: () -> Unit) {
+    // Samoczynne „Strona N” podpowiadamy z bieżącym numerem, żeby nie zapisać nieaktualnego.
+    var text by remember { mutableStateOf(if (index >= 0) PageOrder.bookmarkTitle(current, index, T.t("Strona", "Page")) else current) }
+    MDialog(
+        T.t("Nazwa zakładki", "Bookmark name"), onDismiss, confirm = T.t("Zapisz", "Save"),
+        onConfirm = { ed.renameBookmark(pageId, text); onDismiss() },
+    ) {
+        MField(text, { text = it }, hint = T.t("np. Zestaw 3 — całki", "e.g. Set 3 — integrals"))
     }
 }

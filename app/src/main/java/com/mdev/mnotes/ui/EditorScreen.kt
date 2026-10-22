@@ -34,6 +34,16 @@ import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.MutableTransitionState
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.IntRect
+import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.unit.LayoutDirection
+import androidx.compose.ui.window.Popup
+import androidx.compose.ui.window.PopupPositionProvider
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animateFloatAsState
@@ -251,7 +261,11 @@ fun EditorScreen(ed: Editor, tabs: TabsCtl, onExit: () -> Unit, onSettings: () -
 
     fun toggle(p: Panel) { if (p == Panel.PAGES && dock) set.dockPages = false else panel = if (panel == p) null else p }
     // Pipeta chowa panele, żeby strona była widoczna.
-    LaunchedEffect(ed.tool) { if (ed.tool != Tool.PAINTER) ed.formatPick = false }
+    LaunchedEffect(ed.tool) { if (ed.tool != Tool.PAINTER) { ed.formatPick = false; ed.quickFormat = false } }
+    // Szybki przycisk „Pobierz format” gaśnie sam po czasie z ustawień; w trakcie pobierania formatu czas stoi.
+    LaunchedEffect(ed.quickFormat, ed.formatPick) {
+        if (ed.quickFormat && !ed.formatPick && set.painterQuickSec > 0) { delay(set.painterQuickSec * 1000L); ed.quickFormat = false }
+    }
     LaunchedEffect(ed.pipette != null) { if (ed.pipette != null) panel = null }
     fun applyLayout(mode: Int) { set.layoutMode = mode; ed.view?.applyLayoutMode() }
     fun pickTool(t: Tool, p: Panel?) {
@@ -635,10 +649,13 @@ private fun ToolBar(ed: Editor, set: com.mdev.mnotes.data.Settings, vertical: Bo
                     Box {
                         ToolBtn(b.tip, b.onClick, enabled = b.enabled, selected = b.selected, size = sz, shortcut = b.shortcut, onLong = { b.onHold?.invoke() ?: run { menuFor = b.id } }) { c -> b.glyph(c, isz) }
                         if (menuFor == b.id) BarItemMenu(b.id, cfg, vertical, { set.barConfig = it }, { menuFor = null }, openSettings)
+                        if (b.id == "painter") QuickFormat(ed, set, panel, sz, isz)
                     }
                 }
             }
             if (fit.hidden.isNotEmpty()) Box {
+                // Pędzel schowany pod „⋯” nie ma ikony na pasku, więc jego szybki przycisk wisi pod „⋯”.
+                if (fit.hidden.any { shown[it].id == "painter" }) QuickFormat(ed, set, panel, sz, isz)
                 // Włączone narzędzie spod „⋯” (np. linijka) zaznacza sam przycisk, żeby było widać, że coś działa.
                 IconBtn(Icons.Rounded.MoreHoriz, T.t("Więcej narzędzi", "More tools"), { more = true }, selected = more || fit.hidden.any { shown[it].selected }, size = sz, iconSize = isz)
                 DropdownMenu(more, { more = false }) {
@@ -654,6 +671,45 @@ private fun ToolBar(ed: Editor, set: com.mdev.mnotes.data.Settings, vertical: Bo
                     HorizontalDivider()
                     DropdownMenuItem(text = { Text(T.t("Dostosuj pasek…", "Customise toolbar…")) }, leadingIcon = { Icon(Icons.Rounded.Tune, null) }, onClick = { more = false; openSettings() })
                 }
+            }
+        }
+    }
+}
+
+/**
+ * Szybki przycisk „Pobierz format” pod ikoną pędzla formatu (po stronie kartki), w kształcie przycisków paska.
+ * Leży w oknie `Popup`, bo wystaje poza pasek, a poza granicami rodzica dotyk nie dociera do dzieci. Gaśnie płynnie.
+ */
+@Composable
+private fun QuickFormat(ed: Editor, set: com.mdev.mnotes.data.Settings, panel: Panel?, sz: Dp, isz: Dp) {
+    val m = mint
+    val state = remember { MutableTransitionState(false) }
+    state.targetState = ed.tool == Tool.PAINTER && ed.quickFormat && panel != Panel.PAINTER && !ed.readOnly
+    if (!state.currentState && !state.targetState) return
+    val pos = set.toolbarPos
+    val gap = with(LocalDensity.current) { 4.dp.roundToPx() }
+    val place = remember(pos, gap) {
+        object : PopupPositionProvider {
+            override fun calculatePosition(anchorBounds: IntRect, windowSize: IntSize, layoutDirection: LayoutDirection, popupContentSize: IntSize) = when (pos) {
+                1 -> IntOffset(anchorBounds.left, anchorBounds.top - gap - popupContentSize.height)
+                2 -> IntOffset(anchorBounds.right + gap, anchorBounds.top)
+                3 -> IntOffset(anchorBounds.left - gap - popupContentSize.width, anchorBounds.top)
+                else -> IntOffset(anchorBounds.left, anchorBounds.bottom + gap)
+            }
+        }
+    }
+    val shape = RoundedCornerShape(12.dp)
+    Popup(popupPositionProvider = place) {
+        AnimatedVisibility(visibleState = state, enter = fadeIn(tween(150)), exit = fadeOut(tween(350))) {
+            Box(Modifier.shadow(4.dp, shape).clip(shape).background(m.chrome).border(1.dp, m.line, shape).padding(2.dp)) {
+                ToolBtn(
+                    T.t("Pobierz format — dotknij obiektu, by przejąć jego kolor i styl", "Take format — tap an object to take its colour and style"),
+                    {
+                        ed.formatPick = !ed.formatPick
+                        if (ed.formatPick) ed.say(T.t("Dotknij obiektu, z którego pobrać format", "Tap the object to take the format from"))
+                    },
+                    selected = ed.formatPick, size = sz,
+                ) { c -> Icon(Icons.Rounded.Colorize, null, Modifier.size(isz), tint = c) }
             }
         }
     }
@@ -938,7 +994,11 @@ private fun ToolPanel(ed: Editor, set: com.mdev.mnotes.data.Settings, panel: Pan
                     Text(T.t("Taśma zakrywa to, co pod nią. Dotknij jej, by odkryć lub zakryć. Gumka jej nie usuwa — zaznacz lassem i usuń.", "A tape hides what is under it. Tap it to reveal or cover. The eraser leaves it alone — select with lasso and delete."), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 Panel.PAINTER -> {
-                    SectionLabel(T.t("Pędzel formatu", "Format painter"))
+                    val openPainterSettings = LocalPainterSettings.current
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        SectionLabel(T.t("Pędzel formatu", "Format painter")); Spacer(Modifier.weight(1f))
+                        IconBtn(Icons.Rounded.Settings, T.t("Ustawienia pędzla formatu", "Format painter settings"), { close(); openPainterSettings() }, size = 32.dp, iconSize = 18.dp)
+                    }
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         Chip(T.t("Obiektowo", "Object"), set.painterMode == 0, { set.painterMode = 0 }, icon = Icons.Rounded.FormatPaint)
                         Chip(T.t("Lasso", "Lasso"), set.painterMode == 1, { set.painterMode = 1 }, icon = Icons.Rounded.Gesture)

@@ -113,6 +113,8 @@ class Editor(val ctx: Context, val nbId: String) {
     var pipette by mutableStateOf<((Int) -> Unit)?>(null)
     /** Pędzel formatu w trybie „Pobierz format”: następne dotknięcie obiektu ustawia aktywne pióro według niego. */
     var formatPick by mutableStateOf(false)
+    /** Szybki przycisk „Pobierz format” pod ikoną pędzla: pokazuje go wybranie pędzla, gaszą go użycie, czas i zmiana narzędzia. */
+    var quickFormat by mutableStateOf(false)
     var sel by mutableStateOf<Sel?>(null)
     var cut by mutableStateOf<CutSession?>(null)
     var crop by mutableStateOf<CropSession?>(null)
@@ -791,6 +793,7 @@ class Editor(val ctx: Context, val nbId: String) {
     // — Skróty klawiszowe wspólne z paletą poleceń —
     fun setToolKey(t: Tool) {
         tool = t; clearSelIfNotLasso()
+        quickFormat = t == Tool.PAINTER && settings.painterQuick
         if (t == Tool.TAPE) toast = T.t("Przeciągnij, aby zakryć fragment · dotknij taśmy, aby odkryć", "Drag to cover an area · tap a tape to reveal it")
         if (t == Tool.PAINTER) toast = if (settings.painterMode == 1) T.t("Obrysuj obiekty — przejmą kolor i styl aktywnego pióra", "Circle objects to give them the active pen's colour and style")
             else T.t("Przeciągnij po obiektach — przejmą kolor i styl aktywnego pióra", "Swipe over objects to give them the active pen's colour and style")

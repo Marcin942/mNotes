@@ -361,6 +361,22 @@ class Editor(val ctx: Context, val nbId: String) {
     /** Przesuwa zaznaczenie o (dx, dy) pt — strzałki (Shift = 10 pt). */
     fun nudgeSel(dx: Float, dy: Float) = replaceSel { it.transformed(com.mdev.mnotes.core.geom.Affine.translation(dx, dy)) }
 
+    /** Czy zaznaczenie da się odbić: jak przy obrocie, żaden zaznaczony element nie może być zablokowany. */
+    fun canFlipSel(): Boolean = !readOnly && selElements().let { it.isNotEmpty() && it.none { e -> e.locked } }
+
+    /**
+     * Odbija zaznaczenie jak jedną całość: względem pionowej ([horizontal]) albo poziomej osi przez środek wspólnej ramki.
+     * Jedna zmiana w historii; dwa odbicia dają dokładnie stan wyjściowy.
+     */
+    fun flipSel(horizontal: Boolean) {
+        if (!canFlipSel()) return
+        var b = Bounds.EMPTY
+        for (e in selElements()) b = b.union(e.bounds)
+        if (b.isEmpty) return
+        val m = if (horizontal) com.mdev.mnotes.core.geom.Affine.scale(-1f, 1f, b.cx, b.cy) else com.mdev.mnotes.core.geom.Affine.scale(1f, -1f, b.cx, b.cy)
+        replaceSel { it.transformed(m) }
+    }
+
     // — Tekst i obrazy —
     private val textMeasure by lazy { com.mdev.mnotes.render.PageRenderer(app.assets).textMeasure }
 
@@ -568,8 +584,10 @@ class Editor(val ctx: Context, val nbId: String) {
         val iw = size.first.toFloat(); val ih = size.second.toFloat()
         cancelCut()
         transformMode = false
-        val frame = CropGeom.frameOf(img.crop, iw, ih)
-        crop = CropSession(s.pageId, img.id, img, iw, ih, frame, CropGeom.placeOf(img, iw, ih))
+        // odbity obraz przycina się w odwróconym pliku (patrz CropGeom.mirrorCrop); rysowanie odwraca bitmapę tak samo
+        val flat = CropGeom.unmirrored(img)
+        val frame = CropGeom.frameOf(flat.crop, iw, ih)
+        crop = CropSession(s.pageId, img.id, img, iw, ih, frame, CropGeom.placeOf(flat, iw, ih))
         view?.invalidate()
     }
 
@@ -657,7 +675,7 @@ class Editor(val ctx: Context, val nbId: String) {
     fun applyCrop() {
         val c = crop ?: return; val img = cropImage() ?: return
         val page = doc.page(c.pageId) ?: return
-        val out = CropGeom.applied(img, c.frame, c.place, c.iw, c.ih)
+        val out = CropGeom.remirrored(CropGeom.applied(CropGeom.unmirrored(img), c.frame, c.place, c.iw, c.ih), img.mirror)
         crop = null
         if (out.crop == img.crop && out.cx == img.cx && out.cy == img.cy && out.w == img.w && out.h == img.h && out.rot == img.rot) { view?.invalidate(); return }
         val at = doc.content(page).elements.indexOfFirst { it.id == img.id }

@@ -1797,6 +1797,7 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
             cropMatrix.reset()
             cropMatrix.postScale(s.iw / bmp.width, s.ih / bmp.height)
             cropMatrix.postTranslate(-s.iw * 0.5f, -s.ih * 0.5f)
+            if (img.mirror) cropMatrix.postScale(-1f, 1f)
             cropMatrix.postScale(pl.s, pl.s)
             cropMatrix.postRotate(Math.toDegrees(pl.phi.toDouble()).toFloat())
             cropMatrix.postTranslate(pl.ox, pl.oy)

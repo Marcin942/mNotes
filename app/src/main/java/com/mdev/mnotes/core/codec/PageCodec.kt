@@ -58,6 +58,8 @@ object PageCodec {
     private const val FLAG_IMAGE_CROP = 512
     /** Po czterech ułamkach wycinka jeszcze kąt jego obrotu (f32, radiany): przycięcie z prostowaniem. */
     private const val FLAG_IMAGE_TILT = 1024
+    // Pole tekstowe lub obraz odbite w osi lokalnej x. Bez ogona: starsza wersja pomija bit i rysuje bez odbicia.
+    private const val FLAG_MIRROR = 2048
     private const val Q = 100f
 
     fun encode(content: PageContent): ByteArray {
@@ -182,7 +184,7 @@ object PageCodec {
     private fun writeText(w: ByteWriter, t: TextBox) {
         val fit = when (t.fit) { TextBox.FIT_AUTO -> FLAG_TEXT_AUTO; TextBox.FIT_FIXED -> FLAG_TEXT_FIXED; else -> 0 }
         val lines = t.lineSpacing != 1f
-        w.varint((if (t.locked) FLAG_LOCKED else 0) or fit or (if (lines) FLAG_TEXT_LINES else 0))
+        w.varint((if (t.locked) FLAG_LOCKED else 0) or fit or (if (lines) FLAG_TEXT_LINES else 0) or (if (t.mirror) FLAG_MIRROR else 0))
         w.f32(t.cx); w.f32(t.cy); w.f32(t.w); w.f32(t.h); w.f32(t.rot)
         w.f32(t.size)
         w.i32(t.color)
@@ -202,11 +204,11 @@ object PageCodec {
         val text = r.string()
         val lineSpacing = if (flags and FLAG_TEXT_LINES != 0) r.f32().coerceIn(0.5f, 4f) else 1f
         val fit = when { flags and FLAG_TEXT_AUTO != 0 -> TextBox.FIT_AUTO; flags and FLAG_TEXT_FIXED != 0 -> TextBox.FIT_FIXED; else -> TextBox.FIT_HEIGHT }
-        return TextBox(Ids.next(), cx, cy, w, h, rot, text, size, color, family, style, align, fill, flags and FLAG_LOCKED != 0, fit, lineSpacing)
+        return TextBox(Ids.next(), cx, cy, w, h, rot, text, size, color, family, style, align, fill, flags and FLAG_LOCKED != 0, fit, lineSpacing, flags and FLAG_MIRROR != 0)
     }
 
     private fun writeImage(w: ByteWriter, im: ImageEl) {
-        w.varint((if (im.locked) FLAG_LOCKED else 0) or (if (im.crop.isFull) 0 else FLAG_IMAGE_CROP) or (if (im.crop.a != 0f) FLAG_IMAGE_TILT else 0))
+        w.varint((if (im.locked) FLAG_LOCKED else 0) or (if (im.crop.isFull) 0 else FLAG_IMAGE_CROP) or (if (im.crop.a != 0f) FLAG_IMAGE_TILT else 0) or (if (im.mirror) FLAG_MIRROR else 0))
         w.f32(im.cx); w.f32(im.cy); w.f32(im.w); w.f32(im.h); w.f32(im.rot)
         w.u8((im.alpha.coerceIn(0f, 1f) * 255f).roundToInt())
         w.string(im.asset)
@@ -227,7 +229,7 @@ object PageCodec {
             val a = if (tilted) r.f32().takeIf { it.isFinite() } ?: 0f else 0f
             if (rr > l && b > t) ImageCrop(l, t, rr, b, a) else ImageCrop.FULL
         } else ImageCrop.FULL
-        return ImageEl(Ids.next(), asset, cx, cy, w, h, rot, alpha, flags and FLAG_LOCKED != 0, crop)
+        return ImageEl(Ids.next(), asset, cx, cy, w, h, rot, alpha, flags and FLAG_LOCKED != 0, crop, flags and FLAG_MIRROR != 0)
     }
 
     private fun writeTape(w: ByteWriter, t: TapeEl) {

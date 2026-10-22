@@ -97,6 +97,7 @@ import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.WidthFull
 import androidx.compose.material.icons.rounded.FitScreen
+import androidx.compose.material.icons.rounded.Flip
 import androidx.compose.material.icons.rounded.FlipToBack
 import androidx.compose.material.icons.rounded.CropRotate
 import androidx.compose.material.icons.rounded.FlipToFront
@@ -140,6 +141,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
@@ -1353,6 +1355,12 @@ private fun SelectionBar(ed: Editor, panel: Panel?, toggle: (Panel) -> Unit, edi
                     IconBtn(Icons.Rounded.Palette, T.t("Kolor, grubość i styl linii", "Color, width & line style"), { toggle(Panel.SELCOLOR) }, selected = panel == Panel.SELCOLOR, size = 36.dp, iconSize = 20.dp)
                     if (!locked) IconBtn(Icons.Rounded.CropRotate, T.t("Skaluj i obracaj", "Resize & rotate"), { ed.transformMode = !ed.transformMode }, selected = ed.transformMode, size = 36.dp, iconSize = 20.dp)
                     if (!locked && els.size == 1 && els[0] is ImageEl && !ed.readOnly) IconBtn(Icons.Rounded.Crop, T.t("Przytnij", "Crop"), { ed.startCrop() }, size = 36.dp, iconSize = 20.dp)
+                    if (ed.canFlipSel()) {
+                        IconBtn(Icons.Rounded.Flip, T.t("Odbij w poziomie", "Flip horizontally"), { ed.flipSel(true) }, size = 36.dp, iconSize = 20.dp)
+                        ToolBtn(T.t("Odbij w pionie", "Flip vertically"), { ed.flipSel(false) }, size = 36.dp) { c ->
+                            Icon(Icons.Rounded.Flip, T.t("Odbij w pionie", "Flip vertically"), tint = c, modifier = Modifier.size(20.dp).rotate(90f))
+                        }
+                    }
                     IconBtn(Icons.Rounded.FlipToFront, T.t("Na wierzch", "Bring to front"), { ed.frontSel() }, size = 36.dp, iconSize = 20.dp)
                     IconBtn(Icons.Rounded.FlipToBack, T.t("Na spód", "Send to back"), { ed.backSel() }, size = 36.dp, iconSize = 20.dp)
                     IconBtn(if (locked) Icons.Rounded.LockOpen else Icons.Rounded.Lock, if (locked) T.t("Odblokuj", "Unlock") else T.t("Zablokuj", "Lock"), { ed.lockSel(!locked) }, size = 36.dp, iconSize = 20.dp)
@@ -1430,6 +1438,8 @@ private fun CtxMenuOverlay(ed: Editor, openStyle: () -> Unit) {
                 }
                 Item(T.t("Wklej", "Paste"), "Ctrl+V", ed.canPaste() && !ed.readOnly) { ed.paste(if (cm.pageIndex >= 0) Triple(cm.pageIndex, cm.lx, cm.ly) else null) }
                 if (cm.hasSel) {
+                    Item(T.t("Odbij w poziomie", "Flip horizontally"), enabled = ed.canFlipSel()) { ed.flipSel(true) }
+                    Item(T.t("Odbij w pionie", "Flip vertically"), enabled = ed.canFlipSel()) { ed.flipSel(false) }
                     Item(T.t("Na wierzch", "Bring to front")) { ed.frontSel() }
                     Item(T.t("Na spód", "Send to back")) { ed.backSel() }
                     Item(T.t("Usuń", "Delete"), "Del") { ed.deleteSel() }

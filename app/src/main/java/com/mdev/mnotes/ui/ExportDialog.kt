@@ -43,6 +43,7 @@ import com.mdev.mnotes.app.app
 import com.mdev.mnotes.data.ExportFormat
 import com.mdev.mnotes.data.Exporter
 import com.mdev.mnotes.core.codec.FileKind
+import com.mdev.mnotes.core.text.PageSpan
 import com.mdev.mnotes.data.ImportProbe
 import com.mdev.mnotes.data.ImportSource
 import com.mdev.mnotes.data.Importer
@@ -73,6 +74,8 @@ private fun fmtInfo(f: ExportFormat) = when (f) {
     ExportFormat.MNOTES -> T.t("Pełna kopia zeszytu (otwarty format ZIP) — do przeniesienia na inne urządzenie lub kopii zapasowej.", "Full notebook copy (open ZIP format) — for moving to another device or backup.")
 }
 
+private enum class ExportScope { ALL, PAGE, SPAN }
+
 /** Eksport zeszytu: zapis do wybranego miejsca (SAF), udostępnienie lub wydruk. [prepare] zapisuje stan edytora przed odczytem z dysku. */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -83,15 +86,26 @@ fun ExportDialog(nb: String, currentPage: Int, prepare: () -> Unit, onDismiss: (
     val title = app.repo.meta(nb)?.title ?: "mNotes"
     val exporter = remember { Exporter(app.repo, app.assets, app.pdf) }
     var fmt by remember { mutableStateOf(ExportFormat.PDF) }
-    var all by remember { mutableStateOf(true) }
+    var scopeMode by remember { mutableStateOf(ExportScope.ALL) }
+    var spanText by remember { mutableStateOf("${currentPage + 1}") }
     var busy by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
 
     val canScope = pageCount > 1 && fmt != ExportFormat.MNOTES
-    val pages: List<Int>? = if (canScope && !all) listOf(currentPage.coerceIn(0, pageCount - 1)) else null
+    val spanPages = if (canScope && scopeMode == ExportScope.SPAN) PageSpan.parse(spanText, pageCount) else null
+    val spanInvalid = canScope && scopeMode == ExportScope.SPAN && spanPages == null
+    val pages: List<Int>? = when {
+        !canScope -> null
+        scopeMode == ExportScope.PAGE -> listOf(currentPage.coerceIn(0, pageCount - 1))
+        scopeMode == ExportScope.SPAN -> spanPages
+        else -> null
+    }
     val count = if (fmt == ExportFormat.MNOTES) pageCount else pages?.size ?: pageCount
     val zip = !fmt.multi && count > 1
-    val name = exporter.fileName(title, fmt, if (!fmt.multi && count == 1 && pageCount > 1) (pages?.first() ?: 0) else null, zip)
+    val name = exporter.fileName(
+        title, fmt, if (!fmt.multi && count == 1 && pageCount > 1) (pages?.first() ?: 0) else null, zip,
+        span = if (scopeMode == ExportScope.SPAN) spanPages?.let { PageSpan.label(it) } else null,
+    )
     val mime = if (zip) "application/zip" else fmt.mime
     // Dla własnego rozszerzenia SAF dostaje typ ogólny, żeby nie dopisywać „.bin” ani „.zip”.
     val safMime = if (fmt == ExportFormat.MNOTES) "application/octet-stream" else mime
@@ -161,7 +175,7 @@ fun ExportDialog(nb: String, currentPage: Int, prepare: () -> Unit, onDismiss: (
 
     MDialog(
         T.t("Eksport i udostępnianie", "Export & share"), { if (!busy) onDismiss() },
-        confirm = T.t("Zapisz jako…", "Save as…"), onConfirm = { saver.launch(name) }, confirmEnabled = !busy && pageCount > 0,
+        confirm = T.t("Zapisz jako…", "Save as…"), onConfirm = { saver.launch(name) }, confirmEnabled = !busy && pageCount > 0 && !spanInvalid,
     ) {
         Text(title, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         SectionLabel(T.t("Format", "Format"))
@@ -171,15 +185,26 @@ fun ExportDialog(nb: String, currentPage: Int, prepare: () -> Unit, onDismiss: (
         Text(fmtInfo(fmt), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 8.dp))
         if (canScope) {
             SectionLabel(T.t("Zakres", "Range"))
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                Chip(T.t("Cały zeszyt ($pageCount)", "Whole notebook ($pageCount)"), all, { if (!busy) all = true })
-                Chip(T.t("Strona ${currentPage + 1}", "Page ${currentPage + 1}"), !all, { if (!busy) all = false })
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Chip(T.t("Cały zeszyt ($pageCount)", "Whole notebook ($pageCount)"), scopeMode == ExportScope.ALL, { if (!busy) scopeMode = ExportScope.ALL })
+                Chip(T.t("Strona ${currentPage + 1}", "Page ${currentPage + 1}"), scopeMode == ExportScope.PAGE, { if (!busy) scopeMode = ExportScope.PAGE })
+                Chip(T.t("Przedział stron", "Page range"), scopeMode == ExportScope.SPAN, { if (!busy) scopeMode = ExportScope.SPAN })
+            }
+            if (scopeMode == ExportScope.SPAN) {
+                MField(spanText, { if (!busy) spanText = it }, Modifier.padding(top = 8.dp), hint = T.t("np. 2-5, 8, 10-", "e.g. 2-5, 8, 10-"))
+                Text(
+                    if (spanInvalid) T.t("Podaj numery stron od 1 do $pageCount, np. 2-5 lub 1-3, 8.", "Enter page numbers from 1 to $pageCount, e.g. 2-5 or 1-3, 8.")
+                    else T.t("Wybrano ${spanPages?.size ?: 0} z $pageCount stron.", "${spanPages?.size ?: 0} of $pageCount pages selected."),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = if (spanInvalid) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 4.dp),
+                )
             }
         }
         SectionLabel(T.t("Inne działania", "Other actions"))
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-            Chip(T.t("Udostępnij…", "Share…"), false, { if (!busy) share() }, icon = Icons.Rounded.IosShare)
-            if (fmt == ExportFormat.PDF) Chip(T.t("Drukuj…", "Print…"), false, { if (!busy) print() }, icon = Icons.Rounded.Print)
+            Chip(T.t("Udostępnij…", "Share…"), false, { if (!busy && !spanInvalid) share() }, icon = Icons.Rounded.IosShare)
+            if (fmt == ExportFormat.PDF) Chip(T.t("Drukuj…", "Print…"), false, { if (!busy && !spanInvalid) print() }, icon = Icons.Rounded.Print)
             if (busy) {
                 CircularProgressIndicator(Modifier.padding(start = 8.dp).size(20.dp), strokeWidth = 2.dp, color = mint.accent)
                 Text(T.t("Przygotowuję…", "Preparing…"), style = MaterialTheme.typography.bodySmall, modifier = Modifier.width(110.dp))

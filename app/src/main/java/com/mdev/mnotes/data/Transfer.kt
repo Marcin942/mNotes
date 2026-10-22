@@ -54,9 +54,15 @@ class Exporter(private val repo: Repository, private val assets: Assets, private
     /** Czeka, aż wszystkie zaplanowane zapisy stron trafią na dysk. */
     fun awaitWrites() { runCatching { repo.io.submit {}.get() } }
 
-    fun fileName(title: String, fmt: ExportFormat, pageNo: Int? = null, zip: Boolean = false): String {
+    /** [span] = opis przedziału stron (np. „2-5”) dopisywany do nazwy; ma pierwszeństwo przed [pageNo]. */
+    fun fileName(title: String, fmt: ExportFormat, pageNo: Int? = null, zip: Boolean = false, span: String? = null): String {
         val base = title.replace(Regex("[\\\\/:*?\"<>|\\p{Cntrl}]"), "_").trim().ifEmpty { "mNotes" }.take(80)
-        return base + (if (pageNo != null && !fmt.multi) "-${pageNo + 1}" else "") + "." + (if (zip) "zip" else fmt.ext)
+        val suffix = when {
+            span != null -> "-$span"
+            pageNo != null && !fmt.multi -> "-${pageNo + 1}"
+            else -> ""
+        }
+        return base + suffix + "." + (if (zip) "zip" else fmt.ext)
     }
 
     /** [pages] = indeksy stron do wyeksportowania (null = wszystkie). Zwraca false przy błędzie. */

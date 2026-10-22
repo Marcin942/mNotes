@@ -104,7 +104,7 @@ Założenie projektowe: „Linux Mint user” = osoba ceniąca kontrolę, skrót
 
 ## F. Pliki, kopie, wymiana (FIL)
 - [x] FIL-001 Zapis automatyczny (debounce) + zapis przy wyjściu, odporność na crash (zapis atomowy)
-- [~] FIL-002 Eksport PDF (adnotacje wektorowe), PNG (strona/zakres), SVG (wektor), Markdown/TXT z pól tekstowych _(PDF/SVG sprawdzone; PNG i Markdown z edytora bez testu na urządzeniu; Markdown tylko pola tekstowe)_
+- [~] FIL-002 Eksport PDF (adnotacje wektorowe), PNG (strona/zakres), SVG (wektor), Markdown/TXT z pól tekstowych _(PDF/SVG sprawdzone; PNG i Markdown z edytora bez testu na urządzeniu; Markdown tylko pola tekstowe; 2026-10-22: zakres „Przedział stron” w oknie eksportu — zapis jak w druku: `2-5`, `1-3, 8`, `7-` (do końca), `-3`; `core/text/PageSpan.kt` + `PageSpanTest`, nazwa pliku dostaje przedział, np. `Zeszyt-2-5.pdf`; bez testu na urządzeniu)_
 - [~] FIL-003 `.mnotes` (ZIP: manifest JSON + strony + zasoby), import/eksport, udostępnianie (Share) _(`.mnotes` zaimplementowane; Share bez testu na urządzeniu)_
 - [~] FIL-004 Folder synchronizacji (SAF) — lustro w otwartych plikach dla Syncthing/Nextcloud/rsync; kopia ręczna i automatyczna _(folder synchronizacji (SAF, lustro PDF/MD/.mnotes) zaimplementowany; brak testu zeszytów zablokowanych i zagnieżdżonych folderów)_
 - [~] FIL-005 Drukowanie (PrintManager) _(PrintManager zaimplementowany — brak testu na urządzeniu)_

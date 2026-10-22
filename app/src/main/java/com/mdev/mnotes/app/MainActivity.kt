@@ -64,6 +64,8 @@ import com.mdev.mnotes.ui.MNotesTheme
 import com.mdev.mnotes.ui.COLORS_CAT
 import com.mdev.mnotes.ui.EDITOR_CAT
 import com.mdev.mnotes.ui.LocalBarSettings
+import com.mdev.mnotes.ui.LocalPainterSettings
+import com.mdev.mnotes.ui.PAINTER_QUERY
 import com.mdev.mnotes.ui.SHORTCUTS_CAT
 import com.mdev.mnotes.ui.SettingsScreen
 import com.mdev.mnotes.ui.mint
@@ -76,6 +78,10 @@ class UiModel(application: Application) : AndroidViewModel(application) {
     val lib = LibState()
     var screen by mutableStateOf(Screen.LIBRARY)
     var settingsCat by mutableIntStateOf(0)
+    /** Zapytanie wpisane w wyszukiwarkę ustawień przy wejściu (zębatka w panelu pędzla formatu); puste = zwykłe wejście. */
+    var settingsQuery by mutableStateOf("")
+
+    fun openSettings(cat: Int, query: String = "") { settingsCat = cat; settingsQuery = query; screen = Screen.SETTINGS }
     var editor by mutableStateOf<Editor?>(null)
     var locked by mutableStateOf(app.settings.appLock)
 
@@ -288,13 +294,13 @@ open class MainActivity : FragmentActivity() {
         CompositionLocalProvider(LocalSamsungStart provides ui::startSamsung) {
             Box(Modifier.fillMaxSize()) {
                 when (ui.screen) {
-                    Screen.LIBRARY -> LibraryScreen(ui.lib, onOpen = ui::open, tabs = tabsCtl.takeIf { it.on }, onSettings = { ui.settingsCat = 0; ui.screen = Screen.SETTINGS })
-                    Screen.SETTINGS -> SettingsScreen(onBack = { ui.screen = if (ui.editor != null) Screen.EDITOR else Screen.LIBRARY }, startCat = ui.settingsCat)
+                    Screen.LIBRARY -> LibraryScreen(ui.lib, onOpen = ui::open, tabs = tabsCtl.takeIf { it.on }, onSettings = { ui.openSettings(0) })
+                    Screen.SETTINGS -> SettingsScreen(onBack = { ui.screen = if (ui.editor != null) Screen.EDITOR else Screen.LIBRARY }, startCat = ui.settingsCat, startQuery = ui.settingsQuery)
                     Screen.EDITOR -> {
                         val ed = ui.editor
                         if (ed == null) { ui.screen = Screen.LIBRARY } else key(ed.nbId) {
-                            CompositionLocalProvider(LocalBarSettings provides { ui.settingsCat = EDITOR_CAT; ui.screen = Screen.SETTINGS }) {
-                                EditorScreen(ed, tabsCtl, onExit = ui::leave, onSettings = { ui.settingsCat = 0; ui.screen = Screen.SETTINGS }, onShortcuts = { ui.settingsCat = SHORTCUTS_CAT; ui.screen = Screen.SETTINGS }, onColorSets = { ui.settingsCat = COLORS_CAT; ui.screen = Screen.SETTINGS })
+                            CompositionLocalProvider(LocalBarSettings provides { ui.openSettings(EDITOR_CAT) }, LocalPainterSettings provides { ui.openSettings(EDITOR_CAT, PAINTER_QUERY) }) {
+                                EditorScreen(ed, tabsCtl, onExit = ui::leave, onSettings = { ui.openSettings(0) }, onShortcuts = { ui.openSettings(SHORTCUTS_CAT) }, onColorSets = { ui.openSettings(COLORS_CAT) })
                             }
                         }
                     }

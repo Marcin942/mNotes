@@ -335,6 +335,19 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
         if (animate) animateView(z, x, y, 300L) else { zoom = z; tx = x; ty = y; moved() }
     }
 
+    /** Wykonuje [change] (zmianę kolejności stron) tak, by strona [pageId] została w tym samym miejscu ekranu. */
+    fun keepPageInPlace(pageId: String, change: () -> Unit) {
+        val i0 = doc.indexOf(pageId)
+        val before = if (i0 in 0 until layout.count) layout.rect(i0) else null
+        change()
+        val i1 = doc.indexOf(pageId)
+        if (before == null || i1 !in 0 until layout.count) return
+        val after = layout.rect(i1)
+        stopAnim()
+        tx -= (after.l - before.l) * zoom; ty -= (after.t - before.t) * zoom
+        moved()
+    }
+
     fun ensureVisible(pageId: String) {
         val i = doc.indexOf(pageId)
         if (i < 0 || width == 0) return
@@ -1797,6 +1810,7 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
             cropMatrix.reset()
             cropMatrix.postScale(s.iw / bmp.width, s.ih / bmp.height)
             cropMatrix.postTranslate(-s.iw * 0.5f, -s.ih * 0.5f)
+            if (img.mirror) cropMatrix.postScale(-1f, 1f)
             cropMatrix.postScale(pl.s, pl.s)
             cropMatrix.postRotate(Math.toDegrees(pl.phi.toDouble()).toFloat())
             cropMatrix.postTranslate(pl.ox, pl.oy)
@@ -2563,6 +2577,7 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
         if (ed.formatPick) { takeFormatAt(); mode = Mode.IGNORE; return }
         if (ed.sel != null) ed.clearSel()
         if (ed.readOnly) { mode = Mode.IGNORE; return }
+        if (settings.painterQuickFadeUse) ed.quickFormat = false
         if (settings.painterMode == 1) { val pi = pageIdxAt(curX, curY); if (pi < 0) { mode = Mode.IGNORE; return }; lPage = pi; ln = 0; addLasso(pgX(pi, curX), pgY(pi, curY)) }
         else paintTo(curX, curY)
     }
@@ -2576,7 +2591,7 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
         val els = doc.content(doc.pages[pi]).elements
         val top = els.lastOrNull { it !is TapeEl && it.bounds.inflate(r + 1f).contains(px, py) && EraseMath.hitsElement(it, px, py, r) }
         if (top == null) { ed.say(T.t("Dotknij obiektu, z którego chcesz pobrać format", "Tap the object to take the format from")); return }
-        if (ed.takeFormat(top)) ed.formatPick = false
+        if (ed.takeFormat(top)) { ed.formatPick = false; if (settings.painterQuickFadeTake) ed.quickFormat = false }
         else ed.say(T.t("Ten obiekt nie ma formatu do pobrania", "This object has no format to take"))
     }
 

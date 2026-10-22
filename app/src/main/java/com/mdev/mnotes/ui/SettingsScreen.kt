@@ -87,12 +87,12 @@ const val COLORS_CAT = 2
 const val EDITOR_CAT = 1
 
 @Composable
-fun SettingsScreen(onBack: () -> Unit, startCat: Int = 0) {
+fun SettingsScreen(onBack: () -> Unit, startCat: Int = 0, startQuery: String = "") {
     val ctx = LocalContext.current
     val set = ctx.app.settings
     val m = mint
     var cat by remember { mutableIntStateOf(startCat) }
-    var query by remember { mutableStateOf("") }
+    var query by remember { mutableStateOf(startQuery) }
     val q = remember(query) { SettingsQuery.of(query) }
     val searchFocus = remember { FocusRequester() }
     val rootFocus = remember { FocusRequester() }
@@ -346,8 +346,23 @@ private fun EditorPrefs(set: com.mdev.mnotes.data.Settings) {
         ToggleRow(T.t("Przytrzymaj, aby wyprostować kształt", "Hold to snap to shape"), set.holdToShape, keys = "kształty prosta linia okrąg prostokąt prostowanie snap shape") { set.holdToShape = it }
         if (set.holdToShape) Opt(T.t("Czas przytrzymania: ${set.holdMs} ms", "Hold time: ${set.holdMs} ms"), "prostowanie kształt opóźnienie") { MSlider(set.holdMs.toFloat(), 250f, 1200f) { set.holdMs = (it / 50).toInt() * 50 } }
     }
-    Group(T.t("Pędzel formatu i wypełnienie", "Format painter & fill"), keys = "wiaderko kopiuj formatowanie") {
+    Group(T.t("Pędzel formatu", "Format painter"), keys = "malarz kopiuj formatowanie painter") {
         Opt(T.t("Tryb pędzla formatu", "Format painter mode"), "format painter kopiuj formatowanie styl") { Choice(listOf(T.t("Obiektowo", "Object"), "Lasso"), set.painterMode) { set.painterMode = it } }
+        ToggleRow(T.t("Szybki przycisk „Pobierz format”", "Quick “Take format” button"), set.painterQuick, keys = "pobierz format pipeta pędzel malarz przycisk pod ikoną szybki") { set.painterQuick = it }
+        if (set.painterQuick) {
+            Text(
+                T.t("Wybranie pędzla pokazuje pod jego ikoną drugi przycisk: dotknij go, a potem obiektu na stronie, by przejąć jego kolor i styl. Drugie dotknięcie pędzla otwiera jego panel.", "Picking the painter shows a second button under its icon: tap it, then an object on the page, to take its colour and style. A second tap on the painter opens its panel."),
+                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            ToggleRow(T.t("Gaś przy pierwszym malowaniu", "Fade when painting starts"), set.painterQuickFadeUse, keys = "pobierz format przycisk gaśnie znika malowanie użycie pędzel") { set.painterQuickFadeUse = it }
+            ToggleRow(T.t("Gaś po pobraniu formatu", "Fade after taking a format"), set.painterQuickFadeTake, keys = "pobierz format przycisk gaśnie znika po pobraniu pędzel") { set.painterQuickFadeTake = it }
+            Opt(
+                if (set.painterQuickSec == 0) T.t("Gaś po czasie: nigdy", "Fade after time: never") else T.t("Gaś po czasie: ${set.painterQuickSec} s", "Fade after time: ${set.painterQuickSec} s"),
+                "pobierz format przycisk gaśnie znika czas sekundy opóźnienie pędzel",
+            ) { MSlider(set.painterQuickSec.toFloat(), 0f, 30f) { set.painterQuickSec = it.toInt() } }
+        }
+    }
+    Group(T.t("Wypełnienie", "Fill"), keys = "wiaderko wypełnianie fill") {
         ToggleRow(T.t("Wiaderko domyka małe szpary w liniach", "Fill closes small gaps in lines"), set.fillCloseGaps, keys = "wiaderko wypełnianie fill kolor szpary luka") { set.fillCloseGaps = it }
     }
     Group(T.t("Pipeta", "Eyedropper"), keys = "pipeta próbnik kolor paleta eyedropper") {

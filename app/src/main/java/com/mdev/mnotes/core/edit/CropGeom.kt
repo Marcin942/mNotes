@@ -69,6 +69,18 @@ object CropGeom {
     fun frameOf(c: ImageCrop, iw: Float, ih: Float) =
         CropFrame((c.l + c.r) * 0.5f * iw, (c.t + c.b) * 0.5f * ih, c.width * iw * 0.5f, c.height * ih * 0.5f, c.a)
 
+    /**
+     * Wycinek odbity w osi x pliku (inwolucja). Obraz z odbiciem pokazuje to samo co obraz bez odbicia, którego plik
+     * jest odwrócony w poziomie, więc przycinanie i cięcie liczą w tym odwróconym pliku, a wynik zamieniają z powrotem.
+     */
+    fun mirrorCrop(c: ImageCrop) = ImageCrop(1f - c.r, c.t, 1f - c.l, c.b, if (c.a == 0f) 0f else -c.a)
+
+    /** Obraz w układzie odwróconego pliku: bez odbicia, z odbitym wycinkiem; dla obrazu bez odbicia ten sam. */
+    fun unmirrored(im: ImageEl): ImageEl = if (im.mirror) im.copy(mirror = false, crop = mirrorCrop(im.crop)) else im
+
+    /** Odwrotność [unmirrored] dla obrazu [im] po edycji: przywraca odbicie [mirror] i wycinek w układzie pliku. */
+    fun remirrored(im: ImageEl, mirror: Boolean): ImageEl = if (mirror) im.copy(mirror = true, crop = mirrorCrop(im.crop)) else im
+
     /** Ramka obejmująca cały plik, bez kąta. */
     fun full(iw: Float, ih: Float) = CropFrame(iw * 0.5f, ih * 0.5f, iw * 0.5f, ih * 0.5f, 0f)
 

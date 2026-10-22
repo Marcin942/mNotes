@@ -4,6 +4,7 @@ import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.pdf.PdfDocument
 import android.util.Base64
+import com.mdev.mnotes.core.model.BoxElement
 import com.mdev.mnotes.core.model.FillEl
 import com.mdev.mnotes.core.model.ImageEl
 import com.mdev.mnotes.core.model.PageContent
@@ -54,9 +55,48 @@ class Exporter(private val repo: Repository, private val assets: Assets, private
     /** Czeka, aż wszystkie zaplanowane zapisy stron trafią na dysk. */
     fun awaitWrites() { runCatching { repo.io.submit {}.get() } }
 
-    fun fileName(title: String, fmt: ExportFormat, pageNo: Int? = null, zip: Boolean = false): String {
-        val base = title.replace(Regex("[\\\\/:*?\"<>|\\p{Cntrl}]"), "_").trim().ifEmpty { "mNotes" }.take(80)
-        return base + (if (pageNo != null && !fmt.multi) "-${pageNo + 1}" else "") + "." + (if (zip) "zip" else fmt.ext)
+    private fun safeName(s: String) = s.replace(Regex("[\\\\/:*?\"<>|\\p{Cntrl}]"), "_").trim()
+
+    /** [span] = opis przedziału stron lub sekcji (np. „2-5”) dopisywany do nazwy; ma pierwszeństwo przed [pageNo]. */
+    fun fileName(title: String, fmt: ExportFormat, pageNo: Int? = null, zip: Boolean = false, span: String? = null): String {
+        val base = safeName(title).ifEmpty { "mNotes" }.take(80)
+        val suffix = when {
+            span != null -> "-" + safeName(span).take(60)
+            pageNo != null && !fmt.multi -> "-${pageNo + 1}"
+            else -> ""
+        }
+        return base + suffix + "." + (if (zip) "zip" else fmt.ext)
+    }
+
+    /** Indeksy stron bez żadnej treści (ani elementów, ani tła PDF) — papier w kratkę bez notatek też jest pusty. */
+    fun blankPages(nb: String): Set<Int> {
+        val meta = repo.meta(nb) ?: return emptySet()
+        return meta.pages.indices.filterTo(HashSet()) { i ->
+            val p = meta.pages[i]
+            p.spec.pdf == null && repo.readPage(nb, p.id).elements.isEmpty()
+        }
+    }
+
+    /**
+     * Archiwum ZIP z osobnym plikiem dla każdej części ([parts] = tytuł i indeksy stron): `01 Tytuł.pdf`. Dla PNG i SVG
+     * część z jedną stroną to jeden plik, z kilkoma — folder `01 Tytuł/page-004.png`. Zwraca false przy błędzie.
+     */
+    fun writeParts(nb: String, fmt: ExportFormat, parts: List<Pair<String, List<Int>>>, out: OutputStream): Boolean {
+        val meta = repo.meta(nb) ?: return false
+        if (fmt == ExportFormat.MNOTES || parts.isEmpty()) return false
+        return try {
+            ZipOutputStream(out).use { z ->
+                parts.forEachIndexed { n, (title, idx) ->
+                    val base = "%02d %s".format(Locale.ROOT, n + 1, safeName(title).ifEmpty { "-" }.take(60))
+                    when (fmt) {
+                        ExportFormat.PDF -> { z.putNextEntry(ZipEntry("$base.pdf")); pdfOut(nb, meta, idx, z); z.closeEntry() }
+                        ExportFormat.MD -> { z.putNextEntry(ZipEntry("$base.md")); z.write(markdown(nb, meta, idx).toByteArray()); z.closeEntry() }
+                        else -> imagesInto(z, nb, meta, idx, svg = fmt == ExportFormat.SVG, single = "$base.${fmt.ext}", folder = base)
+                    }
+                }
+            }
+            true
+        } catch (_: Throwable) { false }
     }
 
     /** [pages] = indeksy stron do wyeksportowania (null = wszystkie). Zwraca false przy błędzie. */
@@ -110,19 +150,26 @@ class Exporter(private val repo: Repository, private val assets: Assets, private
     // — PNG i SVG: jedna strona = jeden plik; więcej stron = archiwum ZIP —
 
     private fun imagesOut(nb: String, meta: NotebookMeta, idx: List<Int>, out: OutputStream, svg: Boolean) {
-        val ext = if (svg) "svg" else "png"
-        fun one(i: Int, o: OutputStream) {
-            val p = meta.pages[i]
-            if (svg) o.write(svgPage(nb, p).toByteArray(Charsets.UTF_8)) else pngPage(nb, p, o)
-        }
         val valid = idx.filter { it in meta.pages.indices }
-        if (valid.size == 1) { one(valid[0], out); return }
-        ZipOutputStream(out).use { z ->
-            for (i in valid) {
-                z.putNextEntry(ZipEntry("page-%03d.%s".format(Locale.ROOT, i + 1, ext)))
-                one(i, z)
-                z.closeEntry()
-            }
+        if (valid.size == 1) { imagePage(nb, meta, valid[0], out, svg); return }
+        ZipOutputStream(out).use { z -> imagesInto(z, nb, meta, valid, svg, single = null, folder = null) }
+    }
+
+    private fun imagePage(nb: String, meta: NotebookMeta, i: Int, o: OutputStream, svg: Boolean) {
+        val p = meta.pages[i]
+        if (svg) o.write(svgPage(nb, p).toByteArray(Charsets.UTF_8)) else pngPage(nb, p, o)
+    }
+
+    /** Wpisuje strony do otwartego archiwum: jedna strona jako wpis [single] (gdy podany), inaczej `page-NNN` w [folder]. */
+    private fun imagesInto(z: ZipOutputStream, nb: String, meta: NotebookMeta, idx: List<Int>, svg: Boolean, single: String?, folder: String?) {
+        val ext = if (svg) "svg" else "png"
+        val valid = idx.filter { it in meta.pages.indices }
+        for (i in valid) {
+            val entry = if (single != null && valid.size == 1) single
+            else (if (folder != null) "$folder/" else "") + "page-%03d.%s".format(Locale.ROOT, i + 1, ext)
+            z.putNextEntry(ZipEntry(entry))
+            imagePage(nb, meta, i, z, svg)
+            z.closeEntry()
         }
     }
 
@@ -163,7 +210,7 @@ class Exporter(private val repo: Repository, private val assets: Assets, private
             is Stroke -> svgStroke(sb, e, fl, spec.darkPaper)
             is TextBox -> svgText(sb, e)
             is TapeEl -> {
-                val tr = if (e.rot != 0f) " transform=\"rotate(${f(Math.toDegrees(e.rot.toDouble()).toFloat())} ${f(e.cx)} ${f(e.cy)})\"" else ""
+                val tr = svgBoxTransform(e)
                 val rad = f(minOf(e.w, e.h) * 0.12f)
                 sb.append("<rect x=\"${f(e.cx - e.w / 2)}\" y=\"${f(e.cy - e.h / 2)}\" width=\"${f(e.w)}\" height=\"${f(e.h)}\" rx=\"$rad\" fill=\"${hex(e.color)}\" fill-opacity=\"${if (e.hidden) "1" else "0.18"}\"$tr/>\n")
             }
@@ -179,21 +226,32 @@ class Exporter(private val repo: Repository, private val assets: Assets, private
                 sb.append("\"/>\n")
             }
             is ImageEl -> assets.load(nb, e.asset)?.let { b ->
-                val tr = if (e.rot != 0f) " transform=\"rotate(${f(Math.toDegrees(e.rot.toDouble()).toFloat())} ${f(e.cx)} ${f(e.cy)})\"" else ""
+                val tr = svgBoxTransform(e)
                 val cr = e.crop
+                val filter = svgFx(sb, e.fx)
                 if (cr.isFull) {
-                    sb.append("<image x=\"${f(e.cx - e.w / 2)}\" y=\"${f(e.cy - e.h / 2)}\" width=\"${f(e.w)}\" height=\"${f(e.h)}\" opacity=\"${f(e.alpha)}\"$tr preserveAspectRatio=\"none\" xlink:href=\"data:image/png;base64,${pngB64(b)}\"/>\n")
+                    sb.append("<image x=\"${f(e.cx - e.w / 2)}\" y=\"${f(e.cy - e.h / 2)}\" width=\"${f(e.w)}\" height=\"${f(e.h)}\" opacity=\"${f(e.alpha)}\"$tr$filter preserveAspectRatio=\"none\" xlink:href=\"data:image/png;base64,${pngB64(b)}\"/>\n")
                 } else {
                     // wycinek: do pliku trafia tylko widoczna część (wyprostowana), a nie cały obraz z maską
                     val kept = CropBake.bake(b, cr, (e.w * 4f).roundToInt(), (e.h * 4f).roundToInt())
                     try {
-                        sb.append("<image x=\"${f(e.cx - e.w / 2)}\" y=\"${f(e.cy - e.h / 2)}\" width=\"${f(e.w)}\" height=\"${f(e.h)}\" opacity=\"${f(e.alpha)}\"$tr preserveAspectRatio=\"none\" xlink:href=\"data:image/png;base64,${pngB64(kept)}\"/>\n")
+                        sb.append("<image x=\"${f(e.cx - e.w / 2)}\" y=\"${f(e.cy - e.h / 2)}\" width=\"${f(e.w)}\" height=\"${f(e.h)}\" opacity=\"${f(e.alpha)}\"$tr$filter preserveAspectRatio=\"none\" xlink:href=\"data:image/png;base64,${pngB64(kept)}\"/>\n")
                     } finally { kept.recycle() }
                 }
             }
         }
         sb.append("</svg>\n")
         return sb.toString()
+    }
+
+    /** Dopisuje do [sb] filtr macierzy kolorów obrazu (przesunięcia w skali 0..1, jak w SVG) i zwraca atrybut `filter`; pusty bez efektów. */
+    private fun svgFx(sb: StringBuilder, fx: com.mdev.mnotes.core.model.ImageFx): String {
+        if (fx.isNone) return ""
+        val m = fx.matrix()
+        val values = (0 until 4).joinToString(" ") { r -> (0 until 5).joinToString(" ") { c -> f(if (c == 4) m[r * 5 + c] / 255f else m[r * 5 + c]) } }
+        val id = "fx${fx.hashCode().toUInt()}"
+        sb.append("<filter id=\"$id\" color-interpolation-filters=\"sRGB\"><feColorMatrix type=\"matrix\" values=\"$values\"/></filter>\n")
+        return " filter=\"url(#$id)\""
     }
 
     private fun svgTemplate(sb: StringBuilder, spec: PageSpec) {
@@ -276,11 +334,19 @@ class Exporter(private val repo: Repository, private val assets: Assets, private
         sb.append("Z")
     }
 
+    /** Atrybut `transform` ramki: obrót wokół środka, a przy odbiciu jeszcze lustro w jej osi x (po obrocie). */
+    private fun svgBoxTransform(e: BoxElement): String {
+        val parts = ArrayList<String>(2)
+        if (e.rot != 0f) parts += "rotate(${f(Math.toDegrees(e.rot.toDouble()).toFloat())} ${f(e.cx)} ${f(e.cy)})"
+        if (e.mirror) parts += "translate(${f(e.cx)} ${f(e.cy)}) scale(-1 1) translate(${f(-e.cx)} ${f(-e.cy)})"
+        return if (parts.isEmpty()) "" else " transform=\"${parts.joinToString(" ")}\""
+    }
+
     private fun svgText(sb: StringBuilder, t: TextBox) {
         val lay = renderer.layoutFor(t)
         val x0 = t.cx - t.w / 2; val y0 = t.cy - t.h / 2
         sb.append("<g")
-        if (t.rot != 0f) sb.append(" transform=\"rotate(${f(Math.toDegrees(t.rot.toDouble()).toFloat())} ${f(t.cx)} ${f(t.cy)})\"")
+        sb.append(svgBoxTransform(t))
         sb.append(">\n")
         if (t.fill != 0) sb.append("<rect x=\"${f(x0)}\" y=\"${f(y0)}\" width=\"${f(t.w)}\" height=\"${f(t.h)}\" rx=\"4\" fill=\"${hex(t.fill)}\"/>\n")
         // ręcznie ustawiona ramka przycina tekst tak samo jak na ekranie

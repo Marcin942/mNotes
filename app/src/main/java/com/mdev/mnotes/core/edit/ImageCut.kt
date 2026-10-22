@@ -81,7 +81,7 @@ object ImageCut {
 
     /**
      * Dzieli [img] liniami [lines] na kawałki w kolejności wierszami (od góry, od lewej). Kawałki dziedziczą krycie,
-     * blokadę i obrót; [gap] rozsuwa je symetrycznie wokół dotychczasowego środka. Bez ważnych linii zwraca pustą listę.
+     * efekty, blokadę i obrót; [gap] rozsuwa je symetrycznie wokół dotychczasowego środka. Bez ważnych linii zwraca pustą listę.
      */
     fun split(img: ImageEl, lines: List<CutLine>, gap: Float, newId: () -> Int): List<ImageEl> {
         val norm = normalize(img, lines)
@@ -90,18 +90,23 @@ object ImageCut {
         if (xs.size == 2 && ys.size == 2) return emptyList()
         val cols = xs.size - 1; val rows = ys.size - 1
         val c = cos(img.rot); val s = sin(img.rot)
-        val cr = img.crop
+        // odbity obraz dzieli się tak, jak jego odwrócony plik; kawałki wracają do odbicia na końcu
+        val cr = CropGeom.unmirrored(img).crop
         val out = ArrayList<ImageEl>(cols * rows)
         for (r in 0 until rows) for (k in 0 until cols) {
             val u0 = xs[k]; val u1 = xs[k + 1]; val v0 = ys[r]; val v1 = ys[r + 1]
             val lx = ((u0 + u1) / 2f - 0.5f) * img.w + (k - (cols - 1) / 2f) * gap
             val ly = ((v0 + v1) / 2f - 0.5f) * img.h + (r - (rows - 1) / 2f) * gap
             out.add(
-                ImageEl(
-                    newId(), img.asset,
-                    img.cx + lx * c - ly * s, img.cy + lx * s + ly * c,
-                    (u1 - u0) * img.w, (v1 - v0) * img.h, img.rot, img.alpha, img.locked,
-                    ImageCrop(cr.l + u0 * cr.width, cr.t + v0 * cr.height, cr.l + u1 * cr.width, cr.t + v1 * cr.height),
+                CropGeom.remirrored(
+                    ImageEl(
+                        newId(), img.asset,
+                        img.cx + lx * c - ly * s, img.cy + lx * s + ly * c,
+                        (u1 - u0) * img.w, (v1 - v0) * img.h, img.rot, img.alpha, img.locked,
+                        ImageCrop(cr.l + u0 * cr.width, cr.t + v0 * cr.height, cr.l + u1 * cr.width, cr.t + v1 * cr.height),
+                        img.fx,
+                    ),
+                    img.mirror,
                 ),
             )
         }

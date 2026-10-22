@@ -21,6 +21,7 @@ import com.mdev.mnotes.core.edit.CutLine
 import com.mdev.mnotes.core.edit.FloodFill
 import com.mdev.mnotes.core.edit.ImageCut
 import com.mdev.mnotes.core.model.ImageEl
+import com.mdev.mnotes.core.model.ImageFx
 import com.mdev.mnotes.core.model.PageContent
 import com.mdev.mnotes.core.model.Placed
 import com.mdev.mnotes.core.model.PageSnapshot
@@ -126,6 +127,8 @@ class Editor(val ctx: Context, val nbId: String) {
     var pipette by mutableStateOf<((Int) -> Unit)?>(null)
     /** Pędzel formatu w trybie „Pobierz format”: następne dotknięcie obiektu ustawia aktywne pióro według niego. */
     var formatPick by mutableStateOf(false)
+    /** Szybki przycisk „Pobierz format” pod ikoną pędzla: pokazuje go wybranie pędzla, gaszą go użycie, czas i zmiana narzędzia. */
+    var quickFormat by mutableStateOf(false)
     var sel by mutableStateOf<Sel?>(null)
     var cut by mutableStateOf<CutSession?>(null)
     var crop by mutableStateOf<CropSession?>(null)
@@ -328,6 +331,9 @@ class Editor(val ctx: Context, val nbId: String) {
 
     fun setSelAlpha(a: Float) = replaceSel { e -> if (e is ImageEl) e.copy(alpha = a) else e }
 
+    /** Zmienia efekty kolorystyczne zaznaczonych obrazów; [f] dostaje bieżące efekty danego obrazu. */
+    fun setSelImageFx(f: (ImageFx) -> ImageFx) = replaceSel { e -> if (e is ImageEl) e.copy(fx = f(e.fx)) else e }
+
     fun lockSel(lock: Boolean) = replaceSel { it.withLocked(lock) }
 
     fun frontSel() {
@@ -371,6 +377,22 @@ class Editor(val ctx: Context, val nbId: String) {
 
     /** Przesuwa zaznaczenie o (dx, dy) pt — strzałki (Shift = 10 pt). */
     fun nudgeSel(dx: Float, dy: Float) = replaceSel { it.transformed(com.mdev.mnotes.core.geom.Affine.translation(dx, dy)) }
+
+    /** Czy zaznaczenie da się odbić: jak przy obrocie, żaden zaznaczony element nie może być zablokowany. */
+    fun canFlipSel(): Boolean = !readOnly && selElements().let { it.isNotEmpty() && it.none { e -> e.locked } }
+
+    /**
+     * Odbija zaznaczenie jak jedną całość: względem pionowej ([horizontal]) albo poziomej osi przez środek wspólnej ramki.
+     * Jedna zmiana w historii; dwa odbicia dają dokładnie stan wyjściowy.
+     */
+    fun flipSel(horizontal: Boolean) {
+        if (!canFlipSel()) return
+        var b = Bounds.EMPTY
+        for (e in selElements()) b = b.union(e.bounds)
+        if (b.isEmpty) return
+        val m = if (horizontal) com.mdev.mnotes.core.geom.Affine.scale(-1f, 1f, b.cx, b.cy) else com.mdev.mnotes.core.geom.Affine.scale(1f, -1f, b.cx, b.cy)
+        replaceSel { it.transformed(m) }
+    }
 
     // — Tekst i obrazy —
     private val textMeasure by lazy { com.mdev.mnotes.render.PageRenderer(app.assets).textMeasure }
@@ -579,8 +601,10 @@ class Editor(val ctx: Context, val nbId: String) {
         val iw = size.first.toFloat(); val ih = size.second.toFloat()
         cancelCut()
         transformMode = false
-        val frame = CropGeom.frameOf(img.crop, iw, ih)
-        crop = CropSession(s.pageId, img.id, img, iw, ih, frame, CropGeom.placeOf(img, iw, ih))
+        // odbity obraz przycina się w odwróconym pliku (patrz CropGeom.mirrorCrop); rysowanie odwraca bitmapę tak samo
+        val flat = CropGeom.unmirrored(img)
+        val frame = CropGeom.frameOf(flat.crop, iw, ih)
+        crop = CropSession(s.pageId, img.id, img, iw, ih, frame, CropGeom.placeOf(flat, iw, ih))
         view?.invalidate()
     }
 
@@ -668,7 +692,7 @@ class Editor(val ctx: Context, val nbId: String) {
     fun applyCrop() {
         val c = crop ?: return; val img = cropImage() ?: return
         val page = doc.page(c.pageId) ?: return
-        val out = CropGeom.applied(img, c.frame, c.place, c.iw, c.ih)
+        val out = CropGeom.remirrored(CropGeom.applied(CropGeom.unmirrored(img), c.frame, c.place, c.iw, c.ih), img.mirror)
         crop = null
         if (out.crop == img.crop && out.cx == img.cx && out.cy == img.cy && out.w == img.w && out.h == img.h && out.rot == img.rot) { view?.invalidate(); return }
         val at = doc.content(page).elements.indexOfFirst { it.id == img.id }
@@ -747,10 +771,15 @@ class Editor(val ctx: Context, val nbId: String) {
         exec(DocEdit.Elements(p.id, ElementsEdit.remove(c, c.elements.map { it.id }.toSet())))
     }
 
+    /** Przestawia stronę; bieżąca strona zostaje na ekranie (także gdy to ona jest przenoszona), bez skoku widoku. */
     fun movePage(from: Int, to: Int) {
-        if (from == to) return
+        val t = to.coerceIn(0, doc.pages.size - 1)
+        if (from == t) return
         val p = doc.pages.getOrNull(from) ?: return
-        exec(DocEdit.MovePage(p.id, from, to.coerceIn(0, doc.pages.size - 1)))
+        val edit = DocEdit.MovePage(p.id, from, t)
+        val keep = doc.pages.getOrNull(curIndex())?.id
+        val v = view
+        if (keep != null && v != null) v.keepPageInPlace(keep) { exec(edit) } else exec(edit)
     }
 
     fun setSpec(i: Int, spec: PageSpec) {
@@ -792,6 +821,12 @@ class Editor(val ctx: Context, val nbId: String) {
         structTick++
     }
 
+    /** Zmienia tytuł zakładki strony [pageId]; pusty tytuł wraca do nazwy domyślnej („Strona N”). */
+    fun renameBookmark(pageId: String, title: String) {
+        repo.update(nbId) { m -> m.copy(bookmarks = m.bookmarks.map { if (it.pageId == pageId) it.copy(title = title.trim()) else it }) }
+        structTick++
+    }
+
     fun isBookmarked(i: Int): Boolean { structTick; return doc.pages.getOrNull(i)?.let { p -> repo.meta(nbId)?.bookmarks?.any { it.pageId == p.id } } ?: false }
 
     fun close() {
@@ -804,6 +839,7 @@ class Editor(val ctx: Context, val nbId: String) {
     // — Skróty klawiszowe wspólne z paletą poleceń —
     fun setToolKey(t: Tool) {
         tool = t; clearSelIfNotLasso()
+        quickFormat = t == Tool.PAINTER && settings.painterQuick
         if (t == Tool.TAPE) toast = T.t("Przeciągnij, aby zakryć fragment · dotknij taśmy, aby odkryć", "Drag to cover an area · tap a tape to reveal it")
         if (t == Tool.PAINTER) toast = if (settings.painterMode == 1) T.t("Obrysuj obiekty — przejmą kolor i styl aktywnego pióra", "Circle objects to give them the active pen's colour and style")
             else T.t("Przeciągnij po obiektach — przejmą kolor i styl aktywnego pióra", "Swipe over objects to give them the active pen's colour and style")

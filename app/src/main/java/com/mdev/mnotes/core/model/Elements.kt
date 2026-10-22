@@ -4,6 +4,7 @@ import com.mdev.mnotes.core.geom.Affine
 import com.mdev.mnotes.core.geom.Bounds
 import com.mdev.mnotes.core.pen.LineStyle
 import java.util.concurrent.atomic.AtomicInteger
+import kotlin.math.PI
 import kotlin.math.abs
 import kotlin.math.atan2
 import kotlin.math.cos
@@ -217,21 +218,37 @@ sealed class BoxElement : Element() {
         return abs(lx) <= w * 0.5f + slop && abs(ly) <= h * 0.5f + slop
     }
 
+    /**
+     * Odbicie zawartości w osi lokalnej x (po obrocie [rot]): zawartość leży na stronie jako `R(rot)·diag(±1, 1)`.
+     * Sama ramka jest symetryczna, więc odbicie nie zmienia obrysu, trafienia ani uchwytów.
+     */
+    open val mirror: Boolean get() = false
+
+    /**
+     * Nowa geometria po przekształceniu [m]. Odbicie (det < 0) nie mieści się w obrocie, więc przełącza [mirror], a kąt
+     * wynika z obrazu osi lokalnej x (`U`); oś y (`V`) jest wtedy z nią zgodna dla każdego podobieństwa.
+     */
     protected fun mapBox(m: Affine): BoxGeom {
         val c = cos(rot); val s = sin(rot)
-        val ux = m.a * c + m.c * s
-        val uy = m.b * c + m.d * s
+        val mx = if (mirror) -1f else 1f
+        val ux = mx * (m.a * c + m.c * s)
+        val uy = mx * (m.b * c + m.d * s)
         val vx = -m.a * s + m.c * c
         val vy = -m.b * s + m.d * c
+        val flip = mirror != (m.det < 0f)
+        var r = atan2(uy, ux)
+        if (flip) r += PI.toFloat()
+        if (r > PI.toFloat()) r -= 2f * PI.toFloat()
         return BoxGeom(
             m.mapX(cx, cy), m.mapY(cx, cy),
             w * hypot(ux, uy), h * hypot(vx, vy),
-            atan2(uy, ux),
+            r,
             hypot(ux, uy),
+            flip,
         )
     }
 
-    protected class BoxGeom(val cx: Float, val cy: Float, val w: Float, val h: Float, val rot: Float, val sx: Float)
+    protected class BoxGeom(val cx: Float, val cy: Float, val w: Float, val h: Float, val rot: Float, val sx: Float, val mirror: Boolean)
 }
 
 class TextBox(
@@ -255,6 +272,8 @@ class TextBox(
     val fit: Int = FIT_HEIGHT,
     /** Mnożnik odstępu między wierszami (1 = domyślny dla czcionki); import z Samsung Notes używa 1,15. */
     val lineSpacing: Float = 1f,
+    /** Zawartość odbita w osi lokalnej x; patrz [BoxElement.mirror]. */
+    override val mirror: Boolean = false,
 ) : BoxElement() {
 
     val bold: Boolean get() = style and STYLE_BOLD != 0
@@ -270,12 +289,13 @@ class TextBox(
         rot: Float = this.rot, text: String = this.text, size: Float = this.size, color: Int = this.color,
         family: Int = this.family, style: Int = this.style, align: Int = this.align, fill: Int = this.fill,
         locked: Boolean = this.locked, fit: Int = this.fit, lineSpacing: Float = this.lineSpacing,
-    ) = TextBox(id, cx, cy, w, h, rot, text, size, color, family, style, align, fill, locked, fit, lineSpacing)
+        mirror: Boolean = this.mirror,
+    ) = TextBox(id, cx, cy, w, h, rot, text, size, color, family, style, align, fill, locked, fit, lineSpacing, mirror)
 
     override fun transformed(m: Affine): TextBox {
         val g = mapBox(m)
         // Rozmiar czcionki podąża za skalą wzdłuż osi tekstu; wysokość wynika z układu tekstu.
-        return copy(cx = g.cx, cy = g.cy, w = g.w, h = h * g.sx, rot = g.rot, size = size * g.sx)
+        return copy(cx = g.cx, cy = g.cy, w = g.w, h = h * g.sx, rot = g.rot, size = size * g.sx, mirror = g.mirror)
     }
 
     companion object {
@@ -320,6 +340,85 @@ class ImageCrop(val l: Float, val t: Float, val r: Float, val b: Float, val a: F
     }
 }
 
+/**
+ * Efekty kolorystyczne obrazu (nie zmieniają pliku, tylko sposób rysowania). Kolejność: odcienie szarości albo czerń i biel
+ * ([mode]), wzmocnienie kanałów [r], [g], [b] (1 = bez zmiany), na końcu odwrócenie kolorów [invert].
+ */
+class ImageFx(
+    val invert: Boolean = false,
+    val mode: Int = MODE_COLOR,
+    /** Próg czerni i bieli (0..1): jaśniejsze od niego piksele stają się białe. Działa tylko w [MODE_BW]. */
+    val threshold: Float = 0.5f,
+    val r: Float = 1f,
+    val g: Float = 1f,
+    val b: Float = 1f,
+) {
+    val isNone: Boolean get() = !invert && mode == MODE_COLOR && r == 1f && g == 1f && b == 1f
+
+    fun copy(
+        invert: Boolean = this.invert, mode: Int = this.mode, threshold: Float = this.threshold,
+        r: Float = this.r, g: Float = this.g, b: Float = this.b,
+    ) = ImageFx(invert, mode, threshold, r, g, b)
+
+    /** Macierz 4×5 w układzie `android.graphics.ColorMatrix` (wiersze R, G, B, A; przesunięcia w skali 0..255). */
+    fun matrix(): FloatArray {
+        var m = IDENTITY.copyOf()
+        when (mode) {
+            MODE_GRAY -> m = floatArrayOf(
+                LR, LG, LB, 0f, 0f,
+                LR, LG, LB, 0f, 0f,
+                LR, LG, LB, 0f, 0f,
+                0f, 0f, 0f, 1f, 0f,
+            )
+            MODE_BW -> {
+                val k = BW_STEEPNESS; val o = -k * threshold * 255f
+                m = floatArrayOf(
+                    LR * k, LG * k, LB * k, 0f, o,
+                    LR * k, LG * k, LB * k, 0f, o,
+                    LR * k, LG * k, LB * k, 0f, o,
+                    0f, 0f, 0f, 1f, 0f,
+                )
+            }
+        }
+        m = times(floatArrayOf(r, 0f, 0f, 0f, 0f, 0f, g, 0f, 0f, 0f, 0f, 0f, b, 0f, 0f, 0f, 0f, 0f, 1f, 0f), m)
+        if (invert) m = times(floatArrayOf(-1f, 0f, 0f, 0f, 255f, 0f, -1f, 0f, 0f, 255f, 0f, 0f, -1f, 0f, 255f, 0f, 0f, 0f, 1f, 0f), m)
+        return m
+    }
+
+    override fun equals(other: Any?) = other is ImageFx && invert == other.invert && mode == other.mode && threshold == other.threshold &&
+        r == other.r && g == other.g && b == other.b
+    override fun hashCode() = ((((invert.hashCode() * 31 + mode) * 31 + threshold.hashCode()) * 31 + r.hashCode()) * 31 + g.hashCode()) * 31 + b.hashCode()
+
+    companion object {
+        const val MODE_COLOR = 0
+        const val MODE_GRAY = 1
+        const val MODE_BW = 2
+        const val GAIN_MAX = 2f
+        val NONE = ImageFx()
+
+        private const val LR = 0.299f
+        private const val LG = 0.587f
+        private const val LB = 0.114f
+        /** Ostre przejście progu: po obcięciu do 0..255 zostaje czysta czerń albo biel. */
+        private const val BW_STEEPNESS = 64f
+        private val IDENTITY = floatArrayOf(1f, 0f, 0f, 0f, 0f, 0f, 1f, 0f, 0f, 0f, 0f, 0f, 1f, 0f, 0f, 0f, 0f, 0f, 1f, 0f)
+
+        /** Złożenie: najpierw [first], potem [then] (jak `ColorMatrix.postConcat`). */
+        private fun times(then: FloatArray, first: FloatArray): FloatArray {
+            val out = FloatArray(20)
+            for (row in 0 until 4) {
+                for (col in 0 until 5) {
+                    var v = 0f
+                    for (k in 0 until 4) v += then[row * 5 + k] * first[k * 5 + col]
+                    if (col == 4) v += then[row * 5 + 4]
+                    out[row * 5 + col] = v
+                }
+            }
+            return out
+        }
+    }
+}
+
 class ImageEl(
     override val id: Int,
     /** Nazwa pliku zasobu w katalogu zeszytu. */
@@ -333,6 +432,9 @@ class ImageEl(
     override val locked: Boolean = false,
     /** Wycinek pliku, który obraz pokazuje (po przecięciu kawałki dzielą jeden plik). */
     val crop: ImageCrop = ImageCrop.FULL,
+    val fx: ImageFx = ImageFx.NONE,
+    /** Obraz odbity w osi lokalnej x (po wycinku); patrz [BoxElement.mirror]. */
+    override val mirror: Boolean = false,
 ) : BoxElement() {
 
     override fun withId(newId: Int): ImageEl = copy(id = newId)
@@ -341,12 +443,12 @@ class ImageEl(
     fun copy(
         id: Int = this.id, asset: String = this.asset, cx: Float = this.cx, cy: Float = this.cy,
         w: Float = this.w, h: Float = this.h, rot: Float = this.rot, alpha: Float = this.alpha,
-        locked: Boolean = this.locked, crop: ImageCrop = this.crop,
-    ) = ImageEl(id, asset, cx, cy, w, h, rot, alpha, locked, crop)
+        locked: Boolean = this.locked, crop: ImageCrop = this.crop, fx: ImageFx = this.fx, mirror: Boolean = this.mirror,
+    ) = ImageEl(id, asset, cx, cy, w, h, rot, alpha, locked, crop, fx, mirror)
 
     override fun transformed(m: Affine): ImageEl {
         val g = mapBox(m)
-        return copy(cx = g.cx, cy = g.cy, w = g.w, h = g.h, rot = g.rot)
+        return copy(cx = g.cx, cy = g.cy, w = g.w, h = g.h, rot = g.rot, mirror = g.mirror)
     }
 }
 

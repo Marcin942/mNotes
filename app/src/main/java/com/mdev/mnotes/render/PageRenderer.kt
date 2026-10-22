@@ -313,6 +313,7 @@ class PageRenderer(private val assets: Assets?) {
     private fun drawText(c: Canvas, t: TextBox) {
         c.save()
         c.rotate(Math.toDegrees(t.rot.toDouble()).toFloat(), t.cx, t.cy)
+        if (t.mirror) c.scale(-1f, 1f, t.cx, t.cy)
         c.translate(t.cx - t.w * 0.5f, t.cy - t.h * 0.5f)
         if (t.fill != 0) {
             paint.reset(); paint.isAntiAlias = true; paint.color = t.fill
@@ -324,13 +325,28 @@ class PageRenderer(private val assets: Assets?) {
         c.restore()
     }
 
+    private var fxCached: com.mdev.mnotes.core.model.ImageFx? = null
+    private var fxFilterCached: android.graphics.ColorMatrixColorFilter? = null
+
+    private fun fxFilter(fx: com.mdev.mnotes.core.model.ImageFx): android.graphics.ColorMatrixColorFilter? {
+        if (fx.isNone) return null
+        if (fx != fxCached) {
+            fxFilterCached = android.graphics.ColorMatrixColorFilter(android.graphics.ColorMatrix(fx.matrix()))
+            fxCached = fx
+        }
+        return fxFilterCached
+    }
+
     private fun drawImage(c: Canvas, nb: String, im: ImageEl, decode: Boolean) {
         val bmp = assets?.bitmap(nb, im.asset, decode)
         c.save()
         c.rotate(Math.toDegrees(im.rot.toDouble()).toFloat(), im.cx, im.cy)
+        if (im.mirror) c.scale(-1f, 1f, im.cx, im.cy)
         rect.set(im.cx - im.w * 0.5f, im.cy - im.h * 0.5f, im.cx + im.w * 0.5f, im.cy + im.h * 0.5f)
         if (bmp != null) {
             bmpPaint.alpha = (im.alpha * 255f).toInt().coerceIn(0, 255)
+            val filter = fxFilter(im.fx)
+            bmpPaint.colorFilter = filter
             val cr = im.crop
             if (cr.isFull) c.drawBitmap(bmp, null, rect, bmpPaint)
             else if (bakeCrops) {
@@ -344,6 +360,7 @@ class PageRenderer(private val assets: Assets?) {
                 c.drawBitmap(bmp, src, rect, bmpPaint)
             }
             bmpPaint.alpha = 255
+            bmpPaint.colorFilter = null
         } else {
             paint.reset(); paint.isAntiAlias = true; paint.color = 0x22888888
             c.drawRect(rect, paint)
@@ -367,8 +384,10 @@ class PageRenderer(private val assets: Assets?) {
         sh.setLocalMatrix(tiltMatrix)
         tiltPaint.shader = sh
         tiltPaint.alpha = (im.alpha * 255f).toInt().coerceIn(0, 255)
+        tiltPaint.colorFilter = fxFilter(im.fx)
         c.drawRect(rect, tiltPaint)
         tiltPaint.shader = null
+        tiltPaint.colorFilter = null
     }
 
     private companion object {

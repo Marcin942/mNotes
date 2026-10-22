@@ -128,12 +128,12 @@ fun ExportDialog(nb: String, currentPage: Int, prepare: () -> Unit, onDismiss: (
     var busy by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
 
-    // Zakładki w kolejności stron (kolejność dodawania nic nie znaczy); pusty tytuł → „Strona N”.
+    // Zakładki w kolejności stron (kolejność dodawania nic nie znaczy); pusty albo samoczynny tytuł → bieżące „Strona N”.
     val marks = remember(nb) {
         val m = app.repo.meta(nb)
         val raw = m?.bookmarks.orEmpty().mapNotNull { b ->
             val i = m?.pages?.indexOfFirst { it.id == b.pageId } ?: -1
-            if (i < 0) null else Mark(i, b.title.ifBlank { "${T.t("Strona", "Page")} ${i + 1}" })
+            if (i < 0) null else Mark(i, com.mdev.mnotes.core.model.PageOrder.bookmarkTitle(b.title, i, T.t("Strona", "Page")))
         }
         BookmarkSections.normalize(raw, pageCount)
     }

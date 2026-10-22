@@ -14,7 +14,7 @@ class ModelsJsonTest {
         val pages = listOf(PageMeta("p1", spec), PageMeta("p2", spec))
         val n = NotebookMeta(
             "n1", "Zeszyt \"ąę\"", "f1", 10L, 20L, 30L, 0xFF112233.toInt(), CoverStyle.STRIPES,
-            favorite = true, trashedAt = 5L, tags = listOf("a", "b"), lastPage = 1, layout = 1,
+            favorite = true, trashedAt = 5L, tags = listOf("a", "b"), lastPage = 1, viewMode = 2, pdfDoc = true,
             pages = pages, bookmarks = listOf(Bookmark("p2", "Strona 2")),
         )
         val back = NotebookMeta.fromJson(n.toJson())

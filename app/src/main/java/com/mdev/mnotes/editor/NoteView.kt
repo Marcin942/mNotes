@@ -243,7 +243,7 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
     // ───────────────────────── układ i widok ─────────────────────────
 
     private fun rebuildLayout() {
-        val mode = if (settings.layoutMode == 0) LayoutMode.VERTICAL else LayoutMode.HORIZONTAL
+        val mode = if (ed.layoutMode == 0) LayoutMode.VERTICAL else LayoutMode.HORIZONTAL
         layout = DocLayout.of(doc.pages.map { it.spec }, mode)
         ed.pageCount = doc.pages.size
     }
@@ -265,7 +265,7 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
     /** „100%”: dopasowanie do szerokości (pion), wysokości (poziom) lub całej strony (pojedyncza). */
     fun baseZoom(): Float {
         if (width == 0 || layout.count == 0) return 1f
-        return when (settings.layoutMode) {
+        return when (ed.layoutMode) {
             0 -> width / layout.docWidth
             1 -> height / layout.docHeight
             else -> fitPageZoom(ed.pageIndex.coerceIn(0, layout.count - 1))
@@ -317,7 +317,7 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
 
     private fun targetFor(i: Int): Triple<Float, Float, Float> {
         val spec = doc.pages[i].spec
-        return when (settings.layoutMode) {
+        return when (ed.layoutMode) {
             0 -> Triple(zoom, clampX(tx, zoom), clampY(-(layout.top(i) - layout.pad * 0.5f) * zoom, zoom))
             1 -> Triple(zoom, clampX(-(layout.left(i) - layout.pad * 0.5f) * zoom, zoom), clampY(ty, zoom))
             else -> {
@@ -346,7 +346,7 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
     fun fitWidth() {
         if (width == 0 || layout.count == 0) return
         val i = ed.pageIndex.coerceIn(0, layout.count - 1)
-        val z = if (settings.layoutMode == 2) fitPageZoom(i) else baseZoom()
+        val z = if (ed.layoutMode == 2) fitPageZoom(i) else baseZoom()
         val k = z / zoom
         val cx = width / 2f; val cy = height / 2f
         animateView(z, clampX(cx - (cx - tx) * k, z), clampY(cy - (cy - ty) * k, z))
@@ -486,7 +486,7 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
         borderPaint.strokeWidth = 1f / zoom
 
         val pullOff = pullOffset()
-        if (pullOff > 0f) { c.save(); if (settings.layoutMode == 1) c.translate(-pullOff, 0f) else c.translate(0f, -pullOff) }
+        if (pullOff > 0f) { c.save(); if (ed.layoutMode == 1) c.translate(-pullOff, 0f) else c.translate(0f, -pullOff) }
         c.save()
         c.translate(tx, ty); c.scale(zoom, zoom)
         for (i in range) drawPage(c, i, vb, rvb)
@@ -833,7 +833,7 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
     fun showHit(pi: Int, b: Bounds?) {
         if (doc.pages.isEmpty() || width == 0 || pi !in 0 until layout.count) return
         stopAnim()
-        if (b == null || settings.layoutMode == 2) { goToPage(pi); return }
+        if (b == null || ed.layoutMode == 2) { goToPage(pi); return }
         val cx = layout.left(pi) + (b.l + b.r) / 2; val cy = layout.top(pi) + (b.t + b.b) / 2
         animateView(zoom, clampX(width / 2f - cx * zoom, zoom), clampY(height / 2f - cy * zoom, zoom), 260L)
     }
@@ -910,7 +910,7 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
     }
 
     private fun snapIfNeeded() {
-        if (settings.layoutMode != 2 || layout.count == 0 || mode == Mode.NAV) return
+        if (ed.layoutMode != 2 || layout.count == 0 || mode == Mode.NAV) return
         val i = layout.nearest(docX(width / 2f), docY(height / 2f))
         if (zoom <= fitPageZoom(i) * 1.08f) {
             val (z, x, y) = targetFor(i)
@@ -1252,11 +1252,11 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
     private fun pullEnabled() = settings.pullAddPage && !ed.readOnly && layout.count > 0
     private fun pullThreshold() = 120f * dp
     private fun pullLimit(): Float =
-        if (settings.layoutMode == 1) clampX(Float.NEGATIVE_INFINITY, zoom) else clampY(Float.NEGATIVE_INFINITY, zoom)
+        if (ed.layoutMode == 1) clampX(Float.NEGATIVE_INFINITY, zoom) else clampY(Float.NEGATIVE_INFINITY, zoom)
 
     /** Czy widok stoi na końcu dokumentu (dół albo prawa krawędź w układzie poziomym). */
     private fun atDocEnd(): Boolean {
-        val cur = if (settings.layoutMode == 1) tx else ty
+        val cur = if (ed.layoutMode == 1) tx else ty
         return cur <= pullLimit() + 4f * dp
     }
 
@@ -1268,7 +1268,7 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
 
     /** Przesuwa widok o (dx, dy); nadmiar poza koniec dokumentu zamienia w odciągnięcie. */
     private fun panWithPull(dx: Float, dy: Float, pullOk: Boolean) {
-        val ax = settings.layoutMode == 1
+        val ax = ed.layoutMode == 1
         var d = if (ax) dx else dy
         val other = if (ax) dy else dx
         if (pullOk && pull > 0f) {
@@ -1309,7 +1309,7 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
         val armed = pull >= pullThreshold()
         val r = 13f * dp
         val ink = if (darkUi) 0xFFE8EAED.toInt() else 0xFF3C4043.toInt()
-        val ax = settings.layoutMode == 1
+        val ax = ed.layoutMode == 1
         val label = if (armed) T.t("Puść, aby dodać stronę", "Release to add a page") else T.t("Pociągnij, aby dodać stronę", "Pull to add a page")
         pullText.textSize = 13.5f * dp
         val tw = if (ax) 0f else pullText.measureText(label)

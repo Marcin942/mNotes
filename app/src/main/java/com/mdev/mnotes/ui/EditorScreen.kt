@@ -253,7 +253,7 @@ fun EditorScreen(ed: Editor, tabs: TabsCtl, onExit: () -> Unit, onSettings: () -
     // Pipeta chowa panele, żeby strona była widoczna.
     LaunchedEffect(ed.tool) { if (ed.tool != Tool.PAINTER) ed.formatPick = false }
     LaunchedEffect(ed.pipette != null) { if (ed.pipette != null) panel = null }
-    fun applyLayout(mode: Int) { set.layoutMode = mode; ed.view?.applyLayoutMode() }
+    fun applyLayout(mode: Int) = ed.chooseLayoutMode(mode)
     fun pickTool(t: Tool, p: Panel?) {
         if (ed.tool == t && p != null) toggle(p) else { ed.setToolKey(t); panel = null }
     }
@@ -1406,9 +1406,9 @@ private fun MoreMenu(ed: Editor, set: com.mdev.mnotes.data.Settings, close: () -
         Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             SectionLabel(T.t("Układ stron", "Page layout"))
             FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Chip(T.t("Pionowo", "Vertical"), set.layoutMode == 0, { applyLayout(0) })
-                Chip(T.t("Poziomo", "Horizontal"), set.layoutMode == 1, { applyLayout(1) })
-                Chip(T.t("Pojedyncza", "Single"), set.layoutMode == 2, { applyLayout(2) })
+                Chip(T.t("Pionowo", "Vertical"), ed.layoutMode == 0, { applyLayout(0) })
+                Chip(T.t("Poziomo", "Horizontal"), ed.layoutMode == 1, { applyLayout(1) })
+                Chip(T.t("Pojedyncza", "Single"), ed.layoutMode == 2, { applyLayout(2) })
             }
             HorizontalDivider(Modifier.padding(vertical = 4.dp), color = m.line)
             MenuRow(Icons.Rounded.FitScreen, T.t("Dopasuj do szerokości", "Fit width"), "Ctrl+0") { ed.view?.fitWidth(); close() }

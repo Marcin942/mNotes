@@ -308,6 +308,22 @@ private fun EditorPrefs(set: com.mdev.mnotes.data.Settings) {
         Opt(T.t("Listwa grubości i kolorów", "Width and colour strip"), "toolbar pasek grubość kolor listwa") { Choice(listOf(T.t("Z lewej", "Left"), T.t("Z prawej", "Right"), T.t("Przy pasku", "By the toolbar")), set.optionsPos) { set.optionsPos = it } }
     }
     BarLayoutPrefs(set)
+    Group(T.t("Układ stron przy otwieraniu", "Page layout on opening"), keys = "pionowo poziomo pojedyncza otwieranie widok domyślny zeszyty pdf dokumenty układ strony vertical horizontal single default notebooks documents layout") {
+        val modes = listOf(T.t("Pionowo", "Vertical"), T.t("Poziomo", "Horizontal"), T.t("Pojedyncza", "Single"))
+        Opt(T.t("Zeszyty i pliki mNotes", "Notebooks and mNotes files"), "zeszyty notatki mnotes samsung notes sdocx obrazy układ domyślny pionowo poziomo pojedyncza notebooks") {
+            Choice(modes, set.viewNotebook) { set.viewNotebook = it }
+        }
+        Opt(T.t("Dokumenty PDF", "PDF documents"), "pdf dokumenty układ domyślny pionowo poziomo pojedyncza documents") {
+            Choice(modes, set.viewPdf) { set.viewPdf = it }
+        }
+        Text(
+            T.t(
+                "Dotyczy dokumentów, w których nie wybrano układu ręcznie. Układ wybrany w edytorze (menu „Więcej” → Układ stron) jest zapamiętany osobno dla każdego dokumentu.",
+                "Applies to documents where no layout was picked by hand. A layout picked in the editor (More menu → Page layout) is remembered for each document separately.",
+            ),
+            style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 6.dp),
+        )
+    }
     Group(T.t("Renderowanie", "Rendering"), keys = "jakość ostrość wydajność") {
         Opt(T.t("Jakość wyświetlania strony", "Page display quality"), "render ostrość wydajność bateria pamięć kafelki płynność rozmycie ostra") {
             Choice(

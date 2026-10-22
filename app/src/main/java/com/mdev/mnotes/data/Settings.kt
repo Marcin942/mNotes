@@ -6,6 +6,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import com.mdev.mnotes.core.layout.BarConfig
+import com.mdev.mnotes.core.layout.ViewMode
 import com.mdev.mnotes.core.model.PenKind
 import com.mdev.mnotes.core.pen.ActivePen
 import com.mdev.mnotes.core.pen.PenKit
@@ -110,7 +111,9 @@ class Settings(ctx: Context) {
     var newLandscape by Pref("new.landscape", false)
     var newTemplate by Pref("new.template", 1)
     var newPaper by Pref("new.paper", 0xFFFFFFFF.toInt())
-    var layoutMode by Pref("view.layout", 0)
+    /** Układ stron dla dokumentów bez własnego wyboru ([com.mdev.mnotes.core.layout.ViewMode]): osobno zeszyty (też .mnotes i Samsung Notes) i zaimportowane PDF-y. */
+    var viewNotebook by Pref("view.notebook", ViewMode.DEFAULT_NOTEBOOK)
+    var viewPdf by Pref("view.pdf", ViewMode.DEFAULT_PDF)
     var textSize by Pref("text.size", 20f)
     var textColor by Pref("text.color", 0xFF202124.toInt())
     var textFamily by Pref("text.family", 0)

@@ -361,7 +361,7 @@ class Importer(private val repo: Repository, private val pdf: PdfPool) {
             val (w, h) = pdf.pageSize(id, asset, i) ?: (595f to 842f)
             PageMeta(newId(), PageSpec(w = w, h = h, paper = Paper.WHITE, template = Template.BLANK, pdf = PdfRef(asset, i)))
         }
-        return NotebookMeta(id, title, folderId, now, now, now, cover, CoverStyle.PLAIN, pages = pages)
+        return NotebookMeta(id, title, folderId, now, now, now, cover, CoverStyle.PLAIN, pdfDoc = true, pages = pages)
     }
 
     /** Każdy obraz staje się stroną o proporcjach obrazu (dłuższy bok = 842 pt), obraz leży na stronie jako element. */

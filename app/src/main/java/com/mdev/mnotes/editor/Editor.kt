@@ -3,6 +3,7 @@ package com.mdev.mnotes.editor
 import android.content.Context
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import com.mdev.mnotes.core.layout.ViewMode
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -103,6 +104,18 @@ class Editor(val ctx: Context, val nbId: String) {
     val settings = app.settings
     val doc = NotebookDoc(repo, nbId)
     var view: NoteView? = null
+
+    /** Układ stron tego dokumentu ([com.mdev.mnotes.core.layout.ViewMode]): własny wybór zapisany w zeszycie albo domyślny dla jego rodzaju. */
+    var layoutMode by mutableIntStateOf(doc.meta.let { ViewMode.resolve(it.viewMode, it.pdfDoc, settings.viewNotebook, settings.viewPdf) })
+        private set
+
+    /** Zmiana układu przez użytkownika: pamiętana w tym dokumencie, więc przy następnym otwarciu wraca. */
+    fun chooseLayoutMode(mode: Int) {
+        if (!ViewMode.valid(mode)) return
+        layoutMode = mode
+        doc.setViewMode(mode)
+        view?.applyLayoutMode()
+    }
 
     var tool by mutableStateOf(Tool.PEN)
     var ruler by mutableStateOf(false)
@@ -783,7 +796,7 @@ class Editor(val ctx: Context, val nbId: String) {
 
     fun close() {
         doc.flush()
-        doc.setLastPage(pageIndex, settings.layoutMode)
+        doc.setLastPage(pageIndex)
         view?.dispose()
         view = null
     }

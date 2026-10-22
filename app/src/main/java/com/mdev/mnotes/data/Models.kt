@@ -1,5 +1,6 @@
 package com.mdev.mnotes.data
 
+import com.mdev.mnotes.core.layout.ViewMode
 import com.mdev.mnotes.core.text.NameText
 import com.mdev.mnotes.core.model.PageSpec
 import org.json.JSONArray
@@ -53,8 +54,10 @@ data class NotebookMeta(
     val tags: List<String> = emptyList(),
     val locked: Boolean = false,
     val lastPage: Int = 0,
-    /** 0 = pionowo, 1 = poziomo. */
-    val layout: Int = 0,
+    /** Własny wybór układu stron ([ViewMode]); [ViewMode.DEFAULT] = układ domyślny z ustawień dla rodzaju dokumentu. */
+    val viewMode: Int = ViewMode.DEFAULT,
+    /** Czy to zaimportowany dokument PDF (a nie zeszyt); od tego zależy, który układ domyślny obowiązuje. */
+    val pdfDoc: Boolean = false,
     val pages: List<PageMeta> = emptyList(),
     val bookmarks: List<Bookmark> = emptyList(),
 ) {
@@ -64,7 +67,7 @@ data class NotebookMeta(
         val o = JSONObject()
         o.put("v", 1).put("id", id).put("title", title).put("cr", created).put("mod", modified).put("op", opened)
         o.put("cov", cover).put("cs", coverStyle).put("fav", favorite).put("tr", trashedAt).put("lock", locked)
-        o.put("last", lastPage).put("lay", layout)
+        o.put("last", lastPage).put("vm", viewMode).put("pdfdoc", pdfDoc)
         if (folderId != null) o.put("f", folderId)
         o.put("tags", JSONArray(tags))
         val pg = JSONArray()
@@ -99,7 +102,8 @@ data class NotebookMeta(
                 created = created, modified = modified, opened = o.optLong("op", modified),
                 cover = o.optInt("cov", 0xFF4C9A6A.toInt()), coverStyle = o.optInt("cs", 0),
                 favorite = o.optBoolean("fav"), trashedAt = o.optLong("tr"), tags = tags, locked = o.optBoolean("lock"),
-                lastPage = o.optInt("last"), layout = o.optInt("lay"), pages = pages, bookmarks = bms,
+                lastPage = o.optInt("last"), viewMode = o.optInt("vm", ViewMode.DEFAULT), pdfDoc = if (o.has("pdfdoc")) o.optBoolean("pdfdoc") else ViewMode.looksLikePdf(pages.map { it.spec }),
+                pages = pages, bookmarks = bms,
             )
         }
     }

@@ -81,7 +81,7 @@ object ImageCut {
 
     /**
      * Dzieli [img] liniami [lines] na kawałki w kolejności wierszami (od góry, od lewej). Kawałki dziedziczą krycie,
-     * blokadę i obrót; [gap] rozsuwa je symetrycznie wokół dotychczasowego środka. Bez ważnych linii zwraca pustą listę.
+     * efekty, blokadę i obrót; [gap] rozsuwa je symetrycznie wokół dotychczasowego środka. Bez ważnych linii zwraca pustą listę.
      */
     fun split(img: ImageEl, lines: List<CutLine>, gap: Float, newId: () -> Int): List<ImageEl> {
         val norm = normalize(img, lines)
@@ -102,6 +102,7 @@ object ImageCut {
                     img.cx + lx * c - ly * s, img.cy + lx * s + ly * c,
                     (u1 - u0) * img.w, (v1 - v0) * img.h, img.rot, img.alpha, img.locked,
                     ImageCrop(cr.l + u0 * cr.width, cr.t + v0 * cr.height, cr.l + u1 * cr.width, cr.t + v1 * cr.height),
+                    img.fx,
                 ),
             )
         }

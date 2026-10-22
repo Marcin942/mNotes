@@ -78,6 +78,7 @@ Założenie projektowe: „Linux Mint user” = osoba ceniąca kontrolę, skrót
 - [x] EDT-042 Listy punktowane/numerowane w polu tekstowym — znaczniki tekstowe, `ListText`; bez testu na urządzeniu
 - [x] EDT-050 Obraz z galerii
 - [x] EDT-053 Edycja obrazu (obrót, krycie, blokada) _(uchwyt obrotu, suwak „Krycie obrazu”)_
+- [~] EDT-096 Efekty kolorystyczne obrazu (2026-10-22, gałąź `feat/efekty-zdjec`): zaznaczony obraz ma na pasku przycisk „Efekty obrazu” (panel: odcienie szarości, czarno-biały z progiem, odwróć kolory, wzmocnienie R/G/B 0–200 %, krycie, „Przywróć oryginał”); sam obraz nie ma już panelu wyboru koloru (nic nie robił). Efekt to `ImageFx` w `ImageEl` (nieniszczący, plik zostaje; macierz `ColorMatrix`: szarość/próg → wzmocnienia → odwrócenie), zapis w MNP1 flagą 2048 na końcu rekordu, eksport PNG/PDF przez filtr koloru, SVG przez `feColorMatrix`; kawałki po przecięciu dziedziczą efekty. `ImageFxTest`; bez testu na tablecie
 - [x] EDT-054 Wklej obraz/tekst ze schowka systemu _(Ctrl+V przy pustym schowku wewnętrznym; bez testu na urządzeniu)_
 - [x] EDT-060/061 Laser (znikający ślad) · EDT-062 Ręka
 - [x] EDT-064 Taśma (ukrywanie treści) — `TapeEl`, narzędzie K; bez testu na urządzeniu

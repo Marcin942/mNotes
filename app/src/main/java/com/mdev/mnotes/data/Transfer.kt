@@ -187,19 +187,30 @@ class Exporter(private val repo: Repository, private val assets: Assets, private
             is ImageEl -> assets.load(nb, e.asset)?.let { b ->
                 val tr = if (e.rot != 0f) " transform=\"rotate(${f(Math.toDegrees(e.rot.toDouble()).toFloat())} ${f(e.cx)} ${f(e.cy)})\"" else ""
                 val cr = e.crop
+                val filter = svgFx(sb, e.fx)
                 if (cr.isFull) {
-                    sb.append("<image x=\"${f(e.cx - e.w / 2)}\" y=\"${f(e.cy - e.h / 2)}\" width=\"${f(e.w)}\" height=\"${f(e.h)}\" opacity=\"${f(e.alpha)}\"$tr preserveAspectRatio=\"none\" xlink:href=\"data:image/png;base64,${pngB64(b)}\"/>\n")
+                    sb.append("<image x=\"${f(e.cx - e.w / 2)}\" y=\"${f(e.cy - e.h / 2)}\" width=\"${f(e.w)}\" height=\"${f(e.h)}\" opacity=\"${f(e.alpha)}\"$tr$filter preserveAspectRatio=\"none\" xlink:href=\"data:image/png;base64,${pngB64(b)}\"/>\n")
                 } else {
                     // wycinek: do pliku trafia tylko widoczna część (wyprostowana), a nie cały obraz z maską
                     val kept = CropBake.bake(b, cr, (e.w * 4f).roundToInt(), (e.h * 4f).roundToInt())
                     try {
-                        sb.append("<image x=\"${f(e.cx - e.w / 2)}\" y=\"${f(e.cy - e.h / 2)}\" width=\"${f(e.w)}\" height=\"${f(e.h)}\" opacity=\"${f(e.alpha)}\"$tr preserveAspectRatio=\"none\" xlink:href=\"data:image/png;base64,${pngB64(kept)}\"/>\n")
+                        sb.append("<image x=\"${f(e.cx - e.w / 2)}\" y=\"${f(e.cy - e.h / 2)}\" width=\"${f(e.w)}\" height=\"${f(e.h)}\" opacity=\"${f(e.alpha)}\"$tr$filter preserveAspectRatio=\"none\" xlink:href=\"data:image/png;base64,${pngB64(kept)}\"/>\n")
                     } finally { kept.recycle() }
                 }
             }
         }
         sb.append("</svg>\n")
         return sb.toString()
+    }
+
+    /** Dopisuje do [sb] filtr macierzy kolorów obrazu (przesunięcia w skali 0..1, jak w SVG) i zwraca atrybut `filter`; pusty bez efektów. */
+    private fun svgFx(sb: StringBuilder, fx: com.mdev.mnotes.core.model.ImageFx): String {
+        if (fx.isNone) return ""
+        val m = fx.matrix()
+        val values = (0 until 4).joinToString(" ") { r -> (0 until 5).joinToString(" ") { c -> f(if (c == 4) m[r * 5 + c] / 255f else m[r * 5 + c]) } }
+        val id = "fx${fx.hashCode().toUInt()}"
+        sb.append("<filter id=\"$id\" color-interpolation-filters=\"sRGB\"><feColorMatrix type=\"matrix\" values=\"$values\"/></filter>\n")
+        return " filter=\"url(#$id)\""
     }
 
     private fun svgTemplate(sb: StringBuilder, spec: PageSpec) {

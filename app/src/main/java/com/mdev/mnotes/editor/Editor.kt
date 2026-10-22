@@ -20,6 +20,7 @@ import com.mdev.mnotes.core.edit.CutLine
 import com.mdev.mnotes.core.edit.FloodFill
 import com.mdev.mnotes.core.edit.ImageCut
 import com.mdev.mnotes.core.model.ImageEl
+import com.mdev.mnotes.core.model.ImageFx
 import com.mdev.mnotes.core.model.PageContent
 import com.mdev.mnotes.core.model.Placed
 import com.mdev.mnotes.core.model.PageSnapshot
@@ -316,6 +317,9 @@ class Editor(val ctx: Context, val nbId: String) {
     fun setSelLine(line: LineStyle) = replaceSel { e -> if (e is Stroke) e.withStyle(line = line) else e }
 
     fun setSelAlpha(a: Float) = replaceSel { e -> if (e is ImageEl) e.copy(alpha = a) else e }
+
+    /** Zmienia efekty kolorystyczne zaznaczonych obrazów; [f] dostaje bieżące efekty danego obrazu. */
+    fun setSelImageFx(f: (ImageFx) -> ImageFx) = replaceSel { e -> if (e is ImageEl) e.copy(fx = f(e.fx)) else e }
 
     fun lockSel(lock: Boolean) = replaceSel { it.withLocked(lock) }
 

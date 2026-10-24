@@ -25,6 +25,12 @@ class FileKindsTest {
         assertEquals(FileKind.PDF, FileKinds.classify("x", "", "\u0000\u0000\r\n".toByteArray() + pdf) { emptyList() })
     }
 
+    @Test fun mnotesZPdfemWPierwszymKilobajcieToNiePdf() {
+        // Tło PDF zapisane w archiwum bez kompresji: „%PDF” pojawia się przed 1024. bajtem pliku.
+        val head = zip + ByteArray(900) + pdf
+        assertEquals(FileKind.MNOTES, FileKinds.classify("cw_3.mnotes", "application/octet-stream", head) { listOf("meta.json", "p/a.mnp", "assets/b.pdf") })
+    }
+
     @Test fun obrazPoSygnaturze() {
         assertEquals(FileKind.IMAGE, FileKinds.classify("zdjecie", "application/octet-stream", jpg) { emptyList() })
     }

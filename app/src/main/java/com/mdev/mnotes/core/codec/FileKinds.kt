@@ -38,8 +38,8 @@ object FileKinds {
             else -> FileKind.UNKNOWN
         }
         if (head.isNotEmpty()) {
-            if (isPdf(head)) return FileKind.PDF
-            if (isImage(head)) return FileKind.IMAGE
+            // ZIP najpierw: .mnotes trzyma tło PDF bez kompresji, więc „%PDF” bywa w pierwszym kilobajcie archiwum
+            // i zeszyt importował się jako sam PDF (jedna strona zamiast wszystkich).
             if (isZip(head)) {
                 val names = runCatching { zipNames() }.getOrDefault(emptyList())
                 return when {
@@ -50,6 +50,8 @@ object FileKinds {
                     else -> FileKind.UNKNOWN
                 }
             }
+            if (isPdf(head)) return FileKind.PDF
+            if (isImage(head)) return FileKind.IMAGE
             return FileKind.UNKNOWN
         }
         return when {

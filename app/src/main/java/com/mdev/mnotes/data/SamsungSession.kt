@@ -6,6 +6,7 @@ import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import com.mdev.mnotes.app.MNotesApp
+import com.mdev.mnotes.core.goodnotes.GoodNotesConvert
 import com.mdev.mnotes.core.samsung.ConvertOptions
 import com.mdev.mnotes.core.samsung.ConvertedNote
 import com.mdev.mnotes.core.samsung.ImportMode
@@ -41,6 +42,8 @@ class SamsungItem(val source: ImportSource) {
     /** Trwa (ponowna) konwersja po zmianie ustawień; podgląd pokazuje wtedy jeszcze poprzedni wynik. */
     var busy by mutableStateOf(false)
     internal var doc: SdDocument? = null
+    /** Bajty PDF-a z GoodNotes (zamiast [doc]); konwersja czyta je przy każdej zmianie ustawień. */
+    internal var pdfBytes: ByteArray? = null
     internal var noteOpts: ConvertOptions? = null
     internal val lock = Mutex()
 }
@@ -112,6 +115,7 @@ class SamsungSession(
     private fun release(item: SamsungItem) {
         if (item.state == SdItemState.LOADING) return
         item.doc = null
+        item.pdfBytes = null
         item.note = null
         item.noteOpts = null
         if (item.state == SdItemState.READY) item.state = SdItemState.IDLE
@@ -122,13 +126,18 @@ class SamsungSession(
         item.lock.withLock {
             if (item.state == SdItemState.SAVED) return
             if (item.note != null && item.noteOpts == opts) return
-            if (item.state == SdItemState.FAILED && item.doc == null) return
+            if (item.state == SdItemState.FAILED && item.doc == null && item.pdfBytes == null) return
             val first = item.note == null
             if (first) item.state = SdItemState.LOADING
             item.busy = true
             try {
-                val doc = item.doc ?: withContext(Dispatchers.IO) { SamsungLoad.read(app, item.source) }.also { item.doc = it }
-                val note = withContext(Dispatchers.Default) { SamsungConvert.convert(doc, item.source.name, opts, measure = SdAndroidMeasure()) }
+                val note = if (item.source.goodnotesPdf) {
+                    val bytes = item.pdfBytes ?: withContext(Dispatchers.IO) { SamsungLoad.readPdf(app, item.source.uri) }.also { item.pdfBytes = it }
+                    withContext(Dispatchers.Default) { GoodNotesConvert.convert(bytes, item.source.name, opts) }
+                } else {
+                    val doc = item.doc ?: withContext(Dispatchers.IO) { SamsungLoad.read(app, item.source) }.also { item.doc = it }
+                    withContext(Dispatchers.Default) { SamsungConvert.convert(doc, item.source.name, opts, measure = SdAndroidMeasure()) }
+                }
                 item.note = note
                 item.noteOpts = opts
                 item.pages = note.pages.size
@@ -140,6 +149,7 @@ class SamsungSession(
                 throw e
             } catch (e: Throwable) {
                 item.doc = null
+                item.pdfBytes = null
                 item.note = null
                 item.noteOpts = null
                 item.error = e.message ?: e.javaClass.simpleName

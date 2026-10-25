@@ -6,14 +6,24 @@ import android.provider.DocumentsContract
 import android.provider.OpenableColumns
 import com.mdev.mnotes.core.codec.FileKind
 import com.mdev.mnotes.core.codec.FileKinds
+import com.mdev.mnotes.core.goodnotes.GoodNotesConvert
 import com.mdev.mnotes.core.samsung.SamsungPdf
 import java.io.BufferedInputStream
 import java.util.zip.ZipInputStream
 
-/** Plik wskazany do importu, rozpoznany po zawartości. [samsungPdf]: PDF zgodny z Notatkami (niesie osadzony `.sdocx`). */
-class ImportSource(val uri: Uri, val name: String, val kind: FileKind, val samsungPdf: Boolean = false) {
-    /** Czy plik ma przejść przez import Samsung Notes (z podglądem i wyborem trybu). */
-    val isSamsung: Boolean get() = kind == FileKind.SDOCX || samsungPdf
+/**
+ * Plik wskazany do importu, rozpoznany po zawartości. [samsungPdf]: PDF zgodny z Notatkami (niesie osadzony `.sdocx`).
+ * [goodnotesPdf]: PDF wyeksportowany z GoodNotes (iOS), zamieniany na obiekty mNotes (import eksperymentalny).
+ */
+class ImportSource(
+    val uri: Uri,
+    val name: String,
+    val kind: FileKind,
+    val samsungPdf: Boolean = false,
+    val goodnotesPdf: Boolean = false,
+) {
+    /** Czy plik ma przejść przez okno importu z podglądem i wyborem trybu (Samsung Notes albo GoodNotes). */
+    val isSamsung: Boolean get() = kind == FileKind.SDOCX || samsungPdf || goodnotesPdf
 }
 
 object ImportProbe {
@@ -41,7 +51,12 @@ object ImportProbe {
         val samsungPdf = kind == FileKind.PDF && runCatching {
             ctx.contentResolver.openInputStream(uri)?.use { SamsungPdf.looksCompatible(BufferedInputStream(it)) } ?: false
         }.getOrDefault(false)
-        return ImportSource(uri, name, kind, samsungPdf)
+        // Znacznik Quartz mają też zwykłe PDF-y z iOS i macOS, więc dopiero struktura stron rozstrzyga o GoodNotes.
+        val goodnotesPdf = kind == FileKind.PDF && !samsungPdf && runCatching {
+            val marker = ctx.contentResolver.openInputStream(uri)?.use { GoodNotesConvert.looksCompatible(BufferedInputStream(it)) } ?: false
+            marker && GoodNotesConvert.detect(SamsungLoad.readPdf(ctx, uri))
+        }.getOrDefault(false)
+        return ImportSource(uri, name, kind, samsungPdf, goodnotesPdf)
     }
 
     private fun zipNames(ctx: Context, uri: Uri): List<String> {

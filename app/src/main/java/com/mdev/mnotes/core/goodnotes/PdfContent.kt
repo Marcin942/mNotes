@@ -196,6 +196,8 @@ class GState(
     val textRender: Int,
     /** Prostokąt otaczający przecięcie ścieżek przycinania (x0, y0, x1, y1 na stronie PDF); null = bez przycinania. */
     val clipBox: DoubleArray? = null,
+    /** Fałsz, gdy któraś ścieżka przycinania nie jest prostokątem równoległym do osi: wtedy [clipBox] to tylko obwiednia. */
+    val clipExact: Boolean = true,
 ) {
     val fillArgb: Int? get() = fillCs.argb(fillC)
     val strokeArgb: Int? get() = strokeCs.argb(strokeC)
@@ -253,10 +255,10 @@ class PdfInterpreter(private val doc: PdfDocument, private val resources: PdfDic
         var fillCs: ColorSpace = ColorSpace.GRAY, var fillC: DoubleArray = doubleArrayOf(0.0),
         var strokeCs: ColorSpace = ColorSpace.GRAY, var strokeC: DoubleArray = doubleArrayOf(0.0),
         var ca: Double = 1.0, var CA: Double = 1.0, var blend: String = "Normal", var smask: Boolean = false,
-        var clipped: Boolean = false, var tr: Int = 0, var clipBox: DoubleArray? = null,
+        var clipped: Boolean = false, var tr: Int = 0, var clipBox: DoubleArray? = null, var clipExact: Boolean = true,
     ) {
-        fun copy() = Mut(ctm, lw, cap, join, dash, fillCs, fillC, strokeCs, strokeC, ca, CA, blend, smask, clipped, tr, clipBox)
-        fun freeze() = GState(ctm, lw, cap, join, dash, fillCs, fillC.copyOf(), strokeCs, strokeC.copyOf(), ca, CA, blend, smask, clipped, tr, clipBox)
+        fun copy() = Mut(ctm, lw, cap, join, dash, fillCs, fillC, strokeCs, strokeC, ca, CA, blend, smask, clipped, tr, clipBox, clipExact)
+        fun freeze() = GState(ctm, lw, cap, join, dash, fillCs, fillC.copyOf(), strokeCs, strokeC.copyOf(), ca, CA, blend, smask, clipped, tr, clipBox, clipExact)
     }
 
     fun run(content: ByteArray): List<ContentItem> {
@@ -364,6 +366,8 @@ class PdfInterpreter(private val doc: PdfDocument, private val resources: PdfDic
                     }
                     if (clipPending) {
                         g.clipped = true
+                        val axisAligned = g.ctm.b == 0.0 && g.ctm.c == 0.0 || g.ctm.a == 0.0 && g.ctm.d == 0.0
+                        if (rect == null || !axisAligned) g.clipExact = false
                         val b = if (subs.isEmpty()) doubleArrayOf(0.0, 0.0, 0.0, 0.0) else PathMath.bbox(subs)
                         val c = g.clipBox
                         g.clipBox = if (c == null) b else doubleArrayOf(maxOf(c[0], b[0]), maxOf(c[1], b[1]), minOf(c[2], b[2]), minOf(c[3], b[3]))

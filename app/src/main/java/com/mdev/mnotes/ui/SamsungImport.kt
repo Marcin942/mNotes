@@ -141,9 +141,11 @@ fun SamsungImportScreen(session: SamsungSession, onClose: () -> Unit, onFinished
     val requestClose = { if (multi && session.selectedCount > 0) confirmExit = true else onClose() }
     BackHandler { if (!session.saving) requestClose() }
 
+    val fromGoodNotes = session.items.isNotEmpty() && session.items.all { it.source.goodnotesPdf }
     val doSave = {
         session.save(m.dark) { saved, failed ->
             val msg = when {
+                failed == 0 && fromGoodNotes -> T.t("Zaimportowano z GoodNotes: $saved", "Imported from GoodNotes: $saved")
                 failed == 0 -> T.t("Zaimportowano z Samsung Notes: $saved", "Imported from Samsung Notes: $saved")
                 saved == 0 -> T.t("Nie udało się zaimportować plików ($failed)", "Could not import the files ($failed)")
                 else -> T.t("Zaimportowano $saved, nie udało się $failed", "Imported $saved, $failed failed")
@@ -213,7 +215,8 @@ private fun TopBar(session: SamsungSession, onBack: () -> Unit, onImport: () -> 
     Row(Modifier.fillMaxWidth().background(m.header).padding(horizontal = 8.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
         IconBtn(Icons.AutoMirrored.Rounded.ArrowBack, T.t("Zamknij", "Close"), onBack, enabled = !session.saving)
         Column(Modifier.weight(1f).padding(horizontal = 8.dp)) {
-            Text(T.t("Import z Samsung Notes", "Import from Samsung Notes"), style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            val gn = session.items.isNotEmpty() && session.items.all { it.source.goodnotesPdf }
+            Text(if (gn) T.t("Import z GoodNotes (eksperyment)", "Import from GoodNotes (experimental)") else T.t("Import z Samsung Notes", "Import from Samsung Notes"), style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
             val total = session.items.size
             Text(
                 if (total > 1) T.t("${plural(total, "plik", "pliki", "plików", "file", "files")}, do zaimportowania: $n", "$total files, to import: $n")
@@ -365,6 +368,7 @@ private fun SettingsPane(session: SamsungSession, item: SamsungItem, modifier: M
     val mode = session.modeOf(item)
     val dark = session.darkOf(item, m.dark)
     val canInclude = item.state != SdItemState.FAILED && item.state != SdItemState.SAVED
+    val gn = item.source.goodnotesPdf
     Column(modifier.verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 4.dp)) {
         SectionLabel(T.t("Nazwa zeszytu", "Notebook name"))
         MField(item.title, { item.title = it }, Modifier.fillMaxWidth(), hint = T.t("Nazwa zeszytu", "Notebook name"))
@@ -382,7 +386,10 @@ private fun SettingsPane(session: SamsungSession, item: SamsungItem, modifier: M
         SectionLabel(T.t("Jak przenieść", "How to import"))
         ModeCard(
             mode == ImportMode.ORIGINAL, T.t("Wygląd oryginału", "Look of the original"),
-            T.t(
+            if (gn) T.t(
+                "Strona ma ten sam rozmiar, kolor papieru i kratkę co w GoodNotes. Tło leży pod stroną jak zaimportowany PDF; pisma i kresek nadal można normalnie edytować.",
+                "The page has the same size, paper colour and grid as in GoodNotes. The background sits under the page like an imported PDF; the writing stays fully editable.",
+            ) else T.t(
                 "Strona ma ten sam rozmiar, kolor papieru i linie co w Notatkach Samsung. Tło leży pod stroną jak zaimportowany PDF; pisma i kresek nadal można normalnie edytować.",
                 "The page has the same size, paper colour and lines as in Samsung Notes. The background sits under the page like an imported PDF; the writing stays fully editable.",
             ),
@@ -395,12 +402,12 @@ private fun SettingsPane(session: SamsungSession, item: SamsungItem, modifier: M
             ),
         ) { session.setMode(item, ImportMode.STANDARD) }
 
-        SectionLabel(T.t("Wygląd", "Appearance"))
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        if (!gn) SectionLabel(T.t("Wygląd", "Appearance"))
+        if (!gn) Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Chip(T.t("Jasny", "Light"), !dark, { session.setDark(item, false) }, icon = Icons.Rounded.LightMode)
             Chip(T.t("Ciemny", "Dark"), dark, { session.setDark(item, true) }, icon = Icons.Rounded.DarkMode)
         }
-        Text(
+        if (!gn) Text(
             T.t(
                 "Domyślnie jak motyw aplikacji. Notatki Samsung są zapisane jasno; „ciemny” odwraca jasność papieru i atramentu tak jak tryb ciemny w Notatkach.",
                 "Follows the app theme by default. Samsung notes are stored light; “dark” inverts paper and ink lightness like dark mode in Samsung Notes.",

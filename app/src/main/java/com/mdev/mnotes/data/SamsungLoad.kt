@@ -1,6 +1,7 @@
 package com.mdev.mnotes.data
 
 import android.content.Context
+import android.net.Uri
 import com.mdev.mnotes.core.samsung.SamsungFormatException
 import com.mdev.mnotes.core.samsung.SamsungPdf
 import com.mdev.mnotes.core.samsung.SdDocument
@@ -21,6 +22,12 @@ object SamsungLoad {
                 SdocxReader.read(ByteArrayInputStream(sdocx))
             } else SdocxReader.read(it)
         }
+    }
+
+    /** Cały PDF do pamięci (do [SamsungPdf.MAX_PDF]); blokuje wątek. */
+    fun readPdf(ctx: Context, uri: Uri): ByteArray {
+        val input = ctx.contentResolver.openInputStream(uri) ?: throw IOException("nie można otworzyć pliku")
+        return input.use { readBounded(it, SamsungPdf.MAX_PDF) }
     }
 
     private fun readBounded(input: java.io.InputStream, max: Long): ByteArray {

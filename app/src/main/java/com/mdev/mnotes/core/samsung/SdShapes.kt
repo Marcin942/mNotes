@@ -106,7 +106,7 @@ internal object SdShapes {
      * Elipsa mNotes (49 punktów, punkt 0 na osi głównej) dopasowana do obrysu: środek i osie z momentów punktów, a
      * półosie z ich największego rzutu. Przyjmowana tylko wtedy, gdy obrys naprawdę jest elipsą; inaczej zostaje kreska.
      */
-    private fun ellipseStroke(all: List<DoubleArray>, width: Float, color: Int): Stroke? {
+    internal fun ellipseStroke(all: List<DoubleArray>, width: Float, color: Int): Stroke? {
         // ostatni punkt zamkniętego obrysu leży na pierwszym; liczony dwa razy przesuwałby środek
         val p = if (all.size > 1 && all.first()[0] == all.last()[0] && all.first()[1] == all.last()[1]) all.dropLast(1) else all
         val n = p.size

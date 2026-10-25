@@ -163,6 +163,7 @@ import androidx.compose.ui.input.key.isShiftPressed
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
+import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -171,6 +172,7 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import com.mdev.mnotes.app.app
+import com.mdev.mnotes.core.model.Element
 import com.mdev.mnotes.core.model.ImageEl
 import com.mdev.mnotes.core.model.ImageFx
 import com.mdev.mnotes.core.model.TextBox
@@ -349,7 +351,7 @@ fun EditorScreen(ed: Editor, tabs: TabsCtl, onExit: () -> Unit, onSettings: () -
                     Box(Modifier.fillMaxSize().imePadding()) {
                         // Pod panelami: otwarty panel zasłania kapsułę, a pierwsze dotknięcie strony go zamyka.
                         if (ed.pipette != null) Box(Modifier.align(Alignment.TopCenter).padding(top = 50.dp).panelEnter()) { PipetteCard(set) }
-                        if (ed.cut != null) Box(Modifier.align(Alignment.TopCenter).padding(top = 50.dp, start = 8.dp, end = 8.dp).panelEnter()) { CutBar(ed) }
+                        if (ed.cut != null) CutBarHost(ed)
                         if (ed.crop != null) CropBarHost(ed)
                         if (set.undoDock != 0) UndoCapsule(ed, set.undoDock, Modifier.align(undoCorner(set.undoDock)).padding(8.dp).padding(start = if (!ed.chrome && set.undoDock == 1) 48.dp else 0.dp))
                         if (ed.chrome) {
@@ -365,7 +367,7 @@ fun EditorScreen(ed: Editor, tabs: TabsCtl, onExit: () -> Unit, onSettings: () -
                                 }
                                 Box(Modifier.align(pa).padding(8.dp).panelEnter()) { ToolPanel(ed, set, p, onColorSets) { panel = null } }
                             }
-                            if (panel == Panel.STYLE) Box(Modifier.align(Alignment.TopEnd).padding(8.dp).panelEnter()) { StylePanel(ed) { panel = null } }
+                            if (panel == Panel.STYLE) StyleHost(ed) { panel = null }
                             if (panel == Panel.PAGES && !dock) Box(Modifier.align(Alignment.CenterEnd).padding(vertical = 8.dp).panelEnter()) { PagesPanel(ed, { panel = null }, ::pickImage) }
                             if (panel == Panel.MORE) Box(Modifier.align(Alignment.TopEnd).padding(8.dp).panelEnter()) { MoreMenu(ed, set, { panel = null }, ::applyLayout, { panel = Panel.STYLE }, { palette = true }, onSettings) }
                         } else {
@@ -1082,18 +1084,15 @@ private fun cropRatioName(r: CropRatio) = when (r) {
 }
 
 /**
- * Pasek przycinania leży przy ramce, a nie na stałe u góry: stoi pod nią, nad nią albo z boku, zależnie od tego, gdzie
- * jest miejsce, i zasłania obraz jak najmniej (jak pasek zaznaczenia). Dotychczasowa strona trzyma się, dopóki
- * pasuje, więc pasek nie skacze przy każdym ruchu ramki.
+ * Pasek przycinania i przecinania leży przy tym, czego dotyczy, a nie na stałe u góry: stoi pod obiektem, nad nim albo z boku,
+ * zależnie od tego, gdzie jest miejsce, i zasłania go jak najmniej (jak pasek zaznaczenia). Dotychczasowa strona trzyma się,
+ * dopóki pasuje, więc pasek nie skacze przy każdym ruchu ramki.
  */
 @Composable
-private fun CropBarHost(ed: Editor) {
-    val c = ed.crop ?: return
-    c.frame; c.place; ed.viewTick
-    val v = ed.view
-    val r = v?.cropScreenRect()
+private fun NearHost(rect: android.graphics.RectF?, content: @Composable () -> Unit) {
     val dens = androidx.compose.ui.platform.LocalDensity.current.density
     val side = remember { arrayOfNulls<CardSide>(1) }
+    val r = rect
     Box(
         Modifier.fillMaxSize().layout { mm, cs ->
             val p = mm.measure(cs.copy(minWidth = 0, minHeight = 0))
@@ -1106,7 +1105,44 @@ private fun CropBarHost(ed: Editor) {
                 p.place(spot.x, spot.y + top)
             }
         },
-    ) { Box(Modifier.panelEnter()) { CropBar(ed) } }
+    ) { Box(Modifier.panelEnter()) { content() } }
+}
+
+@Composable
+private fun CropBarHost(ed: Editor) {
+    val c = ed.crop ?: return
+    c.frame; c.place; ed.viewTick
+    NearHost(ed.view?.cropScreenRect()) { CropBar(ed) }
+}
+
+/**
+ * Panel stylu strony stoi tam, gdzie nie zasłania strony (obok niej, gdy po oddaleniu widoku jest wolne miejsce);
+ * gdy strona wypełnia ekran, zostaje w prawym górnym rogu jak dotąd.
+ */
+@Composable
+private fun StyleHost(ed: Editor, close: () -> Unit) {
+    ed.viewTick
+    val page = ed.view?.pageScreenRect(ed.pageIndex.coerceIn(0, (ed.doc.pages.size - 1).coerceAtLeast(0)))
+    val dens = androidx.compose.ui.platform.LocalDensity.current.density
+    val side = remember { arrayOfNulls<CardSide>(1) }
+    Box(
+        Modifier.fillMaxSize().layout { mm, cs ->
+            val p = mm.measure(cs.copy(minWidth = 0, minHeight = 0))
+            layout(cs.maxWidth, cs.maxHeight) {
+                val spot = page?.let { CardPlacement.free(it.left, it.top, it.right, it.bottom, p.width, p.height, cs.maxWidth, cs.maxHeight, 8 * dens, side[0]) }
+                side[0] = spot?.side
+                if (spot != null) p.place(spot.x, spot.y)
+                else p.place((cs.maxWidth - p.width - 8 * dens).toInt().coerceAtLeast(0), (8 * dens).toInt())
+            }
+        },
+    ) { Box(Modifier.panelEnter()) { StylePanel(ed, close) } }
+}
+
+@Composable
+private fun CutBarHost(ed: Editor) {
+    if (ed.cut == null) return
+    ed.selTick; ed.viewTick
+    NearHost(ed.view?.selScreenRect()) { CutBar(ed) }
 }
 
 /** Zwarty pasek przycinania: prostowanie, proporcje i zatwierdzenie w trzech wierszach (bez opisów, podpowiedzi są w opisach przycisków). */
@@ -1347,78 +1383,110 @@ private fun SelectionBar(ed: Editor, panel: Panel?, toggle: (Panel) -> Unit, edi
     val hasImage = els.any { it is ImageEl }
     val hasColorable = els.any { it !is ImageEl }
     val dens = androidx.compose.ui.platform.LocalDensity.current.density
-    Box(
-        Modifier.fillMaxSize().layout { mm, c ->
-            val p = mm.measure(c.copy(minWidth = 0, minHeight = 0))
-            layout(c.maxWidth, c.maxHeight) {
-                val x = (r.centerX() - p.width / 2f).toInt().coerceIn(0, (c.maxWidth - p.width).coerceAtLeast(0))
-                // przy włączonym skalowaniu/obrocie uchwyt obrotu wisi nad ramką — pasek leży nad nim
-                val above = r.top - p.height - (if (ed.transformMode && !locked) NoteView.ROTATE_OFFSET_DP + 22 else 14f) * dens
-                val y = (if (above > 4) above else r.bottom + 14 * dens).toInt().coerceIn(0, (c.maxHeight - p.height).coerceAtLeast(0))
-                p.place(x, y)
-            }
+    val side = remember(sel) { arrayOfNulls<CardSide>(1) }
+    // Panel dodatkowy (kolor, efekty, wyrównanie) leży obok paska, ale poza zaznaczeniem: zasłonięty obiekt to ten, który zmieniasz.
+    val extra: (@Composable () -> Unit)? = when {
+        panel == Panel.SELCOLOR && hasColorable -> { { SelColorPanel(ed, els) } }
+        panel == Panel.IMAGEFX && hasImage -> { { ImageFxPanel(ed, els.first { it is ImageEl } as ImageEl) } }
+        panel == Panel.ALIGN -> { { AlignCard(ed) } }
+        else -> null
+    }
+    Layout(
+        content = {
+            Box { SelectionButtons(ed, panel, toggle, editText, els, locked, hasImage, hasColorable) }
+            if (extra != null) Box(Modifier.panelEnter()) { extra() }
         },
-    ) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            FloatingCard {
-                Row(Modifier.padding(3.dp), verticalAlignment = Alignment.CenterVertically) {
-                    IconBtn(Icons.Rounded.ContentCut, T.t("Wytnij", "Cut"), { ed.cutSel() }, size = 36.dp, iconSize = 20.dp, shortcut = "Ctrl+X")
-                    IconBtn(Icons.Rounded.ContentCopy, T.t("Kopiuj", "Copy"), { ed.copySel() }, size = 36.dp, iconSize = 20.dp, shortcut = "Ctrl+C")
-                    IconBtn(Icons.Rounded.ContentCopy, T.t("Duplikuj", "Duplicate"), { ed.duplicateSel() }, size = 36.dp, iconSize = 20.dp, shortcut = "Ctrl+D", tint = mint.accentText)
-                    BarSep(false)
-                    // sam obraz nie ma koloru do zmiany: dostaje własny panel efektów zamiast wyboru koloru
-                    if (hasColorable) IconBtn(Icons.Rounded.Palette, T.t("Kolor, grubość i styl linii", "Color, width & line style"), { toggle(Panel.SELCOLOR) }, selected = panel == Panel.SELCOLOR, size = 36.dp, iconSize = 20.dp)
-                    if (hasImage) IconBtn(Icons.Rounded.Tune, T.t("Efekty obrazu", "Image effects"), { toggle(Panel.IMAGEFX) }, selected = panel == Panel.IMAGEFX, size = 36.dp, iconSize = 20.dp)
-                    if (!locked) IconBtn(Icons.Rounded.CropRotate, T.t("Skaluj i obracaj", "Resize & rotate"), { ed.transformMode = !ed.transformMode }, selected = ed.transformMode, size = 36.dp, iconSize = 20.dp)
-                    if (!locked && els.size == 1 && els[0] is ImageEl && !ed.readOnly) IconBtn(Icons.Rounded.Crop, T.t("Przytnij", "Crop"), { ed.startCrop() }, size = 36.dp, iconSize = 20.dp)
-                    if (ed.canFlipSel()) {
-                        IconBtn(Icons.Rounded.Flip, T.t("Odbij w poziomie", "Flip horizontally"), { ed.flipSel(true) }, size = 36.dp, iconSize = 20.dp)
-                        ToolBtn(T.t("Odbij w pionie", "Flip vertically"), { ed.flipSel(false) }, size = 36.dp) { c ->
-                            Icon(Icons.Rounded.Flip, T.t("Odbij w pionie", "Flip vertically"), tint = c, modifier = Modifier.size(20.dp).rotate(90f))
-                        }
-                    }
-                    IconBtn(Icons.Rounded.FlipToFront, T.t("Na wierzch", "Bring to front"), { ed.frontSel() }, size = 36.dp, iconSize = 20.dp)
-                    IconBtn(Icons.Rounded.FlipToBack, T.t("Na spód", "Send to back"), { ed.backSel() }, size = 36.dp, iconSize = 20.dp)
-                    IconBtn(if (locked) Icons.Rounded.LockOpen else Icons.Rounded.Lock, if (locked) T.t("Odblokuj", "Unlock") else T.t("Zablokuj", "Lock"), { ed.lockSel(!locked) }, size = 36.dp, iconSize = 20.dp)
-                    if (els.size > 1) IconBtn(Icons.Rounded.AlignHorizontalLeft, T.t("Wyrównaj", "Align"), { toggle(Panel.ALIGN) }, selected = panel == Panel.ALIGN, size = 36.dp, iconSize = 20.dp)
-                    if (els.size == 1 && els[0] is TextBox) IconBtn(Icons.Rounded.Edit, T.t("Edytuj tekst", "Edit text"), editText, size = 36.dp, iconSize = 20.dp)
-                    if (els.size == 1 && els[0] is TextBox && !locked) {
-                        val auto = (els[0] as TextBox).fit == TextBox.FIT_AUTO
-                        IconBtn(
-                            Icons.Rounded.WidthFull,
-                            if (auto) T.t("Auto-rozmiar włączony: dotknij, by zamrozić szerokość", "Auto-size on: tap to freeze the width")
-                            else T.t("Auto-rozmiar: dopasuj pole do tekstu", "Auto-size: fit the box to its text"),
-                            { ed.toggleTextFit() }, selected = auto, size = 36.dp, iconSize = 20.dp,
-                        )
-                    }
-                    BarSep(false)
-                    IconBtn(Icons.Rounded.Delete, T.t("Usuń", "Delete"), { ed.deleteSel() }, size = 36.dp, iconSize = 20.dp, shortcut = "Del", tint = MaterialTheme.colorScheme.error)
+        modifier = Modifier.fillMaxSize(),
+    ) { ms, c ->
+        val loose = c.copy(minWidth = 0, minHeight = 0)
+        val p = ms[0].measure(loose)
+        layout(c.maxWidth, c.maxHeight) {
+            val x = (r.centerX() - p.width / 2f).toInt().coerceIn(0, (c.maxWidth - p.width).coerceAtLeast(0))
+            // przy włączonym skalowaniu/obrocie uchwyt obrotu wisi nad ramką — pasek leży nad nim
+            val above = r.top - p.height - (if (ed.transformMode && !locked) NoteView.ROTATE_OFFSET_DP + 22 else 14f) * dens
+            val barAbove = above > 4
+            val y = (if (barAbove) above else r.bottom + 14 * dens).toInt().coerceIn(0, (c.maxHeight - p.height).coerceAtLeast(0))
+            p.place(x, y)
+            if (ms.size > 1) {
+                val q = ms[1].measure(loose)
+                // przeszkodą jest zaznaczenie razem z paskiem; panel stoi z tej strony, z której jest pasek, jeśli tam jest miejsce
+                val spot = CardPlacement.place(
+                    minOf(r.left, x.toFloat()), minOf(r.top, y.toFloat()), maxOf(r.right, (x + p.width).toFloat()), maxOf(r.bottom, (y + p.height).toFloat()),
+                    q.width, q.height, c.maxWidth, c.maxHeight, 8 * dens, side[0] ?: if (barAbove) CardSide.ABOVE else CardSide.BELOW,
+                )
+                side[0] = spot.side
+                q.place(spot.x, spot.y)
+            }
+        }
+    }
+}
+
+@Composable
+private fun SelectionButtons(ed: Editor, panel: Panel?, toggle: (Panel) -> Unit, editText: () -> Unit, els: List<Element>, locked: Boolean, hasImage: Boolean, hasColorable: Boolean) {
+    FloatingCard {
+        Row(Modifier.padding(3.dp), verticalAlignment = Alignment.CenterVertically) {
+            IconBtn(Icons.Rounded.ContentCut, T.t("Wytnij", "Cut"), { ed.cutSel() }, size = 36.dp, iconSize = 20.dp, shortcut = "Ctrl+X")
+            IconBtn(Icons.Rounded.ContentCopy, T.t("Kopiuj", "Copy"), { ed.copySel() }, size = 36.dp, iconSize = 20.dp, shortcut = "Ctrl+C")
+            IconBtn(Icons.Rounded.ContentCopy, T.t("Duplikuj", "Duplicate"), { ed.duplicateSel() }, size = 36.dp, iconSize = 20.dp, shortcut = "Ctrl+D", tint = mint.accentText)
+            BarSep(false)
+            // sam obraz nie ma koloru do zmiany: dostaje własny panel efektów zamiast wyboru koloru
+            if (hasColorable) IconBtn(Icons.Rounded.Palette, T.t("Kolor, grubość i styl linii", "Color, width & line style"), { toggle(Panel.SELCOLOR) }, selected = panel == Panel.SELCOLOR, size = 36.dp, iconSize = 20.dp)
+            if (hasImage) IconBtn(Icons.Rounded.Tune, T.t("Efekty obrazu", "Image effects"), { toggle(Panel.IMAGEFX) }, selected = panel == Panel.IMAGEFX, size = 36.dp, iconSize = 20.dp)
+            if (!locked) IconBtn(Icons.Rounded.CropRotate, T.t("Skaluj i obracaj", "Resize & rotate"), { ed.transformMode = !ed.transformMode }, selected = ed.transformMode, size = 36.dp, iconSize = 20.dp)
+            if (!locked && els.size == 1 && els[0] is ImageEl && !ed.readOnly) IconBtn(Icons.Rounded.Crop, T.t("Przytnij", "Crop"), { ed.startCrop() }, size = 36.dp, iconSize = 20.dp)
+            if (ed.canFlipSel()) {
+                IconBtn(Icons.Rounded.Flip, T.t("Odbij w poziomie", "Flip horizontally"), { ed.flipSel(true) }, size = 36.dp, iconSize = 20.dp)
+                ToolBtn(T.t("Odbij w pionie", "Flip vertically"), { ed.flipSel(false) }, size = 36.dp) { c ->
+                    Icon(Icons.Rounded.Flip, T.t("Odbij w pionie", "Flip vertically"), tint = c, modifier = Modifier.size(20.dp).rotate(90f))
                 }
             }
-            if (panel == Panel.SELCOLOR && hasColorable) FloatingCard(Modifier.width(300.dp)) {
-                Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    val colors = els.mapNotNull { colorOf(it) }.map { it and 0xFFFFFF }.distinct()
-                    val first = els.firstOrNull { colorOf(it) != null }
-                    val hasStroke = els.any { it is InkStroke }
-                    SectionLabel(T.t("Kolor", "Color"))
-                    ColorPicker(first?.let { colorOf(it) } ?: 0xFF000000.toInt(), { ed.recolorSel(it) }, mixed = colors.size > 1, recent = ed.kit.sets.filter { !it.hl }.flatMap { it.colors.take(it.visible) }.distinct(), onPipette = { ed.startPipette { c -> ed.recolorSel(c) } })
-                    if (hasStroke) {
-                        val w = (els.firstOrNull { it is InkStroke } as InkStroke).width
-                        SectionLabel(T.t("Grubość", "Width"))
-                        MSlider(w, 0.3f, 24f) { ed.setSelWidth(it) }
-                        SectionLabel(T.t("Styl linii", "Line style"))
-                        LineStyleRow(els.filterIsInstance<InkStroke>().map { it.line }.distinct().singleOrNull()) { ed.setSelLine(it) }
-                    }
-                }
+            IconBtn(Icons.Rounded.FlipToFront, T.t("Na wierzch", "Bring to front"), { ed.frontSel() }, size = 36.dp, iconSize = 20.dp)
+            IconBtn(Icons.Rounded.FlipToBack, T.t("Na spód", "Send to back"), { ed.backSel() }, size = 36.dp, iconSize = 20.dp)
+            IconBtn(if (locked) Icons.Rounded.LockOpen else Icons.Rounded.Lock, if (locked) T.t("Odblokuj", "Unlock") else T.t("Zablokuj", "Lock"), { ed.lockSel(!locked) }, size = 36.dp, iconSize = 20.dp)
+            if (els.size > 1) IconBtn(Icons.Rounded.AlignHorizontalLeft, T.t("Wyrównaj", "Align"), { toggle(Panel.ALIGN) }, selected = panel == Panel.ALIGN, size = 36.dp, iconSize = 20.dp)
+            if (els.size == 1 && els[0] is TextBox) IconBtn(Icons.Rounded.Edit, T.t("Edytuj tekst", "Edit text"), editText, size = 36.dp, iconSize = 20.dp)
+            if (els.size == 1 && els[0] is TextBox && !locked) {
+                val auto = (els[0] as TextBox).fit == TextBox.FIT_AUTO
+                IconBtn(
+                    Icons.Rounded.WidthFull,
+                    if (auto) T.t("Auto-rozmiar włączony: dotknij, by zamrozić szerokość", "Auto-size on: tap to freeze the width")
+                    else T.t("Auto-rozmiar: dopasuj pole do tekstu", "Auto-size: fit the box to its text"),
+                    { ed.toggleTextFit() }, selected = auto, size = 36.dp, iconSize = 20.dp,
+                )
             }
-            if (panel == Panel.IMAGEFX && hasImage) ImageFxPanel(ed, els.first { it is ImageEl } as ImageEl)
-            if (panel == Panel.ALIGN) FloatingCard {
-                Row(Modifier.padding(3.dp)) {
-                    val icons = listOf(Icons.Rounded.AlignHorizontalLeft, Icons.Rounded.AlignHorizontalCenter, Icons.Rounded.AlignHorizontalRight, Icons.Rounded.AlignVerticalTop, Icons.Rounded.AlignVerticalCenter, Icons.Rounded.AlignVerticalBottom)
-                    val names = listOf(T.t("Do lewej", "Left"), T.t("Środek poziomo", "Center H"), T.t("Do prawej", "Right"), T.t("Do góry", "Top"), T.t("Środek pionowo", "Center V"), T.t("Do dołu", "Bottom"))
-                    icons.forEachIndexed { i, ic -> IconBtn(ic, names[i], { ed.alignSel(i) }, size = 36.dp, iconSize = 20.dp) }
-                }
+            BarSep(false)
+            IconBtn(Icons.Rounded.Delete, T.t("Usuń", "Delete"), { ed.deleteSel() }, size = 36.dp, iconSize = 20.dp, shortcut = "Del", tint = MaterialTheme.colorScheme.error)
+        }
+    }
+}
+
+@Composable
+private fun SelColorPanel(ed: Editor, els: List<Element>) {
+    FloatingCard(Modifier.width(320.dp)) {
+        Column(Modifier.heightIn(max = 460.dp).verticalScroll(rememberScrollState()).padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            val colors = els.mapNotNull { colorOf(it) }.map { it and 0xFFFFFF }.distinct()
+            val first = els.firstOrNull { colorOf(it) != null }
+            val hasStroke = els.any { it is InkStroke }
+            SectionLabel(T.t("Kolor", "Color"))
+            ColorPicker(first?.let { colorOf(it) } ?: 0xFF000000.toInt(), { ed.recolorSel(it) }, mixed = colors.size > 1, recent = ed.kit.sets.filter { !it.hl }.flatMap { it.colors.take(it.visible) }.distinct(), onPipette = { ed.startPipette { c -> ed.recolorSel(c) } })
+            if (hasStroke) {
+                val w = (els.firstOrNull { it is InkStroke } as InkStroke).width
+                SectionLabel(T.t("Grubość", "Width"))
+                MSlider(w, 0.3f, 24f) { ed.setSelWidth(it) }
+                SectionLabel(T.t("Styl linii", "Line style"))
+                LineStyleRow(els.filterIsInstance<InkStroke>().map { it.line }.distinct().singleOrNull()) { ed.setSelLine(it) }
             }
+        }
+    }
+}
+
+@Composable
+private fun AlignCard(ed: Editor) {
+    FloatingCard {
+        Row(Modifier.padding(3.dp)) {
+            val icons = listOf(Icons.Rounded.AlignHorizontalLeft, Icons.Rounded.AlignHorizontalCenter, Icons.Rounded.AlignHorizontalRight, Icons.Rounded.AlignVerticalTop, Icons.Rounded.AlignVerticalCenter, Icons.Rounded.AlignVerticalBottom)
+            val names = listOf(T.t("Do lewej", "Left"), T.t("Środek poziomo", "Center H"), T.t("Do prawej", "Right"), T.t("Do góry", "Top"), T.t("Środek pionowo", "Center V"), T.t("Do dołu", "Bottom"))
+            icons.forEachIndexed { i, ic -> IconBtn(ic, names[i], { ed.alignSel(i) }, size = 36.dp, iconSize = 20.dp) }
         }
     }
 }
@@ -1427,7 +1495,7 @@ private fun SelectionBar(ed: Editor, panel: Panel?, toggle: (Panel) -> Unit, edi
 private fun ImageFxPanel(ed: Editor, img: ImageEl) {
     val fx = img.fx
     val pct: (Float) -> String = { " ${(it * 100).roundToInt()}%" }
-    FloatingCard(Modifier.width(300.dp)) {
+    FloatingCard(Modifier.width(320.dp)) {
         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
             SectionLabel(T.t("Efekt", "Effect"))
             FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {

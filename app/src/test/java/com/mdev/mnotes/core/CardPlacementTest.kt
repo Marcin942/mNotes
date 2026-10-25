@@ -46,4 +46,13 @@ class CardPlacementTest {
         assertTrue(got <= cover)
         assertTrue(s.x >= 0 && s.y >= 0 && s.x + 400 <= 1200 && s.y + 160 <= 900)
     }
+
+    @Test fun freeReturnsASpotOnlyWhenNothingIsCovered() {
+        val s = CardPlacement.free(300f, 200f, 700f, 500f, 400, 160, 1200, 900, 12f, null)
+        assertTrue(s != null && !overlaps(s.x, s.y, 400, 160, 300f, 200f, 700f, 500f))
+    }
+
+    @Test fun freeReturnsNullWhenTheObjectFillsTheView() {
+        assertEquals(null, CardPlacement.free(0f, 0f, 1200f, 900f, 400, 160, 1200, 900, 12f, null))
+    }
 }

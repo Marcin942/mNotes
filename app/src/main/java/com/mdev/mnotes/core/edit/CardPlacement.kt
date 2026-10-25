@@ -32,11 +32,7 @@ object CardPlacement {
                 CardSide.TOP_LEFT -> CardSpot(it, 0, 0)
             }
         }
-        fun covered(s: CardSpot): Float {
-            val ow = min(s.x + w.toFloat(), r) - max(s.x.toFloat(), l)
-            val oh = min(s.y + h.toFloat(), b) - max(s.y.toFloat(), t)
-            return if (ow > 0f && oh > 0f) ow * oh else 0f
-        }
+        fun covered(s: CardSpot) = covered(s, l, t, r, b, w, h)
         // pod, nad, z prawej, z lewej: pierwsze, które nie zasłania wcale, mieści się w widoku bez przesuwania i dotrzymuje odstępu
         val free = spots.take(4).filter { covered(it) == 0f && gapKept(it, l, t, r, b, w, h, gap) }
         val keep = prev?.let { p -> spots.first { it.side == p } }
@@ -45,6 +41,18 @@ object CardPlacement {
         val best = spots.minByOrNull { covered(it) }!!
         if (keep != null && covered(keep) <= covered(best) + 0.02f * w * h) return keep
         return best
+    }
+
+    /** Jak [place], ale tylko wtedy, gdy karta nie zasłania obrazu wcale; inaczej null (wołający zostawia wtedy kartę tam, gdzie była). */
+    fun free(l: Float, t: Float, r: Float, b: Float, w: Int, h: Int, vw: Int, vh: Int, gap: Float, prev: CardSide?): CardSpot? {
+        val s = place(l, t, r, b, w, h, vw, vh, gap, prev)
+        return s.takeIf { covered(it, l, t, r, b, w, h) == 0f }
+    }
+
+    private fun covered(s: CardSpot, l: Float, t: Float, r: Float, b: Float, w: Int, h: Int): Float {
+        val ow = min(s.x + w.toFloat(), r) - max(s.x.toFloat(), l)
+        val oh = min(s.y + h.toFloat(), b) - max(s.y.toFloat(), t)
+        return if (ow > 0f && oh > 0f) ow * oh else 0f
     }
 
     /** Czy karta leży w odstępie od obrazu, a nie tylko go nie dotyka (po przesunięciu do widoku mogłaby się zbliżyć). */

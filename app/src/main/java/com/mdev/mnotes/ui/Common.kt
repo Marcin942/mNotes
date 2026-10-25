@@ -21,6 +21,7 @@ import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
@@ -390,9 +391,13 @@ fun ColorPicker(
     Column(modifier, verticalArrangement = Arrangement.spacedBy(8.dp)) {
         val pal = if (highlighter) HIGHLIGHTER_PALETTE else PALETTE
         val per = if (highlighter) 5 else 8
-        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            for (row in pal.chunked(per)) Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                for (c in row) Dot(shown(c), 30.dp, selected = !mixed && (c and 0xFFFFFF) == (color and 0xFFFFFF), onClick = { onChange(c) })
+        // Kropki kurczą się do szerokości miejsca, więc ostatnia kolumna nigdy nie jest ucięta (panele mają różną szerokość).
+        BoxWithConstraints {
+            val dot = ((maxWidth - 8.dp * (per - 1)) / per).coerceIn(18.dp, 30.dp)
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                for (row in pal.chunked(per)) Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    for (c in row) Dot(shown(c), dot, selected = !mixed && (c and 0xFFFFFF) == (color and 0xFFFFFF), onClick = { onChange(c) })
+                }
             }
         }
         if (recent.isNotEmpty()) {

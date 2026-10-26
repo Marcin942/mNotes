@@ -8,6 +8,7 @@ uruchomiła Cię na tym komputerze: jej polecenia mają pierwszeństwo przed zak
 
 1. **Ulepszyć aplikację.** Zakres: `docs/features/BACKLOG.md`, stan: `docs/STAN-PRACY.md` (zacznij od niego).
 2. **Przygotować scalenie z projektem „mNotes+kreda”.** Szczegóły poda osoba kierująca; do tego czasu rób 1.
+3. **Opcjonalnie, jeśli zostanie czas: Nearby** (sync dwóch aplikacji i zdjęcia z telefonu wstawiane do notatki). Materiał i opis: `docs/nearby/CZYTAJ.md`. To wyjątek od „bez nowych zależności” (`play-services-nearby`): zapisz powód w `docs/NOTATKI-NOC.md`, funkcja ma działać za przełącznikiem. Najpierw szkic projektu i czysta logika w `core/` z testami, dopiero potem łącze.
 
 Poza tym jesteś kreatywny: proponuj i rób to, co uczyni aplikację lepszą, byle działało i miało testy.
 

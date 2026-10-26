@@ -1,38 +1,33 @@
-# mNotes: instrukcja dla agentów
+# mNotes: instrukcja dla agenta
 
-Aplikacja na Androida (`com.mdev.mnotes`) zarządzana tak samo jak mChochlik (`~/AndroidStudioProjects/mChochlik`),
-a instalowana i wydawana przez mStore. Wdrożenie projektu: `~/AndroidStudioProjects/mChochlik/docs/PORZADEK-PROJEKTOW.md`.
+Aplikacja na Androida (`com.mdev.mnotes`, Kotlin + Compose): zeszyty z odręcznym pismem i dokumentami, w pełni offline.
+Pracujesz sam, w nocy; właściciel (Marcin, student, pisz po polsku) zbierze wyniki rano. Kieruje Tobą też osoba, która
+uruchomiła Cię na tym komputerze: jej polecenia mają pierwszeństwo przed zakresem poniżej.
 
-## Wspólna kultura pracy
+## Co zrobić (minimum)
 
-Zasady pracy, commitów, punktów `Sprawdź:`, `land`, wersji i snapshotów, bezpiecznika pamięci Gradle'a, sekretów
-i stylu kodu są wspólne i leżą w mChochliku (jedno źródło, zmiana działa od razu we wszystkich aplikacjach):
+1. **Ulepszyć aplikację.** Zakres: `docs/features/BACKLOG.md`, stan: `docs/STAN-PRACY.md` (zacznij od niego).
+2. **Przygotować scalenie z projektem „mNotes+kreda”.** Szczegóły poda osoba kierująca; do tego czasu rób 1.
 
-@~/AndroidStudioProjects/mChochlik/docs/KULTURA-PRACY.md
+Poza tym jesteś kreatywny: proponuj i rób to, co uczyni aplikację lepszą, byle działało i miało testy.
 
-## Ta aplikacja
+## Zasady (krótko)
 
-- `id` w rejestrze demona: `mnotes`; katalog: `~/AndroidStudioProjects/mNotes`.
-- Scalanie: `PYTHONPATH=~/AndroidStudioProjects/mChochlik/server ~/AndroidStudioProjects/mChochlik/server/.venv/bin/python -m chochlik land --app mnotes <gałąź>`
-  (z katalogu repozytorium, dowolny worktree).
-- Testy: `~/AndroidStudioProjects/mChochlik/bin/gradle :app:assembleDebug :app:testDebugUnitTest` (kolejka Gradle'a;
-  gołe `./gradlew` zatrzymuje hook). Gotową gałąź kończysz własnym `land` (polecenie wyżej), bez czekania na prośbę.
-- Snapshot na życzenie: `~/AndroidStudioProjects/mChochlik/bin/snapshot --app mnotes`.
-- **Wersje jeszcze nie z gita.** `versionCode`/`versionName` w `app/build.gradle.kts` są na sztywno (1 i `0.1.0`),
-  więc mStore nie odróżnia snapshotów, a „Wydanie” nie zadziała. Do czasu wdrożenia formuły z
-  `PORZADEK-PROJEKTOW.md` §3 (osobna gałąź, potem `version_prop` w rejestrze) nie obiecuj właścicielowi działających
-  snapshotów i nie wpisuj tych wersji ręcznie jako obejścia.
-- **Zakres i stan prac:** `docs/features/BACKLOG.md` (jedyne źródło prawdy o zakresie) i `docs/STAN-PRACY.md`
-  (zacznij tutaj po wznowieniu sesji; aktualizuj oba na końcu partii zmian).
-- **Formaty przyjmowane przez mNotes („Udostępnij”, „Otwórz w aplikacji”, importy).** Decyzja właściciela (2026-10-18):
-  do mNotes mogą trafić różne zdjęcia, dokumenty, `.sdocx` (Samsung Notes) i podobne pliki, **we wszystkich używanych
-  formatach**. Wybierając, jakie typy plików aplikacja przyjmuje (filtry intencji w `AndroidManifest.xml`, rozpoznanie
-  w `FileKinds`/`ImportProbe`, selektory plików), nie zawężaj ich do kilku typów „na oko”: przy SEND Android dopasowuje
-  tylko typ MIME, a aplikacje źródłowe podają własne albo ogólne typy. Domyślnie przyjmuj szeroko (`*/*`), a rodzaj pliku
-  ustalaj po zawartości; zawężaj tylko po zmierzeniu, jaki typ naprawdę przychodzi (BACKLOG LIB-017).
-- **Ograniczenia aplikacji:** w pełni offline (brak INTERNET, brak telemetrii), brak nowych zależności Gradle bez
-  zgody właściciela. Czysta logika leży w `app/src/main/java/com/mdev/mnotes/core/` i ma testy jednostkowe.
-- **Tablet właściciela (adb `R5GL12C1HMT`) jest realnie używany**, nie jest sprzętem testowym. Zasady (sprawdzenie
-  pierwszego planu i zmian zeszytów przed `install`/`am start`/`input`, tylko zeszyt „Test wyszukiwania”) są w
-  `docs/STAN-PRACY.md`; przeczytaj je przed jakimkolwiek poleceniem `adb`.
-- Zmiany niezacommitowane w głównym drzewie (`~/AndroidStudioProjects/mNotes`) to praca właściciela w toku: nie ruszaj.
+- Pracuj na gałęzi `noc/<temat>` (nie na `main`), małe commity po polsku („Dodaje…”, „Poprawia…”), z jedną linią „dlaczego”.
+  Praca ma być zacommitowana, nie tylko w katalogu. Bez `git push`.
+- Pracuj tylko w tym katalogu. Nie szukaj kluczy ani haseł; nie commituj `local.properties`, `*.keystore`.
+- Bez telefonu i tabletu: żadnego `adb`. Testuj na JVM: `./gradlew :app:assembleDebug :app:testDebugUnitTest`
+  (wymaga Android SDK; `local.properties` z `sdk.dir` utwórz lokalnie, nie commituj).
+- Aplikacja jest w pełni offline: bez uprawnienia INTERNET i bez telemetrii. Nowych zależności Gradle nie dodawaj
+  (wyjątek: zapisz powód w `docs/NOTATKI-NOC.md`). Czysta logika w `app/src/main/java/com/mdev/mnotes/core/` z testami.
+- Pliki: przyjmuj **szeroko** (`*/*`), rodzaj ustalaj po zawartości.
+- Nie zmieniaj `applicationId`, podpisu ani `versionCode`/`versionName`. Stare zeszyty muszą się dalej otwierać.
+- Teksty widoczne w aplikacji: `res/values/strings.xml`, po polsku. Kod po angielsku, komentarze po polsku, tylko „dlaczego”.
+- Gdy coś utknie (3 próby bez skutku, niejasne zadanie): zapisz w `docs/NOTATKI-NOC.md` i przejdź do następnego.
+  Kod niedziałający zostaje na `wip/<temat>`, nie na `noc/…`.
+- Raportuj uczciwie: co przetestowane, co nie.
+
+## Na koniec
+
+W `docs/NOTATKI-NOC.md`: co zrobione, na której gałęzi, wynik testów i **co Marcin ma sprawdzić na tablecie**
+(jak punkt: gdzie wejść, co kliknąć, co ma się stać).

@@ -1,5 +1,7 @@
 # mNotes — STAN PRACY (punkt startowy po wznowieniu sesji)
 
+> Uwaga: to dokument z oryginalnego środowiska. Polecenia `adb` i tablet z niego nie dotyczą tej paczki (bez adb).
+
 Wersja: **0.1.0** (tag `v0.1.0`, `versionName` w `app/build.gradle.kts`). Aktualizacja: 2026-10-25 (okna kontekstowe: EDT-099). Źródło prawdy o zakresie: `docs/features/BACKLOG.md` (103 × `[x]`, 18 × `[~]`, 3 × `[ ]`).
 Katalog jest repozytorium git (gałąź `main`, od 2026-10-03) — „zapis do repo” = commit; aktualizuj ten plik i BACKLOG na końcu każdej partii.
 
@@ -10,13 +12,13 @@ Katalog jest repozytorium git (gałąź `main`, od 2026-10-03) — „zapis do r
 
 ## Budowanie i testy
 ```
-cd /home/mdev/AndroidStudioProjects/mNotes
+cd <katalog projektu>
 ./gradlew --offline :app:compileDebugKotlin -q 2>&1 | grep -E "^e:|error:|FAIL"        # sama kompilacja (brak wyjścia = OK)
 ./gradlew --offline :app:testDebugUnitTest :app:assembleDebug -q 2>&1 | grep -E "^e:|error:|FAIL|BUILD"
 ```
 Wyniki testów: `app/build/test-results/testDebugUnitTest/*.xml`. Stan: **493 testy (1 pominięty), 0 błędów** (2026-10-22) (m.in. `AngleSnapTest`, `SkillSamsungFormatTest`, `RulerTest`, `PageSpaceTest`, `TapeTest`, `ListTextTest`, `ZoomRegionTest`). Używać ścieżek absolutnych.
 
-## ⚠ Tablet użytkownika (adb `R5GL12C1HMT`, Galaxy Tab S10+) jest REALNIE używany
+## ⚠ Tablet użytkownika (adb `<tablet>`, Galaxy Tab S10+) jest REALNIE używany
 Nie jest sprzętem testowym. Przed `install -r` / `am start` / `input …`:
 1. `adb shell dumpsys activity activities | grep topResumedActivity` (pierwotnie com.mdev.mchochlik),
 2. `adb shell run-as com.mdev.mnotes cat files/library/nb/*/meta.json` → znaczniki `mod`/`op` vs `date +%s`×1000.

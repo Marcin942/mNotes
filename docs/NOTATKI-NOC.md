@@ -229,6 +229,41 @@ Na starcie (`noc/wszystko` @ `471ed08`): lab 696 testów, 0 porażek.
     lokalizację. Test: lab 719, core 673, 0 porażek, oba APK. **Tablet + telefon:** sparuj (nowa wersja na obu), te same
     cyfry; wyślij 3 zdjęcia jedno po drugim przez „Następne zdjęcie” → trzy obrazy schodkami.
 
+### FAZA 2b (uwagi Marcina z PDF, pierwszeństwo)
+
+- **2b-B1 Nearby od nowa** (`96f7796` projekt, `fe5acff`, `9387024`, `3d9ccd1`). Najpierw `docs/NEARBY-PRZEBUDOWA.md`
+  (diagnoza z kodu i ze stałych odczytanych z jara 19.3.0, projekt, kolejność, jak sprawdzić). **Najważniejsze przyczyny
+  „nie działa”:** (1) okno parowania z Ustawień startowało z rolą „telefon” **na obu** urządzeniach, więc oba szukały i
+  nikt się nie ogłaszał; (2) kod 8025 (wyłączona *usługa* lokalizacji) był pokazywany jako „Nearby nie wystartowało…
+  Usługi Google Play?” i ponawiany w kółko; (3) przybliżona lokalizacja nie wystarcza (notatka z działającego mChochlika),
+  a B2-9 ją przepuszczał — wycofane; (4) brak limitów czasu i postępu, zdjęcie w 100+ porcjach po 30 KB, choć limit
+  BYTES to 1 047 552 B.
+  - `core/nearby/LinkMachine` (+ `LinkTransport`): cała logika łącza z testami na JVM (`FakeAir`: dwa końce w jednym
+    teście, gubienie ramek, zerwanie): role z czynności (odbiór = tablet się ogłasza, wysyłanie = telefon szuka; w
+    parowaniu domyślnie z rozmiaru ekranu ≥ 600 dp, zmiana jednym stuknięciem), lista znalezionych w parowaniu (nazwa
+    punktu `mnp|<nazwa urządzenia>`, jedyne znalezione wybiera się samo po 1 s), parowanie z zobowiązaniem (B2-9),
+    `hello` przed danymi, limity: szukanie 30 s → lista „co sprawdzić”, łączenie 20 s i zabezpieczanie 10 s → od nowa,
+    błędy ustawień/uprawnień bez pętli ponowień (`LinkErrors.explain` — zdanie „co zrobić” dla każdego kodu), inne
+    ponowienie po 3 s, dziennik 20 zdarzeń. Zdjęcie: `PhotoSender`/`PhotoReceiver` — części 256 KB, okno 2, potwierdzenie
+    każdej, ponowienie po 15 s (4 próby), wznowienie po zerwaniu od pierwszej niepotwierdzonej, SHA-256 całości,
+    bez podwójnego wstawienia. Porcja `LinkChunks` 900 000 B (część = jedna ramka).
+  - Lab: `NearbyTransport` (cienki, 1:1 `ConnectionsClient`), jedno okno `PhoneLinkDialog` (Połącz / Zdjęcie z telefonu /
+    Wyślij zdjęcie) i `DiagnosticsDialog`. **Wygląd:** `MDialog`; u góry ikona stanu (Bluetooth, szukanie, kłódka, ✓,
+    ⚠) w kolorze akcentu i zdanie stanu w `titleMedium`; pod nim jedna rzecz: przyciski z nazwami znalezionych tabletów,
+    sześć cyfr `displayMedium` w `accentText`, pasek postępu w kolorze akcentu („Wysyłam zdjęcie · część 2 z 3 · 64 %”),
+    albo lista „co sprawdzić”; zdanie „To urządzenie: tablet (odbiera) · zmień” w parowaniu; na dole „Diagnostyka”.
+    Przed pierwszą prośbą systemową ekran „Łącze potrzebuje zgód Androida” z jednym zdaniem na zgodę, po odmowie
+    „Ustawienia aplikacji”. Diagnostyka: ✓/✗ dla każdej zgody, Bluetooth, Wi‑Fi, usługi lokalizacji, Usług Google Play,
+    wersja Androida, ostatnie zdarzenia z kodami, „Kopiuj raport”. Bez pary „Zdjęcie z telefonu”/„Wyślij” najpierw paruje
+    w tym samym oknie. Ustawienia → Laboratorium: „Połącz telefon z tabletem”, „Wyślij zdjęcie…”, „Diagnostyka łącza”.
+  - Test: 41 testów `core/nearby` (w tym 9 maszyny), lab 739, core 693, 0 porażek, oba APK. **Nie zrobione jeszcze:**
+    ekran synchronizacji zeszytów (ostatnia część 2b-B1) — po 2b-B2 i 2b-B3, bo wymaga warstwy danych zeszytu, a kreda ma
+    priorytet; wysyłanie w tle po zamknięciu okna (okno musi zostać otwarte).
+  - **Nauka:** zdjęcie tablicy z telefonu w notatce na tablecie, bez kabla i bez sieci.
+  - **Tablet + telefon (oba `labDebug` z tej gałęzi):** `docs/NEARBY-PRZEBUDOWA.md` §5 (parowanie z rolami ustawionymi
+    samymi, lokalizacja wyłączona → zdanie „Włącz lokalizację…”, 3 zdjęcia z postępem, Bluetooth wyłączony w połowie →
+    wznowienie, Diagnostyka → „Kopiuj raport” i wklej Marcinowi, jeśli coś nie działa).
+
 ## Faza 2 — agent A (od 27.10, lista A2-* w `docs-noc/PLAN-NOCY.md`)
 
 Każdy punkt na własnej gałęzi `noc/f2-<temat>` od `noc/wszystko`, po zamknięciu scalony do `noc/wszystko`.

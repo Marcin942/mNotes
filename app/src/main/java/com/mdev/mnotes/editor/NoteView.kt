@@ -4,6 +4,8 @@ import android.animation.ValueAnimator
 import android.annotation.SuppressLint
 import android.content.Context
 import android.graphics.Canvas
+import android.graphics.ColorMatrix
+import android.graphics.ColorMatrixColorFilter
 import android.graphics.DashPathEffect
 import android.graphics.Matrix
 import android.graphics.Paint
@@ -37,6 +39,7 @@ import com.mdev.mnotes.core.layout.PageOverflow
 import com.mdev.mnotes.core.layout.PageShift
 import com.mdev.mnotes.core.layout.ZoomRegion
 import com.mdev.mnotes.core.model.BoxElement
+import com.mdev.mnotes.core.model.ColorInvert
 import com.mdev.mnotes.core.model.DocEdit
 import com.mdev.mnotes.core.model.Element
 import com.mdev.mnotes.core.model.TapeEl
@@ -578,7 +581,7 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
         val page = doc.pages[i]; val spec = page.spec; val r = layout.rect(i)
         val o = 2f * dp / zoom
         c.drawRect(r.l - 0.5f * o, r.t, r.r + 0.5f * o, r.b + o, shadowPaint)
-        c.save()
+        val sc = c.save()
         // Po ustaniu zoomu kafelki są w skali 1:1 — origo strony przycinamy do piksela, żeby nic nie było rozmyte filtrem.
         if (cache.pixelExact) {
             val sx = tx + r.l * zoom; val sy = ty + r.t * zoom
@@ -588,21 +591,33 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
         c.clipRect(0f, 0f, spec.w, spec.h)
         val vis = Bounds(vb.l - r.l, vb.t - r.t, vb.r - r.l, vb.b - r.t)
         val req = Bounds(rvb.l - r.l, rvb.t - r.t, rvb.r - r.l, rvb.b - r.t)
+        // F11: odwrócone kolory to filtr na widocznej części strony (kafelki zostają w oryginale, więc przełączenie jest natychmiastowe).
+        if (spec.inverted) invertLayer(c, spec, vis)
         if (!cache.draw(c, page, vis, req, r.l, r.t, zoom)) {
             renderer.drawPaper(c, spec, zoom, null)
             val content = page.content
             if (content != null) renderer.drawElements(c, doc.id, cache.visible(page.id, content), 0, vis, zoom, false, spec.darkPaper)
         }
-        c.restore()
+        c.restoreToCount(sc)
         c.drawRect(r.l, r.t, r.r, r.b, borderPaint)
     }
 
+    private val invertPaint = Paint().apply { colorFilter = ColorMatrixColorFilter(ColorMatrix(ColorInvert.MATRIX)) }
+
+    /** Warstwa z odwróconymi kolorami na widocznej części strony [vis] (w pt strony); zamyka ją restoreToCount wołającego. */
+    private fun invertLayer(c: Canvas, spec: com.mdev.mnotes.core.model.PageSpec, vis: Bounds) {
+        c.saveLayer(max(0f, vis.l), max(0f, vis.t), min(spec.w, vis.r), min(spec.h, vis.b), invertPaint)
+    }
+
     private fun drawLive(c: Canvas) {
+        val vb = Bounds(docX(0f), docY(0f), docX(width.toFloat()), docY(height.toFloat()))
         if (liveActive && livePage in 0 until layout.count) {
             val spec = doc.pages[livePage].spec
-            c.save()
+            val s1 = c.save()
             c.translate(layout.left(livePage), layout.top(livePage))
             c.clipRect(0f, 0f, spec.w, spec.h)
+            // Na odwróconej stronie kreska w trakcie rysowania wygląda tak samo jak po zatwierdzeniu.
+            if (spec.inverted) invertLayer(c, spec, vb.offset(-layout.left(livePage), -layout.top(livePage)))
             if (shapeSnapped) renderer.drawStrokeData(c, builder.penKind, builder.penColor, builder.width, shapePts, shapePts.size / 3, zoom, spec.darkPaper, shapePoly, builder.line, true)
             else {
                 val n = builder.count
@@ -622,19 +637,20 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
                     renderer.drawStrokeData(c, builder.penKind, builder.penColor, builder.width, scratch, total, zoom, spec.darkPaper, line = builder.line)
                 } else renderer.drawStrokeData(c, builder.penKind, builder.penColor, builder.width, builder.pts, total, zoom, spec.darkPaper, line = builder.line)
             }
-            c.restore()
+            c.restoreToCount(s1)
         }
         if (lLifting && lPage in 0 until layout.count) {
             val tgt = dropPage()
             val spec = doc.pages[tgt].spec
-            c.save()
+            val s2 = c.save()
             c.translate(layout.left(tgt), layout.top(tgt))
             c.clipRect(0f, 0f, spec.w, spec.h)
+            if (spec.inverted) invertLayer(c, spec, vb.offset(-layout.left(tgt), -layout.top(tgt)))
             c.translate(layout.left(lPage) - layout.left(tgt), layout.top(lPage) - layout.top(tgt))
             c.concat(matrixOf(lM))
             val z = zoom * lM.scaleFactor
             for (el in lEls) renderer.drawElement(c, doc.id, el, z, false, spec.darkPaper)
-            c.restore()
+            c.restoreToCount(s2)
             lMShown = lM
         }
         drawGhost(c)

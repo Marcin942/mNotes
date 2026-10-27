@@ -60,6 +60,14 @@ data class PageSpec(
     val marginLine: Boolean get() = opts and OPT_MARGIN != 0
 
     /**
+     * Strona wyświetlana w odwróconych kolorach (F11, ciemny tryb dokumentu, np. PDF czytany wieczorem). To sposób
+     * wyświetlania: eksport i druk zostają w oryginale. Zapis w istniejącym polu `o`, więc stara wersja go pominie.
+     */
+    val inverted: Boolean get() = opts and OPT_INVERT != 0
+
+    fun withInverted(on: Boolean) = copy(opts = if (on) opts or OPT_INVERT else opts and OPT_INVERT.inv())
+
+    /**
      * Ciemny papier — zakreślacz działa na nim jak „screen”, nie „multiply”. Dotyczy też strony z tłem PDF, bo strona
      * zaimportowana z Samsung Notes niesie wzór tła w PDF-ie, a kolor papieru w [paper]. Zwykłe importowane PDF-y mają
      * papier biały, więc dla nich nic się nie zmienia.
@@ -99,6 +107,7 @@ data class PageSpec(
 
     companion object {
         const val OPT_MARGIN = 1
+        const val OPT_INVERT = 2
         const val MIN_SIZE = 72f
         const val MAX_SIZE = 8000f
 

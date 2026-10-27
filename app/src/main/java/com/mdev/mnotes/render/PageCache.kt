@@ -11,6 +11,7 @@ import com.mdev.mnotes.core.cache.Coalescer
 import com.mdev.mnotes.core.geom.Bounds
 import com.mdev.mnotes.core.layout.RenderProfile
 import com.mdev.mnotes.core.layout.TileGrid
+import com.mdev.mnotes.core.model.ColorInvert
 import com.mdev.mnotes.core.model.ElementsEdit
 import com.mdev.mnotes.core.model.PageContent
 import com.mdev.mnotes.core.model.PageSpec
@@ -721,7 +722,12 @@ class Thumbs(private val repo: Repository, assets: Assets, private val pdf: PdfP
         c.scale(sc, h / spec.h)
         renderer.drawPaper(c, spec, sc, bg)
         renderer.drawElements(c, nb, content, 0, null, sc, true, spec.darkPaper)
-        return bmp
+        if (!spec.inverted) return bmp
+        // F11: miniatura (i okładka z pierwszej strony) w odwróconych kolorach, jak strona w edytorze.
+        val inv = Bitmap.createBitmap(wPx, h, Bitmap.Config.ARGB_8888)
+        Canvas(inv).drawBitmap(bmp, 0f, 0f, Paint().apply { colorFilter = android.graphics.ColorMatrixColorFilter(android.graphics.ColorMatrix(ColorInvert.MATRIX)) })
+        bmp.recycle()
+        return inv
     }
 
     /** Okładka: miniatura pierwszej strony z pliku lub świeżo wyrenderowana (i zapisana). */

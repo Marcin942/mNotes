@@ -1769,6 +1769,11 @@ private fun StylePanel(ed: Editor, close: () -> Unit) {
                 IconBtn(Icons.Rounded.Close, T.t("Zamknij", "Close"), close, size = 32.dp, iconSize = 18.dp)
             }
             ToggleRow(T.t("Zastosuj do całego zeszytu", "Apply to whole notebook"), all) { all = it }
+            // F11: ciemny tryb dokumentu także dla stron PDF (w przeciwieństwie do wzoru i papieru).
+            ToggleRow(T.t("Odwróć kolory (ciemny tryb)", "Invert colours (dark mode)"), spec.inverted) { on ->
+                if (all) ed.restyleAll { it.withInverted(on) } else ed.setSpec(idx, spec.withInverted(on))
+            }
+            if (spec.inverted) Text(T.t("Jasność odwrócona, odcienie zostają. Tylko na ekranie: eksport i druk są w oryginale.", "Brightness inverted, hues kept. Screen only: export and print stay original."), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             if (isPdf) Text(T.t("Strona PDF — wzór i papier pochodzą z dokumentu.", "PDF page — template and paper come from the document."), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             else {
                 SectionLabel(T.t("Wzór", "Template"))

@@ -24,6 +24,18 @@ object GeomMath {
         return distSq(px, py, ax + t * dx, ay + t * dy)
     }
 
+    /** Kwadrat najmniejszej odległości dwóch odcinków (0, gdy się przecinają). */
+    fun distSqSegmentSegment(
+        ax: Float, ay: Float, bx: Float, by: Float,
+        cx: Float, cy: Float, dx: Float, dy: Float,
+    ): Float {
+        if (segmentsIntersect(ax, ay, bx, by, cx, cy, dx, dy)) return 0f
+        return min(
+            min(distSqPointSegment(ax, ay, cx, cy, dx, dy), distSqPointSegment(bx, by, cx, cy, dx, dy)),
+            min(distSqPointSegment(cx, cy, ax, ay, bx, by), distSqPointSegment(dx, dy, ax, ay, bx, by)),
+        )
+    }
+
     /** Reguła parzystości; [poly] to pary x,y, [n] liczba wierzchołków. */
     fun pointInPolygon(x: Float, y: Float, poly: FloatArray, n: Int): Boolean {
         var inside = false

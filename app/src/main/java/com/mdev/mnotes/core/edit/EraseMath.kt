@@ -10,23 +10,36 @@ import com.mdev.mnotes.core.model.Stroke
 import com.mdev.mnotes.core.pen.LineStyle
 import com.mdev.mnotes.core.pen.StrokeOutline
 import kotlin.math.abs
+import kotlin.math.ceil
 import kotlin.math.hypot
 import kotlin.math.max
+import kotlin.math.min
 
 /** Matematyka gumki i zaznaczania (lasso): czysta, bez Androida. */
 object EraseMath {
 
     /** Czy okrąg (cx, cy, r) dotyka kreski (z uwzględnieniem jej grubości). */
-    fun hitsStroke(s: Stroke, cx: Float, cy: Float, r: Float): Boolean {
-        if (!s.bounds.inflate(r).contains(cx, cy)) return false
+    fun hitsStroke(s: Stroke, cx: Float, cy: Float, r: Float): Boolean = hitsStrokeSwept(s, cx, cy, cx, cy, r)
+
+    /**
+     * Czy „kapsuła” — okrąg o promieniu [r] przesunięty od (ax, ay) do (bx, by) — dotyka kreski. Gumka liczy tak cały
+     * ruch między dwoma zdarzeniami naraz, zamiast dziesiątek kół co ułamek promienia (B1: zacinanie przy mazaniu).
+     */
+    fun hitsStrokeSwept(s: Stroke, ax: Float, ay: Float, bx: Float, by: Float, r: Float): Boolean {
+        val qx0 = min(ax, bx); val qy0 = min(ay, by); val qx1 = max(ax, bx); val qy1 = max(ay, by)
+        if (!s.bounds.inflate(r).intersects(qx0, qy0, qx1, qy1)) return false
         val p = s.pts
         val n = s.count
         val half = s.width * 0.5f
-        if (n == 1) return hypot(p[0] - cx, p[1] - cy) <= r + half * p[2]
+        if (n == 1) {
+            val rad = r + half * p[2]
+            return GeomMath.distSqPointSegment(p[0], p[1], ax, ay, bx, by) <= rad * rad
+        }
         for (i in 0 until n - 1) {
+            val x0 = p[3 * i]; val y0 = p[3 * i + 1]; val x1 = p[3 * i + 3]; val y1 = p[3 * i + 4]
             val rad = r + half * max(p[3 * i + 2], p[3 * i + 5])
-            val d2 = GeomMath.distSqPointSegment(cx, cy, p[3 * i], p[3 * i + 1], p[3 * i + 3], p[3 * i + 4])
-            if (d2 <= rad * rad) return true
+            if (min(x0, x1) > qx1 + rad || max(x0, x1) < qx0 - rad || min(y0, y1) > qy1 + rad || max(y0, y1) < qy0 - rad) continue
+            if (GeomMath.distSqSegmentSegment(x0, y0, x1, y1, ax, ay, bx, by) <= rad * rad) return true
         }
         return false
     }
@@ -35,6 +48,17 @@ object EraseMath {
         is Stroke -> hitsStroke(e, cx, cy, r)
         is BoxElement -> e.containsPoint(cx, cy, r)
         is FillEl -> e.containsPoint(cx, cy)
+    }
+
+    /** [hitsElement] dla całego ruchu od (ax, ay) do (bx, by); ramki i wypełnienia sprawdzane są kołami co ułamek promienia. */
+    fun hitsElementSwept(e: Element, ax: Float, ay: Float, bx: Float, by: Float, r: Float): Boolean {
+        if (e is Stroke) return hitsStrokeSwept(e, ax, ay, bx, by, r)
+        val steps = ceil(hypot(bx - ax, by - ay) / max(0.5f, r * 0.6f)).toInt().coerceIn(0, 4000)
+        for (k in 0..steps) {
+            val f = if (steps == 0) 0f else k.toFloat() / steps
+            if (hitsElement(e, ax + (bx - ax) * f, ay + (by - ay) * f, r)) return true
+        }
+        return false
     }
 
     /** Wynik gumki pikselowej: pozostałe kawałki kreski i obszar strony, którego wygląd się zmienił. */
@@ -53,8 +77,11 @@ object EraseMath {
      * Gdzie wygląd kawałków mógłby się zmienić także daleko od gumki (wzór linii, łamana, inna średnia grubość,
      * kawałki nachodzące na siebie), [Erased.dirty] obejmuje całą kreskę.
      */
-    fun eraseLocal(s: Stroke, cx: Float, cy: Float, r: Float): Erased? {
-        if (!hitsStroke(s, cx, cy, r)) return null
+    fun eraseLocal(s: Stroke, cx: Float, cy: Float, r: Float): Erased? = eraseSwept(s, cx, cy, cx, cy, r)
+
+    /** [eraseLocal] dla całego ruchu gumki od (ax, ay) do (bx, by) naraz (kapsuła, jak w [hitsStrokeSwept]). */
+    fun eraseSwept(s: Stroke, ax: Float, ay: Float, bx: Float, by: Float, r: Float): Erased? {
+        if (!hitsStrokeSwept(s, ax, ay, bx, by, r)) return null
         val p = s.pts
         val n = s.count
         val half = s.width * 0.5f
@@ -63,6 +90,7 @@ object EraseMath {
         for (i in 0 until n) pMax = max(pMax, p[3 * i + 2])
         val step = max(0.6f, r * 0.5f)
         val reach = r + 0.35f * half * pMax + step
+        val qx0 = min(ax, bx) - reach; val qy0 = min(ay, by) - reach; val qx1 = max(ax, bx) + reach; val qy1 = max(ay, by) + reach
         // Łamana z rozpoznanego kształtu rysuje się odcinkami, a kawałki krzywą: gęste punkty na całej długości
         // zachowują jej wygląd (kawałki tracą znacznik łamanej).
         val all = s.poly
@@ -72,7 +100,9 @@ object EraseMath {
         for (i in 1 until n) {
             val x0 = p[3 * i - 3]; val y0 = p[3 * i - 2]; val p0 = p[3 * i - 1]
             val x1 = p[3 * i]; val y1 = p[3 * i + 1]; val p1 = p[3 * i + 2]
-            if (all || GeomMath.distSqPointSegment(cx, cy, x0, y0, x1, y1) <= reach * reach) {
+            val close = !(min(x0, x1) > qx1 || max(x0, x1) < qx0 || min(y0, y1) > qy1 || max(y0, y1) < qy0) &&
+                GeomMath.distSqSegmentSegment(x0, y0, x1, y1, ax, ay, bx, by) <= reach * reach
+            if (all || close) {
                 near[i - 1] = true
                 val k = (hypot(x1 - x0, y1 - y0) / step).toInt().coerceAtMost(400)
                 for (j in 1..k) {
@@ -92,14 +122,15 @@ object EraseMath {
             runStart = -1
         }
         for (i in 0 until m) {
+            val x = a[3 * i]; val y = a[3 * i + 1]
             val rad = r + 0.35f * half * a[3 * i + 2]
-            val inside = hypot(a[3 * i] - cx, a[3 * i + 1] - cy) <= rad
+            val inside = x >= qx0 && x <= qx1 && y >= qy0 && y <= qy1 && GeomMath.distSqPointSegment(x, y, ax, ay, bx, by) <= rad * rad
             if (inside) { removed = true; flush(i) } else if (runStart < 0) runStart = i
         }
         flush(m)
         if (!removed) return null
         if (all || out.isEmpty()) return Erased(out, s.bounds)
-        val dirty = localDirty(s, near, cx, cy, r, half * pMax)
+        val dirty = localDirty(s, near, min(ax, bx) - r, min(ay, by) - r, max(ax, bx) + r, max(ay, by) + r, half * pMax)
         return Erased(out, if (needsFullRepaint(s, out, dirty)) s.bounds else dirty)
     }
 
@@ -107,10 +138,10 @@ object EraseMath {
      * Obszar zmieniony przez starcie: odcinki w zasięgu gumki z dwoma sąsiadami po obu stronach (od nich zależą
      * wygładzenie krzywej i normalne obrysu), poszerzone o pół grubości.
      */
-    private fun localDirty(s: Stroke, near: BooleanArray, cx: Float, cy: Float, r: Float, halfMax: Float): Bounds {
+    private fun localDirty(s: Stroke, near: BooleanArray, l0: Float, t0: Float, r0: Float, b0: Float, halfMax: Float): Bounds {
         val p = s.pts
         val n = s.count
-        var l = cx - r; var t = cy - r; var rr = cx + r; var b = cy + r
+        var l = l0; var t = t0; var rr = r0; var b = b0
         for (i in 0 until n) {
             var hit = false
             for (k in i - 2..i + 1) if (k in 0 until n && near[k]) { hit = true; break }

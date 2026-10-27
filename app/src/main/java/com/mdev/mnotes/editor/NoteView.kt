@@ -24,7 +24,7 @@ import com.mdev.mnotes.core.edit.CropFrame
 import com.mdev.mnotes.core.edit.CropHandle
 import com.mdev.mnotes.core.edit.CutLine
 import com.mdev.mnotes.core.edit.EraseMath
-import com.mdev.mnotes.core.edit.FillErase
+import com.mdev.mnotes.core.edit.EraseSession
 import com.mdev.mnotes.core.edit.ImageCut
 import com.mdev.mnotes.core.edit.PipetteMath
 import com.mdev.mnotes.core.geom.Affine
@@ -188,8 +188,10 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
     // gumka
     private val eraseStart = LinkedHashMap<String, PageContent>()
     private var eraseLastPage = -1
-    private var erasePending: List<Element>? = null
-    private var erasePendingPage: String? = null
+    /** Gest gumki na jednej stronie (wynik w pamięci) i czy ma zmiany, które jeszcze nie trafiły do dokumentu. */
+    private var eraseSession: EraseSession? = null
+    private var eraseSessionPage: String? = null
+    private var erasePending = false
     private var eraseNextApply = 0L
     private var eraseFlushPosted = false
     private var eraseLx = 0f; private var eraseLy = 0f
@@ -2460,8 +2462,9 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
 
     private fun eraseDown() {
         eraseStart.clear(); eraseLastPage = -1
-        erasePending = null; erasePendingPage = null; eraseNextApply = 0L; eraseDirty = Bounds.EMPTY
-        if (settings.eraserMode == 2) { val pi = pageIdxAt(curX, curY); if (pi < 0) { mode = Mode.IGNORE; return }; lPage = pi; ln = 0; addLasso(pgX(pi, curX), pgY(pi, curY)) }
+        eraseSession = null; eraseSessionPage = null; erasePending = false; eraseNextApply = 0L
+        // Lasso gumki zaczęte poza stroną (tło, szczelina) należy do najbliższej strony, jak zwykłe lasso (B4).
+        if (settings.eraserMode == 2) { val pi = layout.nearest(docX(curX), docY(curY)); if (pi < 0) { mode = Mode.IGNORE; return }; lPage = pi; ln = 0; addLasso(pgX(pi, curX), pgY(pi, curY)) }
         else eraseTo(curX, curY)
         if (ed.sel != null) ed.clearSel()
     }
@@ -2472,30 +2475,22 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
         if (pi < 0) { eraseLastPage = -1; return }
         val px = pgX(pi, sx); val py = pgY(pi, sy)
         val r = settings.eraserSize
-        // Kroki liczone są w pamięci na roboczej liście; do dokumentu (a więc do przemalowania bitmap) trafiają
+        // Ruch liczony jest w pamięci ([EraseSession]); do dokumentu (a więc do przemalowania bitmap) trafia
         // rzadziej, gdy przemalowanie jest drogie, bo to ono, a nie liczenie, zacina aplikację.
         val page = doc.pages[pi]
-        if (erasePendingPage != null && erasePendingPage != page.id) flushErase()
+        if (eraseSessionPage != null && eraseSessionPage != page.id) { flushErase(); eraseSession = null; eraseSessionPage = null }
         val cur = doc.content(page)
-        var work: List<Element> = erasePending ?: cur.elements
-        var changed = false
-        if (eraseLastPage == pi) {
-            val steps = ceil(hypot(px - eraseLx, py - eraseLy) / (r * 0.6f)).toInt().coerceAtLeast(1)
-            for (k in 1..steps) {
-                val f = k.toFloat() / steps
-                eraseStep(work, eraseLx + (px - eraseLx) * f, eraseLy + (py - eraseLy) * f)?.let { work = it; changed = true }
-            }
-        } else eraseStep(work, px, py)?.let { work = it; changed = true }
+        val ses = eraseSession ?: EraseSession(cur.elements, settings.eraserMode == 1, settings.eraserKeepHighlighter)
+            .also { eraseSession = it; eraseSessionPage = page.id }
+        val changed = if (eraseLastPage == pi) ses.sweep(eraseLx, eraseLy, px, py, r) else ses.sweep(px, py, px, py, r)
         eraseLastPage = pi; eraseLx = px; eraseLy = py
         if (!changed) return
         eraseStart.getOrPut(page.id) { cur }
-        erasePending = work; erasePendingPage = page.id
+        erasePending = true
         val wait = eraseNextApply - SystemClock.uptimeMillis()
         if (wait <= 0) flushErase() else if (!eraseFlushPosted) { eraseFlushPosted = true; postDelayed(eraseFlushRun, wait) }
     }
 
-    /** Suma obszarów zmienionych przez kroki gumki, które jeszcze nie trafiły do dokumentu. */
-    private var eraseDirty = Bounds.EMPTY
     /** Obszar przekazywany do przemalowania w tle w [pageChanged] na czas [flushErase] i zatwierdzenia przesunięcia. */
     private var applyDirty: Bounds? = null
     private var applyPage: String? = null
@@ -2508,60 +2503,25 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
      * odświeża się rzadziej, ale reszta aplikacji (przewijanie, pasek, rysik) ma wolny wątek.
      */
     private fun flushErase() {
-        val work = erasePending ?: return
-        val pid = erasePendingPage ?: return
-        erasePending = null; erasePendingPage = null
+        if (!erasePending) return
+        val ses = eraseSession ?: return
+        val pid = eraseSessionPage ?: return
+        erasePending = false
         removeCallbacks(eraseFlushRun); eraseFlushPosted = false
         val page = doc.page(pid) ?: return
         val t0 = SystemClock.uptimeMillis()
         val cur = doc.content(page)
         // Przemalowujemy tylko to, co gumka naprawdę zmieniła, a nie całe prostokąty przeciętych kresek.
-        applyDirty = eraseDirty; applyPage = pid; eraseDirty = Bounds.EMPTY
-        doc.applyElements(pid, ElementsEdit.diff(cur, PageContent.of(work)))
+        applyDirty = ses.takeDirty(); applyPage = pid
+        doc.applyElements(pid, ElementsEdit.diff(cur, PageContent.of(ses.elements())))
         applyDirty = null; applyPage = null
         val cost = SystemClock.uptimeMillis() - t0
         eraseNextApply = if (cost <= ERASE_FREE_MS) 0L else t0 + cost + (cost * ERASE_REST).toLong().coerceAtMost(ERASE_MAX_WAIT_MS)
     }
 
-    /** Jeden krok gumki w punkcie (px, py); null = nic nie zmienił. Lista powstaje dopiero przy pierwszym trafieniu. */
-    private fun eraseStep(src: List<Element>, px: Float, py: Float): List<Element>? {
-        val r = settings.eraserSize
-        val keepHl = settings.eraserKeepHighlighter
-        val pixel = settings.eraserMode == 1
-        var out: ArrayList<Element>? = null
-        for (i in src.indices) {
-            val e = src[i]
-            // Wypełnienie leży pod pismem: gumka obiektowa przeciągana po zamalowanym obszarze ściera tylko kreski (całe
-            // wypełnienie usuwa lasso gumki), a pikselowa ściera z wypełnienia to, nad czym przejdzie.
-            val skip = e.locked || e is TapeEl || (e is FillEl && (!pixel || keepHl && e.hl)) ||
-                (keepHl && e is Stroke && e.pen == PenKind.HIGHLIGHTER) || !e.bounds.inflate(r + 1f).contains(px, py)
-            var repl: List<Element>? = null
-            var hit = false
-            if (!skip) {
-                if (pixel) {
-                    if (e is Stroke) {
-                        val res = EraseMath.eraseLocal(e, px, py, r)
-                        if (res != null) {
-                            hit = true; eraseDirty = eraseDirty.union(res.dirty)
-                            repl = res.pieces.map { Stroke(Ids.next(), e.pen, e.color, e.width, it, false, line = e.line) }
-                        }
-                    } else if (e is FillEl) {
-                        val res = FillErase.erase(e, px, py, r)
-                        if (res != null) {
-                            hit = true; eraseDirty = eraseDirty.union(res.dirty)
-                            if (res.rings.isNotEmpty()) repl = listOf(FillEl(Ids.next(), e.color, e.hl, res.rings))
-                        }
-                    }
-                } else if (EraseMath.hitsElement(e, px, py, r)) { hit = true; eraseDirty = eraseDirty.union(e.bounds) }
-            }
-            if (hit && out == null) { out = ArrayList(src.size); for (j in 0 until i) out.add(src[j]) }
-            if (out != null) { if (!hit) out.add(e) else if (repl != null) out.addAll(repl) }
-        }
-        return out
-    }
-
     private fun eraseUp(cancel: Boolean) {
         flushErase(); eraseNextApply = 0L
+        eraseSession = null; eraseSessionPage = null
         if (settings.eraserMode == 2) {
             val pi = lPage
             if (!cancel && ln >= 3 && pi in doc.pages.indices) {
@@ -2590,7 +2550,7 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
         if (ed.sel != null) ed.clearSel()
         if (ed.readOnly) { mode = Mode.IGNORE; return }
         if (settings.painterQuickFadeUse) ed.quickFormat = false
-        if (settings.painterMode == 1) { val pi = pageIdxAt(curX, curY); if (pi < 0) { mode = Mode.IGNORE; return }; lPage = pi; ln = 0; addLasso(pgX(pi, curX), pgY(pi, curY)) }
+        if (settings.painterMode == 1) { val pi = layout.nearest(docX(curX), docY(curY)); if (pi < 0) { mode = Mode.IGNORE; return }; lPage = pi; ln = 0; addLasso(pgX(pi, curX), pgY(pi, curY)) }
         else paintTo(curX, curY)
     }
 

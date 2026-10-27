@@ -158,6 +158,19 @@ Założenie projektowe: „Linux Mint user” = osoba ceniąca kontrolę, skrót
 - [x] AES-007 Estetyka zaznaczenia: pętla lasso (i gumka-pętla) rysowana tylko przerywanym konturem, bez półprzezroczystego wypełnienia (`NoteView.drawLasso`); w panelu „Kolor i grubość” zaznaczenie o różnych kolorach pokazuje tęczowy podgląd (`Dot(mixed)`, `ColorPicker(mixed)`), żaden kolor palety nie jest wybrany, a pole HEX puste — wybór koloru nadal ujednolica całe zaznaczenie; kolor bazowy brany z pierwszego elementu mającego kolor, nie z obrazu Uchwyty skali (rogi) i obrotu są domyślnie ukryte i nieaktywne — włącza je przycisk „Skaluj i obracaj” (`CropRotate`) na pasku zaznaczenia (`Editor.transformMode`, wyłączany przy nowym zaznaczeniu); uchwyt obrotu 52 dp nad ramką ze strefą dotyku 20 dp (nie zachodzi na strefę przesuwania), pasek akcji przesuwa się nad uchwyt; uchwyty wierzchołków łamanej bez zmian _(kompiluje się; bez weryfikacji na tablecie)_
 - [ ] AES-006 Weryfikacja wizualna na emulatorze/urządzeniu (zrzuty porównawcze z GoodNotes/Apple Notes)
 
+## K. Noc 26/27.10.2026 — błędy i funkcje z zeszytu pomysłów (NOC; plan: `docs-noc/PLAN-NOCY.md`)
+Wszystko poniżej: kod + testy JVM, **bez testu na tablecie**. Gałęzie `noc/*`, zbiorczo `noc/wszystko`.
+- [x] NOC-B1 Gumka pikselowa zacinała aplikację: ruch między zdarzeniami liczony jako jedna „kapsuła” (`EraseMath.eraseSwept`), kandydaci z siatki kubełków (`core/geom/BoundsGrid`), elementy strony w slotach (`core/edit/EraseSession`) zamiast kopii listy na każdy krok. JVM: 300 zdarzeń gumki 1 pt na gęstej stronie ~4 s → ~45 ms (`EraseSessionTest`)
+- [x] NOC-B2 Pusta miniatura w zakładce „Strony”: wersja strony idzie parametrem do kafla (strong skipping pomijał go po edycji), prośby o miniaturę łączy `core/cache/Coalescer` (druga prośba nie ginie), w trakcie renderu widać poprzednią miniaturę (`CoalescerTest`)
+- [x] NOC-B3 Zaznaczanie prostokątem: kreski liczone po długości (`EraseMath.samplesAlong`), a nie po wierzchołkach (prosta z 2 punktami), prostokąt z zapasem 4 dp (`LassoSelectTest`)
+- [x] NOC-B4 Zaznaczenie zaczynane poza stroną: lasso już to miało; dołożone lasso gumki i pędzla formatu (najbliższa strona, `DocLayoutTest.outsidePointsBelongToNearestPage`)
+- [x] NOC-B5 Import `.mnotes` z innego urządzenia: `core/codec/MnotesArchive` (plik tymczasowy + `ZipFile`, folder na wierzchu, ścieżki z `\`, zip-slip), rozpoznanie przepakowanego archiwum w `FileKinds`; test na 5-stronicowym archiwum z tłem PDF bez kompresji (dawna przyczyna „tylko pierwsza strona”) (`MnotesArchiveTest`)
+- [~] NOC-B6 Uchwyt regulacji rozmiaru po ~1 s — **nie odtworzono w kodzie** (zmiana „Skaluj i obracaj” od razu odświeża widok); hipotezy i co sprawdzić: `docs/NOTATKI-NOC.md`
+- [x] NOC-B7 Lasso z nachodzącymi pętlami omijało część wspólną: reguła niezerowego nawinięcia zamiast parzysto-nieparzystej (`LassoSelectTest`)
+- [~] NOC-B8 Długopis zmienia się na „Rękę” po zaznaczeniu — **nie odtworzono** (nigdzie nie ma automatycznej zmiany narzędzia na rękę); hipotezy w `docs/NOTATKI-NOC.md`
+- [x] NOC-B9 Krótkie proste: próg prostej z grubości pióra i powiększenia (3–18 pt, `ShapeRecognizer.minLineFor`), krótka kreska może być tylko prostą (`ShortLineTest`)
+- [x] NOC-B10 Kreska ukośna w ramce prostokąta: jak NOC-B3
+
 ## Poza zakresem (świadomie)
 - [-] Rozpoznawanie pisma → tekst, formuły → LaTeX (EDT-046/047), OCR wyszukiwanie w piśmie odręcznym — brak lokalnego silnika offline w zależnościach; wróci, gdy będzie model on-device.
 - [-] Konta, chmura producenta, współpraca w czasie rzeczywistym (sprzeczne z „offline, bez kont”).

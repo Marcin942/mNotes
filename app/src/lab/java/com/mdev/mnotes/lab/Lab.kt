@@ -46,6 +46,7 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.exifinterface.media.ExifInterface
+import com.mdev.mnotes.app.LabCommand
 import com.mdev.mnotes.app.LabFeatures
 import com.mdev.mnotes.core.image.BoardGeometry
 import com.mdev.mnotes.core.image.BoardOptions
@@ -381,6 +382,20 @@ object Lab : LabFeatures {
 
     /** Wielokąty gumki z ułamków na piksele obrazu [img]. */
     private fun scaled(polys: List<FloatArray>, img: Raster) = polys.map { p -> FloatArray(p.size) { i -> p[i] * if (i % 2 == 0) img.w else img.h } }
+
+    /** Okno „Wyślij stronę do mLabs”: edytor i indeks strony z chwili wywołania polecenia; null = zamknięte. */
+    private var sendPage by mutableStateOf<Pair<Editor, Int>?>(null)
+
+    override fun commands(ed: Editor): List<LabCommand> = listOf(
+        LabCommand("labSendMlabs", 0, "Wyślij stronę do mLabs…", "Send page to mLabs…", { ed.doc.pages.isNotEmpty() }) { sendPage = ed to ed.pageIndex },
+    )
+
+    @Composable
+    override fun Overlay(ed: Editor) {
+        val (owner, index) = sendPage ?: return
+        if (owner !== ed) return
+        com.mdev.mnotes.lab.recognize.SendToMlabs.Dialog(ed, index, work) { sendPage = null }
+    }
 
     @Composable
     override fun phoneButton(): Boolean = LabSettings.of(LocalContext.current).nearby

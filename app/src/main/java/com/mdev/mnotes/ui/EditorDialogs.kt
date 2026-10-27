@@ -187,7 +187,7 @@ fun commandList(
     return CmdDefs.list.map { d ->
         val a = acts.getValue(d.id)
         Cmd(d, keys[d.id] ?: d.key, a.first, a.second)
-    }
+    } + com.mdev.mnotes.app.Flavor.lab?.commands(ed).orEmpty().map { c -> Cmd(CmdDef(c.id, c.group, c.pl, c.en), "", c.enabled, c.run) }
 }
 
 @Composable

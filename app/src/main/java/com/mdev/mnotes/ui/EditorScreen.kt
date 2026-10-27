@@ -423,6 +423,7 @@ fun EditorScreen(ed: Editor, tabs: TabsCtl, onExit: () -> Unit, onSettings: () -
         if (ed.dualPick) DualPickDialog(ed) { ed.dualPick = false }
         if (ed.stickerSaveOpen) SaveStickerDialog(ed) { ed.stickerSaveOpen = false }
         if (panel == Panel.PHONE) Flavor.lab?.PhonePanel(ed) { panel = null }
+        Flavor.lab?.Overlay(ed)
         if (palette) PaletteDialog(cmds) { palette = false }
     }
 }

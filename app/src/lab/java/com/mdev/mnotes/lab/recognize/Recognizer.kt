@@ -20,7 +20,7 @@ class RecognizedBlock(
 /**
  * Rozpoznawanie pisma i wzorów dla wariantu lab (K4). Bez modeli w tej aplikacji: dziś jest tylko [NoRecognizer],
  * a docelowo implementacja woła usługę mLabs (TrOCR dla linii tekstu, TAMER dla wzorów), patrz
- * `docs-noc/INTEGRACJA-MLABS.md`. Interfejs jest celowo mały, żeby dało się go podmienić bez ruszania UI.
+ * `docs/INTEGRACJA-MLABS.md`. Interfejs jest celowo mały, żeby dało się go podmienić bez ruszania UI.
  */
 interface Recognizer {
     val name: String
@@ -84,6 +84,13 @@ object PageExport {
         }
         return rows.flatMap { r -> r.sortedBy { it.box[0] } }
     }
+
+    /** Silnik bloku wpisanego ręcznie (zamiast rozpoznawania): pewność 1, cała strona jako ramka. */
+    const val USER_ENGINE = "uzytkownik"
+
+    /** Tekst strony dopisany przez użytkownika jako jeden blok; null dla pustego (lepiej nic niż pusty blok). */
+    fun userBlock(text: String, pageW: Float, pageH: Float): RecognizedBlock? =
+        text.trim().takeIf { it.isNotEmpty() }?.let { RecognizedBlock(RecognizedBlock.Type.TEXT, it, 1f, floatArrayOf(0f, 0f, pageW, pageH), USER_ENGINE) }
 
     /** Nazwa pliku bez polskich znaków i spacji: „Fizyka 1”, strona 3 → fizyka-1-s3. */
     fun fileStem(notebook: String, page: Int): String {

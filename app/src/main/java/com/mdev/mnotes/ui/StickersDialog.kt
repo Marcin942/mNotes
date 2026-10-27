@@ -24,6 +24,7 @@ import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
@@ -38,6 +39,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.mdev.mnotes.app.app
+import com.mdev.mnotes.core.edit.Sticker
 import com.mdev.mnotes.core.model.PageContent
 import com.mdev.mnotes.core.model.PageSpec
 import com.mdev.mnotes.data.StickerStore
@@ -55,6 +57,8 @@ import kotlinx.coroutines.withContext
 fun StickersDialog(ed: Editor, onDismiss: () -> Unit) {
     val items by produceState<List<StickerStore.Item>?>(null, ed.stickerTick) { value = withContext(Dispatchers.IO) { ed.stickers.list() } }
     var deleting by remember { mutableStateOf<String?>(null) }
+    // „Usunąć?” gaśnie samo po 3 s (przegląd Fable §3.2 F19), żeby nie wisiało przy kolejnym otwarciu kafla.
+    LaunchedEffect(deleting) { if (deleting != null) { kotlinx.coroutines.delay(3000); deleting = null } }
     MDialog(T.t("Naklejki", "Stickers"), onDismiss, dismissText = T.t("Zamknij", "Close")) {
         val list = items
         when {
@@ -76,26 +80,33 @@ fun StickersDialog(ed: Editor, onDismiss: () -> Unit) {
     }
 }
 
+/** Tła kart naklejek: papier jasny i ciemny (spokojne, nie czysta biel ani czerń). */
+private val STICKER_LIGHT = Color(0xFFFAFAF7)
+private val STICKER_DARK = Color(0xFF2B2E33)
+
 @Composable
 private fun StickerCard(ed: Editor, s: StickerStore.Item, confirm: Boolean, onInsert: () -> Unit, onDelete: () -> Unit) {
     val m = mint
     val thumbs = LocalContext.current.app.thumbs
-    val bmp by produceState<Bitmap?>(null, s.id) {
+    // 2b-A5: miniatura bez papieru (naklejka nie ma tła), a tło karty dobrane do jasności atramentu — biała kreda czy
+    // biały tekst nie znikają na białej karcie, a w ciemnym motywie ciemny rysunek nie ginie na ciemnej.
+    val thumb by produceState<Pair<Bitmap?, Float?>>(null to null, s.id) {
         value = withContext(Dispatchers.IO) {
-            val n = ed.stickers.load(s.id) ?: return@withContext null
-            // Miniatura na białym papierze z marginesem; obrazy naklejki czytane z jej własnego katalogu nie są potrzebne do podglądu kresek.
+            val n = ed.stickers.load(s.id) ?: return@withContext null to null
             val pad = 6f
             val spec = PageSpec(w = (n.w + 2 * pad).coerceAtLeast(12f), h = (n.h + 2 * pad).coerceAtLeast(12f))
             val els = n.elements.map { it.transformed(com.mdev.mnotes.core.geom.Affine.translation(pad, pad)) }
-            runCatching { thumbs.render(ed.nbId, spec, PageContent.of(els), 220) }.getOrNull()
+            runCatching { thumbs.render(ed.nbId, spec, PageContent.of(els), 220, paper = false) }.getOrNull() to Sticker.inkLuminance(n.elements)
         }
     }
+    val dark = Sticker.darkBackdrop(thumb.second, m.dark)
+    val shape = RoundedCornerShape(8.dp)
     Column(Modifier.width(104.dp), horizontalAlignment = Alignment.CenterHorizontally) {
         Box(
-            Modifier.size(104.dp).clip(RoundedCornerShape(8.dp)).background(Color.White).border(1.dp, m.line, RoundedCornerShape(8.dp)).clickable { onInsert() },
+            Modifier.size(104.dp).clip(shape).background(if (dark) STICKER_DARK else STICKER_LIGHT).border(1.dp, m.line, shape).clickable { onInsert() },
             contentAlignment = Alignment.Center,
         ) {
-            bmp?.let { Image(it.asImageBitmap(), s.name, Modifier.padding(8.dp)) }
+            thumb.first?.let { Image(it.asImageBitmap(), s.name, Modifier.padding(8.dp)) }
         }
         Row(Modifier.fillMaxWidth().padding(top = 2.dp), verticalAlignment = Alignment.CenterVertically) {
             Text(if (confirm) T.t("Usunąć?", "Delete?") else s.name, Modifier.weight(1f), style = MaterialTheme.typography.labelMedium, maxLines = 1, overflow = TextOverflow.Ellipsis,

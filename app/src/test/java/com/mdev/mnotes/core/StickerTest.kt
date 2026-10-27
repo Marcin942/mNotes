@@ -60,4 +60,37 @@ class StickerTest {
         assertEquals(1f, Sticker.fitScale(50f, 50f, 420f, 595f), 0f)
         assertTrue(Sticker.fitScale(1000f, 200f, 420f, 595f) < 0.5f)
     }
+
+    private fun colored(color: Int, vararg xy: Float): Stroke {
+        val pts = FloatArray(xy.size / 2 * 3)
+        for (i in 0 until xy.size / 2) { pts[3 * i] = xy[2 * i]; pts[3 * i + 1] = xy[2 * i + 1]; pts[3 * i + 2] = 1f }
+        return Stroke(Ids.next(), PenKind.BALLPOINT, color, 2f, pts)
+    }
+
+    /** 2b-A5: naklejka nie ma tła — po zapisie i odczycie są tylko jej elementy, w ich własnych kolorach. */
+    @Test fun stickerHasNoBackgroundAfterCodec() {
+        val white = 0xFFFFFFFF.toInt()
+        val src = listOf(colored(white, 10f, 10f, 60f, 40f), colored(0xFFFFEB3B.toInt(), 20f, 50f, 80f, 50f))
+        val n = Sticker.normalize(src)!!
+        val back = PageCodec.decode(PageCodec.encode(PageContent.of(n.elements))).elements
+        assertEquals(2, back.size)
+        assertTrue(back.all { it is Stroke })
+        assertEquals(listOf(white, 0xFFFFEB3B.toInt()), back.map { (it as Stroke).color })
+        // Obwiednia naklejki to sam rysunek — bez marginesu i prostokąta papieru.
+        val b = src.map { it.bounds }.reduce { a, c -> a.union(c) }
+        assertEquals(b.w, n.w, 1e-3f); assertEquals(b.h, n.h, 1e-3f)
+    }
+
+    /** 2b-A5: podgląd na tle, na którym atrament widać — biały rysunek na ciemnej karcie, czarny na jasnej. */
+    @Test fun previewBackdropContrastsWithInk() {
+        val whiteChalk = listOf(colored(0xFFFFFFFF.toInt(), 0f, 0f, 50f, 50f))
+        val blackInk = listOf(colored(0xFF1A1A1A.toInt(), 0f, 0f, 50f, 50f))
+        assertTrue(Sticker.darkBackdrop(Sticker.inkLuminance(whiteChalk), themeDark = false))
+        assertTrue(!Sticker.darkBackdrop(Sticker.inkLuminance(blackInk), themeDark = true))
+        // Kolor pośredni (szary) i same obrazy — jak motyw.
+        val grey = listOf(colored(0xFF8A8A8A.toInt(), 0f, 0f, 50f, 50f))
+        assertEquals(true, Sticker.darkBackdrop(Sticker.inkLuminance(grey), themeDark = true))
+        assertEquals(false, Sticker.darkBackdrop(Sticker.inkLuminance(grey), themeDark = false))
+        assertNull(Sticker.inkLuminance(listOf(ImageEl(Ids.next(), "a.png", 10f, 10f, 20f, 20f))))
+    }
 }

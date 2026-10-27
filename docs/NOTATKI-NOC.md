@@ -438,3 +438,12 @@ Wygląd ikon sprawdzam rysunkiem Java2D z tej samej geometrii (`PreviewHarness`,
   agenta B. Test wymaga ≥ 3 synonimów na wiersz i sam znajdzie nowy wiersz bez nich. **Wygląd:** bez zmian (te same
   wyniki, więcej trafień). **Tablet:** Ustawienia → szukaj „mazanie”, „lupa”, „wibracje”, „magnes”, „ciemny”, „mapa”,
   „kreda”, „telefon” — za każdym razem właściwe wiersze; „przyczep” — nowy przełącznik w Gumka i lasso.
+- **Scalenie `noc/lab2`** (po 2b-A4): okno Nearby z diagnostyką (2b-B1 krok 3); bez konfliktów; core 722, lab 768.
+- **2b-A5** naklejki na białym tle — `noc/f2b-naklejki`; `StickerTest` (2 nowe). Zapis naklejki nigdy nie miał tła (test
+  to potwierdza), problemem był podgląd: miniatura na białym papierze w białej karcie. Teraz `Thumbs.render(…, paper =
+  false)` i tło karty z `Sticker.darkBackdrop` (jasność atramentu: > 0,62 ciemne tło, < 0,38 jasne, pomiędzy — motyw).
+  **[założenie z planu]** przezroczyste tło, podgląd na tle dopasowanym; szachownicy nie dodałem — żadna naklejka nie ma
+  dziś przezroczystości, którą trzeba by pokazać (obrazy kredy mają ją, ale nie są rysowane w miniaturze, patrz BACKLOG).
+  **Wygląd:** karty 104 dp z zaokrągleniem 8 dp i obwódką `m.line`, tło #FAFAF7 albo #2B2E33. **Tablet:** narysuj coś
+  białym na ciemnej stronie → zapisz jako naklejkę → „⋮” → „Naklejki…”: karta ciemna, rysunek widać; czarny rysunek w
+  ciemnym motywie — karta jasna; dotknij kosza — „Usunąć?” gaśnie po 3 s.

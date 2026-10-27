@@ -65,8 +65,9 @@ class LinkChunksTest {
     fun splitAndJoinLargePhoto() {
         val data = ByteArray(2_500_000) { (it * 31).toByte() }
         val parts = LinkChunks.split(data)
-        assertEquals(84, parts.size)
-        assertTrue(parts.all { it.size <= LinkChunks.CHUNK + 1 })
+        assertEquals(3, parts.size)
+        // każda porcja mieści się w ConnectionsClient.MAX_BYTES_DATA_SIZE z play-services-nearby 19.3.0
+        assertTrue(parts.all { it.size <= LinkChunks.CHUNK + 1 && it.size <= 1_047_552 })
         val j = ChunkJoiner()
         var out: ByteArray? = null
         for (p in parts) out = j.feed(p) ?: out
@@ -163,11 +164,21 @@ class LinkPermissionsTest {
     private val scan = "android.permission.BLUETOOTH_SCAN"
 
     @Test
-    fun approximateLocationIsNotARefusal() {
-        assertTrue(LinkPermissions.granted(mapOf(scan to true, fine to false, coarse to true)))
+    fun preciseLocationIsRequiredOnEveryVersion() {
         assertTrue(LinkPermissions.granted(mapOf(scan to true, fine to true, coarse to true)))
-        assertTrue(!LinkPermissions.granted(mapOf(scan to true, fine to false, coarse to false)))
+        // tylko przybliżona: szukanie zwraca 8034/8036 (docs/NEARBY-PRZEBUDOWA.md §2.3)
+        assertTrue(!LinkPermissions.granted(mapOf(scan to true, fine to false, coarse to true)))
         assertTrue(!LinkPermissions.granted(mapOf(scan to false, fine to true, coarse to true)))
+        assertTrue(!LinkPermissions.granted(emptyMap()))
+    }
+
+    @Test
+    fun requiredPermissionsFollowTheAndroidVersion() {
+        assertEquals(listOf(fine, coarse), LinkPermissions.required(29))
+        assertTrue(scan in LinkPermissions.required(31) && "android.permission.NEARBY_WIFI_DEVICES" !in LinkPermissions.required(32))
+        assertTrue("android.permission.NEARBY_WIFI_DEVICES" in LinkPermissions.required(33))
+        assertTrue(fine in LinkPermissions.required(36))
+        assertEquals(listOf(fine), LinkPermissions.missing(34) { it != fine })
     }
 }
 

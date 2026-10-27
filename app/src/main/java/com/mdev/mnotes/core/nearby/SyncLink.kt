@@ -9,26 +9,38 @@ import java.nio.ByteBuffer
 import java.security.MessageDigest
 
 /**
- * Wynik prośby o uprawnienia łącza: wszystko poza lokalizacją musi być przyznane, a z lokalizacji wystarczy jedna
- * (Android 12+ pozwala dać tylko przybliżoną; to nie jest odmowa łącza).
+ * Uprawnienia łącza na danej wersji Androida (`docs/NEARBY-PRZEBUDOWA.md` §3.6). Dokładna lokalizacja jest wymagana
+ * wszędzie: notatka z działającej aplikacji (mChochlik) mówi, że szukanie bez niej zwraca 8034/8036 także na nowych
+ * Androidach (B2-9 przyjmował przybliżoną: to był błąd). Przybliżona jest na liście, bo Android 12+ pyta o obie naraz.
  */
 object LinkPermissions {
-    fun granted(result: Map<String, Boolean>): Boolean {
-        val location = result.filterKeys { "LOCATION" in it }
-        return result.filterKeys { "LOCATION" !in it }.values.all { it } && (location.isEmpty() || location.values.any { it })
+    const val FINE = "android.permission.ACCESS_FINE_LOCATION"
+    const val COARSE = "android.permission.ACCESS_COARSE_LOCATION"
+
+    fun required(sdk: Int): List<String> = buildList {
+        if (sdk >= 31) { add("android.permission.BLUETOOTH_SCAN"); add("android.permission.BLUETOOTH_ADVERTISE"); add("android.permission.BLUETOOTH_CONNECT") }
+        if (sdk >= 33) add("android.permission.NEARBY_WIFI_DEVICES")
+        add(FINE); add(COARSE)
     }
+
+    /** Wynik prośby: wszystkie wymagane przyznane (przybliżona sama nie wystarcza). */
+    fun granted(result: Map<String, Boolean>): Boolean = result.isNotEmpty() && result.all { (k, v) -> v || k == COARSE && result[FINE] == true }
+
+    /** Których jeszcze brakuje (do ekranu „Dlaczego” i diagnostyki); [has] mówi, czy uprawnienie jest przyznane. */
+    fun missing(sdk: Int, has: (String) -> Boolean): List<String> = required(sdk).filter { !has(it) && it != COARSE }
 }
 
 /** Kto się ogłasza (tablet: [HOST]) i kto szuka (telefon: [CLIENT]); od roli zależy kolejność w identyfikatorze sesji. */
 enum class SyncRole { HOST, CLIENT; val opposite get() = if (this == HOST) CLIENT else HOST }
 
 /**
- * Nearby przyjmuje ładunek BYTES do ok. 32 KB, więc wiadomość idzie w porcjach po [CHUNK] bajtów z bajtem flagi
- * (1: ciąg dalszy, 0: ostatnia). Limit wiadomości podniesiony względem klawiatury (1 MiB) do [MAX_MESSAGE], bo zdjęcie
- * z telefonu ma kilka MB. Nearby zachowuje kolejność ładunków.
+ * Wiadomość w porcjach po [CHUNK] bajtów z bajtem flagi (1: ciąg dalszy, 0: ostatnia). Limit ładunku BYTES w
+ * `play-services-nearby:19.3.0` to `ConnectionsClient.MAX_BYTES_DATA_SIZE` = 1 047 552 B (odczytane z jara; materiał
+ * z mChochlika zakładał 32 KB), więc porcja to 900 000 B i część zdjęcia (256 KB, [PhotoSender]) idzie jedną ramką.
+ * Odbiornik skleja porcje dowolnej wielkości (stare 30 KB też). Nearby zachowuje kolejność ładunków.
  */
 object LinkChunks {
-    const val CHUNK = 30_000
+    const val CHUNK = 900_000
     const val MAX_MESSAGE = 24 shl 20
 
     fun split(data: ByteArray, chunk: Int = CHUNK): List<ByteArray> {
@@ -120,9 +132,15 @@ sealed interface SyncMsg {
     data class PageList(val notebookId: String, val title: String, val pages: List<PageMeta>) : SyncMsg
     data class PageRequest(val notebookId: String, val ids: List<String>) : SyncMsg
     class PageData(val notebookId: String, val meta: PageMeta, val bytes: ByteArray) : SyncMsg
+    /** Część zdjęcia ([PhotoSender]): nagłówek całości w każdej części, żeby odbiorca mógł zacząć od dowolnej. */
+    class PhotoPart(val id: String, val index: Int, val count: Int, val sha: ByteArray, val name: String, val mime: String, val bytes: ByteArray) : SyncMsg
+    data class PhotoAck(val id: String, val index: Int) : SyncMsg
+    /** Zdjęcie złożone ([ok]) albo odrzucone (zła suma kontrolna, za duże). */
+    data class PhotoDone(val id: String, val ok: Boolean) : SyncMsg
 
     companion object {
         private const val PHOTO = 1; private const val NOTE = 2; private const val LIST = 3; private const val REQUEST = 4; private const val DATA = 5
+        private const val PART = 6; private const val ACK = 7; private const val DONE = 8
 
         fun encode(m: SyncMsg): ByteArray {
             val bo = ByteArrayOutputStream()
@@ -135,6 +153,9 @@ sealed interface SyncMsg {
                     is PageList -> { o.writeByte(LIST); o.writeUTF(m.notebookId); o.writeUTF(m.title); o.writeInt(m.pages.size); m.pages.forEach(::meta) }
                     is PageRequest -> { o.writeByte(REQUEST); o.writeUTF(m.notebookId); o.writeInt(m.ids.size); m.ids.forEach(o::writeUTF) }
                     is PageData -> { o.writeByte(DATA); o.writeUTF(m.notebookId); meta(m.meta); bytes(m.bytes) }
+                    is PhotoPart -> { o.writeByte(PART); o.writeUTF(m.id); o.writeInt(m.index); o.writeInt(m.count); bytes(m.sha); o.writeUTF(m.name); o.writeUTF(m.mime); bytes(m.bytes) }
+                    is PhotoAck -> { o.writeByte(ACK); o.writeUTF(m.id); o.writeInt(m.index) }
+                    is PhotoDone -> { o.writeByte(DONE); o.writeUTF(m.id); o.writeBoolean(m.ok) }
                 }
             }
             return bo.toByteArray()
@@ -151,6 +172,9 @@ sealed interface SyncMsg {
                     LIST -> PageList(i.readUTF(), i.readUTF(), List(count()) { meta() })
                     REQUEST -> PageRequest(i.readUTF(), List(count()) { i.readUTF() })
                     DATA -> PageData(i.readUTF(), meta(), bytes())
+                    PART -> PhotoPart(i.readUTF(), i.readInt(), i.readInt(), bytes(), i.readUTF(), i.readUTF(), bytes())
+                    ACK -> PhotoAck(i.readUTF(), i.readInt())
+                    DONE -> PhotoDone(i.readUTF(), i.readBoolean())
                     else -> null
                 }
             }

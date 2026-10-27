@@ -231,10 +231,6 @@ class NearbyLink(context: Context, private val listener: SyncListener) {
         fun granted(result: Map<String, Boolean>): Boolean = com.mdev.mnotes.core.nearby.LinkPermissions.granted(result)
 
         /** Uprawnienia do poproszenia przed startem (zależnie od wersji Androida). */
-        fun permissions(sdk: Int): Array<String> = buildList {
-            if (sdk >= 31) { add("android.permission.BLUETOOTH_ADVERTISE"); add("android.permission.BLUETOOTH_CONNECT"); add("android.permission.BLUETOOTH_SCAN") }
-            if (sdk >= 33) add("android.permission.NEARBY_WIFI_DEVICES")
-            add("android.permission.ACCESS_FINE_LOCATION"); add("android.permission.ACCESS_COARSE_LOCATION")
-        }.toTypedArray()
+        fun permissions(sdk: Int): Array<String> = com.mdev.mnotes.core.nearby.LinkPermissions.required(sdk).toTypedArray()
     }
 }

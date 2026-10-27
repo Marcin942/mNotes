@@ -200,6 +200,19 @@ class FaintAndFramesTest {
     }
 
     @Test
+    fun specksGoDotsStay() {
+        val r = Raster(60, 30)
+        r[5, 5] = ink; r[6, 5] = ink                       // drobinka 2 px
+        for (y in 10..12) for (x in 30..32) r[x, y] = ink  // kropka 3×3 = 9 px
+        r[5, 6] = Raster.argb(80, 240, 240, 240)          // półprzezroczysta otoczka drobinki
+        val out = Chalk.despeckle(r, 6)
+        assertEquals(0, Raster.alpha(out[5, 5]))
+        assertEquals(0, Raster.alpha(out[5, 6]))
+        assertEquals(255, Raster.alpha(out[31, 11]))
+        assertEquals(6, Chalk.speckArea(1600)); assertEquals(3, Chalk.speckArea(400))
+    }
+
+    @Test
     fun bothStepsAreOptional() {
         val photo = Synthetic.photo()
         val off = BoardPipeline.run(photo, BoardOptions(faint = false, frames = false))

@@ -114,6 +114,26 @@ class ChalkVectorTest {
     }
 
     @Test
+    fun brokenChalkLineBecomesOneStroke() {
+        val r = canvas(120, 40)
+        // linia z przerwami po 4 px, jak kreda na chropowatej tablicy
+        for (x0 in listOf(5, 30, 55, 80)) thick(r, x0, 20, x0 + 20, 20, 1)
+        val lines = ChalkVector.vectorize(r)
+        assertEquals(1, lines.size)
+        assertTrue(lines[0].length() > 90f)
+    }
+
+    @Test
+    fun sideBySideAndPerpendicularStrokesStaySeparate() {
+        val r = canvas(120, 80)
+        thick(r, 10, 20, 50, 20, 1)
+        thick(r, 10, 26, 50, 26, 1)    // równoległa 6 px niżej: końce nie patrzą na siebie
+        thick(r, 80, 10, 80, 40, 1)
+        thick(r, 85, 45, 110, 45, 1)   // „T” z przerwą: koniec pionowej patrzy w bok poziomej
+        assertEquals(4, ChalkVector.vectorize(r).size)
+    }
+
+    @Test
     fun douglasPeuckerDropsNearlyCollinearPoints() {
         val pts = floatArrayOf(0f, 0f, 1f, 0.2f, 2f, -0.1f, 3f, 0f, 3f, 5f)
         val s = ChalkVector.simplify(pts, 0.5f)

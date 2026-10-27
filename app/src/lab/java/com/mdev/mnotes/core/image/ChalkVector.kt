@@ -33,7 +33,7 @@ object ChalkVector {
         if (mask.none { it }) return emptyList()
         val skel = thin(mask, w, h)
         val dist = distance(mask, w, h)
-        val paths = join(trace(skel, w, h), w, dist)
+        val paths = bridge(join(trace(skel, w, h), w, dist), w, dist)
         return paths.map { ChalkLine(simplify(it, epsilon), widthOf(it, w, dist)) }.filter { it.length() >= minLength }
     }
 
@@ -248,6 +248,74 @@ object ChalkVector {
         for (i in paths.indices) if (closed[i]) out += paths[i]
         return out
     }
+
+    /**
+     * Łączy przerwane kreski (2b-B2): kreda na tablicy ma przerwy, więc jedna linia rozpadała się na kawałki. Koniec
+     * jednej łamanej i koniec drugiej łączą się, gdy są bliżej niż dwie grubości kreski (najwyżej [BRIDGE_MAX] px) i oba
+     * końce patrzą na siebie (odchylenie każdego od odcinka łączącego < [BRIDGE_DEGREES]°). Kreski obok siebie albo pod
+     * kątem prostym się nie łączą; najkrótsze przerwy najpierw. Łamane zamknięte zostają bez zmian.
+     */
+    fun bridge(paths: List<FloatArray>, w: Int, dist: FloatArray): List<FloatArray> {
+        val open = paths.indices.filter { paths[it].size >= 4 && !(paths[it][0] == paths[it][paths[it].size - 2] && paths[it][1] == paths[it][paths[it].size - 1]) }
+        if (open.size < 2) return paths
+        fun end(i: Int, e: Int): Int = if (e == 0) 0 else paths[i].size / 2 - 1
+        fun px(i: Int, e: Int) = paths[i][2 * end(i, e)]
+        fun py(i: Int, e: Int) = paths[i][2 * end(i, e) + 1]
+        // kierunek „na zewnątrz” końca: od punktu ~6 px w głąb łamanej do końca
+        fun out(i: Int, e: Int): FloatArray {
+            val n = paths[i].size / 2; val k = minOf(6, n - 1)
+            val inner = if (e == 0) k else n - 1 - k
+            val dx = px(i, e) - paths[i][2 * inner]; val dy = py(i, e) - paths[i][2 * inner + 1]
+            val l = max(1e-3f, hypot(dx, dy))
+            return floatArrayOf(dx / l, dy / l)
+        }
+        fun width(i: Int, e: Int) = 2f * dist.getOrElse(py(i, e).toInt() * w + px(i, e).toInt()) { 1f } - 1f
+        val cosMax = kotlin.math.cos(Math.toRadians(BRIDGE_DEGREES)).toFloat()
+        val cands = ArrayList<Triple<Float, Pair<Int, Int>, Pair<Int, Int>>>()
+        for (a in open.indices) for (b in a + 1 until open.size) for (e in 0..1) for (f in 0..1) {
+            val i = open[a]; val j = open[b]
+            val gx = px(j, f) - px(i, e); val gy = py(j, f) - py(i, e)
+            val gap = hypot(gx, gy)
+            val limit = minOf(BRIDGE_MAX, max(3f, 2f * max(width(i, e), width(j, f))))
+            if (gap > limit) continue
+            if (gap > 1.5f) {
+                val oi = out(i, e); val oj = out(j, f)
+                if ((oi[0] * gx + oi[1] * gy) / gap < cosMax || -(oj[0] * gx + oj[1] * gy) / gap < cosMax) continue
+            }
+            cands += Triple(gap, i to e, j to f)
+        }
+        if (cands.isEmpty()) return paths
+        cands.sortBy { it.first }
+        val link = HashMap<Pair<Int, Int>, Pair<Int, Int>>()
+        for ((_, a, b) in cands) if (a !in link && b !in link) {
+            // bez pętli: nie łączymy, jeśli a i b są już w jednym łańcuchu
+            var cur = b.first; var from = b.second; var loop = false
+            while (true) { val nx = link[cur to 1 - from] ?: break; if (nx.first == a.first) { loop = true; break }; cur = nx.first; from = nx.second }
+            if (loop || a.first == b.first) continue
+            link[a] = b; link[b] = a
+        }
+        val used = HashSet<Int>()
+        val result = ArrayList<FloatArray>()
+        fun chain(first: Int, fromEnd: Int) {
+            val xs = ArrayList<Float>()
+            var i = first; var e = fromEnd
+            while (i !in used) {
+                used += i
+                val p = paths[i]; val n = p.size / 2
+                for (k in if (e == 0) 0 until n else (n - 1 downTo 0)) { xs += p[2 * k]; xs += p[2 * k + 1] }
+                val next = link[i to 1 - e] ?: break
+                i = next.first; e = next.second
+            }
+            result += xs.toFloatArray()
+        }
+        for (i in open) for (e in 0..1) if (i !in used && (i to e) !in link) chain(i, e)
+        for (i in paths.indices) if (i !in used) result += paths[i]
+        return result
+    }
+
+    /** Najdłuższa przerwa w kresce, którą łączymy (px wyniku), i największe odchylenie końców od siebie. */
+    const val BRIDGE_MAX = 12f
+    const val BRIDGE_DEGREES = 35.0
 
     /** Douglas-Peucker: zostawia punkty odległe od cięciwy o więcej niż [eps] pikseli. */
     fun simplify(pts: FloatArray, eps: Float): FloatArray {

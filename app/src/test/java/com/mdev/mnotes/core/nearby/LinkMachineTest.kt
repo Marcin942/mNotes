@@ -172,6 +172,21 @@ class LinkMachineTest {
     }
 
     @Test
+    fun notebookFileGoesTheSameWayAndArrivesWithItsMime() {
+        val key = pairKey()
+        val tSeen = Seen()
+        val tablet = machine(air.end("tablet"), LinkMode.RECEIVE, SyncRole.HOST, "T", key, tSeen)
+        val phone = machine(air.end("telefon"), LinkMode.SEND, SyncRole.CLIENT, "P", key)
+        val notebook = ByteArray(3_000_000).also { Random(9).nextBytes(it) }  // ponad dawne porcje i limity zdjęcia
+        tablet.start(); phone.start()
+        phone.sendPhoto("Fizyka.mnotes", "application/x-mnotes", notebook)
+        run(tablet, phone) { tSeen.photos.isNotEmpty() }
+        val got = tSeen.photos.single()
+        assertEquals("application/x-mnotes", got.mime)
+        assertArrayEquals(notebook, got.bytes)
+    }
+
+    @Test
     fun lostPartIsResentAfterTheTimeout() {
         val key = pairKey()
         val tSeen = Seen()

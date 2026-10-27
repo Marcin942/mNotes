@@ -246,6 +246,7 @@ object Lab : LabFeatures {
         ToggleRow(T.t("Wyostrz kredę", "Sharpen the chalk"), opt.sharpen) { change(opt.copy(sharpen = it)) }
         ToggleRow(T.t("Dociągaj bladą kredę do wyraźnej", "Keep faint chalk joined to clear chalk"), opt.faint) { change(opt.copy(faint = it)) }
         ToggleRow(T.t("Usuń listwy, ramy i ścianę", "Remove ledges, frames and wall"), opt.frames) { change(opt.copy(frames = it)) }
+        ToggleRow(T.t("Usuń drobinki (ziarno tablicy)", "Remove specks (board grain)"), opt.specks) { change(opt.copy(specks = it)) }
         ToggleRow(T.t("Próg tła automatycznie", "Automatic background cut"), opt.autoCut) { change(opt.copy(autoCut = it)) }
         if (!opt.autoCut) {
             SectionLabel(T.t("Próg tła: ${(opt.cut * 100).toInt()}%", "Background cut: ${(opt.cut * 100).toInt()}%"))
@@ -403,7 +404,38 @@ object Lab : LabFeatures {
     override fun phoneButton(): Boolean = LabSettings.of(LocalContext.current).nearby
 
     @Composable
-    override fun PhonePanel(ed: Editor, close: () -> Unit) = com.mdev.mnotes.lab.nearby.PhoneLinkDialog(com.mdev.mnotes.core.nearby.LinkMode.RECEIVE, ed, close)
+    override fun PhonePanel(ed: Editor, close: () -> Unit) = com.mdev.mnotes.lab.nearby.PhoneLinkDialog(com.mdev.mnotes.core.nearby.LinkMode.RECEIVE, ed, close = close)
+
+    /**
+     * Zdjęcie z trybu wykładu (2b-B3, hook A2-8): gdy to ciemna tablica, przechodzi przez kredę z krokami z Ustawień
+     * i podmienia plik obrazu jako **osobna** edycja — zdjęcie na stronie to podgląd, a jedno cofnięcie wraca do
+     * oryginału. Inne zdjęcia (kartka, slajd) zostają bez zmian. Wyłączane w Ustawienia → Laboratorium.
+     */
+    override fun onLecturePhoto(ed: Editor, pageId: String, image: ImageEl) {
+        val set = LabSettings.of(ed.view?.context ?: return)
+        if (!set.lecture) return
+        val file = ed.repo.assetFile(ed.nbId, image.asset)
+        val opt = set.options()
+        work.launch {
+            val photo = loadRaster(file, opt.maxSide) ?: return@launch
+            if (!BoardGeometry.looksLikeDarkBoard(photo)) return@launch
+            val out = BoardPipeline.run(photo, opt).image
+            val png = encodePng(out) ?: return@launch
+            ed.repo.io.execute {
+                val name = runCatching { ed.repo.importAsset(ed.nbId, png.inputStream(), "png") }.getOrNull() ?: return@execute
+                ed.view?.post {
+                    val page = ed.doc.page(pageId) ?: return@post
+                    val cur = ed.doc.content(page)
+                    // użytkownik mógł już zdjęcie przesunąć albo usunąć: bierzemy je z bieżącej treści strony
+                    val el = cur.elements.firstOrNull { it.id == image.id } as? ImageEl ?: return@post
+                    if (el.asset != image.asset) return@post
+                    val clean = el.copy(asset = name, h = el.w * out.h / out.w, crop = com.mdev.mnotes.core.model.ImageCrop.FULL, fx = com.mdev.mnotes.core.model.ImageFx.NONE)
+                    ed.exec(com.mdev.mnotes.core.model.DocEdit.Elements(page.id, com.mdev.mnotes.core.model.ElementsEdit.replace(cur, mapOf(el.id to clean))))
+                    ed.say(T.t("Tablica oczyszczona: sama kreda. Cofnij (↶), żeby wrócić do zdjęcia.", "Board cleaned: chalk only. Undo (↶) to get the photo back."))
+                }
+            }
+        }
+    }
 
     /** Po wstawieniu zdjęcia ciemnej tablicy raz podpowiada „Oczyść tablicę”; sprawdzenie na 320 px w tle. */
     override fun imageInserted(ed: Editor, el: ImageEl) {
@@ -436,9 +468,10 @@ object Lab : LabFeatures {
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(vertical = 6.dp),
             )
             ToggleRow(T.t("Podpowiedź po wstawieniu zdjęcia tablicy", "Hint after inserting a board photo"), set.boardHint) { set.boardHint = it }
+            ToggleRow(T.t("Zdjęcie z trybu wykładu od razu przez kredę", "Lecture-mode photo straight through chalk cleanup"), set.lecture) { set.lecture = it }
             Steps(set.options()) { o ->
                 set.straighten = o.straighten; set.crop = o.crop; set.flatten = o.flatten; set.sharpen = o.sharpen
-                set.faint = o.faint; set.frames = o.frames
+                set.faint = o.faint; set.frames = o.frames; set.specks = o.specks
                 set.autoCut = o.autoCut; set.cut = o.cut; set.solid = o.solid
                 set.tint = listOf(null, LabSettings.tintColor(1), LabSettings.tintColor(2)).indexOf(o.tint).coerceAtLeast(0)
             }
@@ -452,6 +485,7 @@ object Lab : LabFeatures {
         val store = remember { com.mdev.mnotes.lab.nearby.PairStore(ctx) }
         var dialog by remember { mutableStateOf(0) }
         var tick by remember { mutableStateOf(0) }
+        var outgoing by remember { mutableStateOf<com.mdev.mnotes.core.nearby.SyncMsg.Photo?>(null) }
         Group(T.t("Telefon i tablet (Nearby)", "Phone and tablet (Nearby)"), keys = "nearby telefon tablet zdjęcie bluetooth parowanie połącz wyślij diagnostyka łącze phone pair connect send diagnostics link") {
             Text(
                 T.t(
@@ -472,6 +506,10 @@ object Lab : LabFeatures {
                     TextButton(onClick = { dialog = 2 }) { Text(T.t("Wyślij zdjęcie na tablet (na telefonie)", "Send a photo to the tablet (on the phone)")) }
                     TextButton(onClick = { store.clear(); tick++ }) { Text(T.t("Usuń parę", "Forget the pair"), color = MaterialTheme.colorScheme.error) }
                 }
+                if (store.paired) {
+                    TextButton(onClick = { dialog = 4 }) { Text(T.t("Wyślij zeszyt na drugie urządzenie", "Send a notebook to the other device")) }
+                    TextButton(onClick = { dialog = 5 }) { Text(T.t("Odbierz zeszyt z drugiego urządzenia", "Receive a notebook from the other device")) }
+                }
                 TextButton(onClick = { dialog = 3 }) { Text(T.t("Diagnostyka łącza", "Link diagnostics")) }
             }
         }
@@ -479,6 +517,9 @@ object Lab : LabFeatures {
             1 -> com.mdev.mnotes.lab.nearby.PhoneLinkDialog(com.mdev.mnotes.core.nearby.LinkMode.PAIR, null) { dialog = 0; tick++ }
             2 -> com.mdev.mnotes.lab.nearby.PhoneLinkDialog(com.mdev.mnotes.core.nearby.LinkMode.SEND, null) { dialog = 0; tick++ }
             3 -> com.mdev.mnotes.lab.nearby.DiagnosticsDialog(null) { dialog = 0 }
+            4 -> com.mdev.mnotes.lab.nearby.NotebookSendDialog({ dialog = 0 }) { file -> outgoing = file; dialog = 6 }
+            5 -> com.mdev.mnotes.lab.nearby.PhoneLinkDialog(com.mdev.mnotes.core.nearby.LinkMode.RECEIVE, null) { dialog = 0 }
+            6 -> com.mdev.mnotes.lab.nearby.PhoneLinkDialog(com.mdev.mnotes.core.nearby.LinkMode.SEND, null, outgoing?.let { listOf(it) }) { dialog = 0; outgoing = null }
         }
     }
 

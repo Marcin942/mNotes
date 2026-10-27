@@ -41,23 +41,31 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import com.mdev.mnotes.app.MNotesApp
 import com.mdev.mnotes.core.nearby.LinkMachine
 import com.mdev.mnotes.core.nearby.LinkMode
 import com.mdev.mnotes.core.nearby.LinkPermissions
 import com.mdev.mnotes.core.nearby.LinkState
 import com.mdev.mnotes.core.nearby.SyncMsg
 import com.mdev.mnotes.core.nearby.SyncRole
+import com.mdev.mnotes.data.ExportFormat
+import com.mdev.mnotes.data.Exporter
+import com.mdev.mnotes.data.Importer
 import com.mdev.mnotes.editor.Editor
 import com.mdev.mnotes.editor.T
 import com.mdev.mnotes.ui.MDialog
 import com.mdev.mnotes.ui.mint
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.io.ByteArrayOutputStream
 
 /** Rola w parowaniu z ekranu: duży (≥ 600 dp) to tablet i się ogłasza, mniejszy to telefon i szuka (§3.2). */
@@ -77,12 +85,16 @@ private const val CASCADE = 6
 /**
  * Jedno okno łącza telefon ↔ tablet po obu stronach (2b-B1, `docs/NEARBY-PRZEBUDOWA.md` §3.7): ikona i duże zdanie
  * stanu, pod nim jedna rzecz zależna od stanu (lista znalezionych, sześć cyfr, postęp, lista „co sprawdzić”), na dole
- * „Diagnostyka”. [start]: parowanie (oba), odbiór (tablet, [ed] = gdzie wstawiać), wysyłanie (telefon). Bez pary odbiór
- * i wysyłanie najpierw parują w tym samym oknie. Logika w `core/nearby/LinkMachine`, tu tylko pokazywanie i uprawnienia.
+ * „Diagnostyka”. [start]: parowanie (oba), odbiór (tablet, [ed] = gdzie wstawiać zdjęcia; bez [ed] odbiera zeszyty),
+ * wysyłanie (telefon: zdjęcia z galerii albo gotowe [files], np. zeszyt `.mnotes`). Bez pary odbiór i wysyłanie najpierw
+ * parują w tym samym oknie. Logika w `core/nearby/LinkMachine`, tu tylko pokazywanie i uprawnienia.
  */
 @Composable
-fun PhoneLinkDialog(start: LinkMode, ed: Editor?, close: () -> Unit) {
+fun PhoneLinkDialog(start: LinkMode, ed: Editor?, files: List<SyncMsg.Photo>? = null, close: () -> Unit) {
     val ctx = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val notebooks = if (start == LinkMode.SEND) files != null else ed == null
+    var imported by remember { mutableIntStateOf(0) }
     val store = remember { PairStore(ctx) }
     val me = remember { deviceName(ctx) }
     var key by remember { mutableStateOf(if (start == LinkMode.PAIR) null else store.loadOrForget()) }
@@ -94,10 +106,10 @@ fun PhoneLinkDialog(start: LinkMode, ed: Editor?, close: () -> Unit) {
     var generation by remember { mutableIntStateOf(0) }
     var state by remember { mutableStateOf<LinkState>(LinkState.Idle) }
     var received by remember { mutableIntStateOf(0) }
-    var picked by remember { mutableStateOf(false) }
+    var picked by remember { mutableStateOf(files != null) }
     var note by remember { mutableStateOf<String?>(null) }
     var diagnostics by remember { mutableStateOf(false) }
-    val waiting = remember { ArrayList<SyncMsg.Photo>() }
+    val waiting = remember { ArrayList<SyncMsg.Photo>(files.orEmpty()) }
 
     val ask = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
         allowed = missing(ctx).isEmpty()
@@ -110,7 +122,19 @@ fun PhoneLinkDialog(start: LinkMode, ed: Editor?, close: () -> Unit) {
             val m = LinkMachine(t, mode, role, me, if (mode == LinkMode.PAIR) null else key, store.peerName, listener = object : LinkMachine.Listener {
                 override fun changed(s: LinkState) { state = s }
                 override fun photo(p: SyncMsg.Photo) {
-                    val e = ed ?: return
+                    if (p.mime == ExportFormat.MNOTES.mime) {
+                        // zeszyt z drugiego urządzenia: kopia jako nowy zeszyt w bibliotece (nic nie jest nadpisywane)
+                        val app = ctx.applicationContext as MNotesApp
+                        scope.launch {
+                            val meta = withContext(Dispatchers.IO) { runCatching { Importer(app.repo, app.pdf).importMnotes(p.bytes.inputStream(), null) }.getOrNull() }
+                            if (meta == null) { note = T.t("Nie udało się dodać zeszytu z drugiego urządzenia.", "Could not add the notebook from the other device."); return@launch }
+                            app.repo.addNotebook(meta)
+                            imported++
+                            note = T.t("Dodano zeszyt „${meta.title}” do biblioteki.", "Added the notebook “${meta.title}” to the library.")
+                        }
+                        return
+                    }
+                    val e = ed ?: run { note = T.t("Przyszło zdjęcie, ale to okno nie jest otwarte w zeszycie.", "A photo arrived, but this window is not open in a notebook."); return }
                     val k = received % CASCADE
                     e.insertImage(p.bytes.inputStream(), if ("png" in p.mime) "png" else "jpg") { if (k > 0) e.nudgeSel(k * CASCADE_STEP, k * CASCADE_STEP) }
                     received++
@@ -142,12 +166,12 @@ fun PhoneLinkDialog(start: LinkMode, ed: Editor?, close: () -> Unit) {
         link?.first?.sendPhoto(photo.name, photo.mime, photo.bytes) ?: waiting.add(photo)
     }
     fun pickPhoto() = pick.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
-    LaunchedEffect(mode, allowed) { if (mode == LinkMode.SEND && allowed && !picked) pickPhoto() }
+    LaunchedEffect(mode, allowed) { if (mode == LinkMode.SEND && allowed && !picked && files == null) pickPhoto() }
 
     val title = when (start) {
         LinkMode.PAIR -> T.t("Połącz telefon z tabletem", "Connect phone and tablet")
-        LinkMode.RECEIVE -> T.t("Zdjęcie z telefonu", "Photo from phone")
-        LinkMode.SEND -> T.t("Wyślij zdjęcie na tablet", "Send photo to tablet")
+        LinkMode.RECEIVE -> if (notebooks) T.t("Odbierz zeszyt", "Receive a notebook") else T.t("Zdjęcie z telefonu", "Photo from phone")
+        LinkMode.SEND -> if (notebooks) T.t("Wyślij zeszyt", "Send a notebook") else T.t("Wyślij zdjęcie na tablet", "Send photo to tablet")
     }
     val digits = state as? LinkState.ConfirmDigits
     val sentSome = ((state as? LinkState.Ready)?.sent ?: 0) > 0
@@ -155,7 +179,7 @@ fun PhoneLinkDialog(start: LinkMode, ed: Editor?, close: () -> Unit) {
         title, onDismiss = close,
         confirm = when {
             digits != null -> T.t("Zgadza się", "They match")
-            mode == LinkMode.SEND && picked && (state is LinkState.Ready || state is LinkState.Sending) -> T.t("Następne zdjęcie", "Next photo")
+            mode == LinkMode.SEND && files == null && picked && (state is LinkState.Ready || state is LinkState.Sending) -> T.t("Następne zdjęcie", "Next photo")
             else -> null
         },
         onConfirm = {
@@ -168,14 +192,14 @@ fun PhoneLinkDialog(start: LinkMode, ed: Editor?, close: () -> Unit) {
                 }
             } else pickPhoto()
         },
-        dismissText = if (received > 0 || sentSome) T.t("Gotowe", "Done") else T.t("Zamknij", "Close"),
+        dismissText = if (received > 0 || imported > 0 || sentSome) T.t("Gotowe", "Done") else T.t("Zamknij", "Close"),
     ) {
         Column(Modifier.heightIn(max = 520.dp).verticalScroll(rememberScrollState())) {
             if (!allowed) PermissionsPart(ctx, refused) { ask.launch(LinkPermissions.required(Build.VERSION.SDK_INT).toTypedArray()) }
             else {
                 if (expired && mode == LinkMode.PAIR) Line(T.t("Para wygasła (np. po przywróceniu kopii zapasowej): połącz urządzenia jeszcze raz.", "The pairing expired (e.g. after restoring a backup): connect the devices again."))
                 else if (mode == LinkMode.PAIR && start != LinkMode.PAIR) Line(T.t("Najpierw połącz telefon z tabletem (raz).", "First connect the phone and the tablet (once)."))
-                StatePart(state, mode, role, me, store.peerName, received, link?.first)
+                StatePart(state, mode, role, me, store.peerName, if (notebooks) imported else received, link?.first, notebooks)
                 if (mode == LinkMode.PAIR && digits == null) {
                     TextButton(onClick = { role = if (role == SyncRole.HOST) SyncRole.CLIENT else SyncRole.HOST }) {
                         Text(if (role == SyncRole.HOST) T.t("To urządzenie: tablet (odbiera) · zmień", "This device: tablet (receives) · change") else T.t("To urządzenie: telefon (wysyła) · zmień", "This device: phone (sends) · change"))
@@ -205,16 +229,18 @@ private fun PermissionsPart(ctx: Context, refused: Boolean, ask: () -> Unit) {
 
 /** Zdanie stanu z ikoną i jedna rzecz pod nim. */
 @Composable
-private fun StatePart(state: LinkState, mode: LinkMode, role: SyncRole, me: String, peer: String, received: Int, machine: LinkMachine?) {
+private fun StatePart(state: LinkState, mode: LinkMode, role: SyncRole, me: String, peer: String, received: Int, machine: LinkMachine?, notebooks: Boolean) {
     val host = role == SyncRole.HOST
     when (state) {
         LinkState.Idle -> Status(Icons.Rounded.Bluetooth, T.t("Przygotowuję łącze…", "Preparing the link…"))
         is LinkState.Searching -> {
             val text = when {
                 host && mode == LinkMode.PAIR -> T.t("Widać mnie jako „$me”. Na telefonie otwórz „Połącz telefon z tabletem”.", "Visible as “$me”. On the phone open “Connect phone and tablet”.")
+                host && notebooks -> T.t("Czekam na „$peer”. Na drugim urządzeniu: Ustawienia → Laboratorium → „Wyślij zeszyt…”.", "Waiting for “$peer”. On the other device: Settings → Lab → “Send a notebook…”.")
                 host -> T.t("Czekam na telefon „$peer”. Na telefonie: Ustawienia → Laboratorium → „Wyślij zdjęcie na tablet”.", "Waiting for the phone “$peer”. On the phone: Settings → Lab → “Send photo to tablet”.")
                 state.found.isNotEmpty() -> T.t("Znaleziono — stuknij tablet:", "Found — tap the tablet:")
                 mode == LinkMode.PAIR -> T.t("Szukam tabletu… Na tablecie otwórz „Połącz telefon z tabletem”.", "Looking for the tablet… On the tablet open “Connect phone and tablet”.")
+                notebooks -> T.t("Szukam „$peer”… Na drugim urządzeniu otwórz „Odbierz zeszyt”.", "Looking for “$peer”… On the other device open “Receive a notebook”.")
                 else -> T.t("Szukam tabletu „$peer”… Na tablecie otwórz „Zdjęcie z telefonu”.", "Looking for the tablet “$peer”… On the tablet open “Photo from phone”.")
             }
             Status(Icons.Rounded.BluetoothSearching, text)
@@ -238,8 +264,11 @@ private fun StatePart(state: LinkState, mode: LinkMode, role: SyncRole, me: Stri
         is LinkState.Ready -> Status(
             Icons.Rounded.CheckCircle,
             when {
+                host && mode != LinkMode.PAIR && notebooks -> if (received == 0) T.t("Połączono z „${state.peer}”. Zeszyty trafią do biblioteki.", "Connected to “${state.peer}”. Notebooks will go to the library.")
+                else T.t("Dodano zeszytów: $received.", "Notebooks added: $received.")
                 host && mode != LinkMode.PAIR -> if (received == 0) T.t("Połączono z „${state.peer}”. Zdjęcia trafią na tę stronę.", "Connected to “${state.peer}”. Photos will land on this page.")
                 else T.t("Wstawiono zdjęć: $received. Możesz wysłać kolejne.", "Photos inserted: $received. You can send more.")
+                state.sent > 0 && notebooks -> T.t("Zeszyt jest już na drugim urządzeniu.", "The notebook is on the other device.")
                 state.sent > 0 -> T.t("Wstawiono na tablecie zdjęć: ${state.sent}.", "Photos inserted on the tablet: ${state.sent}.")
                 else -> T.t("Połączono z „${state.peer}”.", "Connected to “${state.peer}”.")
             },
@@ -247,7 +276,8 @@ private fun StatePart(state: LinkState, mode: LinkMode, role: SyncRole, me: Stri
         is LinkState.Sending -> {
             val pct = (state.progress * 100).toInt()
             val part = minOf(state.part + 1, state.parts)
-            Status(Icons.Rounded.PhoneAndroid, T.t("Wysyłam zdjęcie · część $part z ${state.parts} · $pct %", "Sending the photo · part $part of ${state.parts} · $pct %"))
+            Status(Icons.Rounded.PhoneAndroid, if (notebooks) T.t("Wysyłam zeszyt · część $part z ${state.parts} · $pct %", "Sending the notebook · part $part of ${state.parts} · $pct %")
+                else T.t("Wysyłam zdjęcie · część $part z ${state.parts} · $pct %", "Sending the photo · part $part of ${state.parts} · $pct %"))
             LinearProgressIndicator(progress = { state.progress }, modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp), color = mint.accent)
             if (state.queued > 0) Line(T.t("W kolejce: ${state.queued}", "Queued: ${state.queued}"))
         }
@@ -267,6 +297,49 @@ private fun Status(icon: ImageVector, text: String) = Row(verticalAlignment = Al
 
 @Composable
 private fun Line(text: String) = Text(text, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(vertical = 2.dp))
+
+/**
+ * Wybór zeszytu do wysłania (wersja 1 synchronizacji): eksport `.mnotes` tym samym kodem co „Eksport i udostępnianie”,
+ * potem [send] z gotowym plikiem. Odbiorca dodaje go jako nowy zeszyt — nic po żadnej stronie nie jest nadpisywane.
+ */
+@Composable
+fun NotebookSendDialog(close: () -> Unit, send: (SyncMsg.Photo) -> Unit) {
+    val ctx = LocalContext.current
+    val app = ctx.applicationContext as MNotesApp
+    val scope = rememberCoroutineScope()
+    var busy by remember { mutableStateOf<String?>(null) }
+    var note by remember { mutableStateOf<String?>(null) }
+    val list = app.repo.notebooks.filter { it.trashedAt == 0L }.sortedByDescending { it.modified }
+    MDialog(T.t("Wyślij zeszyt", "Send a notebook"), close, dismissText = T.t("Anuluj", "Cancel")) {
+        Column(Modifier.heightIn(max = 460.dp).verticalScroll(rememberScrollState())) {
+            Line(
+                if (busy != null) T.t("Przygotowuję „$busy”…", "Preparing “$busy”…")
+                else T.t("Wybierz zeszyt. Drugie urządzenie doda go jako nowy zeszyt (nic nie nadpisuje).", "Choose a notebook. The other device adds it as a new notebook (nothing is overwritten)."),
+            )
+            if (list.isEmpty()) Line(T.t("Nie ma jeszcze żadnego zeszytu.", "There are no notebooks yet."))
+            for (m in list) TextButton(onClick = {
+                if (busy != null) return@TextButton
+                busy = m.title
+                scope.launch {
+                    val bytes = withContext(Dispatchers.IO) {
+                        runCatching {
+                            val exporter = Exporter(app.repo, app.assets, app.pdf)
+                            exporter.awaitWrites()
+                            ByteArrayOutputStream().also { exporter.write(m.id, ExportFormat.MNOTES, null, it) }.toByteArray()
+                        }.getOrNull()
+                    }
+                    busy = null
+                    when {
+                        bytes == null || bytes.isEmpty() -> note = T.t("Nie udało się przygotować zeszytu.", "Could not prepare the notebook.")
+                        bytes.size > LinkMachine.FILE_MAX -> note = T.t("Zeszyt ma ${bytes.size shr 20} MB, łącze przyjmuje do ${LinkMachine.FILE_MAX shr 20} MB. Wyślij go przez „Eksport i udostępnianie”.", "The notebook is ${bytes.size shr 20} MB; the link takes up to ${LinkMachine.FILE_MAX shr 20} MB. Send it via “Export & share”.")
+                        else -> send(SyncMsg.Photo(m.title.take(60) + "." + ExportFormat.MNOTES.ext, ExportFormat.MNOTES.mime, bytes))
+                    }
+                }
+            }) { Text(m.title, modifier = Modifier.fillMaxWidth()) }
+            note?.let { Line(it) }
+        }
+    }
+}
 
 /** „Diagnostyka”: sprawdzenia ✓/✗, ostatnie zdarzenia łącza (gdy okno łącza jest otwarte) i „Kopiuj raport”. */
 @Composable

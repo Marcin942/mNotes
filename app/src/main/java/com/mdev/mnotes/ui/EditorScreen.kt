@@ -64,6 +64,8 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.FormatColorFill
 import androidx.compose.material.icons.rounded.FormatPaint
+import androidx.compose.material.icons.rounded.StayCurrentLandscape
+import androidx.compose.material.icons.rounded.StayCurrentPortrait
 import androidx.compose.material.icons.rounded.IosShare
 import androidx.compose.material.icons.rounded.Colorize
 import androidx.compose.material.icons.rounded.Straighten
@@ -1718,13 +1720,18 @@ private fun StylePanel(ed: Editor, close: () -> Unit) {
                         reset = { apply { it.copy(spacing = it.template.defaultSpacing) } })
                 }
                 SectionLabel(T.t("Rozmiar", "Size"))
+                // Każda strona trzyma własny format i orientację (F5); „cały zeszyt” zmienia format, a orientację zostawia.
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    for (f in com.mdev.mnotes.core.model.PageFormat.entries) Chip(formatName(f), false, {
-                        val land = spec.w > spec.h
-                        val (w, h) = if (land) f.landscape() else f.w to f.h
-                        apply { it.withSize(w, h) }
-                    })
+                    for (f in com.mdev.mnotes.core.model.PageFormat.entries) Chip(formatName(f), spec.format == f, { apply { it.withFormat(f) } })
                 }
+            }
+            if (!isPdf && spec.w != spec.h) {
+                SectionLabel(T.t("Orientacja", "Orientation"))
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Chip(T.t("Pionowo", "Portrait"), !spec.landscape, { apply { it.oriented(false) } }, icon = Icons.Rounded.StayCurrentPortrait)
+                    Chip(T.t("Poziomo", "Landscape"), spec.landscape, { apply { it.oriented(true) } }, icon = Icons.Rounded.StayCurrentLandscape)
+                }
+                Text(T.t("Treść zostaje na miejscu; to, co wyjdzie poza nową krawędź, przesuń lassem.", "Content stays in place; move anything past the new edge with the lasso."), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
     }

@@ -39,6 +39,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.StayCurrentLandscape
+import androidx.compose.material.icons.rounded.StayCurrentPortrait
 import androidx.compose.material.icons.rounded.ArrowDownward
 import androidx.compose.material.icons.rounded.ArrowUpward
 import androidx.compose.material.icons.rounded.Bookmark
@@ -336,7 +338,19 @@ private fun PageActions(ed: Editor, cur: Int, total: Int, ro: Boolean) {
             PanelBtn(Icons.Rounded.ArrowUpward, T.t("Wcześniej", "Earlier"), !ro && cur > 0, Modifier.weight(1f)) { ed.movePage(cur, cur - 1) }
             PanelBtn(Icons.Rounded.ArrowDownward, T.t("Dalej", "Later"), !ro && cur < total - 1, Modifier.weight(1f)) { ed.movePage(cur, cur + 1) }
         }
-        PanelBtn(Icons.Rounded.Add, T.t("Dodaj stronę", "Add page"), !ro, Modifier.fillMaxWidth(), accent = true) { ed.addPage(cur) }
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+            PanelBtn(Icons.Rounded.Add, T.t("Dodaj stronę", "Add page"), !ro, Modifier.weight(1f), accent = true) { ed.addPage(cur) }
+            // Strona w drugiej orientacji (F5): zeszyt może mieszać strony pionowe i poziome.
+            val spec = ed.doc.pages.getOrNull(cur)?.spec
+            if (spec != null && spec.w != spec.h) {
+                val land = !spec.landscape
+                IconBtn(
+                    if (land) Icons.Rounded.StayCurrentLandscape else Icons.Rounded.StayCurrentPortrait,
+                    if (land) T.t("Dodaj stronę poziomą", "Add landscape page") else T.t("Dodaj stronę pionową", "Add portrait page"),
+                    { ed.addPage(cur, spec.copy(pdf = null).oriented(land)) }, enabled = !ro, size = 36.dp, iconSize = 20.dp,
+                )
+            }
+        }
     }
 }
 

@@ -1,6 +1,7 @@
 package com.mdev.mnotes.core.model
 
 import org.json.JSONObject
+import kotlin.math.abs
 import kotlin.math.roundToInt
 
 /** Wzór tła strony. Kody są częścią formatu bazy — nie zmieniać. */
@@ -66,6 +67,22 @@ data class PageSpec(
     val darkPaper: Boolean get() = Paper.isDark(paper)
 
     fun withSize(w: Float, h: Float) = copy(w = w, h = h)
+
+    val landscape: Boolean get() = w > h
+
+    /** Format strony (A4, A5…), gdy rozmiar pasuje co do 1 pt w którejkolwiek orientacji; null = rozmiar własny. */
+    val format: PageFormat? get() = PageFormat.entries.firstOrNull { f ->
+        (abs(f.w - w) <= 1f && abs(f.h - h) <= 1f) || (abs(f.h - w) <= 1f && abs(f.w - h) <= 1f)
+    }
+
+    /**
+     * Ta sama strona w orientacji [land] (F5: pionowe i poziome strony w jednym zeszycie). Zamienia boki tylko,
+     * gdy orientacja się zmienia; kwadrat zostaje bez zmian.
+     */
+    fun oriented(land: Boolean): PageSpec = if (landscape == land || w == h) this else copy(w = h, h = w)
+
+    /** Ten sam format w orientacji tej strony. */
+    fun withFormat(f: PageFormat): PageSpec = if (landscape) copy(w = f.h, h = f.w) else copy(w = f.w, h = f.h)
 
     /** Zmiana wzoru zachowuje papier i rozmiar, ale przywraca rozstaw typowy dla wzoru. */
     fun withTemplate(t: Template) = copy(template = t, spacing = t.defaultSpacing)

@@ -333,6 +333,10 @@ private fun Appearance(set: com.mdev.mnotes.data.Settings) {
                 ) { set.miniMapCorner = it }
             }
         }
+        // Przegląd §3.2a: powiększenie to widok, nie wejście.
+        Opt(T.t("Największe powiększenie: ×${set.zoomMaxFactor.toInt()} (domyślnie ×6)", "Maximum zoom: ×${set.zoomMaxFactor.toInt()} (default ×6)"), "zoom powiększenie maksymalne przybliżenie max zoom") {
+            MSlider(set.zoomMaxFactor, 2f, 24f) { set.zoomMaxFactor = Math.round(it).toFloat() }
+        }
         ToggleRow(T.t("Animacja zmiany kolejności stron", "Animate page reordering"), set.pageAnim, keys = "animacja strony kolejność przesuwanie przestawianie animation reorder pages") { set.pageAnim = it }
         if (set.pageAnim) Opt(T.t("Czas animacji stron: ${set.pageAnimMs} ms", "Page animation time: ${set.pageAnimMs} ms"), "animacja strony czas szybkość duration speed") {
             MSlider(set.pageAnimMs.toFloat(), PageShift.MIN_MS.toFloat(), PageShift.MAX_MS.toFloat()) { set.pageAnimMs = (it / 20).toInt() * 20 }
@@ -435,6 +439,8 @@ private fun EditorPrefs(set: com.mdev.mnotes.data.Settings) {
     Group(T.t("Pióro", "Pen"), keys = "wygładzanie kształty rysowanie pen") {
         Opt(T.t("Wygładzanie: ${(set.smoothing * 100).toInt()}%", "Smoothing: ${(set.smoothing * 100).toInt()}%"), "gładkość stabilizacja drżenie pióro") { MSlider(set.smoothing, 0f, 2f) { set.smoothing = it } }
         ToggleRow(T.t("Przytrzymaj, aby wyprostować kształt", "Hold to snap to shape"), set.holdToShape, keys = "kształty prosta linia okrąg prostokąt prostowanie snap shape") { set.holdToShape = it }
+        // Przegląd §3.2a: wstawianie zdjęć to praca w edytorze, nie ustawienie wejścia.
+        ToggleRow(T.t("Wstawione zdjęcie wyrównuj do kratki", "Align inserted photos to the grid"), set.imageGridFit, keys = "zdjęcie obraz kratka siatka wyrównaj przyciągnij grid snap image") { set.imageGridFit = it }
         if (set.holdToShape) Opt(T.t("Czas przytrzymania: ${set.holdMs} ms", "Hold time: ${set.holdMs} ms"), "prostowanie kształt opóźnienie") { MSlider(set.holdMs.toFloat(), 250f, 1200f) { set.holdMs = (it / 50).toInt() * 50 } }
         // F28 (A2-4): te same przełączniki co kafelki w panelu pióra, żeby wyszukiwarka ustawień je znajdowała.
         if (set.holdToShape) {
@@ -493,7 +499,7 @@ private fun EditorPrefs(set: com.mdev.mnotes.data.Settings) {
         ToggleRow(T.t("Gumka pomija zakreślacz", "Eraser ignores highlighter"), set.eraserKeepHighlighter, keys = "eraser wymaż zakreślacz marker") { set.eraserKeepHighlighter = it }
         Opt(T.t("Kształt lassa", "Lasso shape"), "zaznaczanie zaznacz odręczne prostokąt") { Choice(listOf(T.t("Odręczne", "Freehand"), T.t("Prostokąt", "Rectangle")), if (set.lassoRect) 1 else 0) { set.lassoRect = it == 1 } }
         Opt(T.t("Co zaznacza lasso", "What the lasso selects"), "zaznaczanie pętla zahacz musnąć zbalansowane touch balanced") {
-            Choice(listOf(T.t("Zbalansowane", "Balanced"), T.t("Tylko zahacz", "Just touch")), if (set.lassoTouch) 1 else 0) { set.lassoTouch = it == 1 }
+            Choice(listOf(T.t("Połowa w pętli", "Half in the loop"), T.t("Wystarczy dotknąć", "Just touch")), if (set.lassoTouch) 1 else 0) { set.lassoTouch = it == 1 }
         }
         Text(lassoModeHint(set.lassoTouch), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(bottom = 6.dp))
         ToggleRow(T.t("Przyciągaj do siatki", "Snap to grid"), set.snapGrid, keys = "grid siatka magnes snap") { set.snapGrid = it }
@@ -524,12 +530,11 @@ private fun InputPrefs(set: com.mdev.mnotes.data.Settings) {
         ToggleRow(T.t("Cofnij dotknięciem dwóch palców", "Two-finger tap to undo"), set.twoFingerUndo, keys = "undo cofanie gest dwa palce") { set.twoFingerUndo = it }
         ToggleRow(T.t("Odciągnij za ostatnią stroną, aby dodać nową", "Pull past the last page to add a new one"), set.pullAddPage, keys = "nowa strona dodaj pull gest koniec zeszytu") { set.pullAddPage = it }
         ToggleRow(T.t("Nowa strona, gdy tekst wyjdzie za ostatnią", "New page when text runs past the last one"), set.autoTextPage, keys = "nowa strona tekst pole automatycznie koniec auto page text") { set.autoTextPage = it }
-        ToggleRow(T.t("Wstawione zdjęcie wyrównuj do kratki", "Align inserted photos to the grid"), set.imageGridFit, keys = "zdjęcie obraz kratka siatka wyrównaj przyciągnij grid snap image") { set.imageGridFit = it }
         ToggleRow(T.t("Grecki i indeksy w tekście (\\alpha → α, x^2 → x², a_1 → a₁)", "Greek and indices in text (\\alpha → α, x^2 → x², a_1 → a₁)"), set.mathText, keys = "grecki litery indeks górny dolny potęga latex alfa unicode greek subscript superscript") { set.mathText = it }
         ToggleRow(T.t("Ponowne dotknięcie lasera, ręki lub lassa wraca do pisania", "Tapping laser, hand or lasso again returns to writing"), set.returnToPen, keys = "odznacz narzędzie powrót pióro pisanie laser ręka lasso pusty obszar return pen") { set.returnToPen = it }
-        Text(T.t("Także dotknięcie pustego miejsca tym narzędziem (bez zaznaczenia).", "Also a tap on an empty spot with that tool (with nothing selected)."), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(bottom = 6.dp))
-        Opt(T.t("Największe powiększenie: ×${set.zoomMaxFactor.toInt()} (domyślnie ×6)", "Maximum zoom: ×${set.zoomMaxFactor.toInt()} (default ×6)"), "zoom powiększenie maksymalne przybliżenie max zoom") {
-            MSlider(set.zoomMaxFactor, 2f, 24f) { set.zoomMaxFactor = Math.round(it).toFloat() }
+        // Dopowiedzenie znika razem z wierszem, gdy wyszukiwanie go nie pokazuje (przegląd §3.2 F26).
+        if (rowVisible(T.t("Ponowne dotknięcie lasera, ręki lub lassa wraca do pisania", "Tapping laser, hand or lasso again returns to writing"), "odznacz narzędzie powrót pióro pisanie laser ręka lasso pusty obszar return pen")) {
+            Text(T.t("Także dotknięcie pustego miejsca tym narzędziem (bez zaznaczenia).", "Also a tap on an empty spot with that tool (with nothing selected)."), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(bottom = 6.dp))
         }
         val tapActions = listOf(T.t("Cofnij", "Undo"), T.t("Ponów", "Redo"), T.t("Przybliż / oddal", "Zoom in / out"), T.t("Brak", "None"))
         Opt(T.t("Podwójne dotknięcie palcem", "Finger double tap"), "double tap gest dwukrotne") { Choice(tapActions, set.doubleTap) { set.doubleTap = it } }

@@ -99,7 +99,7 @@ object Guide {
                     t("Lasso gumki: obrysuj trzecią — usuwa to, co obrysujesz.", "Lasso eraser: circle the third — it removes what you circle."),
                     t("Wycinanie: obrysuj połowę czwartej — kreska zostaje przecięta dokładnie na obrysie.", "Cut out: circle half of the fourth — the stroke is cut exactly along the loop."),
                 ),
-                t("„Nie ruszaj zakreślacza” na listwie gumki chroni zakreślenia, gdy poprawiasz pismo.", "“Leave the highlighter” on the eraser strip protects highlights while you fix the writing."),
+                t("„Gumka pomija zakreślacz” na listwie gumki chroni zakreślenia, gdy poprawiasz pismo.", "“Eraser ignores highlighter” on the eraser strip protects highlights while you fix the writing."),
             ) { y ->
                 val names = listOf(t("obiektowa", "object"), t("pikselowa", "pixel"), t("lasso", "lasso"), t("wycinanie", "cut out"))
                 (0 until 4).flatMap { listOf(text(MARGIN, y + 14f + it * 56f, names[it], 9f, MUTED, w = 74f)) + wave(MARGIN + 82f, y + 22f + it * 56f, 66, INK) }

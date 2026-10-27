@@ -35,9 +35,9 @@ import com.mdev.mnotes.editor.T
 import kotlin.math.min
 
 /** Gotowe zakresy: najczęstsze w zadaniach szkolnych i na pierwszym roku. */
-private val PRESETS = listOf(
+private fun presets() = listOf(
     "−5 … 5" to AxesSpec(),
-    "I ćwiartka" to AxesSpec(0f, 10f, 0f, 10f, labelEvery = 2),
+    T.t("I ćwiartka", "Quadrant I") to AxesSpec(0f, 10f, 0f, 10f, labelEvery = 2),
     "t ≥ 0" to AxesSpec(0f, 10f, -5f, 5f, xName = "t", yName = "v"),
     "−1 … 1" to AxesSpec(-1f, 1f, -1f, 1f, 0.25f, 0.25f, 60f, labelEvery = 2),
 )
@@ -84,7 +84,7 @@ fun AxesDialog(ed: Editor, onDismiss: () -> Unit) {
             )
             SectionLabel(T.t("Gotowe", "Presets"))
             FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                for ((name, p) in PRESETS) Chip(name, false, { load(p.copy(unit = spec.unit)) })
+                for ((name, p) in presets()) Chip(name, false, { load(p.copy(unit = spec.unit)) })
             }
             SectionLabel(T.t("Zakres", "Range"))
             RangeRow("x", fx0, { fx0 = it }, fx1, { fx1 = it }, fsx, { fsx = it })
@@ -114,11 +114,11 @@ fun AxesDialog(ed: Editor, onDismiss: () -> Unit) {
 private fun RangeRow(axis: String, lo: String, setLo: (String) -> Unit, hi: String, setHi: (String) -> Unit, step: String, setStep: (String) -> Unit) {
     Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
         Text(axis, style = MaterialTheme.typography.titleSmall, modifier = Modifier.width(16.dp))
-        MField(lo, setLo, Modifier.width(72.dp), hint = T.t("od", "from"))
+        MField(lo, setLo, Modifier.width(72.dp), hint = T.t("od", "from"), number = true)
         Text("…", style = MaterialTheme.typography.bodyMedium)
-        MField(hi, setHi, Modifier.width(72.dp), hint = T.t("do", "to"))
+        MField(hi, setHi, Modifier.width(72.dp), hint = T.t("do", "to"), number = true)
         Text(T.t("krok", "step"), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        MField(step, setStep, Modifier.width(64.dp), hint = "1")
+        MField(step, setStep, Modifier.width(64.dp), hint = "1", number = true)
     }
 }
 

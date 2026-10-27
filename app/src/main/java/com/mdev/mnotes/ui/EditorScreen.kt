@@ -64,8 +64,8 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.FormatColorFill
 import androidx.compose.material.icons.rounded.FormatPaint
-import androidx.compose.material.icons.rounded.StayCurrentLandscape
-import androidx.compose.material.icons.rounded.StayCurrentPortrait
+import androidx.compose.material.icons.rounded.CropLandscape
+import androidx.compose.material.icons.rounded.CropPortrait
 import androidx.compose.material.icons.rounded.IosShare
 import androidx.compose.material.icons.rounded.Colorize
 import androidx.compose.material.icons.rounded.Straighten
@@ -979,7 +979,7 @@ private fun WriteBackBtn(ed: Editor, set: com.mdev.mnotes.data.Settings) {
 }
 
 /**
- * Opcje gumki (F7): tryby z ikonami, rozmiary, „Nie ruszaj zakreślacza” i panel. [items] = grupy do pokazania (w menu
+ * Opcje gumki (F7): tryby z ikonami, rozmiary, „Gumka pomija zakreślacz” i panel. [items] = grupy do pokazania (w menu
  * przy ikonie wybrane w Ustawieniach, na listwie wszystkie), [back] = przycisk powrotu do pisania na końcu (2b-A2).
  */
 @Composable
@@ -1265,7 +1265,7 @@ private fun ToolPanel(ed: Editor, set: com.mdev.mnotes.data.Settings, panel: Pan
                         Text(String.format("%.0f pt", set.eraserSize), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     MSlider(set.eraserSize, 1f, 60f) { set.eraserSize = it }
-                    ToggleRow(T.t("Nie ruszaj zakreślacza", "Keep highlighter"), set.eraserKeepHighlighter) { set.eraserKeepHighlighter = it }
+                    ToggleRow(T.t("Gumka pomija zakreślacz", "Eraser ignores highlighter"), set.eraserKeepHighlighter) { set.eraserKeepHighlighter = it }
                     HorizontalDivider(Modifier.padding(vertical = 6.dp), color = m.line)
                     Chip(T.t("Wyczyść stronę", "Clear page"), false, { ed.clearPage(); close() }, icon = Icons.Rounded.Delete)
                 }
@@ -1308,13 +1308,15 @@ private fun ToolPanel(ed: Editor, set: com.mdev.mnotes.data.Settings, panel: Pan
                         Chip(T.t("Odręczne", "Freehand"), !set.lassoRect, { set.lassoRect = false }, icon = Icons.Rounded.Gesture)
                         Chip(T.t("Prostokąt", "Rectangle"), set.lassoRect, { set.lassoRect = true }, icon = Icons.Rounded.HighlightAlt)
                     }
-                    SectionLabel(T.t("Co zaznacza pętla", "What the loop selects"))
+                    SectionLabel(T.t("Co zaznacza lasso", "What the lasso selects"))
                     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Chip(T.t("Zbalansowane", "Balanced"), !set.lassoTouch, { set.lassoTouch = false })
-                        Chip(T.t("Tylko zahacz", "Just touch"), set.lassoTouch, { set.lassoTouch = true })
+                        Chip(T.t("Połowa w pętli", "Half in the loop"), !set.lassoTouch, { set.lassoTouch = false })
+                        Chip(T.t("Wystarczy dotknąć", "Just touch"), set.lassoTouch, { set.lassoTouch = true })
                     }
                     Text(lassoModeHint(set.lassoTouch), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     ToggleRow(T.t("Przyciągaj do siatki", "Snap to grid"), ed.gridSnap) { ed.gridSnap = it; set.snapGrid = it }
+                    // Przegląd §3.2 F22: „Przyczep do figur” obok innych przyciągań, nie tylko w „⋮”.
+                    ToggleRow(T.t("Przyczep do figur (końce linii i punkty)", "Attach to shapes (line ends and points)"), set.attach) { set.attach = it }
                     ToggleRow(T.t("Przyciągaj do równych kątów", "Snap to even angles"), set.rotSnap) { set.rotSnap = it }
                     Text(rotationHint(set), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Text(T.t("Ctrl+A zaznacza wszystko na stronie.", "Ctrl+A selects everything on the page."), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -1900,7 +1902,8 @@ internal fun PointMenuOverlay(ed: Editor) {
                         Item(T.t("Usuń kotwicę", "Delete anchor"), enabled = com.mdev.mnotes.core.shapes.Bezier.anchors(c) > 2) {
                             ed.pointAction(pm) { s -> s.ctrl?.let { cc -> com.mdev.mnotes.core.shapes.PointEdit.removeAnchor(cc, pm.index)?.let { com.mdev.mnotes.core.shapes.Bezier.withCtrl(s, it) } } }
                         }
-                    } else Item(T.t("To uchwyt — przeciągnij go, by wygiąć krzywą", "This is a handle — drag it to bend the curve"), enabled = false) {}
+                    // Podpowiedź, nie akcja: zwykły tekst jak nagłówek „Konstrukcja”, a nie wyszarzona pozycja menu (przegląd §3.2 F21).
+                    } else Text(T.t("To uchwyt — przeciągnij go, by wygiąć krzywą", "This is a handle — drag it to bend the curve"), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp).widthIn(max = 240.dp))
                 } else {
                     Item(T.t("Usuń punkt", "Delete point"), enabled = st.vertexCount > 2) { ed.pointAction(pm) { com.mdev.mnotes.core.shapes.PointEdit.removeVertex(it, pm.index) } }
                     Item(T.t("Dodaj punkt obok", "Add point next to it")) { ed.pointAction(pm) { com.mdev.mnotes.core.shapes.PointEdit.insertAfter(it, pm.index) } }
@@ -1999,8 +2002,9 @@ internal fun androidx.compose.foundation.layout.BoxScope.EdToast(ed: Editor, bot
 @Composable
 private fun MoreMenu(ed: Editor, set: com.mdev.mnotes.data.Settings, close: () -> Unit, applyLayout: (Int) -> Unit, openStyle: () -> Unit, palette: () -> Unit, onSettings: () -> Unit) {
     val m = mint
+    // Przegląd §3.2a: menu urosło (tryb stron, profile, stanowiska) — przewija się jak inne panele i ma sekcje.
     FloatingCard(Modifier.width(280.dp)) {
-        Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Column(Modifier.heightIn(max = 560.dp).verticalScroll(rememberScrollState()).padding(10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             SectionLabel(T.t("Układ stron", "Page layout"))
             FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Chip(T.t("Pionowo", "Vertical"), ed.layoutMode == 0, { applyLayout(0) })
@@ -2028,18 +2032,23 @@ private fun MoreMenu(ed: Editor, set: com.mdev.mnotes.data.Settings, close: () -
                 }
             }
             HorizontalDivider(Modifier.padding(vertical = 4.dp), color = m.line)
+            SectionLabel(T.t("Widok", "View"))
             MenuRow(Icons.Rounded.FitScreen, T.t("Dopasuj do szerokości", "Fit width"), "Ctrl+0") { ed.view?.fitWidth(); close() }
             MenuRow(Icons.Rounded.Palette, T.t("Styl strony…", "Page style…"), "") { openStyle() }
-            if (!ed.readOnly) MenuRow(Icons.Rounded.ShowChart, T.t("Układ współrzędnych…", "Coordinate axes…"), "") { close(); ed.axesOpen = true }
-            if (!ed.readOnly) MenuRow(Icons.Rounded.Interests, T.t("Naklejki…", "Stickers…"), "") { close(); ed.stickersOpen = true }
-            if (!ed.readOnly) MenuRow(Icons.Rounded.PhotoCamera, T.t("Tryb wykładu…", "Lecture mode…"), "") { close(); ed.lectureMode = true; ed.lectureShootTick++ }
+            MenuRow(Icons.Rounded.Fullscreen, T.t("Ukryj paski (tryb skupienia)", "Hide bars (focus mode)"), "F11") { ed.chrome = false; close() }
+            ToggleRow(T.t("Okno powiększenia (pisz w powiększeniu)", "Zoom window (write magnified)"), ed.zoomWin) { ed.toggleZoomWin(); close() }
+            ToggleRow(T.t("Tylko do odczytu", "Read-only"), ed.readOnly) { ed.readOnly = it }
+            if (!ed.readOnly) {
+                SectionLabel(T.t("Wstaw", "Insert"))
+                MenuRow(Icons.Rounded.ShowChart, T.t("Układ współrzędnych…", "Coordinate axes…"), "") { close(); ed.axesOpen = true }
+                MenuRow(Icons.Rounded.Interests, T.t("Naklejki…", "Stickers…"), "") { close(); ed.stickersOpen = true }
+                MenuRow(Icons.Rounded.PhotoCamera, T.t("Tryb wykładu…", "Lecture mode…"), "") { close(); ed.lectureMode = true; ed.lectureShootTick++ }
+                ToggleRow(T.t("Przyczep do figur (końce linii i punkty)", "Attach to shapes (line ends and points)"), ed.settings.attach) { ed.settings.attach = it }
+            }
             // 2b-A7: stanowisko — kolejne dokumenty pod spodem i zapisane układy (przełączane jak karty).
+            SectionLabel(T.t("Stanowisko", "Workspace"))
             MenuRow(Icons.Rounded.ViewAgenda, T.t("Dołóż zeszyt poniżej…", "Add notebook below…"), "") { close(); ed.station?.picking = true }
             MenuRow(Icons.Rounded.Dashboard, T.t("Stanowiska…", "Workspaces…"), "") { close(); ed.station?.listing = true }
-            MenuRow(Icons.Rounded.Fullscreen, T.t("Ukryj paski (tryb skupienia)", "Hide bars (focus mode)"), "F11") { ed.chrome = false; close() }
-            ToggleRow(T.t("Tylko do odczytu", "Read-only"), ed.readOnly) { ed.readOnly = it }
-            ToggleRow(T.t("Okno powiększenia (pisz w powiększeniu)", "Zoom window (write magnified)"), ed.zoomWin) { ed.toggleZoomWin(); close() }
-            ToggleRow(T.t("Przyczep do figur (końce linii i punkty)", "Attach to shapes (line ends and points)"), ed.settings.attach) { ed.settings.attach = it }
             HorizontalDivider(Modifier.padding(vertical = 4.dp), color = m.line)
             MenuRow(Icons.Rounded.Search, T.t("Szukaj w zeszycie…", "Search in notebook…"), "Ctrl+F") { close(); ed.openSearch() }
             MenuRow(Icons.Rounded.IosShare, T.t("Eksport i udostępnianie…", "Export & share…"), "Ctrl+E") { close(); ed.exportOpen = true }
@@ -2179,8 +2188,8 @@ private fun StylePanel(ed: Editor, close: () -> Unit) {
             if (!isPdf && !spec.board && spec.w != spec.h) {
                 SectionLabel(T.t("Orientacja", "Orientation"))
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Chip(T.t("Pionowo", "Portrait"), !spec.landscape, { apply { it.oriented(false) } }, icon = Icons.Rounded.StayCurrentPortrait)
-                    Chip(T.t("Poziomo", "Landscape"), spec.landscape, { apply { it.oriented(true) } }, icon = Icons.Rounded.StayCurrentLandscape)
+                    Chip(T.t("Pionowo", "Portrait"), !spec.landscape, { apply { it.oriented(false) } }, icon = Icons.Rounded.CropPortrait)
+                    Chip(T.t("Poziomo", "Landscape"), spec.landscape, { apply { it.oriented(true) } }, icon = Icons.Rounded.CropLandscape)
                 }
                 Text(T.t("Treść zostaje na miejscu; to, co wyjdzie poza nową krawędź, przesuń lassem.", "Content stays in place; move anything past the new edge with the lasso."), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }

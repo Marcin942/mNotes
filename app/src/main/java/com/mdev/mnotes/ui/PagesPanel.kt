@@ -39,8 +39,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Add
-import androidx.compose.material.icons.rounded.StayCurrentLandscape
-import androidx.compose.material.icons.rounded.StayCurrentPortrait
+import androidx.compose.material.icons.rounded.CropLandscape
+import androidx.compose.material.icons.rounded.CropPortrait
 import androidx.compose.material.icons.rounded.ArrowDownward
 import androidx.compose.material.icons.rounded.ArrowUpward
 import androidx.compose.material.icons.rounded.Bookmark
@@ -347,7 +347,7 @@ private fun PageActions(ed: Editor, cur: Int, total: Int, ro: Boolean) {
             if (spec != null && spec.w != spec.h) {
                 val land = !spec.landscape
                 IconBtn(
-                    if (land) Icons.Rounded.StayCurrentLandscape else Icons.Rounded.StayCurrentPortrait,
+                    if (land) Icons.Rounded.CropLandscape else Icons.Rounded.CropPortrait,
                     if (land) T.t("Dodaj stronę poziomą", "Add landscape page") else T.t("Dodaj stronę pionową", "Add portrait page"),
                     { ed.addPage(cur, spec.copy(pdf = null).oriented(land)) }, enabled = !ro, size = 36.dp, iconSize = 20.dp,
                 )

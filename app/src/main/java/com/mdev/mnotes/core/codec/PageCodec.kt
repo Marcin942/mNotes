@@ -48,6 +48,9 @@ object PageCodec {
     private const val FLAG_LOCKED = 4
     private const val FLAG_ELLIPSE = 8
 
+    // Bity flag są osobne dla każdego rodzaju rekordu: 64 to krzywa w kresce i tryb „auto” w polu tekstu, 128 —
+    // wypełnienie kreski i stały rozmiar pola tekstu. Czytnik sprawdza je dopiero po tagu rekordu, więc się nie mylą.
+
     /** Styl linii kreski; starsze wersje ignorują te bity i rysują linię ciągłą. */
     private const val FLAG_DASHED = 16
     private const val FLAG_DOTTED = 32

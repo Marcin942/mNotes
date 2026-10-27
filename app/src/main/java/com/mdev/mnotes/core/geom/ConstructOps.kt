@@ -172,8 +172,14 @@ object ConstructOps {
     private val VERTEX_NAMES = setOf("A", "B", "C")
     private val PAIR = listOf("P", "Q")
 
-    /** Wynik jednej konstrukcji: kreski i kropki oraz geometria, której nazwy punktów mają nie zasłaniać. */
-    private class Draw(val col: Int, val w: Float, base: List<Line>, val names: Boolean) {
+    /**
+     * Wynik jednej konstrukcji: kreski i kropki oraz geometria, której nazwy punktów mają nie zasłaniać. Wspólny dla menu
+     * „Konstrukcja ▸” i narzędzia Geometria (2b-A8), więc wyniki wyglądają tak samo.
+     */
+    internal fun compose(col: Int, w: Float, names: Boolean, base: List<Line> = emptyList(), f: Draw.() -> Unit): List<Element> =
+        Draw(col, w, base, names).apply(f).done()
+
+    internal class Draw(val col: Int, val w: Float, base: List<Line>, val names: Boolean) {
         val out = ArrayList<Element>()
         val segs = ArrayList<Line>(base)
         val circs = ArrayList<Circle>()

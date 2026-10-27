@@ -238,3 +238,9 @@ dziedziczy już proces z `start-A.sh`, więc `./gradlew` działa bez niego.
   szukania pokażą się razem z pasującym wierszem; jeśli to przeszkadza, owinąć je w `Extra { }` jak w „Obracanie i kąty”.
   **Tablet (labDebug):** Ustawienia → szukaj „kreda” albo „telefon” → wiersze z „Laboratorium”; w coreDebug brak tej
   kategorii w wynikach.
+- **A2-11** drobne z przeglądu — `noc/f2-drobne`; `GuideTest.checkYourselfPageExercisesWork`,
+  `MnotesArchiveTest.temporaryArchiveLivesOutsideTheNotebook`. (1) Przewodnik: strona 7 „Sprawdź się” (5 zadań), strona 2
+  zdanie o √/∑. **Wygląd:** jak pozostałe strony przewodnika — tytuł 22 pt w zieleni, polecenia 11,5 pt, szary przerywany
+  trójkąt do przerysowania i dwa grafitowe okręgi (prawdziwe kształty, nie wzory). (2) B5: `MnotesArchive.extract(…, tmpDir)`
+  z `repo.cache` (= `cacheDir`). (3) BACKLOG: naklejki poza eksportem — wpis F19 doprecyzowany. **Tablet:** Biblioteka →
+  Nowy → „Zeszyt-przewodnik” → strona 7: zadania 1 i 2 wykonalne bez rysowania okręgów; import `.mnotes` jak w B5.

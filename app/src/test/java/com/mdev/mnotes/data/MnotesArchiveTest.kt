@@ -109,4 +109,15 @@ class MnotesArchiveTest {
         assertNull(MnotesArchive.extract(ByteArrayInputStream(bos.toByteArray()), tmp.newFolder("a"), 1L shl 30))
         assertNull(MnotesArchive.extract(ByteArrayInputStream(archive()), tmp.newFolder("b"), 100L))
     }
+
+    /** A2-11: archiwum w trakcie importu leży w katalogu tymczasowym, nie w zeszycie, i znika także po odrzuceniu. */
+    @Test fun temporaryArchiveLivesOutsideTheNotebook() {
+        val cache = tmp.newFolder("cache")
+        val dst = tmp.newFolder("nb2")
+        checkAllPages(dst, MnotesArchive.extract(ByteArrayInputStream(archive()), dst, 1L shl 30, cache))
+        assertTrue(dst.list()!!.none { it.endsWith(".zip") })
+        assertTrue(cache.list()!!.isEmpty())
+        assertNull(MnotesArchive.extract(ByteArrayInputStream(archive()), tmp.newFolder("nb3"), 100L, cache))
+        assertTrue(cache.list()!!.isEmpty())
+    }
 }

@@ -1,8 +1,10 @@
 package com.mdev.mnotes.core
 
 import com.mdev.mnotes.core.codec.PageCodec
+import com.mdev.mnotes.core.geom.ConstructOps
 import com.mdev.mnotes.core.guide.Guide
 import com.mdev.mnotes.core.model.PageContent
+import com.mdev.mnotes.core.model.Stroke
 import com.mdev.mnotes.core.model.TextBox
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -35,5 +37,20 @@ class GuideTest {
 
     @Test fun textHeightGrowsWithLength() {
         assertTrue(Guide.textHeight("x".repeat(400), 11f, 500f) > Guide.textHeight("krótko", 11f, 500f))
+    }
+
+    /** A2-11: ostatnia strona „Sprawdź się” — zadania działają na jej własnych wzorach (okręgi, trójkąt). */
+    @Test fun checkYourselfPageExercisesWork() {
+        for (pl in listOf(true, false)) {
+            val last = Guide.pages(pl).last()
+            assertEquals(if (pl) "Sprawdź się" else "Try it yourself", (last.elements[0] as TextBox).text)
+            val strokes = last.elements.filterIsInstance<Stroke>()
+            val rings = strokes.filter { it.ellipse }
+            assertEquals(2, rings.size)
+            val cross = ConstructOps.ops(rings).first { it.id == "xcc" }.build(0, 1f)
+            assertEquals(2, cross.filterIsInstance<Stroke>().size)
+            val tri = strokes.single { it.poly }
+            assertTrue(ConstructOps.ops(listOf(tri)).any { it.id == "circum" })
+        }
     }
 }

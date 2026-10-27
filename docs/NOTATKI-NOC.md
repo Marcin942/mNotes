@@ -210,6 +210,25 @@ Na starcie (`noc/wszystko` @ `471ed08`): lab 696 testów, 0 porażek.
   oba APK. **Nauka:** strona z wykładu trafia do mLabs, które ją sprawdza albo układa pytania kontrolne. **Tablet:** Plik →
   „Wyślij stronę do mLabs…” → wpisz `v = s/t` → „Udostępnij…” → np. Pliki → dwa pliki: PNG strony i JSON z blokiem.
 
+- **B2-9 Nearby K5 — bezpieczeństwo i błędy, etapy A i B** (`82ca30c`; etap C — ekran synchronizacji zeszytów — nie
+  zrobiony, bo FAZA 2b każe przerobić Nearby od nowa):
+  - Parowanie commit-then-reveal (`core/nearby/PairingSession`, protokół `mnotes-para:2:`): po połączeniu każda strona
+    wysyła tylko zobowiązanie SHA-256 swojej oferty (klucz publiczny, 16-bajtowy nonce, nazwa); ofertę dopiero po
+    zobowiązaniu drugiej strony; oferta niezgodna ze zobowiązaniem albo bez niego zrywa parowanie. SAS = HKDF z klucza pary
+    i obu nonce. Napastnik w środku musi się zobowiązać, zanim pozna nonce ofiary: 1 szansa na 10⁶ na próbę zamiast
+    dobierania klucza w tle. Testy: uczciwa para (te same cyfry i klucz), oferta wychodzi dopiero po zobowiązaniu,
+    podmieniony klucz i zmieniona nazwa odrzucone, oferta bez zobowiązania odrzucona, napastnik z własnymi kluczami daje
+    różne cyfry. Wersja 1 parowania nie jest przyjmowana (obie aplikacje muszą mieć tę wersję). Komentarz w
+    `SyncCrypto.kt` mówi teraz prawdę.
+  - **Świadoma decyzja: brak tajności w przód.** Klucz pary jest stały (zaszyfrowany kluczem z Keystore); kto go wykradnie
+    z urządzenia, odczyta nagrane wcześniej ramki. Dla zdjęć z wykładu między własnymi urządzeniami to rozsądna cena.
+  - Okna: „Następne zdjęcie” wysyła od razu (wcześniej czekało na `onUp`, który już minął); para zapisana, ale nie do
+    odczytu → `PairStore.loadOrForget` czyści ją i okna mówią „Para wygasła…”, z przyciskiem „Sparuj telefon”;
+    przybliżona lokalizacja nie jest odmową (`LinkPermissions.granted`, test); kolejne zdjęcia z telefonu schodkami co
+    24 pt; `PairStore.save` w `runCatching` z komunikatem; w Ustawienia → Laboratorium zdanie, czemu Android pyta o
+    lokalizację. Test: lab 719, core 673, 0 porażek, oba APK. **Tablet + telefon:** sparuj (nowa wersja na obu), te same
+    cyfry; wyślij 3 zdjęcia jedno po drugim przez „Następne zdjęcie” → trzy obrazy schodkami.
+
 ## Faza 2 — agent A (od 27.10, lista A2-* w `docs-noc/PLAN-NOCY.md`)
 
 Każdy punkt na własnej gałęzi `noc/f2-<temat>` od `noc/wszystko`, po zamknięciu scalony do `noc/wszystko`.

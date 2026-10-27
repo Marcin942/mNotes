@@ -17,8 +17,14 @@ class CryptoException(message: String, cause: Throwable? = null) : Exception(mes
 
 /**
  * Kryptografia łącza telefon ↔ tablet bez serwera (wzór: klawiatura z mChochlika, `docs/nearby/`). Klucz pary
- * powstaje z jednorazowego ECDH P-256; podmianę kluczy w trakcie parowania wykrywa porównanie sześciu cyfr na obu
- * ekranach. Każda ramka jest szyfrowana AES-256-GCM (Nearby samo nie uwierzytelnia). Ciągi „info” są własne mNotes.
+ * powstaje z jednorazowego ECDH P-256. Podmianę kluczy w trakcie parowania wykrywa porównanie sześciu cyfr na obu
+ * ekranach, a zobowiązanie przed ujawnieniem klucza ([PairingSession], commit-then-reveal) sprawia, że napastnik w
+ * środku nie może dobrać swojego klucza pod te cyfry: każda próba to szansa 1 na 10⁶, a nie 10⁶ obliczeń w tle.
+ * Każda ramka jest szyfrowana AES-256-GCM (Nearby samo nie uwierzytelnia). Ciągi „info” są własne mNotes.
+ *
+ * Świadomie bez tajności w przód: klucz pary jest stały (zapisany zaszyfrowany kluczem z Keystore), więc kto go
+ * wykradnie z urządzenia, odczyta też nagrane wcześniej ramki. Dla zdjęć z wykładu między własnym telefonem i tabletem
+ * to rozsądna cena za brak kolejnej wymiany kluczy przy każdym połączeniu.
  */
 object SyncCrypto {
     const val KEY_LEN = 32
@@ -52,9 +58,12 @@ object SyncCrypto {
         return hkdf(shared, salt = sortedConcat(mine.publicKey, peerPublic), info = "mnotes-sync-pair-v1", len = KEY_LEN)
     }
 
-    /** Kod do porównania wzrokiem na obu ekranach: „123 456”. */
-    fun sas(pairKey: ByteArray): String {
-        val raw = hkdf(pairKey, salt = ByteArray(0), info = "mnotes-sync-sas-v1", len = 4)
+    /**
+     * Kod do porównania wzrokiem na obu ekranach: „123 456”. Zależy od klucza pary (więc od obu kluczy publicznych) i od
+     * obu nonce ujawnionych dopiero po zobowiązaniach; kolejność nonce bez znaczenia.
+     */
+    fun sas(pairKey: ByteArray, nonceA: ByteArray, nonceB: ByteArray): String {
+        val raw = hkdf(pairKey, salt = sortedConcat(nonceA, nonceB), info = "mnotes-sync-sas-v2", len = 4)
         val n = ((raw[0].toLong() and 0xFF) shl 24 or ((raw[1].toLong() and 0xFF) shl 16) or
             ((raw[2].toLong() and 0xFF) shl 8) or (raw[3].toLong() and 0xFF)) % 1_000_000
         val digits = n.toString().padStart(6, '0')
@@ -119,6 +128,11 @@ object SyncCrypto {
         }
 
     private fun requireKey(key: ByteArray) { if (key.size != KEY_LEN) throw CryptoException("klucz ma ${key.size} bajtów zamiast $KEY_LEN") }
+
+    /** Porównanie w stałym czasie (zobowiązania, znaczniki). */
+    fun same(a: ByteArray, b: ByteArray): Boolean = java.security.MessageDigest.isEqual(a, b)
+
+    fun sha256(vararg parts: ByteArray): ByteArray = java.security.MessageDigest.getInstance("SHA-256").run { parts.forEach(::update); digest() }
 
     private fun sortedConcat(a: ByteArray, b: ByteArray): ByteArray = if (compareUnsigned(a, b) <= 0) a + b else b + a
 

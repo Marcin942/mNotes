@@ -20,17 +20,24 @@ class PairStore(ctx: Context) {
     val paired: Boolean get() = sp.contains(K_BLOB)
     val peerName: String get() = sp.getString(K_NAME, "").orEmpty()
 
-    fun save(pairKey: ByteArray, peer: String) {
+    /** Zapisuje klucz pary; false, gdy Keystore odmówił (wtedy nic nie zapisano). */
+    fun save(pairKey: ByteArray, peer: String): Boolean = runCatching {
         val c = Cipher.getInstance("AES/GCM/NoPadding").apply { init(Cipher.ENCRYPT_MODE, wrappingKey()) }
         val blob = c.iv + c.doFinal(pairKey)
         sp.edit().putString(K_BLOB, Base64.encodeToString(blob, Base64.NO_WRAP)).putString(K_NAME, peer).apply()
-    }
+    }.isSuccess
 
     fun load(): ByteArray? = runCatching {
         val blob = Base64.decode(sp.getString(K_BLOB, null) ?: return null, Base64.NO_WRAP)
         val c = Cipher.getInstance("AES/GCM/NoPadding").apply { init(Cipher.DECRYPT_MODE, wrappingKey(), GCMParameterSpec(128, blob, 0, 12)) }
         c.doFinal(blob, 12, blob.size - 12)
     }.getOrNull()
+
+    /**
+     * Klucz pary do połączenia. Zapisany, ale nie do odczytania (Keystore zgubił klucz, np. po przywróceniu kopii
+     * zapasowej na nowe urządzenie) → para usunięta i null: okna mówią „Para wygasła” zamiast czekać w nieskończoność.
+     */
+    fun loadOrForget(): ByteArray? = load() ?: run { if (paired) clear(); null }
 
     fun clear() { sp.edit().clear().apply() }
 

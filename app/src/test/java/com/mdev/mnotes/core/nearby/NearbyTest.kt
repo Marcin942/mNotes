@@ -16,8 +16,11 @@ class SyncCryptoTest {
         val k1 = SyncCrypto.pairKey(tablet, phone.publicKey); val k2 = SyncCrypto.pairKey(phone, tablet.publicKey)
         assertArrayEquals(k1, k2)
         assertEquals(32, k1.size)
-        assertEquals(SyncCrypto.sas(k1), SyncCrypto.sas(k2))
-        assertTrue(Regex("\\d{3} \\d{3}").matches(SyncCrypto.sas(k1)))
+        val n1 = ByteArray(16) { 1 }; val n2 = ByteArray(16) { 2 }
+        assertEquals(SyncCrypto.sas(k1, n1, n2), SyncCrypto.sas(k2, n2, n1))
+        assertTrue(Regex("\\d{3} \\d{3}").matches(SyncCrypto.sas(k1, n1, n2)))
+        // inny nonce, inne cyfry (dlatego nonce ujawnia się dopiero po zobowiązaniu)
+        assertNotEquals(SyncCrypto.sas(k1, n1, n2), SyncCrypto.sas(k1, n1, ByteArray(16) { 3 }))
         assertEquals(SyncCrypto.nearbyName(k1), SyncCrypto.nearbyName(k2))
         assertTrue(SyncCrypto.nearbyName(k1).startsWith("mn-"))
     }
@@ -27,7 +30,8 @@ class SyncCryptoTest {
         val tablet = SyncCrypto.generateKeys(); val phone = SyncCrypto.generateKeys(); val evil = SyncCrypto.generateKeys()
         // podmieniony klucz: tablet liczy z kluczem napastnika, telefon też
         val onTablet = SyncCrypto.pairKey(tablet, evil.publicKey); val onPhone = SyncCrypto.pairKey(phone, evil.publicKey)
-        assertNotEquals(SyncCrypto.sas(onTablet), SyncCrypto.sas(onPhone))
+        val n = ByteArray(16)
+        assertNotEquals(SyncCrypto.sas(onTablet, n, n), SyncCrypto.sas(onPhone, n, n))
     }
 
     @Test
@@ -153,17 +157,106 @@ class SyncPlanTest {
     }
 }
 
+class LinkPermissionsTest {
+    private val fine = "android.permission.ACCESS_FINE_LOCATION"
+    private val coarse = "android.permission.ACCESS_COARSE_LOCATION"
+    private val scan = "android.permission.BLUETOOTH_SCAN"
+
+    @Test
+    fun approximateLocationIsNotARefusal() {
+        assertTrue(LinkPermissions.granted(mapOf(scan to true, fine to false, coarse to true)))
+        assertTrue(LinkPermissions.granted(mapOf(scan to true, fine to true, coarse to true)))
+        assertTrue(!LinkPermissions.granted(mapOf(scan to true, fine to false, coarse to false)))
+        assertTrue(!LinkPermissions.granted(mapOf(scan to false, fine to true, coarse to true)))
+    }
+}
+
 class PairingTest {
+    private val nonce = ByteArray(Pairing.NONCE_LEN) { it.toByte() }
+
     @Test
     fun offerRoundTripsAsBytesAndCode() {
         val k = SyncCrypto.generateKeys()
-        val o = Pairing.Offer(k.publicKey, "Tablet Marcina")
-        val back = Pairing.decode(o.encode())!!
+        val o = Pairing.Offer(k.publicKey, nonce, "Tablet Marcina")
+        val back = Pairing.decode(o.encode()) as Pairing.Offer
         assertArrayEquals(k.publicKey, back.publicKey)
+        assertArrayEquals(nonce, back.nonce)
         assertEquals("Tablet Marcina", back.deviceName)
         val fromCode = Pairing.fromCode(o.toCode())!!
         assertArrayEquals(k.publicKey, fromCode.publicKey)
+        assertArrayEquals(nonce, fromCode.nonce)
+        val commit = Pairing.decode(Pairing.Commit(o.commitment()).encode()) as Pairing.Commit
+        assertArrayEquals(o.commitment(), commit.hash)
         assertNull(Pairing.decode("śmieci".toByteArray()))
         assertNull(Pairing.fromCode("mnotes-para:1:"))
+    }
+
+    /** Przesyła wiadomości z kroków do drugiej strony, aż obie skończą (jak łącze zachowujące kolejność). */
+    private fun run(a: PairingSession, b: PairingSession) {
+        val toB = ArrayDeque(listOf(a.start())); val toA = ArrayDeque(listOf(b.start()))
+        while (toA.isNotEmpty() || toB.isNotEmpty()) {
+            toB.removeFirstOrNull()?.let { toA.addAll(b.receive(it).send) }
+            toA.removeFirstOrNull()?.let { toB.addAll(a.receive(it).send) }
+        }
+    }
+
+    @Test
+    fun honestPairGetsTheSameKeyAndDigitsOnBothSides() {
+        val tablet = PairingSession("Tablet"); val phone = PairingSession("Telefon")
+        run(tablet, phone)
+        val t = tablet.result!!; val p = phone.result!!
+        assertArrayEquals(t.pairKey, p.pairKey)
+        assertEquals(t.sas, p.sas)
+        assertEquals("Telefon", t.peerName); assertEquals("Tablet", p.peerName)
+    }
+
+    @Test
+    fun ownOfferGoesOutOnlyAfterThePeersCommitment() {
+        val a = PairingSession("A")
+        val commit = a.start()
+        assertTrue(Pairing.decode(commit) is Pairing.Commit)
+        // nic nie przyszło: A nie ujawnia klucza; zobowiązanie B → dopiero wtedy oferta A
+        val b = PairingSession("B")
+        val step = a.receive(b.start())
+        assertEquals(1, step.send.size)
+        assertTrue(Pairing.decode(step.send[0]) is Pairing.Offer)
+        // B, która dostała zobowiązanie przed wysłaniem swojego, wysyła oba naraz: najpierw zobowiązanie
+        val late = PairingSession("C").receive(commit).send
+        assertEquals(2, late.size)
+        assertTrue(Pairing.decode(late[0]) is Pairing.Commit && Pairing.decode(late[1]) is Pairing.Offer)
+    }
+
+    @Test
+    fun keySwappedAfterTheCommitmentIsRejected() {
+        val a = PairingSession("Tablet"); val b = PairingSession("Telefon")
+        a.receive(b.start())
+        // napastnik przepuszcza zobowiązanie B, ale potem podsuwa A ofertę ze swoim kluczem i nonce B
+        val evil = SyncCrypto.generateKeys()
+        val honest = b.receive(a.start()).send.map { Pairing.decode(it) }.filterIsInstance<Pairing.Offer>().single()
+        val forged = Pairing.Offer(evil.publicKey, honest.nonce, honest.deviceName)
+        try { a.receive(forged.encode()); fail("podmieniony klucz przeszedł") } catch (_: CryptoException) {}
+        // zmieniona sama nazwa też nie przejdzie
+        val renamed = Pairing.Offer(honest.publicKey, honest.nonce, "Ktoś inny")
+        val a2 = PairingSession("Tablet")
+        a2.receive(Pairing.Commit(honest.commitment()).encode())
+        try { a2.receive(renamed.encode()); fail("zmieniona nazwa przeszła") } catch (_: CryptoException) {}
+    }
+
+    @Test
+    fun offerWithoutCommitmentAndForeignBytesAreRejected() {
+        val a = PairingSession("A")
+        a.start()
+        val k = SyncCrypto.generateKeys()
+        try { a.receive(Pairing.Offer(k.publicKey, nonce, "X").encode()); fail("oferta bez zobowiązania przeszła") } catch (_: CryptoException) {}
+        try { a.receive("śmieci".toByteArray()); fail() } catch (_: CryptoException) {}
+    }
+
+    @Test
+    fun manInTheMiddleWithHisOwnKeysShowsDifferentDigits() {
+        // napastnik paruje się osobno z tabletem i telefonem: musi zobowiązać się, zanim pozna nonce każdej strony
+        val tablet = PairingSession("Tablet"); val phone = PairingSession("Telefon")
+        val m1 = PairingSession("Telefon"); val m2 = PairingSession("Tablet")
+        run(tablet, m1); run(m2, phone)
+        assertNotEquals(tablet.result!!.sas, phone.result!!.sas)
     }
 }

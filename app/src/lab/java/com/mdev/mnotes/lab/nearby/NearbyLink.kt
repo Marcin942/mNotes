@@ -21,6 +21,7 @@ import com.google.android.gms.nearby.connection.Strategy
 import com.mdev.mnotes.core.nearby.ChunkJoiner
 import com.mdev.mnotes.core.nearby.LinkChunks
 import com.mdev.mnotes.core.nearby.Pairing
+import com.mdev.mnotes.core.nearby.PairingSession
 import com.mdev.mnotes.core.nearby.SyncCodec
 import com.mdev.mnotes.core.nearby.SyncCrypto
 import com.mdev.mnotes.core.nearby.SyncMsg
@@ -40,8 +41,8 @@ interface SyncListener {
 /**
  * Łącze telefon ↔ tablet przez Nearby Connections (Bluetooth albo Wi-Fi Direct, bez wspólnej sieci), wzorowane na
  * klawiaturze mChochlika (`docs/nearby/`). Tablet ([SyncRole.HOST]) się ogłasza, telefon szuka. Dwa tryby:
- * parowanie (stała nazwa, jawna wymiana kluczy publicznych, potem sześć cyfr na obu ekranach) i praca po parowaniu
- * (nazwa z klucza pary, każda ramka szyfrowana [SyncCodec]). Wszystko na głównym wątku, bez blokad.
+ * parowanie (stała nazwa, [PairingSession]: zobowiązania, potem oferty z kluczami, potem sześć cyfr na obu ekranach)
+ * i praca po parowaniu (nazwa z klucza pary, każda ramka szyfrowana [SyncCodec]). Wszystko na głównym wątku.
  */
 class NearbyLink(context: Context, private val listener: SyncListener) {
     private val client = Nearby.getConnectionsClient(context.applicationContext)
@@ -62,7 +63,7 @@ class NearbyLink(context: Context, private val listener: SyncListener) {
 
     private inner class Session(val role: SyncRole, val pairKey: ByteArray?, val deviceName: String) {
         private val name = pairKey?.let { SyncCrypto.nearbyName(it) } ?: Pairing.PAIRING_NAME
-        private val keys = if (pairKey == null) SyncCrypto.generateKeys() else null
+        private var pairing = if (pairKey == null) PairingSession(deviceName) else null
         private var searching = false
         private var endpoint: String? = null
         private var connected = false
@@ -77,7 +78,7 @@ class NearbyLink(context: Context, private val listener: SyncListener) {
                 val part = payload.asBytes() ?: return
                 try {
                     val raw = joiner.feed(part) ?: return
-                    if (keys != null) return pairOffer(raw)
+                    if (pairKey == null) return pairMessage(raw)
                     val c = codec ?: return
                     if (!c.ready) {
                         c.acceptHello(raw)
@@ -100,7 +101,7 @@ class NearbyLink(context: Context, private val listener: SyncListener) {
                 if (!alive || info.endpointName != name || (endpoint != null && endpoint != id)) { client.rejectConnection(id); return }
                 endpoint = id
                 joiner = ChunkJoiner()
-                if (pairKey != null) codec = SyncCodec(pairKey, role)
+                if (pairKey != null) codec = SyncCodec(pairKey, role) else pairing = PairingSession(deviceName)
                 client.acceptConnection(id, payloads).addOnFailureListener { if (alive && endpoint == id) failed(id) }
             }
 
@@ -109,7 +110,7 @@ class NearbyLink(context: Context, private val listener: SyncListener) {
                 if (!resolution.status.isSuccess) return failed(id)
                 connected = true
                 stopSearch()
-                if (keys != null) { sendRaw(Pairing.Offer(keys.publicKey, deviceName).encode()); return }
+                if (pairKey == null) { pairing?.let { sendRaw(it.start()) }; return }
                 val c = codec ?: SyncCodec(pairKey!!, role).also { codec = it }
                 sendRaw(c.hello())
                 if (c.ready) linkUp()
@@ -132,11 +133,15 @@ class NearbyLink(context: Context, private val listener: SyncListener) {
             override fun onEndpointLost(id: String) = Unit
         }
 
-        /** Klucz publiczny drugiej strony przyszedł jawnie; bezpieczeństwo daje porównanie cyfr przez użytkownika. */
-        private fun pairOffer(raw: ByteArray) {
-            val offer = Pairing.decode(raw) ?: throw IllegalStateException("to nie jest oferta parowania")
-            val key = SyncCrypto.pairKey(keys!!, offer.publicKey)
-            listener.onPairCode(SyncCrypto.sas(key), offer.deviceName, key)
+        /**
+         * Wiadomość parowania: zobowiązanie drugiej strony (odpowiadamy ofertą) albo jej oferta (sprawdzona względem
+         * zobowiązania; niezgodna rzuca i zrywa połączenie). Cyfry porównuje potem użytkownik.
+         */
+        private fun pairMessage(raw: ByteArray) {
+            val p = pairing ?: return
+            val step = p.receive(raw)
+            for (m in step.send) sendRaw(m)
+            step.result?.let { listener.onPairCode(it.sas, it.peerName, it.pairKey) }
         }
 
         fun search() {
@@ -218,6 +223,12 @@ class NearbyLink(context: Context, private val listener: SyncListener) {
             ConnectionsStatusCodes.MISSING_PERMISSION_ACCESS_WIFI_STATE,
             ConnectionsStatusCodes.MISSING_PERMISSION_CHANGE_WIFI_STATE,
         )
+
+        /**
+         * Czy wynik prośby o uprawnienia pozwala próbować: wszystko poza lokalizacją przyznane, a z lokalizacji wystarczy
+         * przybliżona (Android 12+ daje wybór; odmowa dokładnej to nie odmowa łącza).
+         */
+        fun granted(result: Map<String, Boolean>): Boolean = com.mdev.mnotes.core.nearby.LinkPermissions.granted(result)
 
         /** Uprawnienia do poproszenia przed startem (zależnie od wersji Androida). */
         fun permissions(sdk: Int): Array<String> = buildList {

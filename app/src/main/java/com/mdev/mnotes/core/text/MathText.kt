@@ -26,8 +26,11 @@ object MathText {
     private fun sup(c: Char): Char? = SUP_SRC.indexOf(c).let { if (it < 0) null else SUP_DST[it] }
     private fun sub(c: Char): Char? = SUB_SRC.indexOf(c).let { if (it < 0) null else SUB_DST[it] }
 
-    /** Zamienia wszystkie zakończone znaczniki w [s]. */
-    fun convert(s: String): String {
+    /**
+     * Zamienia wszystkie zakończone znaczniki w [s]. [atEnd] = tekst zatwierdzony („Gotowe”): koniec tekstu też kończy
+     * `\alpha` i ciąg cyfr, ale nie pojedynczą literę (`plik_a` zostaje).
+     */
+    fun convert(s: String, atEnd: Boolean = false): String {
         if ('\\' !in s && '^' !in s && '_' !in s) return s
         val out = StringBuilder(s.length)
         var i = 0
@@ -40,7 +43,7 @@ object MathText {
                     val name = s.substring(i + 1, j)
                     val g = GREEK[name]
                     // Znacznik zakończony dowolnym nieliterowym znakiem (zostaje); na końcu tekstu czekamy na dalsze litery.
-                    if (g != null && j < s.length) {
+                    if (g != null && (j < s.length || atEnd)) {
                         out.append(g)
                         i = j
                         continue
@@ -55,10 +58,19 @@ object MathText {
                         val body = if (end > 0) s.substring(i + 2, end) else null
                         val conv = body?.map { map(it) }
                         if (conv != null && body.isNotEmpty() && conv.all { it != null }) { conv.forEach { out.append(it) }; i = end + 1; continue }
+                    } else if (n != null && (n in '0'..'9' || n == '+' || n == '-')) {
+                        // Znak i cyfry czekają na koniec ciągu, inaczej „x^10” dałoby „x¹0”. Po „^” ciąg kończy też litera
+                        // („x^2y” to wzór), po „_” tylko nielitera, bo w nazwach plików („plik_2a”) podkreślenie jest częste.
+                        var j = i + 1
+                        if (n !in '0'..'9') j++
+                        while (j < s.length && s[j] in '0'..'9') j++
+                        val stop = s.getOrNull(j)
+                        val closed = if (stop == null) atEnd else c == '^' || !stop.isLetter()
+                        if (closed) { for (k in i + 1 until j) out.append(map(s[k]) ?: s[k]); i = j; continue }
                     } else if (n != null) {
                         val m = map(n)
                         val after = s.getOrNull(i + 2)
-                        // Cyfra i znak od razu; litera tylko przed nieliterą (żeby „nazwa_pliku” zostało).
+                        // Pozostałe znaki od razu; litera tylko przed nieliterą (żeby „nazwa_pliku” zostało).
                         if (m != null && (!n.isLetter() || (after != null && !after.isLetter()))) { out.append(m); i += 2; continue }
                     }
                     out.append(c); i++

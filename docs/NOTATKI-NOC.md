@@ -136,3 +136,18 @@ wariant core 594, wariant lab 623 (te same + 29 testów lab); `assembleCoreDebug
 
 Nie testowane: nic z UI na urządzeniu (brak tabletu), wydajność kredy na zdjęciu 12 Mpx (praca na 2400 px), Nearby
 w ogóle (wymaga dwóch urządzeń).
+
+## Faza 2 — agent A (od 27.10, lista A2-* w `docs-noc/PLAN-NOCY.md`)
+
+Każdy punkt na własnej gałęzi `noc/f2-<temat>` od `noc/wszystko`, po zamknięciu scalony do `noc/wszystko`.
+Testy: `./gradlew --offline :app:testCoreDebugUnitTest :app:testLabDebugUnitTest :app:assembleCoreDebug :app:assembleLabDebug`.
+Środowisko: `source .toolchain/env.sh` jest w tej sesji zablokowane przez uprawnienia, ale zmienne (JDK, SDK, GRADLE_USER_HOME)
+dziedziczy już proces z `start-A.sh`, więc `./gradlew` działa bez niego.
+
+- **A2-1** `x^10` → x¹⁰ — `noc/f2-indeksy`; `MathTextTest` (`multiDigitRuns`, `finalFlush`). Cyfry (z opcjonalnym znakiem
+  `+`/`-` na początku) po `^`/`_` czekają na koniec ciągu. **Odstępstwo od planu (świadome):** po `^` ciąg kończy też litera
+  (`x^2y ` → x²y, jak przed poprawką), po `_` tylko nielitera (zgodnie z planem; `plik_2a.txt` zostaje) — wykładnik przed
+  literą to typowy wzór, a podkreślenie z cyfrą przed literą typowa nazwa pliku. Dodatkowo „Gotowe” w oknie tekstu kończy
+  znacznik na samym końcu tekstu (inaczej `x^10` wpisane na końcu i zatwierdzone zostałoby surowe). Przy okazji: `x^-1 `
+  dawało x⁻1, teraz x⁻¹. Testy: core 659, lab 688, 0 błędów. **Tablet:** Tekst → wpisz `x^10 + a_12 = 10^-3` i „Gotowe” →
+  `x¹⁰ + a₁₂ = 10⁻³`; `plik_2a.txt` zostaje bez zmian.

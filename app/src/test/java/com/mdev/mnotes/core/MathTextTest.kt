@@ -19,13 +19,38 @@ class MathTextTest {
     }
 
     @Test fun superAndSubscripts() {
-        assertEquals("x² + y²", c("x^2 + y^2"))
-        assertEquals("a₁, a₂", c("a_1, a_2"))
+        assertEquals("x² + y²,", c("x^2 + y^2,"))
+        assertEquals("x² + y^2", c("x^2 + y^2"))   // cyfra na końcu czeka, bo może przyjść następna
+        assertEquals("a₁, a₂ ", c("a_1, a_2 "))
         assertEquals("x⁻¹", c("x^{-1}"))
         assertEquals("aᵢⱼ", c("a_{ij}"))
         assertEquals("eⁱ ", c("e^i "))
         assertEquals("x^n", c("x^n"))   // litera na końcu czeka na granicę
         assertEquals("xⁿ+1", c("x^n+1"))
+    }
+
+    /** A2-1 (przegląd Fable): „x^10” dawało „x¹0”, bo cyfra zamieniała się od razu. */
+    @Test fun multiDigitRuns() {
+        assertEquals("x¹⁰ ", c("x^10 "))
+        assertEquals("a₁₂ ", c("a_12 "))
+        assertEquals("x^1", c("x^1"))             // bez granicy nic się nie zmienia
+        assertEquals("x^10", c("x^10"))
+        assertEquals("x⁻¹ ", c("x^-1 "))         // znak i cyfra razem, nie „x⁻1”
+        assertEquals("Na⁺ ", c("Na^+ "))
+        assertEquals("10¹²·", c("10^12·"))
+        assertEquals("x²y ", c("x^2y "))         // po „^” litera kończy wykładnik
+        assertEquals("plik_2a.txt", c("plik_2a.txt"))   // po „_” nie — nazwy plików
+        assertEquals("img₂₀.jpg", c("img_20.jpg"))      // jak dotąd: indeks przed kropką
+        assertEquals("a₁₀+b₂₃=", c("a_10+b_23="))
+    }
+
+    /** Zatwierdzenie („Gotowe”) kończy znacznik na końcu tekstu, ale nie pojedynczą literę. */
+    @Test fun finalFlush() {
+        assertEquals("x¹⁰", MathText.convert("x^10", atEnd = true))
+        assertEquals("α", MathText.convert("\\alpha", atEnd = true))
+        assertEquals("plik_a", MathText.convert("plik_a", atEnd = true))
+        assertEquals("x^", MathText.convert("x^", atEnd = true))
+        assertEquals("\\alphabet", MathText.convert("\\alphabet", atEnd = true))
     }
 
     @Test fun ordinaryTextStays() {

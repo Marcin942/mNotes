@@ -105,6 +105,7 @@ class Settings(ctx: Context) {
     var eraserSize by Pref("eraser.size", 14f)       // promień w pt
     var eraserKeepHighlighter by Pref("eraser.ignore_highlighter", false)
     var lassoRect by Pref("lasso.rect", false)
+    var lassoTouch by Pref("lasso.touch", false)    // lasso „tylko zahacz”: wystarczy musnąć obiekt pętlą; domyślnie zbalansowane (połowa obiektu w pętli)
     var dockPages by Pref("ui.dockpages", false)    // panel stron zadokowany z lewej na szerokim oknie (LNX-016)
     var samsungMode by Pref("import.samsung_mode", 0) // ostatni wybór w oknie importu Samsung Notes: 0 wygląd oryginału, 1 standard mNotes
     var zoomMag by Pref("zoomwin.mag", 3f)          // powiększenie okna powiększenia (EXT-003): 2–5×

@@ -378,6 +378,10 @@ private fun EditorPrefs(set: com.mdev.mnotes.data.Settings) {
         Opt(T.t("Rozmiar gumki: ${set.eraserSize.toInt()} pt", "Eraser size: ${set.eraserSize.toInt()} pt"), "eraser grubość wymaż") { MSlider(set.eraserSize, 1f, 60f) { set.eraserSize = it } }
         ToggleRow(T.t("Gumka pomija zakreślacz", "Eraser ignores highlighter"), set.eraserKeepHighlighter, keys = "eraser wymaż zakreślacz marker") { set.eraserKeepHighlighter = it }
         Opt(T.t("Kształt lassa", "Lasso shape"), "zaznaczanie zaznacz odręczne prostokąt") { Choice(listOf(T.t("Odręczne", "Freehand"), T.t("Prostokąt", "Rectangle")), if (set.lassoRect) 1 else 0) { set.lassoRect = it == 1 } }
+        Opt(T.t("Co zaznacza lasso", "What the lasso selects"), "zaznaczanie pętla zahacz musnąć zbalansowane touch balanced") {
+            Choice(listOf(T.t("Zbalansowane", "Balanced"), T.t("Tylko zahacz", "Just touch")), if (set.lassoTouch) 1 else 0) { set.lassoTouch = it == 1 }
+        }
+        Text(lassoModeHint(set.lassoTouch), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(bottom = 6.dp))
         ToggleRow(T.t("Przyciągaj do siatki", "Snap to grid"), set.snapGrid, keys = "grid siatka magnes snap") { set.snapGrid = it }
     }
     Group(T.t("Obracanie i kąty", "Rotation & angles"), keys = "$ROTATION_QUERY przyciąganie równe kąty obrót obracanie kątomierz tarcza stopnie rotate snap protractor dial degrees") {

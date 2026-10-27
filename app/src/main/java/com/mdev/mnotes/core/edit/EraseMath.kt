@@ -263,6 +263,47 @@ object EraseMath {
         return out
     }
 
+    /**
+     * Lasso „tylko zahacz” (F1): obiekt trafia do zaznaczenia, gdy choć kawałek leży w pętli albo pętla go musnęła
+     * (przeszła w odległości [slop] od kreski, przez ramkę, przez wypełnienie). Zbalansowane to [selectedByLasso].
+     */
+    fun touchedByLasso(e: Element, poly: FloatArray, slop: Float): Boolean {
+        val n = poly.size / 2
+        if (n == 0) return false
+        val lb = Bounds.ofPoints(poly).inflate(slop)
+        if (!lb.intersects(e.bounds)) return false
+        when (e) {
+            is Stroke -> {
+                val s = samplesAlong(e)
+                for (k in 0 until s.size / 2) if (polygonContains(poly, s[2 * k], s[2 * k + 1])) return true
+                for (i in 0 until n) {
+                    val j = (i + 1) % n
+                    if (hitsStrokeSwept(e, poly[2 * i], poly[2 * i + 1], poly[2 * j], poly[2 * j + 1], slop)) return true
+                }
+                return false
+            }
+            is BoxElement -> {
+                if (polygonContains(poly, e.cx, e.cy)) return true
+                val b = e.bounds
+                if (polygonContains(poly, b.l, b.t) || polygonContains(poly, b.r, b.t) || polygonContains(poly, b.r, b.b) || polygonContains(poly, b.l, b.b)) return true
+                for (i in 0 until n) {
+                    val j = (i + 1) % n
+                    if (hitsElementSwept(e, poly[2 * i], poly[2 * i + 1], poly[2 * j], poly[2 * j + 1], slop)) return true
+                }
+                return false
+            }
+            is FillEl -> {
+                for (ring in e.rings) for (k in 0 until ring.size / 2) if (polygonContains(poly, ring[2 * k], ring[2 * k + 1])) return true
+                for (i in 0 until n) if (e.containsPoint(poly[2 * i], poly[2 * i + 1])) return true
+                return false
+            }
+        }
+    }
+
+    /** Zaznaczenie lassem wg trybu: [touch] = „tylko zahacz”, inaczej zbalansowane. */
+    fun lassoSelects(e: Element, poly: FloatArray, touch: Boolean, slop: Float): Boolean =
+        if (touch) touchedByLasso(e, poly, slop) else selectedByLasso(e, poly)
+
     /** Kreska i wypełnienie wpadają do zaznaczenia, gdy co najmniej połowa ich długości leży w wielokącie; ramki — gdy środek. */
     fun selectedByLasso(e: Element, poly: FloatArray): Boolean = when (e) {
         is Stroke -> {

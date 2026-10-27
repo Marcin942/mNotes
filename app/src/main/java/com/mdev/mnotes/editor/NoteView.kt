@@ -2796,7 +2796,9 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
                     val x1 = max(lp[0], lp[2 * (ln - 1)]) + g; val y1 = max(lp[1], lp[2 * (ln - 1) + 1]) + g
                     floatArrayOf(x0, y0, x1, y0, x1, y1, x0, y1)
                 } else lp.copyOf(2 * ln)
-                val ids = doc.content(page).elements.filter { !it.locked && EraseMath.selectedByLasso(it, poly) }.map { it.id }.toSet()
+                val touch = settings.lassoTouch
+                val slop = LASSO_TOUCH_DP * dp / zoom
+                val ids = doc.content(page).elements.filter { !it.locked && EraseMath.lassoSelects(it, poly, touch, slop) }.map { it.id }.toSet()
                 ed.select(page.id, ids)
             }
             LM.MOVE, LM.SCALE, LM.ROTATE, LM.VERTEX, LM.RESIZE, LM.NONE -> if (!toolMoved) lassoTap(page, pgX(pi, curX), pgY(pi, curY))
@@ -2958,6 +2960,8 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
         private val TAP_SLOPS_DP = floatArrayOf(8f, 14f, 22f)
         /** Zapas prostokąta zaznaczenia (dp ekranu): obiekt na samym brzegu ramki też jest w środku. */
         private const val RECT_SLACK_DP = 4f
+        /** Lasso „tylko zahacz”: pętla przechodząca tak blisko obiektu (dp ekranu) już go łapie. */
+        private const val LASSO_TOUCH_DP = 3f
         /** Promień pędzla formatu w trybie obiektowym (dp ekranu). */
         private const val PAINT_R_DP = 7f
         /** Gumka: przemalowanie do tylu ms nie wymusza przerw; dłuższe czeka ERASE_REST × własny czas (najwyżej ERASE_MAX_WAIT_MS). */

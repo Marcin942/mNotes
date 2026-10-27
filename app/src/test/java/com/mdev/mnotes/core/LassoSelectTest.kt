@@ -76,6 +76,26 @@ class LassoSelectTest {
         assertFalse(EraseMath.polygonContains(poly, 0f, 80f))
     }
 
+    /** F1: „tylko zahacz” łapie obiekt, który pętla ledwo musnęła; zbalansowane go pomija. */
+    @Test fun touchModeCatchesGrazedObjects() {
+        val loop = rect(0f, 0f, 50f, 50f)
+        val crossing = line(45f, 25f, 200f, 25f)            // tylko 5 pt w pętli
+        assertFalse(EraseMath.lassoSelects(crossing, loop, touch = false, slop = 2f))
+        assertTrue(EraseMath.lassoSelects(crossing, loop, touch = true, slop = 2f))
+        val grazed = line(51f, 60f, 51f, 120f)              // róg pętli jest ok. 10 pt od końca kreski: za daleko
+        assertFalse(EraseMath.lassoSelects(grazed, loop, touch = true, slop = 2f))
+        val brushed = line(51f, 10f, 51f, 40f)              // biegnie tuż przy boku pętli (1 pt), w całości poza nią
+        assertTrue(EraseMath.lassoSelects(brushed, loop, touch = true, slop = 2f))
+        assertFalse(EraseMath.lassoSelects(line(80f, 10f, 80f, 40f), loop, touch = true, slop = 2f))
+    }
+
+    @Test fun touchModeBoxCornerInside() {
+        val img = com.mdev.mnotes.core.model.ImageEl(Ids.next(), "a.png", 60f, 60f, 40f, 40f)   // od (40,40) do (80,80)
+        val loop = rect(0f, 0f, 50f, 50f)
+        assertFalse(EraseMath.lassoSelects(img, loop, touch = false, slop = 2f))
+        assertTrue(EraseMath.lassoSelects(img, loop, touch = true, slop = 2f))
+    }
+
     @Test fun samplesAreSpreadAlongLength() {
         val s = EraseMath.samplesAlong(line(0f, 0f, 100f, 0f), 4)
         assertEquals(8, s.size)

@@ -170,6 +170,7 @@ Wszystko poniżej: kod + testy JVM, **bez testu na tablecie**. Gałęzie `noc/*`
 - [~] NOC-B8 Długopis zmienia się na „Rękę” po zaznaczeniu — **nie odtworzono** (nigdzie nie ma automatycznej zmiany narzędzia na rękę); hipotezy w `docs/NOTATKI-NOC.md`
 - [x] NOC-B9 Krótkie proste: próg prostej z grubości pióra i powiększenia (3–18 pt, `ShapeRecognizer.minLineFor`), krótka kreska może być tylko prostą (`ShortLineTest`)
 - [x] NOC-B10 Kreska ukośna w ramce prostokąta: jak NOC-B3
+- [x] NOC-F1 Lasso „Zbalansowane / Tylko zahacz” (gałąź `noc/lasso`): chipy w panelu lassa i Ustawienia → Gumka i lasso → „Co zaznacza lasso” (`lasso.touch`, domyślnie zbalansowane = dawne zachowanie). „Tylko zahacz”: kawałek obiektu w pętli albo pętla przechodzi w 3 dp od niego (`EraseMath.touchedByLasso`, `LassoSelectTest`)
 
 ## Poza zakresem (świadomie)
 - [-] Rozpoznawanie pisma → tekst, formuły → LaTeX (EDT-046/047), OCR wyszukiwanie w piśmie odręcznym — brak lokalnego silnika offline w zależnościach; wróci, gdy będzie model on-device.

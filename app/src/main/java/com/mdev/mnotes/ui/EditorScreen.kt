@@ -1033,6 +1033,12 @@ private fun ToolPanel(ed: Editor, set: com.mdev.mnotes.data.Settings, panel: Pan
                         Chip(T.t("Odręczne", "Freehand"), !set.lassoRect, { set.lassoRect = false }, icon = Icons.Rounded.Gesture)
                         Chip(T.t("Prostokąt", "Rectangle"), set.lassoRect, { set.lassoRect = true }, icon = Icons.Rounded.HighlightAlt)
                     }
+                    SectionLabel(T.t("Co zaznacza pętla", "What the loop selects"))
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Chip(T.t("Zbalansowane", "Balanced"), !set.lassoTouch, { set.lassoTouch = false })
+                        Chip(T.t("Tylko zahacz", "Just touch"), set.lassoTouch, { set.lassoTouch = true })
+                    }
+                    Text(lassoModeHint(set.lassoTouch), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     ToggleRow(T.t("Przyciągaj do siatki", "Snap to grid"), ed.gridSnap) { ed.gridSnap = it; set.snapGrid = it }
                     ToggleRow(T.t("Przyciągaj do równych kątów", "Snap to even angles"), set.rotSnap) { set.rotSnap = it }
                     Text(rotationHint(set), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)

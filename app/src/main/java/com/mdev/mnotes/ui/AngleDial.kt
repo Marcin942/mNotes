@@ -243,6 +243,11 @@ private fun DrawScope.drawLabels(c: Offset, r: Float, paint: android.graphics.Pa
     }
 }
 
+/** Opis trybu zaznaczania lassem (panel lassa i Ustawienia). */
+internal fun lassoModeHint(touch: Boolean): String =
+    if (touch) T.t("Wystarczy musnąć obiekt pętlą albo objąć jego kawałek.", "Brushing an object with the loop, or circling part of it, is enough.")
+    else T.t("Obiekt trafia do zaznaczenia, gdy co najmniej połowa leży w pętli.", "An object is selected when at least half of it is inside the loop.")
+
 /** Skrót stanu do panelu lasso: „Obrót przyciąga: co 15°”. */
 internal fun rotationHint(set: Settings): String =
     if (!set.rotSnap) T.t("Obrót jest płynny, bez zatrzymywania na kątach.", "Rotation is free, with no stops at angles.")

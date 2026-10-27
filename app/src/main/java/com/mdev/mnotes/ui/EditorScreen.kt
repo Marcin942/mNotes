@@ -1737,6 +1737,14 @@ private fun CtxMenuOverlay(ed: Editor, openStyle: () -> Unit) {
                     Item(T.t("Kopiuj wycinek do schowka", "Copy snip to clipboard")) { ed.snipSel(true) }
                     Item(T.t("Zapisz jako naklejkę…", "Save as sticker…")) { ed.stickerSaveOpen = true }
                     if (ed.canArrangeSel()) Item(T.t("Uporządkuj obrazy", "Arrange images")) { ed.arrangeSel() }
+                    // L1: konstrukcje dla zaznaczonych kształtów (trójkąt, proste, okręgi, punkty).
+                    val cons = remember(cm) { ed.constructionOps() }
+                    if (cons.isNotEmpty()) {
+                        HorizontalDivider()
+                        Text(T.t("Konstrukcja", "Construction"), Modifier.padding(horizontal = 16.dp, vertical = 4.dp), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        for (op in cons) Item(T.t(op.pl, op.en)) { ed.applyConstruction(op) }
+                        HorizontalDivider()
+                    }
                 }
                 Item(T.t("Wklej", "Paste"), "Ctrl+V", ed.canPaste() && !ed.readOnly) { ed.paste(if (cm.pageIndex >= 0) Triple(cm.pageIndex, cm.lx, cm.ly) else null) }
                 if (cm.hasSel) {

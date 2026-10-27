@@ -1,0 +1,141 @@
+package com.mdev.mnotes.core.geom
+
+import kotlin.math.abs
+import kotlin.math.cos
+import kotlin.math.hypot
+import kotlin.math.sin
+import kotlin.math.sqrt
+
+/**
+ * Konstrukcje geometryczne 2D (L1), napisane od zera według znanych wzorów (pomysł z pracy licencjackiej „Route
+ * Editor”, bez jej kodu): okrąg przez trzy punkty, przecięcia, punkty szczególne trójkąta i przekształcenia.
+ * Wszystko w punktach strony (pt), y w dół jak na ekranie — wzory od tego nie zależą.
+ */
+object Construct {
+    data class P(val x: Float, val y: Float) {
+        operator fun plus(o: P) = P(x + o.x, y + o.y)
+        operator fun minus(o: P) = P(x - o.x, y - o.y)
+        operator fun times(k: Float) = P(x * k, y * k)
+        fun dist(o: P) = hypot(x - o.x, y - o.y)
+    }
+
+    /** Prosta przez [a] i [b] (jako odcinek do rysowania: od [a] do [b]). */
+    data class Line(val a: P, val b: P)
+
+    data class Circle(val c: P, val r: Float)
+
+    private const val EPS = 1e-6
+
+    private fun cross(a: P, b: P) = a.x.toDouble() * b.y - a.y.toDouble() * b.x
+
+    /** Okrąg przez trzy punkty; null, gdy są współliniowe. */
+    fun circleThrough(a: P, b: P, c: P): Circle? {
+        val o = circumcenter(a, b, c) ?: return null
+        return Circle(o, o.dist(a))
+    }
+
+    /** Środek okręgu opisanego (przecięcie symetralnych). */
+    fun circumcenter(a: P, b: P, c: P): P? {
+        val ax = a.x.toDouble(); val ay = a.y.toDouble(); val bx = b.x.toDouble(); val by = b.y.toDouble(); val cx = c.x.toDouble(); val cy = c.y.toDouble()
+        val d = 2 * (ax * (by - cy) + bx * (cy - ay) + cx * (ay - by))
+        if (abs(d) < EPS) return null
+        val a2 = ax * ax + ay * ay; val b2 = bx * bx + by * by; val c2 = cx * cx + cy * cy
+        return P(((a2 * (by - cy) + b2 * (cy - ay) + c2 * (ay - by)) / d).toFloat(), ((a2 * (cx - bx) + b2 * (ax - cx) + c2 * (bx - ax)) / d).toFloat())
+    }
+
+    fun centroid(a: P, b: P, c: P) = P((a.x + b.x + c.x) / 3f, (a.y + b.y + c.y) / 3f)
+
+    /** Ortocentrum: H = A + B + C − 2·O (prosta Eulera), dla współliniowych null. */
+    fun orthocenter(a: P, b: P, c: P): P? {
+        val o = circumcenter(a, b, c) ?: return null
+        return P(a.x + b.x + c.x - 2 * o.x, a.y + b.y + c.y - 2 * o.y)
+    }
+
+    /** Okrąg wpisany: środek ważony długościami przeciwległych boków, promień = pole / połowa obwodu. */
+    fun incircle(a: P, b: P, c: P): Circle? {
+        val la = b.dist(c); val lb = c.dist(a); val lc = a.dist(b)
+        val per = la + lb + lc
+        val area = abs(cross(b - a, c - a)).toFloat() / 2f
+        if (per < EPS || area < EPS) return null
+        val i = P((la * a.x + lb * b.x + lc * c.x) / per, (la * a.y + lb * b.y + lc * c.y) / per)
+        return Circle(i, 2f * area / per)
+    }
+
+    /** Przecięcie prostych (nie odcinków); null dla równoległych. */
+    fun intersect(l1: Line, l2: Line): P? {
+        val r = l1.b - l1.a; val s = l2.b - l2.a
+        val den = cross(r, s)
+        if (abs(den) < EPS) return null
+        val t = cross(l2.a - l1.a, s) / den
+        return P((l1.a.x + r.x * t).toFloat(), (l1.a.y + r.y * t).toFloat())
+    }
+
+    /** Przecięcia prostej z okręgiem (0, 1 albo 2 punkty). */
+    fun intersect(l: Line, c: Circle): List<P> {
+        val d = l.b - l.a
+        val f = l.a - c.c
+        val a = d.x.toDouble() * d.x + d.y.toDouble() * d.y
+        if (a < EPS) return emptyList()
+        val b = 2 * (f.x.toDouble() * d.x + f.y.toDouble() * d.y)
+        val cc = f.x.toDouble() * f.x + f.y.toDouble() * f.y - c.r.toDouble() * c.r
+        val disc = b * b - 4 * a * cc
+        if (disc < -EPS * a) return emptyList()
+        val sq = sqrt(maxOf(0.0, disc))
+        val t1 = (-b - sq) / (2 * a); val t2 = (-b + sq) / (2 * a)
+        val p1 = P((l.a.x + d.x * t1).toFloat(), (l.a.y + d.y * t1).toFloat())
+        if (sq < 1e-9) return listOf(p1)
+        return listOf(p1, P((l.a.x + d.x * t2).toFloat(), (l.a.y + d.y * t2).toFloat()))
+    }
+
+    /** Przecięcia dwóch okręgów (0, 1 albo 2 punkty; współśrodkowe — brak). */
+    fun intersect(c1: Circle, c2: Circle): List<P> {
+        val d = c1.c.dist(c2.c).toDouble()
+        if (d < EPS || d > c1.r + c2.r + 1e-4 || d < abs(c1.r - c2.r) - 1e-4) return emptyList()
+        val a = (c1.r.toDouble() * c1.r - c2.r.toDouble() * c2.r + d * d) / (2 * d)
+        val h = sqrt(maxOf(0.0, c1.r.toDouble() * c1.r - a * a))
+        val ux = (c2.c.x - c1.c.x) / d; val uy = (c2.c.y - c1.c.y) / d
+        val mx = c1.c.x + a * ux; val my = c1.c.y + a * uy
+        val p1 = P((mx - h * uy).toFloat(), (my + h * ux).toFloat())
+        if (h < 1e-6) return listOf(p1)
+        return listOf(p1, P((mx + h * uy).toFloat(), (my - h * ux).toFloat()))
+    }
+
+    /** Punkt na odcinku (t ∈ [0, 1] od a do b) i na okręgu (t ∈ [0, 1] pełny obrót od kierunku osi x). */
+    fun pointOn(l: Line, t: Float) = l.a + (l.b - l.a) * t
+    fun pointOn(c: Circle, t: Float): P { val a = 2 * Math.PI * t; return P(c.c.x + c.r * cos(a).toFloat(), c.c.y + c.r * sin(a).toFloat()) }
+
+    /** Rzut prostopadły punktu na prostą (spodek wysokości). */
+    fun project(p: P, l: Line): P {
+        val d = l.b - l.a
+        val len2 = d.x.toDouble() * d.x + d.y.toDouble() * d.y
+        if (len2 < EPS) return l.a
+        val t = ((p.x - l.a.x).toDouble() * d.x + (p.y - l.a.y).toDouble() * d.y) / len2
+        return P((l.a.x + d.x * t).toFloat(), (l.a.y + d.y * t).toFloat())
+    }
+
+    fun reflect(p: P, l: Line): P { val q = project(p, l); return q * 2f - p }
+    fun reflect(p: P, center: P): P = center * 2f - p
+    fun rotate(p: P, center: P, rad: Float): P {
+        val c = cos(rad); val s = sin(rad); val d = p - center
+        return P(center.x + d.x * c - d.y * s, center.y + d.x * s + d.y * c)
+    }
+    fun homothety(p: P, center: P, k: Float): P = center + (p - center) * k
+    fun translate(p: P, v: P): P = p + v
+
+    /** Środek odcinka i symetralna (jako odcinek długości [len] przez środek). */
+    fun midpoint(a: P, b: P) = P((a.x + b.x) / 2f, (a.y + b.y) / 2f)
+    fun bisector(a: P, b: P, len: Float): Line {
+        val m = midpoint(a, b); val d = b - a; val l = hypot(d.x, d.y).coerceAtLeast(1e-6f)
+        val n = P(-d.y / l, d.x / l)
+        return Line(m - n * (len / 2f), m + n * (len / 2f))
+    }
+
+    /** Dwusieczna kąta przy wierzchołku [v] między ramionami do [a] i [b] (półprosta długości [len]). */
+    fun angleBisector(a: P, v: P, b: P, len: Float): Line {
+        val u = (a - v).let { it * (1f / hypot(it.x, it.y).coerceAtLeast(1e-6f)) }
+        val w = (b - v).let { it * (1f / hypot(it.x, it.y).coerceAtLeast(1e-6f)) }
+        val s = u + w
+        val l = hypot(s.x, s.y).coerceAtLeast(1e-6f)
+        return Line(v, v + s * (len / l))
+    }
+}

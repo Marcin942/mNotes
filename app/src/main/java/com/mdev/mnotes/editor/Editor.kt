@@ -13,6 +13,7 @@ import com.mdev.mnotes.app.MNotesApp
 import com.mdev.mnotes.core.geom.Axes
 import com.mdev.mnotes.core.geom.AxesSpec
 import com.mdev.mnotes.core.geom.Bounds
+import com.mdev.mnotes.core.geom.ConstructOps
 import com.mdev.mnotes.core.model.DocEdit
 import com.mdev.mnotes.core.model.Element
 import com.mdev.mnotes.core.model.ElementsEdit
@@ -662,6 +663,20 @@ class Editor(val ctx: Context, val nbId: String) {
 
     /** Zapamiętuje narzędzie piszące; wołane przy każdej zmianie narzędzia. */
     fun noteTool(t: Tool) { if (t == Tool.PEN || t == Tool.CURVE) lastWriteTool = t }
+
+    // — Konstrukcje geometryczne (L1) —
+    /** Konstrukcje możliwe dla bieżącego zaznaczenia (trójkąt, proste, okręgi, punkty). */
+    fun constructionOps(): List<ConstructOps.Op> = if (readOnly) emptyList() else ConstructOps.ops(selElements())
+
+    /** Dopisuje wynik konstrukcji w kolorze i grubości aktywnego pióra; zaznacza wynik (jedno cofnięcie). */
+    fun applyConstruction(op: ConstructOps.Op) {
+        val p = selPage() ?: return
+        val ink = (if (pen.kind == PenKind.HIGHLIGHTER) 0xFF37474F.toInt() else pen.color) or (0xFF shl 24)
+        val els = op.build(ink, pen.width.coerceIn(0.6f, 3f))
+        if (els.isEmpty()) { say(T.t("Ta konstrukcja nie ma rozwiązania dla zaznaczonych kształtów", "This construction has no solution for the selected shapes")); return }
+        exec(DocEdit.Elements(p.id, ElementsEdit.add(doc.content(p), els)))
+        select(p.id, els.map { it.id }.toSet())
+    }
 
     // — Porządkowanie obrazów (F23) —
     fun canArrangeSel(): Boolean = !readOnly && selElements().count { it is ImageEl && !it.locked } >= 2

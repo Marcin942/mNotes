@@ -14,6 +14,7 @@ import com.mdev.mnotes.core.geom.Axes
 import com.mdev.mnotes.core.geom.AxesSpec
 import com.mdev.mnotes.core.geom.Bounds
 import com.mdev.mnotes.core.geom.ConstructOps
+import com.mdev.mnotes.core.pages.LecturePages
 import com.mdev.mnotes.core.model.DocEdit
 import com.mdev.mnotes.core.model.Element
 import com.mdev.mnotes.core.model.ElementsEdit
@@ -663,6 +664,35 @@ class Editor(val ctx: Context, val nbId: String) {
 
     /** Zapamiętuje narzędzie piszące; wołane przy każdej zmianie narzędzia. */
     fun noteTool(t: Tool) { if (t == Tool.PEN || t == Tool.CURVE) lastWriteTool = t }
+
+    // — Tryb wykładu (pomysł Fable nr 1) —
+    var lectureMode by mutableStateOf(false)
+    /** Rośnie, gdy trzeba otworzyć aparat (kapsuła trybu wykładu go obserwuje). */
+    var lectureShootTick by mutableIntStateOf(0)
+    private var lectureN = 0
+
+    fun lectureFile(): java.io.File = java.io.File(ctx.cacheDir, "share/wyklad-${System.currentTimeMillis()}.jpg").apply { parentFile?.mkdirs() }
+
+    /** Zdjęcie z aparatu na nowej stronie za bieżącą: nagłówek z datą i numerem, zdjęcie u góry, miejsce na notatki niżej. */
+    fun lectureShot(f: java.io.File) {
+        val after = curIndex()
+        repo.io.execute {
+            val name = runCatching { f.inputStream().use { repo.importAsset(nbId, it, "jpg") } }.getOrNull()
+            f.delete()
+            val size = name?.let { com.mdev.mnotes.render.Assets.imageSize(repo.assetFile(nbId, it)) }
+            view?.post {
+                if (name == null || size == null) { say(T.t("Nie udało się wczytać zdjęcia", "Could not load the photo")); return@post }
+                val spec = (doc.pages.getOrNull(after)?.spec ?: PageSpec()).copy(pdf = null)
+                val head = LecturePages.header(System.currentTimeMillis(), ++lectureN, T.pl)
+                val m = LecturePages.MARGIN
+                val title = TextBox(Ids.next(), spec.w / 2f, m + 9f, spec.w - 2 * m, 18f, 0f, head, 11f, 0xFF607D8B.toInt())
+                val r = LecturePages.photoRect(size.first, size.second, spec.w, spec.h)
+                val img = ImageEl(Ids.next(), name, r.cx, r.cy, r.w, r.h)
+                exec(DocEdit.InsertPages(listOf((after + 1) to PageSnapshot(newId(), spec, PageContent.of(listOf(title, img))))))
+                view?.goToPage(after + 1)
+            }
+        }
+    }
 
     // — Konstrukcje geometryczne (L1) —
     /** Konstrukcje możliwe dla bieżącego zaznaczenia (trójkąt, proste, okręgi, punkty). */

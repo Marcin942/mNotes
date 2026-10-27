@@ -121,6 +121,7 @@ import androidx.compose.material.icons.rounded.FormatAlignRight
 import androidx.compose.material.icons.rounded.FormatAlignJustify
 import androidx.compose.material.icons.rounded.Interests
 import androidx.compose.material.icons.rounded.ViewAgenda
+import androidx.compose.material.icons.rounded.PhotoCamera
 import androidx.compose.material.icons.rounded.ExpandLess
 import androidx.compose.material.icons.rounded.ExpandMore
 import androidx.compose.material.icons.rounded.WbAuto
@@ -392,6 +393,7 @@ fun EditorScreen(ed: Editor, tabs: TabsCtl, onExit: () -> Unit, onSettings: () -
                             )
                         }
                         SelectionBar(ed, panel, { toggle(it) }, { textReq(ed) })
+                        LectureControls(ed)
                         if (ed.searchOpen) SearchBar(ed)
                         EdToast(ed)
                     }
@@ -1795,6 +1797,7 @@ private fun MoreMenu(ed: Editor, set: com.mdev.mnotes.data.Settings, close: () -
             MenuRow(Icons.Rounded.Palette, T.t("Styl strony…", "Page style…"), "") { openStyle() }
             if (!ed.readOnly) MenuRow(Icons.Rounded.ShowChart, T.t("Układ współrzędnych…", "Coordinate axes…"), "") { close(); ed.axesOpen = true }
             if (!ed.readOnly) MenuRow(Icons.Rounded.Interests, T.t("Naklejki…", "Stickers…"), "") { close(); ed.stickersOpen = true }
+            if (!ed.readOnly) MenuRow(Icons.Rounded.PhotoCamera, T.t("Tryb wykładu (zdjęcia na kolejnych stronach)", "Lecture mode (photos on new pages)"), "") { close(); ed.lectureMode = true; ed.lectureShootTick++ }
             if (ed.dualId == null) MenuRow(Icons.Rounded.ViewAgenda, T.t("Drugi zeszyt poniżej…", "Second notebook below…"), "") { close(); ed.dualPick = true }
             else MenuRow(Icons.Rounded.ViewAgenda, T.t("Zamknij drugi zeszyt", "Close the second notebook"), "") { close(); ed.dualId = null }
             MenuRow(Icons.Rounded.Fullscreen, T.t("Ukryj paski (tryb skupienia)", "Hide bars (focus mode)"), "F11") { ed.chrome = false; close() }

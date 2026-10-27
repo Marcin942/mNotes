@@ -139,6 +139,7 @@ fun commandList(
         "insertAxes" to ({ !ed.readOnly } to { ed.axesOpen = true }),
         "arrangeImages" to ({ ed.canArrangeSel() } to { ed.arrangeSel() }),
         "dualOpen" to ({ true } to { if (ed.dualId == null) ed.dualPick = true else ed.dualId = null }),
+        "lecture" to ({ !ed.readOnly } to { ed.lectureMode = true; ed.lectureShootTick++ }),
         "stickers" to ({ !ed.readOnly } to { ed.stickersOpen = true }),
         "stickerSave" to ({ ed.sel != null } to { ed.stickerSaveOpen = true }),
         "snipImage" to ({ ed.sel != null && !ed.readOnly } to { ed.snipSel(false) }),

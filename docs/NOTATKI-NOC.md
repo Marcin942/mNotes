@@ -599,3 +599,17 @@ Wygląd ikon sprawdzam rysunkiem Java2D z tej samej geometrii (`PreviewHarness`,
   stopka „n / 17”; strona 8 „Krzywe Béziera”: Krzywa → „Przez wskazane punkty”, stuknij A–E i E drugi raz; strona 9:
   Geometria → „Przecięcie okręgów” na dwóch okręgach strony; strona 15: „⋮” → Strony → „Ciemne” i porównaj z ilustracją;
   w wersji lab strona 14 mówi o kredzie, w core nie.
+- **2b-A12** profile pracy — `noc/f2b-profile`; `ProfilesTest` (8 testów), core 773, lab 827, zielone. Logika:
+  `core/prefs/Profiles.kt` — lista kluczy, które profil może nadpisać (5 sekcji; nic z danych), `switch` (najpierw powrót
+  do kopii sprzed profilu, potem nowy — A → B → brak = stan sprzed A), plik tekstowy z wierszami i tabulatorami (bez JSON,
+  bo `org.json` w testach JVM to atrapa), `merge`, `next`, przypięcia. `Settings`: rejestr `Pref` po kluczu,
+  `prefValue`, `switchProfile`, `profiles` (pusty zapis = gotowe profile). **Decyzje:** zmiany ustawień zrobione ręcznie
+  w trakcie profilu znikają po jego wyłączeniu, jeśli dotyczą kluczy profilu (powrót jest dokładny) — żeby je zachować w
+  profilu: „Zapisz obecne”; przypięty profil włącza się przy otwarciu zeszytu i zostaje po wyjściu (bez cichego
+  przełączania z powrotem); stanowisko — przez główny zeszyt. **Wygląd:** „⋮” → sekcja „Profil pracy” (chipy jak „Strony”)
+  i przełącznik przypięcia; Ustawienia → Wejście na górze: karta z wyjaśnieniem, profil = nazwa + opis „palec … · sekcje:
+  n” + chipy akcji; okno profilu: nazwa, dotyk (chipy), 5 przełączników sekcji, uwaga jak zmienić pasek w profilu.
+  **Tablet:** „⋮” → Profil pracy → „Tylko rysik” → dymek „palec wyłączony”; przesuń palcem — nic, rysik pisze; „Bez
+  profilu” — palec znów przewija; Ustawienia → Wejście → „Nowy z obecnych ustawień…” → „Moje”, dotyk „Rysuje” → zapisz →
+  włącz z „⋮”; włączony profil + „Włączaj … przy otwieraniu tego zeszytu” → wyjdź, przełącz na „Bez profilu”, otwórz
+  zeszyt → dymek „(przypięty do zeszytu)”; eksport profili do pliku i import (pojawią się kopie z nowymi id).

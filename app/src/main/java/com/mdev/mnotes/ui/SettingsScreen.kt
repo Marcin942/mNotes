@@ -517,6 +517,7 @@ private fun EditorPrefs(set: com.mdev.mnotes.data.Settings) {
 
 @Composable
 private fun InputPrefs(set: com.mdev.mnotes.data.Settings) {
+    ProfilesPrefs(set)
     Group {
         Opt(T.t("Palec", "Finger"), "finger dotyk przewijanie powiększanie rysowanie touch") { Choice(listOf(T.t("Przewija i powiększa", "Pans & zooms"), T.t("Rysuje", "Draws"), T.t("Ignorowany", "Ignored")), set.fingerMode) { set.fingerMode = it } }
         ToggleRow(T.t("Odrzucanie dłoni (rysik ma pierwszeństwo)", "Palm rejection (stylus wins)"), set.palmRejection, keys = "palm dłoń rysik stylus przypadkowe dotknięcia") { set.palmRejection = it }
@@ -553,6 +554,126 @@ private fun InputPrefs(set: com.mdev.mnotes.data.Settings) {
             style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(vertical = 8.dp),
         )
     } }
+}
+
+/**
+ * Profile pracy (2b-A12): lista z przełączaniem, nowy profil z obecnych ustawień, edycja sekcji, eksport i import pliku.
+ * Profil zapamiętuje wybrane sekcje ustawień takie, jakie są w chwili zapisu — żeby zmienić np. pasek w profilu,
+ * włącza się profil, ustawia pasek i „Zapisz obecne”.
+ */
+@Composable
+private fun ProfilesPrefs(set: com.mdev.mnotes.data.Settings) {
+    val ctx = LocalContext.current
+    var editing by remember { mutableStateOf<com.mdev.mnotes.core.prefs.Profile?>(null) }
+    var creating by remember { mutableStateOf(false) }
+    var confirmDel by remember { mutableStateOf<String?>(null) }
+    val list = set.profiles
+    val exportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/plain")) { uri ->
+        if (uri != null) runCatching { ctx.contentResolver.openOutputStream(uri)?.use { it.write(com.mdev.mnotes.core.prefs.Profiles.encode(set.profiles).toByteArray()) } }
+    }
+    val importLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) runCatching {
+            val txt = ctx.contentResolver.openInputStream(uri)?.use { it.readBytes().decodeToString() } ?: return@runCatching
+            val got = com.mdev.mnotes.core.prefs.Profiles.decode(txt)
+            set.profiles = com.mdev.mnotes.core.prefs.Profiles.merge(set.profiles, got)
+            android.widget.Toast.makeText(ctx, T.t("Zaimportowano profile: ", "Profiles imported: ") + got.size, android.widget.Toast.LENGTH_SHORT).show()
+        }
+    }
+    Group(T.t("Profile pracy", "Work profiles"), keys = "profil profile tryb tryby wykład rysowanie rysik dotyk palec przełączanie custom modes lecture drawing stylus touch") {
+        Extra {
+            Text(
+                T.t("Profil przełącza naraz dotyk palcem, gesty, pasek narzędzi i widok. Przełączysz go w edytorze: „⋮” → Profil pracy albo paletą poleceń. Wyłączenie profilu przywraca ustawienia sprzed niego.",
+                    "A profile switches finger touch, gestures, toolbar and view at once. Switch it in the editor: “⋮” → Work profile or from the command palette. Turning a profile off restores the settings from before it."),
+                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(vertical = 6.dp),
+            )
+        }
+        for (p in list) Extra {
+            val on = set.profileActive == p.id
+            Column(Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(p.name, style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f), color = if (on) mint.accentText else MaterialTheme.colorScheme.onSurface)
+                    Text(profileSummary(p), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                FlowRow(Modifier.padding(top = 4.dp), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Chip(if (on) T.t("Włączony — wyłącz", "On — turn off") else T.t("Włącz", "Turn on"), on, { set.switchProfile(if (on) null else p) })
+                    Chip(T.t("Edytuj…", "Edit…"), false, { editing = p })
+                    Chip(T.t("Zapisz obecne", "Save current"), false, {
+                        set.profiles = set.profiles.map { if (it.id == p.id) com.mdev.mnotes.core.prefs.Profiles.capture(p.id, p.name, p.values.keys, set::prefValue) else it }
+                    })
+                    Chip(if (confirmDel == p.id) T.t("Usunąć?", "Delete?") else T.t("Usuń", "Delete"), confirmDel == p.id, {
+                        if (confirmDel != p.id) confirmDel = p.id
+                        else {
+                            if (on) set.switchProfile(null)
+                            set.profiles = set.profiles.filter { it.id != p.id }
+                            confirmDel = null
+                        }
+                    })
+                }
+            }
+        }
+        Extra {
+            FlowRow(Modifier.padding(vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Chip(T.t("Nowy z obecnych ustawień…", "New from current settings…"), false, { creating = true })
+                Chip(T.t("Eksportuj profile", "Export profiles"), false, { exportLauncher.launch("mnotes-profile.txt") })
+                Chip(T.t("Importuj", "Import"), false, { importLauncher.launch(arrayOf("text/plain", "*/*")) })
+            }
+        }
+    }
+    if (creating || editing != null) ProfileDialog(set, editing) { creating = false; editing = null }
+}
+
+/** Krótki opis profilu: dotyk i liczba sekcji. */
+private fun profileSummary(p: com.mdev.mnotes.core.prefs.Profile): String {
+    val P = com.mdev.mnotes.core.prefs.Profiles
+    val finger = when ((p.values[P.FINGER] as? com.mdev.mnotes.core.prefs.PVal.I)?.v) {
+        P.FINGER_SCROLL -> T.t("palec przewija", "finger scrolls")
+        P.FINGER_DRAW -> T.t("palec rysuje", "finger draws")
+        P.FINGER_OFF -> T.t("palec wyłączony", "finger off")
+        else -> T.t("dotyk bez zmian", "touch unchanged")
+    }
+    val groups = P.GROUPS.indices.count { g -> P.keysOf(g).any { it in p.values } }
+    return finger + " · " + T.t("sekcje: ", "sections: ") + groups
+}
+
+/** Nowy profil (z obecnych ustawień) albo edycja: nazwa, dotyk palcem i sekcje, które profil ma przełączać. */
+@Composable
+private fun ProfileDialog(set: com.mdev.mnotes.data.Settings, edit: com.mdev.mnotes.core.prefs.Profile?, close: () -> Unit) {
+    val P = com.mdev.mnotes.core.prefs.Profiles
+    var name by remember { mutableStateOf(edit?.name ?: "") }
+    var finger by remember { mutableStateOf((edit?.values?.get(P.FINGER) as? com.mdev.mnotes.core.prefs.PVal.I)?.v ?: set.fingerMode) }
+    val groups = remember { androidx.compose.runtime.mutableStateListOf<Int>().apply { addAll(P.GROUPS.indices.filter { g -> if (edit == null) g <= 2 else P.keysOf(g).any { it in edit.values } }) } }
+    MDialog(
+        if (edit == null) T.t("Nowy profil pracy", "New work profile") else T.t("Profil pracy", "Work profile"), close,
+        confirm = T.t("Zapisz", "Save"), confirmEnabled = name.isNotBlank(),
+        onConfirm = {
+            val keys = groups.sorted().flatMap { P.keysOf(it) }
+            // Sekcje już w profilu zachowują jego wartości; nowe biorą obecne ustawienia.
+            val vals = LinkedHashMap<String, com.mdev.mnotes.core.prefs.PVal>()
+            for (k in keys) (edit?.values?.get(k) ?: set.prefValue(k))?.let { vals[k] = it }
+            if (0 in groups) vals[P.FINGER] = com.mdev.mnotes.core.prefs.PVal.I(finger)
+            val id = edit?.id ?: P.newId(set.profiles.map { it.id })
+            val p = com.mdev.mnotes.core.prefs.Profile(id, name.trim(), vals)
+            set.profiles = if (edit == null) set.profiles + p else set.profiles.map { if (it.id == id) p else it }
+            // Edycja włączonego profilu działa od razu (powrót do stanu sprzed i nałożenie nowej wersji).
+            if (set.profileActive == id) set.switchProfile(p)
+            close()
+        },
+    ) {
+        Column(Modifier.verticalScroll(rememberScrollState())) {
+            MField(name, { name = it }, hint = T.t("Nazwa, np. Wykład", "Name, e.g. Lecture"))
+            SectionLabel(T.t("Dotyk palcem", "Finger touch"))
+            Choice(listOf(T.t("Przewija i powiększa", "Pans & zooms"), T.t("Rysuje", "Draws"), T.t("Wyłączony", "Off")), finger) { finger = it; if (0 !in groups) groups.add(0) }
+            SectionLabel(T.t("Profil przełącza", "The profile switches"))
+            P.GROUPS.forEachIndexed { g, (pl, en) ->
+                ToggleRow(T.t(pl, en), g in groups) { if (it) groups.add(g) else groups.remove(g) }
+            }
+            Text(
+                T.t("Nowe sekcje zapamiętują ustawienia takie, jakie są teraz. Żeby np. zmienić widoczne narzędzia w profilu: włącz profil, ustaw pasek, a potem „Zapisz obecne”.",
+                    "New sections remember the settings as they are now. To change e.g. the visible tools in a profile: turn the profile on, set up the toolbar, then “Save current”."),
+                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 6.dp),
+            )
+        }
+    }
 }
 
 @Composable

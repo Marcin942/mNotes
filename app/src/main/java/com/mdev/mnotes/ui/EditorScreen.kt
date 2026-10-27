@@ -283,6 +283,11 @@ fun EditorScreen(main: Editor, tabs: TabsCtl, onExit: () -> Unit, onSettings: ()
     val ed = st.active
     val set = ed.settings
     val m = mint
+    // 2b-A12: zeszyt z przypiętym profilem włącza go przy otwarciu (zostaje włączony po wyjściu — przełącza się ręcznie).
+    LaunchedEffect(main.nbId) {
+        val pid = com.mdev.mnotes.core.prefs.Profiles.pinsDecode(set.profilePins)[main.nbId] ?: return@LaunchedEffect
+        if (pid != set.profileActive) set.profiles.firstOrNull { it.id == pid }?.let { switchProfile(main, it, pinned = true) }
+    }
     var panel by remember { mutableStateOf<Panel?>(null) }
     var palette by remember { mutableStateOf(false) }
     var goTo by remember { mutableStateOf(false) }
@@ -2005,6 +2010,18 @@ private fun MoreMenu(ed: Editor, set: com.mdev.mnotes.data.Settings, close: () -
                     (ed.station?.rows ?: listOf(ed)).forEach { it.view?.invalidate() }
                 })
             }
+            // 2b-A12: profile pracy — jedno dotknięcie przełącza dotyk, gesty i paski.
+            SectionLabel(T.t("Profil pracy", "Work profile"))
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Chip(T.t("Bez profilu", "None"), set.profileActive.isEmpty(), { switchProfile(ed, null) })
+                for (p in set.profiles) Chip(p.name, set.profileActive == p.id, { switchProfile(ed, p) })
+            }
+            set.activeProfile?.let { p ->
+                val pins = com.mdev.mnotes.core.prefs.Profiles.pinsDecode(set.profilePins)
+                ToggleRow(T.t("Włączaj „${p.name}” przy otwieraniu tego zeszytu", "Turn on “${p.name}” when opening this notebook"), pins[ed.nbId] == p.id) { on ->
+                    set.profilePins = com.mdev.mnotes.core.prefs.Profiles.pinsEncode(if (on) pins + (ed.nbId to p.id) else pins - ed.nbId)
+                }
+            }
             HorizontalDivider(Modifier.padding(vertical = 4.dp), color = m.line)
             MenuRow(Icons.Rounded.FitScreen, T.t("Dopasuj do szerokości", "Fit width"), "Ctrl+0") { ed.view?.fitWidth(); close() }
             MenuRow(Icons.Rounded.Palette, T.t("Styl strony…", "Page style…"), "") { openStyle() }
@@ -2025,6 +2042,22 @@ private fun MoreMenu(ed: Editor, set: com.mdev.mnotes.data.Settings, close: () -
             MenuRow(Icons.Rounded.Settings, T.t("Ustawienia", "Settings"), "") { close(); onSettings() }
         }
     }
+}
+
+/** Przełącza profil pracy i mówi, co się stało (dotyk to najczęstsze zaskoczenie, więc jest w dymku). */
+fun switchProfile(ed: Editor, p: com.mdev.mnotes.core.prefs.Profile?, pinned: Boolean = false) {
+    val set = ed.settings
+    set.switchProfile(p)
+    val finger = when (set.fingerMode) {
+        com.mdev.mnotes.core.prefs.Profiles.FINGER_DRAW -> T.t("palec rysuje", "finger draws")
+        com.mdev.mnotes.core.prefs.Profiles.FINGER_OFF -> T.t("palec wyłączony", "finger off")
+        else -> T.t("palec przewija", "finger scrolls")
+    }
+    ed.say(
+        if (p == null) T.t("Bez profilu — ustawienia jak przed profilem ($finger)", "No profile — settings as before ($finger)")
+        else T.t("Profil „${p.name}”${if (pinned) " (przypięty do zeszytu)" else ""} — $finger", "Profile “${p.name}”${if (pinned) " (pinned to notebook)" else ""} — $finger"),
+    )
+    ed.view?.invalidate()
 }
 
 fun pageThemeLabels() = listOf(

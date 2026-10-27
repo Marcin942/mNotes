@@ -129,6 +129,7 @@ object CmdDefs {
         CmdDef("arrangeImages", 1, "Uporządkuj zaznaczone obrazy", "Arrange selected images", ""),
         CmdDef("dualOpen", 2, "Dołóż zeszyt poniżej (stanowisko)…", "Add notebook below (workspace)…", ""),
         CmdDef("stations", 2, "Stanowiska…", "Workspaces…", ""),
+        CmdDef("profileNext", 2, "Przełącz profil pracy (kolejny / bez profilu)", "Switch work profile (next / none)", ""),
         CmdDef("lecture", 3, "Tryb wykładu: zdjęcie na nową stronę", "Lecture mode: photo on a new page", ""),
         CmdDef("stickers", 3, "Naklejki…", "Stickers…", ""),
         CmdDef("stickerSave", 3, "Zapisz zaznaczenie jako naklejkę…", "Save selection as sticker…", ""),

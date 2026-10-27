@@ -22,9 +22,19 @@ import kotlin.reflect.KProperty
  */
 class Settings(ctx: Context) {
     private val sp: SharedPreferences = ctx.getSharedPreferences("mnotes", Context.MODE_PRIVATE)
+    /** Ustawienia po kluczu (2b-A12): profil zmienia je przez stan Compose, więc UI i widok widzą zmianę od razu. */
+    private val registry = HashMap<String, Pref<*>>()
 
     private inner class Pref<T>(val key: String, val def: T) : ReadWriteProperty<Any?, T> {
         private var state by mutableStateOf(read())
+
+        init { registry[key] = this }
+
+        fun current(): Any? = state
+
+        /** Zapis wartości z profilu; inny typ niż domyślny jest pomijany (plik z innej wersji). */
+        @Suppress("UNCHECKED_CAST")
+        fun put(v: Any) { if (def != null && v::class == (def as Any)::class) setValue(null, ::key, v as T) }
 
         @Suppress("UNCHECKED_CAST")
         private fun read(): T = when (def) {
@@ -222,6 +232,40 @@ class Settings(ctx: Context) {
             List(a.length()) { i -> a.getJSONObject(i).let { ActivePen(PenKind.fromCode(it.getInt("k")), it.getInt("c"), it.getDouble("w").toFloat()) } }
         } catch (_: Exception) { emptyList() }
     }
+
+    // — Profile pracy (2b-A12) —
+    var profilesRaw by Pref("profile.list", "")         // Profiles.encode; pusty = jeszcze bez listy (gotowe profile)
+    var profileActive by Pref("profile.active", "")     // id włączonego profilu albo pusty
+    private var profileBackup by Pref("profile.backup", "")   // wartości sprzed profilu (Profiles.encodeValues)
+    var profilePins by Pref("profile.pins", "")         // zeszyt → profil (Profiles.pinsEncode)
+
+    var profiles: List<com.mdev.mnotes.core.prefs.Profile>
+        get() = if (profilesRaw.isEmpty()) com.mdev.mnotes.core.prefs.Profiles.builtIns(com.mdev.mnotes.editor.T.pl) else com.mdev.mnotes.core.prefs.Profiles.decode(profilesRaw)
+        set(v) { profilesRaw = com.mdev.mnotes.core.prefs.Profiles.encode(v).ifEmpty { "mnotes-profiles 1\n" } }
+
+    /** Bieżąca wartość ustawienia [key] (null — nieznany klucz). */
+    fun prefValue(key: String): com.mdev.mnotes.core.prefs.PVal? = when (val v = registry[key]?.current()) {
+        is Int -> com.mdev.mnotes.core.prefs.PVal.I(v)
+        is Boolean -> com.mdev.mnotes.core.prefs.PVal.B(v)
+        is Float -> com.mdev.mnotes.core.prefs.PVal.F(v)
+        is String -> com.mdev.mnotes.core.prefs.PVal.S(v)
+        else -> null
+    }
+
+    private fun putPrefValue(key: String, v: com.mdev.mnotes.core.prefs.PVal) {
+        val pref = registry[key] ?: return
+        pref.put(when (v) { is com.mdev.mnotes.core.prefs.PVal.I -> v.v; is com.mdev.mnotes.core.prefs.PVal.B -> v.v; is com.mdev.mnotes.core.prefs.PVal.F -> v.v; is com.mdev.mnotes.core.prefs.PVal.S -> v.v })
+    }
+
+    /** Włącza profil [p] (null — wyłącza); wyłączenie przywraca dokładnie to, co profil nadpisał. */
+    fun switchProfile(p: com.mdev.mnotes.core.prefs.Profile?) {
+        val sw = com.mdev.mnotes.core.prefs.Profiles.switch(p, com.mdev.mnotes.core.prefs.Profiles.decodeValues(profileBackup), ::prefValue)
+        for ((k, v) in sw.write) putPrefValue(k, v)
+        profileBackup = com.mdev.mnotes.core.prefs.Profiles.encodeValues(sw.backup)
+        profileActive = p?.id ?: ""
+    }
+
+    val activeProfile: com.mdev.mnotes.core.prefs.Profile? get() = profileActive.takeIf { it.isNotEmpty() }?.let { id -> profiles.firstOrNull { it.id == id } }
 
     /** Klucze związane z urządzeniem (uprawnienia do folderu, blokada) nie wędrują w pliku ustawień. */
     private fun deviceBound(k: String) = k.startsWith("sync.") || k.startsWith("lock.")

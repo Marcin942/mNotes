@@ -67,6 +67,7 @@ import androidx.compose.material.icons.rounded.Checklist
 import androidx.compose.material.icons.rounded.FormatListNumbered
 import androidx.compose.material.icons.rounded.FormatListBulleted
 import com.mdev.mnotes.core.text.ListText
+import com.mdev.mnotes.core.text.MathText
 import com.mdev.mnotes.core.text.TextFit
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.TextRange
@@ -294,7 +295,16 @@ fun TextDialog(ed: Editor, req: TextRequest) {
         MAreaField(field, { nv ->
             // Enter w wierszu listy dopisuje kolejny znacznik (EDT-042)
             val r = if (nv.selection.collapsed) ListText.onEnter(field.text, nv.text, nv.selection.start) else null
-            field = if (r != null) TextFieldValue(r.text, TextRange(r.selStart, r.selEnd)) else nv
+            var next = if (r != null) TextFieldValue(r.text, TextRange(r.selStart, r.selEnd)) else nv
+            // L2: \alpha → α, x^2 → x², a_1 → a₁ przy pisaniu; kursor zostaje w tej samej odległości od końca.
+            if (ed.settings.mathText && next.selection.collapsed && next.text.length > field.text.length) {
+                val conv = MathText.convert(next.text)
+                if (conv != next.text) {
+                    val pos = (conv.length - (next.text.length - next.selection.start)).coerceIn(0, conv.length)
+                    next = TextFieldValue(conv, TextRange(pos))
+                }
+            }
+            field = next
         }, Modifier.fillMaxWidth().focusRequester(focus), hint = T.t("Wpisz tekst…", "Type text…"))
         Row(Modifier.padding(top = 10.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
             fun st(bit: Int, icon: androidx.compose.ui.graphics.vector.ImageVector, tip: String) =

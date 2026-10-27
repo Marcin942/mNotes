@@ -70,6 +70,12 @@ data class PageSpec(
     fun withInverted(on: Boolean) = copy(opts = if (on) opts or OPT_INVERT else opts and OPT_INVERT.inv())
 
     /**
+     * Strona-tablica (2b-A13, [com.mdev.mnotes.core.layout.Board]): płótno rośnie razem z treścią. Bit w polu `o`, więc
+     * stara wersja widzi zwykłą dużą stronę z kratką.
+     */
+    val board: Boolean get() = opts and OPT_BOARD != 0
+
+    /**
      * Ciemny papier — zakreślacz działa na nim jak „screen”, nie „multiply”. Dotyczy też strony z tłem PDF, bo strona
      * zaimportowana z Samsung Notes niesie wzór tła w PDF-ie, a kolor papieru w [paper]. Zwykłe importowane PDF-y mają
      * papier biały, więc dla nich nic się nie zmienia.
@@ -110,6 +116,7 @@ data class PageSpec(
     companion object {
         const val OPT_MARGIN = 1
         const val OPT_INVERT = 2
+        const val OPT_BOARD = 4
         const val MIN_SIZE = 72f
         const val MAX_SIZE = 8000f
 
@@ -117,15 +124,18 @@ data class PageSpec(
             val o = JSONObject(json)
             val t = Template.fromCode(o.optInt("t", 0))
             val paper = o.optInt("p", Paper.WHITE)
+            val opts = o.optInt("o", OPT_MARGIN)
+            // Tablica może być większa niż zwykła strona; starsza wersja przytnie ją do MAX_SIZE (treść dalej jest w pliku).
+            val max = if (opts and OPT_BOARD != 0) com.mdev.mnotes.core.layout.Board.MAX else MAX_SIZE
             PageSpec(
-                w = o.optDouble("w", PageFormat.A4.w.toDouble()).toFloat().coerceIn(MIN_SIZE, MAX_SIZE),
-                h = o.optDouble("h", PageFormat.A4.h.toDouble()).toFloat().coerceIn(MIN_SIZE, MAX_SIZE),
+                w = o.optDouble("w", PageFormat.A4.w.toDouble()).toFloat().coerceIn(MIN_SIZE, max),
+                h = o.optDouble("h", PageFormat.A4.h.toDouble()).toFloat().coerceIn(MIN_SIZE, max),
                 paper = paper,
                 template = t,
                 line = Paper.migrateLine(paper, o.optInt("l", Paper.autoLineColor(paper))),
                 spacing = o.optDouble("s", t.defaultSpacing.toDouble()).toFloat(),
                 lineWidth = o.optDouble("lw", 0.6).toFloat(),
-                opts = o.optInt("o", OPT_MARGIN),
+                opts = opts,
                 pdf = if (o.has("pa")) PdfRef(o.getString("pa"), o.optInt("pn", 0)) else null,
             )
         } catch (_: Exception) {

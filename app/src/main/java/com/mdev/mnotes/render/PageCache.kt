@@ -27,6 +27,7 @@ import kotlin.math.floor
 import kotlin.math.ln
 import kotlin.math.max
 import kotlin.math.min
+import kotlin.math.sqrt
 
 /**
  * Rastrowa pamięć podręczna stron oparta na kafelkach (512 px) renderowanych w skali bieżącego powiększenia.
@@ -218,7 +219,7 @@ class PageCache(
         want(page, e, vis, req, left, top)
         val spec = page.spec
         val now = System.nanoTime()
-        val tilesOn = profile.tiled && primary > profile.baseScale * 1.03f
+        val tilesOn = profile.tiled && primary > tiledBase(spec) * 1.03f
         layers.clear()
         var complete = false
         if (tilesOn) {
@@ -295,7 +296,7 @@ class PageCache(
         if (closed) return
         e.base.stamp = frame
         requestBase(page, e)
-        if (!profile.tiled || primary <= profile.baseScale * 1.03f) return
+        if (!profile.tiled || primary <= tiledBase(page.spec) * 1.03f) return
         requestLevel(page, levelFor(e, primary), req, left, top, 0f)
         // Zapas: po ustaniu zoomu przygotowujemy w tle drugi, gęstszy poziom (tylko widoczne kafelki, najniższy priorytet).
         if (vis != null && headroom > primary * 1.03f) {
@@ -308,10 +309,16 @@ class PageCache(
      * zostaje poprzednia bitmapa (skalowana przez GPU), a nowa jest renderowana dopiero po ustaniu zoomu.
      */
     private fun baseScaleFor(e: Entry, spec: PageSpec): Float {
-        if (profile.tiled) return profile.baseScale
+        if (profile.tiled) return tiledBase(spec)
         if (e.base.bmp != null && !settled) return e.base.bscale
         return profile.classicScale(curZoom, spec.w, spec.h)
     }
+
+    /**
+     * Skala bazy w trybie kafelkowym: stała profilu, ale baza ma najwyżej [BASE_MAX_PIXELS] — zwykła strona się mieści,
+     * a tablica (2b-A13, płótno wielokrotnie większe od kartki) dostaje bazę rzadszą, resztę dorysowują kafelki.
+     */
+    private fun tiledBase(spec: PageSpec): Float = min(profile.baseScale, sqrt(BASE_MAX_PIXELS / (spec.w * spec.h)))
 
     private fun requestBase(page: PageState, e: Entry) {
         val sc = baseScaleFor(e, page.spec)
@@ -701,6 +708,8 @@ class PageCache(
     companion object {
         const val WORKERS = 3
         const val MAX_LEVELS = 4
+        /** Najwięcej pikseli bitmapy bazowej (ok. 16 MB); A4 przy 1,6 px/pt to ok. 1,3 mln — bez zmian. */
+        const val BASE_MAX_PIXELS = 4_000_000f
         const val HEADROOM_BIAS = 1e9f
         val LN_MAX_AHEAD = ln(4f)
         const val STALE_FRAMES = 2L

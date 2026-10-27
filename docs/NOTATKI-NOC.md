@@ -626,3 +626,19 @@ Wygląd ikon sprawdzam rysunkiem Java2D z tej samej geometrii (`PreviewHarness`,
   profilu” — palec znów przewija; Ustawienia → Wejście → „Nowy z obecnych ustawień…” → „Moje”, dotyk „Rysuje” → zapisz →
   włącz z „⋮”; włączony profil + „Włączaj … przy otwieraniu tego zeszytu” → wyjdź, przełącz na „Bez profilu”, otwórz
   zeszyt → dymek „(przypięty do zeszytu)”; eksport profili do pliku i import (pojawią się kopie z nowymi id).
+- **Scalenie `noc/lab2`** (po 2b-A12): agent B skończył listę (narożniki bez ściany 2b-B2, notatki); bez konfliktów; core 773,
+  lab 830.
+- **2b-A13** zeszyt „Tablica” — `noc/f2b-tablica`; `BoardTest` (7 testów), core 780, lab 837, zielone. Logika:
+  `core/layout/Board.kt` (rozmiar startowy, krok i zapas wzrostu, limit, kadr eksportu, punkt startu widoku);
+  `PageSpec.OPT_BOARD` w polu `o` (tablica może mieć do 24 000 pt; zwykłe strony dalej przycinane do 8000).
+  `Editor.exec` dokłada płótno w tej samej grupie edycji (`DocEdit.Group`: zmiana treści + rozmiar + ewentualne
+  przesunięcie całej treści), `Editor.record` (przeciągnięcie lassem) — osobnym wpisem; `NoteView.boardShifted` przesuwa
+  widok razem z treścią. `PageCache.tiledBase`: baza kafelków najwyżej 4 mln pikseli. **Decyzje:** tablica to jedna
+  strona, nie nowy format (stara wersja ją otworzy); „100 %” = szerokość A4; mini-mapa zawsze na tablicy; eksport = kadr
+  treści. **Znane:** cofnięcie wzrostu w lewo/w górę przesuwa treść z powrotem bez przesunięcia widoku (widać skok o krok
+  płótna); stara wersja po zapisie tablicy > 8000 pt zapisze przycięty rozmiar (treść zostaje, nowa wersja dołoży płótno
+  przy następnej zmianie). **Wygląd:** tablica wygląda jak duża kartka w kratkę bez marginesu, okładka w bibliotece
+  w kratkę. **Tablet:** Biblioteka → „Nowy” → „Nowa tablica” → otwiera się na środku płótna w skali zeszytu; rysuj, przesuń
+  widok do prawej krawędzi i pisz przy niej → płótno się wydłuża (mini-mapa w rogu pokazuje większą stronę); to samo przy
+  lewej krawędzi — treść nie skacze; cofnij — płótno wraca; szczypnij maksymalnie — widać całe płótno; Ctrl+0 / „Dopasuj” —
+  cała treść; Eksport → PNG → obraz samego rysunku z małym marginesem; pamięć przy długim rysowaniu.

@@ -276,8 +276,49 @@ class Editor(val ctx: Context, val nbId: String) {
     fun redo() { commitSelPreview(); cancelCut(); cancelCrop(); clearSel(); val e = doc.doRedo(); undoTick++; e?.pageIds?.firstOrNull()?.let { view?.ensureVisible(it) } }
 
     /** Wykonanie z zapisem na stosie cofania. */
-    fun exec(edit: DocEdit) { doc.exec(edit); undoTick++ }
-    fun record(edit: DocEdit) { doc.record(edit); undoTick++ }
+    fun exec(edit: DocEdit) {
+        val grown = boardGrowth(edit)
+        doc.exec(grown?.first ?: edit); undoTick++
+        grown?.second?.let { (dx, dy) -> view?.boardShifted(dx, dy) }
+    }
+
+    /**
+     * 2b-A13: zmiana treści tablicy blisko brzegu dokłada płótna w tym samym wpisie cofania; przy wzroście w lewo/w górę
+     * cała treść przesuwa się o (dx, dy) — wtedy zwraca też to przesunięcie, żeby widok poszedł za treścią.
+     */
+    private fun boardGrowth(edit: DocEdit): Pair<DocEdit, Pair<Float, Float>?>? {
+        if (edit !is DocEdit.Elements) return null
+        val page = doc.page(edit.pageId) ?: return null
+        if (!page.spec.board) return null
+        val (parts, shift) = boardParts(page, doc.content(page).apply(edit.edit)) ?: return null
+        return DocEdit.Group(listOf(edit) + parts) to shift
+    }
+
+    /** Edycje powiększające tablicę [page] dla treści [after] (rozmiar, ewentualnie przesunięcie całej treści). */
+    private fun boardParts(page: com.mdev.mnotes.data.PageState, after: com.mdev.mnotes.core.model.PageContent): Pair<List<DocEdit>, Pair<Float, Float>?>? {
+        val spec = page.spec
+        val g = com.mdev.mnotes.core.layout.Board.grow(spec.w, spec.h, after.bounds) ?: return null
+        val size = DocEdit.Spec(page.id, spec, spec.withSize(g.w, g.h))
+        if (g.dx == 0f && g.dy == 0f) return listOf<DocEdit>(size) to null
+        val m = com.mdev.mnotes.core.geom.Affine.translation(g.dx, g.dy)
+        val move = DocEdit.Elements(page.id, ElementsEdit.replace(after, after.elements.associate { it.id to it.transformed(m) }))
+        return listOf(size, move) to (g.dx to g.dy)
+    }
+
+    /** Edycja już wykonana (przeciąganie lassem, zapis przez [record]): tablica rośnie osobnym wpisem cofania. */
+    private fun boardAfter(edit: DocEdit) {
+        val pid = when (edit) {
+            is DocEdit.Elements -> edit.pageId
+            is DocEdit.Group -> edit.edits.firstNotNullOfOrNull { (it as? DocEdit.Elements)?.pageId }
+            else -> null
+        } ?: return
+        val page = doc.page(pid) ?: return
+        if (!page.spec.board) return
+        val (parts, shift) = boardParts(page, doc.content(page)) ?: return
+        doc.exec(DocEdit.Group(parts)); undoTick++
+        shift?.let { (dx, dy) -> view?.boardShifted(dx, dy) }
+    }
+    fun record(edit: DocEdit) { doc.record(edit); undoTick++; boardAfter(edit) }
 
     // — Zaznaczenie —
     fun clearSel() { if (sel != null) { sel = null; transformMode = false; pointEdit = false; selTick++ } }

@@ -131,7 +131,9 @@ class Exporter(private val repo: Repository, private val assets: Assets, private
             for (i in idx) {
                 val p = meta.pages.getOrNull(i) ?: continue
                 val spec = p.spec
-                val page = doc.startPage(PdfDocument.PageInfo.Builder(spec.w.roundToInt().coerceAtLeast(1), spec.h.roundToInt().coerceAtLeast(1), n++).create())
+                val fr = frameOf(nb, p)
+                val page = doc.startPage(PdfDocument.PageInfo.Builder((fr?.w ?: spec.w).roundToInt().coerceAtLeast(1), (fr?.h ?: spec.h).roundToInt().coerceAtLeast(1), n++).create())
+                if (fr != null) { page.canvas.translate(-fr.l, -fr.t); page.canvas.clipRect(fr.l, fr.t, fr.r, fr.b) }
                 drawPage(page.canvas, nb, p, 1f, 2f)
                 doc.finishPage(page)
             }
@@ -143,6 +145,10 @@ class Exporter(private val repo: Repository, private val assets: Assets, private
             renderer.releaseBaked()
         }
     }
+
+    /** 2b-A13: kadr tablicy — obrys treści z zapasem (eksport bez pustego płótna); null dla zwykłych stron. */
+    private fun frameOf(nb: String, p: PageMeta): com.mdev.mnotes.core.geom.Bounds? =
+        if (!p.spec.board) null else com.mdev.mnotes.core.layout.Board.frame(repo.readPage(nb, p.id).bounds, p.spec.w, p.spec.h)
 
     /** Rysuje stronę w układzie punktów; [bgScale] = px/pt dla tła PDF. */
     private fun drawPage(c: Canvas, nb: String, p: PageMeta, scale: Float, bgScale: Float) {
@@ -184,11 +190,14 @@ class Exporter(private val repo: Repository, private val assets: Assets, private
     }
 
     private fun pngPage(nb: String, p: PageMeta, out: OutputStream) {
-        val s = min(3f, 4096f / max(p.spec.w, p.spec.h))
-        val bmp = Bitmap.createBitmap((p.spec.w * s).roundToInt(), (p.spec.h * s).roundToInt(), Bitmap.Config.ARGB_8888)
+        val fr = frameOf(nb, p)
+        val w = fr?.w ?: p.spec.w; val h = fr?.h ?: p.spec.h
+        val s = min(3f, 4096f / max(w, h))
+        val bmp = Bitmap.createBitmap((w * s).roundToInt().coerceAtLeast(1), (h * s).roundToInt().coerceAtLeast(1), Bitmap.Config.ARGB_8888)
         try {
             val c = Canvas(bmp)
             c.scale(s, s)
+            if (fr != null) c.translate(-fr.l, -fr.t)
             drawPage(c, nb, p, s, s)
             bmp.compress(Bitmap.CompressFormat.PNG, 100, out)
         } finally { bmp.recycle() }
@@ -207,7 +216,9 @@ class Exporter(private val repo: Repository, private val assets: Assets, private
     private fun svgPage(nb: String, p: PageMeta): String {
         val spec = p.spec
         val sb = StringBuilder(64 * 1024)
-        sb.append("<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:xlink=\"http://www.w3.org/1999/xlink\" width=\"${f(spec.w)}pt\" height=\"${f(spec.h)}pt\" viewBox=\"0 0 ${f(spec.w)} ${f(spec.h)}\">\n")
+        val fr = frameOf(nb, p)
+        if (fr != null) sb.append("<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:xlink=\"http://www.w3.org/1999/xlink\" width=\"${f(fr.w)}pt\" height=\"${f(fr.h)}pt\" viewBox=\"${f(fr.l)} ${f(fr.t)} ${f(fr.w)} ${f(fr.h)}\">\n")
+        else sb.append("<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:xlink=\"http://www.w3.org/1999/xlink\" width=\"${f(spec.w)}pt\" height=\"${f(spec.h)}pt\" viewBox=\"0 0 ${f(spec.w)} ${f(spec.h)}\">\n")
         sb.append("<rect width=\"${f(spec.w)}\" height=\"${f(spec.h)}\" fill=\"${hex(spec.paper)}\"/>\n")
         val ref: PdfRef? = spec.pdf
         if (ref != null) {

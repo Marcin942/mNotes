@@ -2161,13 +2161,17 @@ private fun StylePanel(ed: Editor, close: () -> Unit) {
                         commit = { ed.commitSpecPreview() },
                         reset = { apply { it.copy(spacing = it.template.defaultSpacing) } })
                 }
-                SectionLabel(T.t("Rozmiar", "Size"))
-                // Każda strona trzyma własny format i orientację (F5); „cały zeszyt” zmienia format, a orientację zostawia.
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    for (f in com.mdev.mnotes.core.model.PageFormat.entries) Chip(formatName(f), spec.format == f, { apply { it.withFormat(f) } })
+                // 2b-A13: tablica nie ma formatu — płótno rośnie samo.
+                if (spec.board) Text(T.t("Tablica: płótno rośnie samo, gdy piszesz blisko brzegu.", "Board: the canvas grows by itself when you write near the edge."), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                else {
+                    SectionLabel(T.t("Rozmiar", "Size"))
+                    // Każda strona trzyma własny format i orientację (F5); „cały zeszyt” zmienia format, a orientację zostawia.
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        for (f in com.mdev.mnotes.core.model.PageFormat.entries) Chip(formatName(f), spec.format == f, { apply { it.withFormat(f) } })
+                    }
                 }
             }
-            if (!isPdf && spec.w != spec.h) {
+            if (!isPdf && !spec.board && spec.w != spec.h) {
                 SectionLabel(T.t("Orientacja", "Orientation"))
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     Chip(T.t("Pionowo", "Portrait"), !spec.landscape, { apply { it.oriented(false) } }, icon = Icons.Rounded.StayCurrentPortrait)

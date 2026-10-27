@@ -54,6 +54,7 @@ import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.ContentCopy
 import androidx.compose.material.icons.rounded.CreateNewFolder
+import androidx.compose.material.icons.rounded.Dashboard
 import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.DeleteForever
 import androidx.compose.material.icons.rounded.Description
@@ -725,6 +726,15 @@ private fun TopBar(st: LibState, wide: Boolean, ops: LibOps, openDrawer: () -> U
                         text = { Text(T.t("Nowy zeszyt…", "New notebook…")) }, leadingIcon = { Icon(Icons.Rounded.Description, null) },
                         trailingIcon = { Text("Ctrl+N", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant) },
                         onClick = { newMenu = false; st.dialog = LibDialog.NewNb },
+                    )
+                    // 2b-A13: tablica — jedno płótno bez stron, rośnie razem z pismem.
+                    DropdownMenuItem(
+                        text = { Text(T.t("Nowa tablica (nieskończone płótno)", "New board (infinite canvas)")) }, leadingIcon = { Icon(Icons.Rounded.Dashboard, null) },
+                        onClick = {
+                            newMenu = false
+                            val n = repo.createNotebook(T.t("Tablica", "Board"), com.mdev.mnotes.core.layout.Board.spec(), CoverPalette.default, com.mdev.mnotes.data.CoverStyle.GRID, if (st.place == Place.LIB) st.folderId else null)
+                            ops.onOpen(n.id)
+                        },
                     )
                     DropdownMenuItem(
                         text = { Text(T.t("Nowy folder…", "New folder…")) }, leadingIcon = { Icon(Icons.Rounded.CreateNewFolder, null) },

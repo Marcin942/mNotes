@@ -27,6 +27,7 @@ import com.mdev.mnotes.core.edit.CutLine
 import com.mdev.mnotes.core.edit.FloodFill
 import com.mdev.mnotes.core.edit.ImageCut
 import com.mdev.mnotes.core.edit.ImageArrange
+import com.mdev.mnotes.core.edit.GridFit
 import com.mdev.mnotes.core.edit.Snip
 import com.mdev.mnotes.core.edit.Sticker
 import com.mdev.mnotes.core.shapes.PointEdit
@@ -644,7 +645,13 @@ class Editor(val ctx: Context, val nbId: String) {
                 }
                 val maxW = page.spec.w * 0.6f; val maxH = page.spec.h * 0.6f
                 val k = min(maxW / size.first, maxH / size.second)
-                val el = ImageEl(Ids.next(), name, cx, cy, size.first * k, size.second * k)
+                var el = ImageEl(Ids.next(), name, cx, cy, size.first * k, size.second * k)
+                // Pomysł Fable 11 (opcja): zdjęcie od razu na węzłach kratki i szerokością w pełnych oczkach.
+                val sp = page.spec.spacing
+                if (settings.imageGridFit && page.spec.pdf == null && page.spec.template != Template.BLANK && sp > 0f) {
+                    val r = GridFit.fit(el.bounds, el.w / el.h, sp, page.spec.w, page.spec.h)
+                    el = el.copy(cx = r.cx, cy = r.cy, w = r.w, h = r.h)
+                }
                 exec(DocEdit.Elements(page.id, ElementsEdit.add(doc.content(page), listOf(el))))
                 tool = Tool.LASSO
                 select(page.id, setOf(el.id))
@@ -706,6 +713,20 @@ class Editor(val ctx: Context, val nbId: String) {
         if (els.isEmpty()) { say(T.t("Ta konstrukcja nie ma rozwiązania dla zaznaczonych kształtów", "This construction has no solution for the selected shapes")); return }
         exec(DocEdit.Elements(p.id, ElementsEdit.add(doc.content(p), els)))
         select(p.id, els.map { it.id }.toSet())
+    }
+
+    /** Pomysł Fable 12: jedyny zaznaczony obraz staje się tłem strony — zablokowany i na spodzie, pod pismem. */
+    fun canStickBackground(): Boolean = !readOnly && selElements().singleOrNull().let { it is ImageEl && !it.locked }
+
+    fun stickBackground() {
+        val p = selPage() ?: return
+        val im = selElements().singleOrNull() as? ImageEl ?: return
+        val c = doc.content(p)
+        val toBack = ElementsEdit.sendToBack(c, setOf(im.id))
+        val lock = ElementsEdit.replace(c.apply(toBack), mapOf(im.id to im.withLocked(true)))
+        exec(DocEdit.Group(listOf(DocEdit.Elements(p.id, toBack), DocEdit.Elements(p.id, lock))))
+        clearSel()
+        say(T.t("Obraz przyklejony jako tło strony (odblokujesz go w menu zaznaczenia)", "Image stuck as page background (unlock it from the selection menu)"))
     }
 
     // — Porządkowanie obrazów (F23) —

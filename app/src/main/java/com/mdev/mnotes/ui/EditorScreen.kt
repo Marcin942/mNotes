@@ -1739,6 +1739,7 @@ private fun CtxMenuOverlay(ed: Editor, openStyle: () -> Unit) {
                     Item(T.t("Kopiuj wycinek do schowka", "Copy snip to clipboard")) { ed.snipSel(true) }
                     Item(T.t("Zapisz jako naklejkę…", "Save as sticker…")) { ed.stickerSaveOpen = true }
                     if (ed.canArrangeSel()) Item(T.t("Uporządkuj obrazy", "Arrange images")) { ed.arrangeSel() }
+                    if (ed.canStickBackground()) Item(T.t("Przyklej do strony jako tło", "Stick to page as background")) { ed.stickBackground() }
                     // L1: konstrukcje dla zaznaczonych kształtów (trójkąt, proste, okręgi, punkty).
                     val cons = remember(cm) { ed.constructionOps() }
                     if (cons.isNotEmpty()) {

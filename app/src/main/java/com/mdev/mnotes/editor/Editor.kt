@@ -53,7 +53,7 @@ import java.io.InputStream
 import kotlin.math.max
 import kotlin.math.min
 
-enum class Tool { PEN, ERASER, LASSO, TEXT, LASER, HAND, SPACE, TAPE, PAINTER, FILL }
+enum class Tool { PEN, ERASER, LASSO, TEXT, LASER, HAND, SPACE, TAPE, PAINTER, FILL, CURVE }
 
 class Sel(val pageId: String, val ids: Set<Int>)
 
@@ -213,7 +213,7 @@ class Editor(val ctx: Context, val nbId: String) {
     fun editKit(f: (PenKit) -> PenKit) { settings.penKit = f(kit) }
 
     /** Narzędzia, które biorą kolor i styl z aktywnego pióra (pióro, pędzel formatu, wypełnienie). */
-    val penTool: Boolean get() = tool == Tool.PEN || tool == Tool.PAINTER || tool == Tool.FILL
+    val penTool: Boolean get() = tool == Tool.PEN || tool == Tool.PAINTER || tool == Tool.FILL || tool == Tool.CURVE
 
     /** Wybór narzędzia piszącego z paska: staje się aktywnym piórem i narzędziem, a zaznaczenie znika. */
     fun selectPen(kind: PenKind) {

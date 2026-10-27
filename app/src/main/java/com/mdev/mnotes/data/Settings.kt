@@ -90,6 +90,8 @@ class Settings(ctx: Context) {
     var tripleTap by Pref("input.triple_tap", 1)     // potrójne dotknięcie palcem: te same wartości co przy podwójnym
     var holdToShape by Pref("input.hold_to_shape", true)
     var holdMs by Pref("input.hold_ms", 550)
+    var holdToCurve by Pref("input.hold_curve", true)    // F18: nierozpoznana kreska trzymana dalej staje się gładką krzywą
+    var curveHoldMs by Pref("input.hold_curve_ms", 350)  // ile dłużej trzymać (ms) po nieudanym rozpoznaniu kształtu
     var twoFingerUndo by Pref("input.two_finger_undo", true)
     var pullAddPage by Pref("input.pull_add_page", true)
     var autoTextPage by Pref("pages.auto_text", true)  // nowa strona, gdy tekst wyjdzie za ostatnią albo zacznie się za nią (F10)

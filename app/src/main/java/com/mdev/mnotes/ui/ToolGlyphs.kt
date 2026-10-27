@@ -89,6 +89,23 @@ fun EraserModeGlyph(mode: Int, color: Color, modifier: Modifier = Modifier) {
     }
 }
 
+/** Krzywa Béziera (F17): łuk w kształcie „S” z dwiema kotwicami i ramionami uchwytów. */
+@Composable
+fun BezierGlyph(color: Color, modifier: Modifier = Modifier) {
+    Canvas(modifier) {
+        val p = Path()
+        p.moveTo(u(4f), u(18f))
+        p.cubicTo(u(4f), u(6f), u(20f), u(18f), u(20f), u(6f))
+        drawPath(p, color, style = Stroke(u(2f), cap = StrokeCap.Round))
+        drawLine(color, Offset(u(4f), u(18f)), Offset(u(4f), u(9f)), u(1.1f), StrokeCap.Round)
+        drawLine(color, Offset(u(20f), u(6f)), Offset(u(20f), u(15f)), u(1.1f), StrokeCap.Round)
+        drawCircle(color, u(1.9f), Offset(u(4f), u(18f)))
+        drawCircle(color, u(1.9f), Offset(u(20f), u(6f)))
+        drawCircle(color, u(1.4f), Offset(u(4f), u(9f)), style = Stroke(u(1.1f)))
+        drawCircle(color, u(1.4f), Offset(u(20f), u(15f)), style = Stroke(u(1.1f)))
+    }
+}
+
 /** Rozmiar gumki: okrąg tym większy, im większa gumka (pierwiastek, żeby 2 i 40 pt zmieściły się w przycisku). */
 @Composable
 fun EraserSizeGlyph(pt: Float, color: Color, modifier: Modifier = Modifier) {

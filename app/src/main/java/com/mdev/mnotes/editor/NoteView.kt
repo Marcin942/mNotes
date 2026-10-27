@@ -56,6 +56,7 @@ import com.mdev.mnotes.core.model.TextBox
 import com.mdev.mnotes.core.pen.LaserColors
 import com.mdev.mnotes.core.pen.PenSpec
 import com.mdev.mnotes.core.pen.StrokeBuilder
+import com.mdev.mnotes.core.shapes.Bezier
 import com.mdev.mnotes.core.shapes.ShapeBox
 import com.mdev.mnotes.core.shapes.ShapeFrame
 import com.mdev.mnotes.core.shapes.ShapeKind
@@ -117,6 +118,7 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
     private val selPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE; strokeWidth = 1.6f * dp; pathEffect = DashPathEffect(floatArrayOf(7f * dp, 5f * dp), 0f) }
     private val handleFill = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL; color = 0xFFFFFFFF.toInt() }
     private val handleStroke = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE; strokeWidth = 2f * dp }
+    private val handleArm = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE; strokeWidth = 1.2f * dp }
     private val lassoPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE; strokeWidth = 1.8f * dp; pathEffect = DashPathEffect(floatArrayOf(9f * dp, 6f * dp), 0f); strokeJoin = Paint.Join.ROUND }
     private val ringPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE; strokeWidth = 1.3f * dp }
     private val laserPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
@@ -159,6 +161,8 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
     private var livePage = -1
     private var shapeSnapped = false
     private var shapePts = FloatArray(0)
+    /** Punkty kontrolne wygładzonej krzywej po przytrzymaniu (F18); null = zwykły rozpoznany kształt. */
+    private var shapeCtrl: FloatArray? = null
     private var holdX = 0f; private var holdY = 0f
     private var holdRaw = 0                         // ile surowych próbek miało powstać do chwili osiadnięcia pióra (reszta to dryf)
     private var shapeKind = ShapeKind.LINE
@@ -225,6 +229,8 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
     private var lAx = 0f; private var lAy = 0f; private var lHx = 0f; private var lHy = 0f
     private var lAngleStart = 0f
     private var vIdx = 0; private var vBase: Stroke? = null; private var vDx = 0f; private var vDy = 0f
+    /** Przeciągany jest punkt kontrolny krzywej Béziera (F17), a nie wierzchołek łamanej. */
+    private var vCtrl = false
     private var rFrame: ShapeFrame? = null; private var rHandle = 0
     private var tBase: TextBox? = null; private var tSide = TextFit.Side.RIGHT
     private var sbSel: Sel? = null; private var sbKey = -1; private var sbVal: Bounds? = null
@@ -239,7 +245,7 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
     private var lsX = FloatArray(256); private var lsY = FloatArray(256); private var lsNx = FloatArray(256); private var lsNy = FloatArray(256)
 
     private val holdRunnable = Runnable {
-        if (mode == Mode.TOOL && activeTool == Tool.PEN && liveActive && !shapeSnapped) trySnapShape()
+        if (mode == Mode.TOOL && (activeTool == Tool.PEN || activeTool == Tool.CURVE) && liveActive && !shapeSnapped) trySnapShape()
         else if (mode == Mode.TOOL && activeTool == Tool.LASSO) lassoHold()
     }
     private val longPress = Runnable {
@@ -797,7 +803,7 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
             )
         } else cs = selQuad(pi, selBounds() ?: (if (lLifting) lBounds else return))
         selPaint.color = accent
-        handleStroke.color = accent
+        handleStroke.color = accent; handleArm.color = (accent and 0xFFFFFF) or (0xB0 shl 24)
         tmpPath.rewind()
         tmpPath.moveTo(cs[0], cs[1]); tmpPath.lineTo(cs[2], cs[3]); tmpPath.lineTo(cs[4], cs[5]); tmpPath.lineTo(cs[6], cs[7]); tmpPath.close()
         c.drawPath(tmpPath, selPaint)
@@ -811,6 +817,19 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
             val rot = rotateHandle(cs, topmost = !(lLifting && lm == LM.ROTATE))
             c.drawLine(rot[2], rot[3], rot[0], rot[1], handleStroke)
             c.drawCircle(rot[0], rot[1], r, handleFill); c.drawCircle(rot[0], rot[1], r, handleStroke)
+        }
+        curveSel()?.ctrl?.let { cc ->
+            // F17: ramiona uchwytów cienką linią, kotwice jak wierzchołki łamanej, uchwyty mniejsze i puste w środku.
+            val n = cc.size / 2
+            for (i in 0 until n) if (!Bezier.isAnchor(i)) {
+                val a = if (i % 3 == 1) i - 1 else i + 1
+                c.drawLine(scrX(pi, cc[2 * a]), scrY(pi, cc[2 * a + 1]), scrX(pi, cc[2 * i]), scrY(pi, cc[2 * i + 1]), handleArm)
+            }
+            for (i in 0 until n) {
+                val hx = scrX(pi, cc[2 * i]); val hy = scrY(pi, cc[2 * i + 1])
+                if (Bezier.isAnchor(i)) { c.drawCircle(hx, hy, r * 1.1f, handleFill); c.drawCircle(hx, hy, r * 1.1f, handleStroke) }
+                else { c.drawCircle(hx, hy, r * 0.7f, handleFill); c.drawCircle(hx, hy, r * 0.7f, handleStroke) }
+            }
         }
         if (poly != null) for (i in 0 until poly.vertexCount) {
             val vx = scrX(pi, poly.pts[3 * i]); val vy = scrY(pi, poly.pts[3 * i + 1])
@@ -1935,9 +1954,9 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
         curX = ev.getX(idx); curY = ev.getY(idx)
         downX = curX; downY = curY; downT = ev.eventTime; toolMoved = false
         lm = LM.NONE; ln = 0
-        if ((tool == Tool.PEN || tool == Tool.LASSO) && (resizeDown() || vertexDown())) { activeTool = Tool.LASSO; invalidate(); return }
+        if ((tool == Tool.PEN || tool == Tool.CURVE || tool == Tool.LASSO) && (resizeDown() || vertexDown())) { activeTool = Tool.LASSO; invalidate(); return }
         when (tool) {
-            Tool.PEN -> penDown(ev, idx)
+            Tool.PEN, Tool.CURVE -> penDown(ev, idx)
             Tool.ERASER -> eraseDown()
             Tool.LASSO -> { lassoDown(); if (mode == Mode.TOOL) postDelayed(holdRunnable, 520L) }
             Tool.SPACE -> spaceDown()
@@ -1954,7 +1973,7 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
         curX = ev.getX(idx); curY = ev.getY(idx)
         if (!toolMoved && hypot(curX - downX, curY - downY) > slop) toolMoved = true
         when (activeTool) {
-            Tool.PEN -> penMove(ev, idx)
+            Tool.PEN, Tool.CURVE -> penMove(ev, idx)
             Tool.ERASER -> {
                 for (h in 0 until ev.historySize) eraseTo(ev.getHistoricalX(idx, h), ev.getHistoricalY(idx, h))
                 eraseTo(curX, curY)
@@ -1973,9 +1992,9 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
     }
 
     private fun finishTool(ev: MotionEvent, idx: Int, cancel: Boolean) {
-        removeCallbacks(holdRunnable)
+        removeCallbacks(holdRunnable); removeCallbacks(curveHold)
         when (activeTool) {
-            Tool.PEN -> penUp(cancel)
+            Tool.PEN, Tool.CURVE -> penUp(cancel)
             Tool.ERASER -> eraseUp(cancel)
             Tool.LASSO -> lassoUp(cancel)
             Tool.SPACE -> spaceUp(cancel)
@@ -2007,7 +2026,7 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
         val p = ed.pen
         val sp = PenSpec.of(p.kind)
         builder.begin(p.kind, p.color, p.width, (sp.smoothing * settings.smoothing).coerceIn(0f, 1f), (0.5f / zoom).coerceIn(0.05f, 0.9f), p.style)
-        liveActive = true; shapeSnapped = false; predN = 0
+        liveActive = true; shapeSnapped = false; shapeCtrl = null; predN = 0
         holdX = curX; holdY = curY; holdRaw = 0
         if (ed.sel != null) ed.clearSel()
         rulerSide = 0
@@ -2057,8 +2076,21 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
         predN = n
     }
 
+    /** F18: kreska trzymana dalej po nieudanym rozpoznaniu kształtu staje się gładką krzywą z uchwytami. */
+    private val curveHold = Runnable {
+        if (mode != Mode.TOOL || !liveActive || shapeSnapped || (activeTool != Tool.PEN && activeTool != Tool.CURVE)) return@Runnable
+        val total = builder.rawCount
+        val n = if (holdRaw >= 3) holdRaw.coerceAtMost(total) else total
+        if (n < 3) return@Runnable
+        val c = Bezier.fit(builder.raw.copyOf(2 * n), max(1.2f, 3f * dp / zoom)) ?: return@Runnable
+        shapeCtrl = c; shapePts = Bezier.sample(c); shapePoly = false; shapeKind = ShapeKind.POLYLINE
+        shapeSnapped = true; predN = 0; shapeLabel = null
+        performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
+        invalidate()
+    }
+
     private fun armHold() {
-        removeCallbacks(holdRunnable)
+        removeCallbacks(holdRunnable); removeCallbacks(curveHold)
         if (settings.holdToShape && rulerSide == 0 && !shapeSnapped && toolType != MotionEvent.TOOL_TYPE_FINGER) postDelayed(holdRunnable, settings.holdMs.toLong())
     }
 
@@ -2067,7 +2099,12 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
         val total = builder.rawCount
         if (total < 3) return
         val n = if (holdRaw >= 3) holdRaw.coerceAtMost(total) else total
-        val shape = ShapeRecognizer.recognize(builder.raw, n, ShapeRecognizer.minLineFor(builder.width, dp / zoom)) ?: return
+        val shape = ShapeRecognizer.recognize(builder.raw, n, ShapeRecognizer.minLineFor(builder.width, dp / zoom))
+        if (shape == null) {
+            // F18: nierozpoznana kreska — dalsze trzymanie przez osobny czas wygładza ją w krzywą Béziera.
+            if (settings.holdToCurve) postDelayed(curveHold, settings.curveHoldMs.toLong())
+            return
+        }
         val m = shape.xy.size / 2
         shapePts = FloatArray(3 * m)
         for (i in 0 until m) { shapePts[3 * i] = shape.xy[2 * i]; shapePts[3 * i + 1] = shape.xy[2 * i + 1]; shapePts[3 * i + 2] = 1f }
@@ -2088,6 +2125,7 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
      * kąt przyciąga co 15°), pozostałe kształty skalują się względem środka.
      */
     private fun adjustSnapped() {
+        if (shapeCtrl != null) return   // wygładzona krzywa (F18) nie skaluje się za piórem; edycja uchwytami po puszczeniu
         val pi = livePage
         if (pi !in 0 until layout.count) return
         val px = pgX(pi, curX); val py = pgY(pi, curY)
@@ -2140,13 +2178,22 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
         if (!liveActive) return
         liveActive = false; rulerSide = 0
         val pi = livePage
-        val snapped = shapeSnapped
-        val stroke = if (cancel) null else if (snapped) Stroke(Ids.next(), builder.penKind, builder.penColor, builder.width, shapePts.copyOf(), false, shapePoly, shapeKind == ShapeKind.ELLIPSE, builder.line) else builder.finish(Ids.next())
-        shapeSnapped = false; shapeLabel = null
+        var snapped = shapeSnapped
+        val sc = shapeCtrl
+        // F17: narzędzie Krzywa zamienia każdą kreskę na gładką krzywą Béziera z uchwytami.
+        val curve = if (!cancel && !snapped && activeTool == Tool.CURVE) Bezier.fit(builder.raw.copyOf(2 * builder.rawCount), max(0.8f, 2f * dp / zoom)) else null
+        val stroke = when {
+            cancel -> null
+            sc != null -> Stroke(Ids.next(), builder.penKind, builder.penColor, builder.width, Bezier.sample(sc), line = builder.line, ctrl = sc)
+            snapped -> Stroke(Ids.next(), builder.penKind, builder.penColor, builder.width, shapePts.copyOf(), false, shapePoly, shapeKind == ShapeKind.ELLIPSE, builder.line)
+            curve != null -> { snapped = true; Stroke(Ids.next(), builder.penKind, builder.penColor, builder.width, Bezier.sample(curve), line = builder.line, ctrl = curve) }
+            else -> builder.finish(Ids.next())
+        }
+        shapeSnapped = false; shapeLabel = null; shapeCtrl = null
         if (stroke == null || pi !in doc.pages.indices) return
         val page = doc.pages[pi]
         ed.exec(DocEdit.Elements(page.id, ElementsEdit.add(doc.content(page), listOf(stroke))))
-        // Kształt z uchwytami od razu zaznaczony — niebieskie punkty pozwalają go przekształcić.
+        // Kształt (i krzywa) z uchwytami od razu zaznaczony — niebieskie punkty pozwalają go przekształcić.
         if (snapped) ed.select(page.id, setOf(stroke.id))
     }
 
@@ -2154,7 +2201,7 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
 
     /** Jedyny zaznaczony element, jeśli jest łamaną z uchwytami (nie zablokowaną); w trakcie przeciągania — jej bieżąca wersja. */
     private fun polySel(): Stroke? {
-        if (lLifting && lm == LM.VERTEX) return lEls.firstOrNull() as? Stroke
+        if (lLifting && lm == LM.VERTEX) return (lEls.firstOrNull() as? Stroke)?.takeIf { it.ctrl == null }
         val s = ed.sel ?: return null
         if (s.ids.size != 1 || lLifting) return null
         val e = ed.selElements().singleOrNull() as? Stroke ?: return null
@@ -2275,7 +2322,39 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
         ed.viewTick++
     }
 
+    /** Jedyna zaznaczona krzywa Béziera (F17), niezablokowana; w trakcie przeciągania uchwytu — jej bieżąca wersja. */
+    private fun curveSel(): Stroke? {
+        if (lLifting && lm == LM.VERTEX) return (lEls.firstOrNull() as? Stroke)?.takeIf { it.ctrl != null }
+        val s = ed.sel ?: return null
+        if (s.ids.size != 1 || lLifting) return null
+        val e = ed.selElements().singleOrNull() as? Stroke ?: return null
+        return if (e.ctrl != null && !e.locked) e else null
+    }
+
+    /** Punkt kontrolny krzywej pod punktem ekranu (kotwice mają pierwszeństwo przed uchwytami) albo -1. */
+    private fun curveHit(st: Stroke, pi: Int, sx: Float, sy: Float): Int {
+        val c = st.ctrl ?: return -1
+        var best = -1; var bd = 22f * dp
+        for (i in 0 until c.size / 2) {
+            val d = hypot(sx - scrX(pi, c[2 * i]), sy - scrY(pi, c[2 * i + 1])) - (if (Bezier.isAnchor(i)) 4f * dp else 0f)
+            if (d < bd) { bd = d; best = i }
+        }
+        return best
+    }
+
     private fun vertexDown(): Boolean {
+        curveSel()?.let { st ->
+            val s = ed.sel ?: return false
+            val pi = doc.indexOf(s.pageId); if (pi < 0) return false
+            val best = curveHit(st, pi, curX, curY)
+            if (best < 0) return false
+            val c = st.ctrl!!
+            lPage = pi; lm = LM.VERTEX; lIds = s.ids; vIdx = best; vBase = st; vCtrl = true
+            lBounds = st.bounds; lM = Affine.IDENTITY; lLifting = false
+            vDx = c[2 * best] - pgX(pi, curX); vDy = c[2 * best + 1] - pgY(pi, curY)
+            return true
+        }
+        vCtrl = false
         val st = polySel() ?: return false
         val s = ed.sel ?: return false
         val pi = doc.indexOf(s.pageId); if (pi < 0) return false
@@ -2296,6 +2375,14 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
         val b = vBase ?: return
         var x = px + vDx; var y = py + vDy
         if (settings.snapGrid || ed.gridSnap) { val g = 14.17f; x = (x / g).roundToInt() * g; y = (y / g).roundToInt() * g }
+        if (vCtrl) {
+            // F17: kotwica ciągnie swoje uchwyty, uchwyt gładkiej kotwicy obraca przeciwny (bez załamania krzywej).
+            val c = b.ctrl ?: return
+            val cur = Bezier.withCtrl(b, Bezier.moved(c, vIdx, x, y))
+            lEls = listOf(cur); lBounds = cur.bounds
+            ed.viewTick++
+            return
+        }
         else {
             val tol = 5f * dp / zoom
             var bx = tol; var by = tol
@@ -2956,6 +3043,7 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
         if (st != null) {
             for (i in 0 until st.vertexCount) if (hypot(sx - scrX(pi, st.pts[3 * i]), sy - scrY(pi, st.pts[3 * i + 1])) < 24f * dp) return true
         }
+        curveSel()?.let { if (curveHit(it, pi, sx, sy) >= 0) return true }
         val sh = shapeSel()
         if (sh != null && resizeHit(sh, pi, sx, sy) >= 0) return true
         val tx = textSel()

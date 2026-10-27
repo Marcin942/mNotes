@@ -298,7 +298,7 @@ fun EditorScreen(ed: Editor, tabs: TabsCtl, onExit: () -> Unit, onSettings: () -
         when {
             // Pędzel formatu i wiaderko biorą styl z pióra, więc inne pióro tylko zmienia ich barwę; dopiero
             // dotknięcie tego, które już jest w użyciu, wraca do pisania.
-            (ed.tool == Tool.PAINTER || ed.tool == Tool.FILL) && ed.kit.active != k -> ed.editKit { it.withActive(k) }
+            (ed.tool == Tool.PAINTER || ed.tool == Tool.FILL || ed.tool == Tool.CURVE) && ed.kit.active != k -> ed.editKit { it.withActive(k) }
             ed.tool == Tool.PEN && ed.kit.active == k -> toggle(Panel.PEN)
             else -> { ed.selectPen(k); if (panel != Panel.PEN) panel = null }
         }
@@ -648,6 +648,10 @@ private fun ToolBar(ed: Editor, set: com.mdev.mnotes.data.Settings, vertical: Bo
     tool("text", 7, Icons.Rounded.TextFields, T.t("Tekst", "Text"), "T", Tool.TEXT, null)
     tool("laser", 14, Icons.Rounded.TrackChanges, T.t("Laser", "Laser"), "O", Tool.LASER, null, enabled = true)
     tool("hand", 10, Icons.Rounded.PanTool, T.t("Ręka (przewijanie)", "Hand (pan)"), "H", Tool.HAND, null, enabled = true)
+    // F17: krzywa Béziera — kreska aktywnym piórem staje się gładką krzywą z uchwytami.
+    items += BarItem("curve", 2, 18, T.t("Krzywa Béziera — rysuj, a potem popraw uchwytami", "Bézier curve — draw, then adjust with handles"), null, !ro, ed.tool == Tool.CURVE, ed.tool == Tool.CURVE, { pickTool(Tool.CURVE, null) }) { c, s ->
+        BezierGlyph(c, Modifier.size(s))
+    }
     tool("tape", 15, Icons.Rounded.VisibilityOff, T.t("Taśma — zakryj fragment (do nauki)", "Tape — cover an area (for study)"), "K", Tool.TAPE, Panel.TAPE)
     tool("space", 16, Icons.Rounded.UnfoldMore, T.t("Wstaw / usuń odstęp", "Insert / remove space"), "X", Tool.SPACE, null)
     icon("ruler", 2, 13, Icons.Rounded.Straighten, T.t("Linijka", "Ruler"), "R", !ro, ed.ruler, pin = false) { ed.toggleRuler() }

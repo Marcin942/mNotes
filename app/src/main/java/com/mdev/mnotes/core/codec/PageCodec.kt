@@ -51,6 +51,11 @@ object PageCodec {
     /** Styl linii kreski; starsze wersje ignorują te bity i rysują linię ciągłą. */
     private const val FLAG_DASHED = 16
     private const val FLAG_DOTTED = 32
+    /**
+     * Kreska z punktami kontrolnymi krzywej Béziera (F17), dopisanymi za punktami. Starsza wersja pomija koniec
+     * rekordu (rekordy mają długość) i rysuje samą gęstą łamaną, która wygląda tak samo.
+     */
+    private const val FLAG_BEZIER = 64
     // Tryb rozmiaru pola tekstowego; brak obu bitów = TextBox.FIT_HEIGHT, czyli zapis sprzed trybów.
     private const val FLAG_TEXT_AUTO = 64
     private const val FLAG_TEXT_FIXED = 128
@@ -148,7 +153,8 @@ object PageCodec {
         w.u8(s.pen.code)
         w.i32(s.color)
         val line = when (s.line) { LineStyle.DASHED -> FLAG_DASHED; LineStyle.DOTTED -> FLAG_DOTTED; LineStyle.SOLID -> 0 }
-        w.varint((if (s.locked) FLAG_LOCKED else 0) or (if (s.poly) FLAG_POLY else 0) or (if (s.ellipse) FLAG_ELLIPSE else 0) or line)
+        val ctrl = s.ctrl
+        w.varint((if (s.locked) FLAG_LOCKED else 0) or (if (s.poly) FLAG_POLY else 0) or (if (s.ellipse) FLAG_ELLIPSE else 0) or line or (if (ctrl != null) FLAG_BEZIER else 0))
         w.varint((s.width * Q).roundToInt().coerceAtLeast(1))
         val n = s.count
         w.varint(n)
@@ -161,6 +167,15 @@ object PageCodec {
             w.zigzag(y - py)
             w.u8((p[3 * i + 2].coerceIn(0f, 1f) * 255f).roundToInt())
             px = x; py = y
+        }
+        if (ctrl != null) {
+            w.varint(ctrl.size / 2)
+            var cx = 0; var cy = 0
+            for (i in 0 until ctrl.size / 2) {
+                val x = (ctrl[2 * i] * Q).roundToInt(); val y = (ctrl[2 * i + 1] * Q).roundToInt()
+                w.zigzag(x - cx); w.zigzag(y - cy)
+                cx = x; cy = y
+            }
         }
     }
 
@@ -181,7 +196,16 @@ object PageCodec {
             pts[3 * i + 2] = r.u8() / 255f
         }
         val line = if (flags and FLAG_DASHED != 0) LineStyle.DASHED else if (flags and FLAG_DOTTED != 0) LineStyle.DOTTED else LineStyle.SOLID
-        return Stroke(Ids.next(), pen, color, width, pts, flags and FLAG_LOCKED != 0, flags and FLAG_POLY != 0, flags and FLAG_ELLIPSE != 0, line)
+        var ctrl: FloatArray? = null
+        if (flags and FLAG_BEZIER != 0) {
+            val m = r.varint()
+            if (m < 0 || m > r.remaining) throw CodecException("Zła liczba punktów kontrolnych")
+            val c = FloatArray(2 * m)
+            var cx = 0; var cy = 0
+            for (i in 0 until m) { cx += r.zigzag(); cy += r.zigzag(); c[2 * i] = cx / Q; c[2 * i + 1] = cy / Q }
+            ctrl = c
+        }
+        return Stroke(Ids.next(), pen, color, width, pts, flags and FLAG_LOCKED != 0, flags and FLAG_POLY != 0, flags and FLAG_ELLIPSE != 0, line, ctrl)
     }
 
     private fun writeText(w: ByteWriter, t: TextBox) {

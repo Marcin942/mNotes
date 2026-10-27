@@ -21,6 +21,7 @@ import androidx.compose.material.icons.rounded.FormatPaint
 import androidx.compose.material.icons.rounded.Gesture
 import androidx.compose.material.icons.rounded.HighlightAlt
 import androidx.compose.material.icons.rounded.PanTool
+import androidx.compose.material.icons.rounded.Timeline
 import androidx.compose.material.icons.rounded.RestartAlt
 import androidx.compose.material.icons.rounded.Colorize
 import androidx.compose.material.icons.rounded.Straighten
@@ -64,6 +65,7 @@ internal fun barName(id: String): String = when (id) {
     "text" -> T.t("Tekst", "Text")
     "laser" -> T.t("Laser", "Laser")
     "hand" -> T.t("Ręka (przewijanie)", "Hand (pan)")
+    "curve" -> T.t("Krzywa Béziera", "Bézier curve")
     "tape" -> T.t("Taśma", "Tape")
     "space" -> T.t("Wstaw / usuń odstęp", "Insert / remove space")
     "ruler" -> T.t("Linijka", "Ruler")
@@ -85,6 +87,7 @@ internal fun barVector(id: String, lassoRect: Boolean): ImageVector? = when (id)
     "text" -> Icons.Rounded.TextFields
     "laser" -> Icons.Rounded.TrackChanges
     "hand" -> Icons.Rounded.PanTool
+    "curve" -> Icons.Rounded.Timeline
     "tape" -> Icons.Rounded.VisibilityOff
     "space" -> Icons.Rounded.UnfoldMore
     "ruler" -> Icons.Rounded.Straighten

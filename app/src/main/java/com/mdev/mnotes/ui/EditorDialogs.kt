@@ -159,6 +159,7 @@ fun commandList(
         "toolText" to ({ !ed.readOnly } to { pickTool(Tool.TEXT, null) }),
         "toolLaser" to ({ true } to { pickTool(Tool.LASER, null) }),
         "toolHand" to ({ true } to { pickTool(Tool.HAND, null) }),
+        "toolCurve" to ({ !ed.readOnly } to { pickTool(Tool.CURVE, null) }),
         "toolSpace" to ({ !ed.readOnly } to { pickTool(Tool.SPACE, null) }),
         "ruler" to ({ !ed.readOnly } to { ed.toggleRuler() }),
         "toolTape" to ({ !ed.readOnly } to { pickTool(Tool.TAPE, Panel.TAPE) }),

@@ -65,6 +65,7 @@ private fun checked(ed: Editor, set: com.mdev.mnotes.data.Settings, id: String):
     "toolText" -> ed.tool == Tool.TEXT
     "toolLaser" -> ed.tool == Tool.LASER
     "toolHand" -> ed.tool == Tool.HAND
+    "toolCurve" -> ed.tool == Tool.CURVE
     "toolSpace" -> ed.tool == Tool.SPACE
     "toolTape" -> ed.tool == Tool.TAPE
     "ruler" -> ed.ruler

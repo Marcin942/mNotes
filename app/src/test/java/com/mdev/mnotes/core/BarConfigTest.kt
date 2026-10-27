@@ -40,7 +40,7 @@ class BarConfigTest {
         val c = BarConfig.DEFAULT.move("redo", 1)
         assertEquals("ballpoint", c.order[1]); assertEquals("redo", c.order[2])
         assertEquals(BarConfig.DEFAULT.order, BarConfig.DEFAULT.move("undo", -1).order)
-        assertEquals(BarConfig.DEFAULT.order, BarConfig.DEFAULT.move("ruler", 1).order)
+        assertEquals(BarConfig.DEFAULT.order, BarConfig.DEFAULT.move(BarConfig.DEFAULT_ORDER.last(), 1).order)
     }
 
     @Test fun moveSkipsItemsInMenu() {

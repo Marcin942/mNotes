@@ -85,7 +85,7 @@ class LinkMachine(
     private var helloSent = false
     private val outbox = ArrayDeque<PhotoSender>()
     private var current: PhotoSender? = null
-    private val receiver = PhotoReceiver()
+    private val receiver = PhotoReceiver(FILE_MAX)
     private var sentCount = 0
     private var receivedCount = 0
     private var photoSeq = 0
@@ -118,8 +118,12 @@ class LinkMachine(
     /** „Spróbuj ponownie” po problemie z ustawieniami albo uprawnieniami. */
     fun retry() { if (running) search() }
 
-    /** Kolejka zdjęć do wysłania (telefon); wychodzą po kolei, gdy łącze jest gotowe. */
+    /**
+     * Kolejka plików do wysłania (zdjęcia z telefonu, zeszyty `.mnotes`); wychodzą po kolei, gdy łącze jest gotowe.
+     * Odbiorca dostaje każdy przez [Listener.photo] z tym samym [mime] i sam decyduje, co z nim zrobić.
+     */
     fun sendPhoto(name: String, mime: String, bytes: ByteArray): String {
+        require(bytes.size <= FILE_MAX) { "plik ponad ${FILE_MAX shr 20} MB" }
         val id = "${clock()}-${++photoSeq}"
         outbox.addLast(PhotoSender(id, name, mime, bytes))
         record("zdjęcie w kolejce: ${bytes.size / 1024} KB")
@@ -355,5 +359,8 @@ class LinkMachine(
         const val RETRY_MS = 3_000L
         const val AUTO_PICK_MS = 1_000L
         const val LOG_SIZE = 20
+
+        /** Największy plik przez łącze (zeszyt z PDF-em bywa duży; całość mieści się w pamięci po obu stronach). */
+        const val FILE_MAX = 64 shl 20
     }
 }

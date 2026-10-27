@@ -404,7 +404,7 @@ object Lab : LabFeatures {
     override fun phoneButton(): Boolean = LabSettings.of(LocalContext.current).nearby
 
     @Composable
-    override fun PhonePanel(ed: Editor, close: () -> Unit) = com.mdev.mnotes.lab.nearby.PhoneLinkDialog(com.mdev.mnotes.core.nearby.LinkMode.RECEIVE, ed, close)
+    override fun PhonePanel(ed: Editor, close: () -> Unit) = com.mdev.mnotes.lab.nearby.PhoneLinkDialog(com.mdev.mnotes.core.nearby.LinkMode.RECEIVE, ed, close = close)
 
     /**
      * Zdjęcie z trybu wykładu (2b-B3, hook A2-8): gdy to ciemna tablica, przechodzi przez kredę z krokami z Ustawień
@@ -485,6 +485,7 @@ object Lab : LabFeatures {
         val store = remember { com.mdev.mnotes.lab.nearby.PairStore(ctx) }
         var dialog by remember { mutableStateOf(0) }
         var tick by remember { mutableStateOf(0) }
+        var outgoing by remember { mutableStateOf<com.mdev.mnotes.core.nearby.SyncMsg.Photo?>(null) }
         Group(T.t("Telefon i tablet (Nearby)", "Phone and tablet (Nearby)"), keys = "nearby telefon tablet zdjęcie bluetooth parowanie połącz wyślij diagnostyka łącze phone pair connect send diagnostics link") {
             Text(
                 T.t(
@@ -505,6 +506,10 @@ object Lab : LabFeatures {
                     TextButton(onClick = { dialog = 2 }) { Text(T.t("Wyślij zdjęcie na tablet (na telefonie)", "Send a photo to the tablet (on the phone)")) }
                     TextButton(onClick = { store.clear(); tick++ }) { Text(T.t("Usuń parę", "Forget the pair"), color = MaterialTheme.colorScheme.error) }
                 }
+                if (store.paired) {
+                    TextButton(onClick = { dialog = 4 }) { Text(T.t("Wyślij zeszyt na drugie urządzenie", "Send a notebook to the other device")) }
+                    TextButton(onClick = { dialog = 5 }) { Text(T.t("Odbierz zeszyt z drugiego urządzenia", "Receive a notebook from the other device")) }
+                }
                 TextButton(onClick = { dialog = 3 }) { Text(T.t("Diagnostyka łącza", "Link diagnostics")) }
             }
         }
@@ -512,6 +517,9 @@ object Lab : LabFeatures {
             1 -> com.mdev.mnotes.lab.nearby.PhoneLinkDialog(com.mdev.mnotes.core.nearby.LinkMode.PAIR, null) { dialog = 0; tick++ }
             2 -> com.mdev.mnotes.lab.nearby.PhoneLinkDialog(com.mdev.mnotes.core.nearby.LinkMode.SEND, null) { dialog = 0; tick++ }
             3 -> com.mdev.mnotes.lab.nearby.DiagnosticsDialog(null) { dialog = 0 }
+            4 -> com.mdev.mnotes.lab.nearby.NotebookSendDialog({ dialog = 0 }) { file -> outgoing = file; dialog = 6 }
+            5 -> com.mdev.mnotes.lab.nearby.PhoneLinkDialog(com.mdev.mnotes.core.nearby.LinkMode.RECEIVE, null) { dialog = 0 }
+            6 -> com.mdev.mnotes.lab.nearby.PhoneLinkDialog(com.mdev.mnotes.core.nearby.LinkMode.SEND, null, outgoing?.let { listOf(it) }) { dialog = 0; outgoing = null }
         }
     }
 

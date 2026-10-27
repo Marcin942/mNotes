@@ -26,6 +26,7 @@ import com.mdev.mnotes.core.edit.FloodFill
 import com.mdev.mnotes.core.edit.ImageCut
 import com.mdev.mnotes.core.model.ImageEl
 import com.mdev.mnotes.core.model.ImageFx
+import com.mdev.mnotes.core.model.WhiteBalance
 import com.mdev.mnotes.core.model.PageContent
 import com.mdev.mnotes.core.model.Placed
 import com.mdev.mnotes.core.model.PageSnapshot
@@ -335,6 +336,30 @@ class Editor(val ctx: Context, val nbId: String) {
 
     /** Zmienia efekty kolorystyczne zaznaczonych obrazów; [f] dostaje bieżące efekty danego obrazu. */
     fun setSelImageFx(f: (ImageFx) -> ImageFx) = replaceSel { e -> if (e is ImageEl) e.copy(fx = f(e.fx)) else e }
+
+    /**
+     * F15: autobalans bieli zaznaczonych obrazów — piksele pomniejszonego obrazu (najwyżej 256 px) liczone w tle,
+     * wynik jako wzmocnienia R/G/B (jeden wpis cofania; dalej da się je poprawić suwakami).
+     */
+    fun autoWhiteBalanceSel(whitePatch: Boolean) {
+        val imgs = selElements().filterIsInstance<ImageEl>()
+        if (imgs.isEmpty()) return
+        repo.io.execute {
+            val gains = imgs.associate { im ->
+                val bmp = app.assets.load(nbId, im.asset, 256)
+                val g = if (bmp == null) null else {
+                    val px = IntArray(bmp.width * bmp.height).also { bmp.getPixels(it, 0, bmp.width, 0, 0, bmp.width, bmp.height) }
+                    bmp.recycle()
+                    if (whitePatch) WhiteBalance.whitePatch(px) else WhiteBalance.grayWorld(px)
+                }
+                im.id to g
+            }
+            view?.post {
+                replaceSel { e -> val g = gains[e.id]; if (e is ImageEl && g != null) e.copy(fx = e.fx.copy(mode = ImageFx.MODE_COLOR, r = g[0], g = g[1], b = g[2])) else e }
+                if (gains.values.all { it == null }) say(T.t("Nie udało się odczytać obrazu", "Could not read the image"))
+            }
+        }
+    }
 
     private class ElPreview(val pageId: String, val before: Map<Int, ImageEl>)
     private var elPreview: ElPreview? = null

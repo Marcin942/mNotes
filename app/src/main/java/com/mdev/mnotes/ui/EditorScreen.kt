@@ -115,6 +115,9 @@ import androidx.compose.material.icons.rounded.Palette
 import androidx.compose.material.icons.rounded.PanTool
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.ShowChart
+import androidx.compose.material.icons.rounded.ExpandLess
+import androidx.compose.material.icons.rounded.ExpandMore
+import androidx.compose.material.icons.rounded.WbAuto
 import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material.icons.rounded.TextFields
 import androidx.compose.material.icons.rounded.TrackChanges
@@ -180,6 +183,7 @@ import com.mdev.mnotes.app.app
 import com.mdev.mnotes.core.model.Element
 import com.mdev.mnotes.core.model.ImageEl
 import com.mdev.mnotes.core.model.ImageFx
+import com.mdev.mnotes.core.model.ImageTone
 import com.mdev.mnotes.core.model.TextBox
 import com.mdev.mnotes.core.model.PenKind
 import com.mdev.mnotes.core.model.Stroke as InkStroke
@@ -1571,8 +1575,11 @@ private fun AlignCard(ed: Editor) {
 private fun ImageFxPanel(ed: Editor, img: ImageEl) {
     val fx = img.fx
     val pct: (Float) -> String = { " ${(it * 100).roundToInt()}%" }
+    val signed: (Float) -> String = { v -> " " + (if (v > 0.005f) "+" else "") + (v * 100).roundToInt() }
+    var rgbOpen by remember { mutableStateOf(false) }
     FloatingCard(Modifier.width(320.dp)) {
-        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        // Długi panel przewija się wewnątrz karty, a rzadziej używane kanały R/G/B są zwinięte (F13: ergonomia menu).
+        Column(Modifier.heightIn(max = 520.dp).verticalScroll(rememberScrollState()).padding(12.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
             SectionLabel(T.t("Efekt", "Effect"))
             FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Chip(T.t("Kolor", "Color"), fx.mode == ImageFx.MODE_COLOR, { ed.setSelImageFx { it.copy(mode = ImageFx.MODE_COLOR) } })
@@ -1583,9 +1590,25 @@ private fun ImageFxPanel(ed: Editor, img: ImageEl) {
             if (fx.mode == ImageFx.MODE_BW) {
                 FxSlider(ed, T.t("Próg bieli", "White threshold"), fx.threshold, 0f, 1f, { "" }) { v -> { im -> im.copy(fx = im.fx.copy(threshold = v)) } }
             }
-            FxSlider(ed, T.t("Czerwony", "Red"), fx.r, 0f, ImageFx.GAIN_MAX, pct) { v -> { im -> im.copy(fx = im.fx.copy(r = v)) } }
-            FxSlider(ed, T.t("Zielony", "Green"), fx.g, 0f, ImageFx.GAIN_MAX, pct) { v -> { im -> im.copy(fx = im.fx.copy(g = v)) } }
-            FxSlider(ed, T.t("Niebieski", "Blue"), fx.b, 0f, ImageFx.GAIN_MAX, pct) { v -> { im -> im.copy(fx = im.fx.copy(b = v)) } }
+            // F13: jasność, temperatura i odcień to inny układ tych samych wzmocnień R/G/B — suwaki poruszają się razem.
+            val tone = ImageTone.of(fx)
+            FxSlider(ed, T.t("Jasność", "Brightness"), tone.brightness, 0.2f, 1.8f, pct) { v -> { im -> im.copy(fx = ImageTone.withBrightness(im.fx, v)) } }
+            FxSlider(ed, T.t("Temperatura (zimno ↔ ciepło)", "Temperature (cool ↔ warm)"), tone.temperature, -0.6f, 0.6f, signed) { v -> { im -> im.copy(fx = ImageTone.withTemperature(im.fx, v)) } }
+            FxSlider(ed, T.t("Odcień (magenta ↔ zieleń)", "Tint (magenta ↔ green)"), tone.tint, -0.6f, 0.6f, signed) { v -> { im -> im.copy(fx = ImageTone.withTint(im.fx, v)) } }
+            SectionLabel(T.t("Balans bieli", "White balance"))
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Chip(T.t("Auto: białe tło", "Auto: white background"), false, { ed.autoWhiteBalanceSel(true) }, icon = Icons.Rounded.WbAuto)
+                Chip(T.t("Auto: szary świat", "Auto: gray world"), false, { ed.autoWhiteBalanceSel(false) })
+            }
+            Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(6.dp)).clickable { rgbOpen = !rgbOpen }.padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                SectionLabel(T.t("Kanały R / G / B", "R / G / B channels"), Modifier.weight(1f))
+                Icon(if (rgbOpen) Icons.Rounded.ExpandLess else Icons.Rounded.ExpandMore, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            if (rgbOpen) {
+                FxSlider(ed, T.t("Czerwony", "Red"), fx.r, 0f, ImageFx.GAIN_MAX, pct) { v -> { im -> im.copy(fx = im.fx.copy(r = v)) } }
+                FxSlider(ed, T.t("Zielony", "Green"), fx.g, 0f, ImageFx.GAIN_MAX, pct) { v -> { im -> im.copy(fx = im.fx.copy(g = v)) } }
+                FxSlider(ed, T.t("Niebieski", "Blue"), fx.b, 0f, ImageFx.GAIN_MAX, pct) { v -> { im -> im.copy(fx = im.fx.copy(b = v)) } }
+            }
             FxSlider(ed, T.t("Krycie obrazu", "Image opacity"), img.alpha, 0.1f, 1f, { "" }) { v -> { im -> im.copy(alpha = v) } }
             if (!fx.isNone) {
                 Spacer(Modifier.height(6.dp))

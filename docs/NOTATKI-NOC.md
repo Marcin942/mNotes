@@ -259,7 +259,18 @@ Na starcie (`noc/wszystko` @ `471ed08`): lab 696 testów, 0 porażek.
   - Test: 41 testów `core/nearby` (w tym 9 maszyny), lab 739, core 693, 0 porażek, oba APK. **Nie zrobione jeszcze:**
     ekran synchronizacji zeszytów (ostatnia część 2b-B1) — po 2b-B2 i 2b-B3, bo wymaga warstwy danych zeszytu, a kreda ma
     priorytet; wysyłanie w tle po zamknięciu okna (okno musi zostać otwarte).
-  - **Nauka:** zdjęcie tablicy z telefonu w notatce na tablecie, bez kabla i bez sieci.
+  - **Krok 4: zeszyty przez łącze** (`24a3692`). Ustawienia → Laboratorium (po sparowaniu): „Wyślij zeszyt na drugie
+    urządzenie” (okno `MDialog` z listą zeszytów od ostatnio zmienionych; po stuknięciu „Przygotowuję „X”…”, potem to
+    samo okno łącza ze zdaniem „Wysyłam zeszyt · część 3 z 12 · 25 %”) i „Odbierz zeszyt z drugiego urządzenia” („Czekam
+    na „Pixel 8”…”, po odbiorze „Dodano zeszyt „X” do biblioteki”). Kierunek dowolny: kto wysyła, ten szuka; kto odbiera,
+    ten się ogłasza. **Świadomie wersja 1 bez scalania stron:** zeszyt idzie jako `.mnotes` (ten sam `Exporter`/`Importer`
+    co „Eksport i udostępnianie” i import), odbiorca dodaje go jako **nowy** zeszyt — nic nie jest nadpisywane, więc żadna
+    strona nie może zginąć. Scalanie stron („nowsza wygrywa”, `SyncPlan` w `core/nearby` już jest) wymaga zapisu do
+    otwartego zeszytu przez `NotebookDoc` i testów na dwóch kopiach — zostawione na później. Limit 64 MB (zeszyt z dużym
+    PDF-em → podpowiedź „Eksport i udostępnianie”). Test: symulacja zeszytu 3 MB przez łącze (`notebookFileGoesTheSameWay…`),
+    lab 786, core 732, 0 porażek, oba APK. **Tablet + telefon:** wyślij mały zeszyt z telefonu, na tablecie „Odbierz
+    zeszyt” → zeszyt w bibliotece, strony i obrazy jak w oryginale.
+  - **Nauka:** zdjęcie tablicy z telefonu w notatce na tablecie, bez kabla i bez sieci; notatki z telefonu na tablecie.
   - **Tablet + telefon (oba `labDebug` z tej gałęzi):** `docs/NEARBY-PRZEBUDOWA.md` §5 (parowanie z rolami ustawionymi
     samymi, lokalizacja wyłączona → zdanie „Włącz lokalizację…”, 3 zdjęcia z postępem, Bluetooth wyłączony w połowie →
     wznowienie, Diagnostyka → „Kopiuj raport” i wklej Marcinowi, jeśli coś nie działa).

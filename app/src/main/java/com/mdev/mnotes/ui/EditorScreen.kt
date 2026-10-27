@@ -392,6 +392,7 @@ fun EditorScreen(ed: Editor, tabs: TabsCtl, onExit: () -> Unit, onSettings: () -
                         EdToast(ed)
                     }
                     CtxMenuOverlay(ed, { panel = Panel.STYLE })
+                    PointMenuOverlay(ed)
                 }
                 if (strip == 1) PenStrip(ed, set, 1, pos, panel, onColorSets) { toggle(it) }
                 if (ed.chrome && pos == 3) SideRail(ed, set, panel, ::pickTool, ::holdTool, ::pickPen, right = true)
@@ -1657,6 +1658,38 @@ private fun colorOf(e: com.mdev.mnotes.core.model.Element?): Int? = when (e) {
 }
 
 // ─────────────────────────────── Menu kontekstowe, toast ───────────────────────────────
+
+@Composable
+private fun PointMenuOverlay(ed: Editor) {
+    val pm = ed.pointMenu ?: return
+    fun close() { ed.pointMenu = null }
+    @Composable
+    fun Item(text: String, enabled: Boolean = true, onClick: () -> Unit) = DropdownMenuItem(text = { Text(text) }, enabled = enabled, onClick = { close(); onClick() })
+    val st = ed.doc.page(pm.pageId)?.let { ed.doc.content(it).byId(pm.elementId) } as? com.mdev.mnotes.core.model.Stroke
+    Box(Modifier.fillMaxSize()) {
+        Box(Modifier.offset { IntOffset(pm.x.toInt(), pm.y.toInt()) }) {
+            DropdownMenu(true, { close() }) {
+                if (st == null) return@DropdownMenu
+                val c = st.ctrl
+                if (pm.curve && c != null) {
+                    val anchor = com.mdev.mnotes.core.shapes.Bezier.isAnchor(pm.index)
+                    if (anchor) {
+                        val smooth = com.mdev.mnotes.core.shapes.Bezier.smooth(c, pm.index)
+                        Item(if (smooth) T.t("Ostra kotwica (załamanie)", "Corner anchor") else T.t("Gładka kotwica", "Smooth anchor"), enabled = pm.index > 0 && pm.index < c.size / 2 - 1) {
+                            ed.pointAction(pm) { s -> s.ctrl?.let { com.mdev.mnotes.core.shapes.Bezier.withCtrl(s, com.mdev.mnotes.core.shapes.PointEdit.toggleSmooth(it, pm.index)) } }
+                        }
+                        Item(T.t("Usuń kotwicę", "Delete anchor"), enabled = com.mdev.mnotes.core.shapes.Bezier.anchors(c) > 2) {
+                            ed.pointAction(pm) { s -> s.ctrl?.let { cc -> com.mdev.mnotes.core.shapes.PointEdit.removeAnchor(cc, pm.index)?.let { com.mdev.mnotes.core.shapes.Bezier.withCtrl(s, it) } } }
+                        }
+                    } else Item(T.t("To uchwyt — przeciągnij go, by wygiąć krzywą", "This is a handle — drag it to bend the curve"), enabled = false) {}
+                } else {
+                    Item(T.t("Usuń punkt", "Delete point"), enabled = st.vertexCount > 2) { ed.pointAction(pm) { com.mdev.mnotes.core.shapes.PointEdit.removeVertex(it, pm.index) } }
+                    Item(T.t("Dodaj punkt obok", "Add point next to it")) { ed.pointAction(pm) { com.mdev.mnotes.core.shapes.PointEdit.insertAfter(it, pm.index) } }
+                }
+            }
+        }
+    }
+}
 
 @Composable
 private fun CtxMenuOverlay(ed: Editor, openStyle: () -> Unit) {

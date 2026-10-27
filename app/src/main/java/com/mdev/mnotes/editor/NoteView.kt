@@ -248,6 +248,18 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
         if (mode == Mode.TOOL && (activeTool == Tool.PEN || activeTool == Tool.CURVE) && liveActive && !shapeSnapped) trySnapShape()
         else if (mode == Mode.TOOL && activeTool == Tool.LASSO) lassoHold()
     }
+    /** F21: menu punktu po przytrzymaniu uchwytu wierzchołka albo punktu kontrolnego. */
+    private val pointHold = Runnable {
+        if (mode != Mode.TOOL || lm != LM.VERTEX || toolMoved || lLifting) return@Runnable
+        val s = ed.sel ?: return@Runnable
+        val id = s.ids.singleOrNull() ?: return@Runnable
+        performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+        ed.pointMenu = Editor.PointMenu(downX, downY, s.pageId, id, vIdx, vCtrl)
+        lm = LM.NONE; mode = Mode.IGNORE
+        invalidate()
+    }
+    private var selTapT = 0L; private var selTapX = 0f; private var selTapY = 0f
+
     private val longPress = Runnable {
         if (mode == Mode.NAV && navMax == 1 && navTravel < slop * 1.5f) {
             performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
@@ -1954,7 +1966,12 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
         curX = ev.getX(idx); curY = ev.getY(idx)
         downX = curX; downY = curY; downT = ev.eventTime; toolMoved = false
         lm = LM.NONE; ln = 0
-        if ((tool == Tool.PEN || tool == Tool.CURVE || tool == Tool.LASSO) && (resizeDown() || vertexDown())) { activeTool = Tool.LASSO; invalidate(); return }
+        if ((tool == Tool.PEN || tool == Tool.CURVE || tool == Tool.LASSO) && (resizeDown() || vertexDown())) {
+            activeTool = Tool.LASSO
+            // F21: przytrzymanie uchwytu punktu (bez ruchu) otwiera menu punktu.
+            if (lm == LM.VERTEX) postDelayed(pointHold, 520L)
+            invalidate(); return
+        }
         when (tool) {
             Tool.PEN, Tool.CURVE -> penDown(ev, idx)
             Tool.ERASER -> eraseDown()
@@ -1992,7 +2009,7 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
     }
 
     private fun finishTool(ev: MotionEvent, idx: Int, cancel: Boolean) {
-        removeCallbacks(holdRunnable); removeCallbacks(curveHold)
+        removeCallbacks(holdRunnable); removeCallbacks(curveHold); removeCallbacks(pointHold)
         when (activeTool) {
             Tool.PEN, Tool.CURVE -> penUp(cancel)
             Tool.ERASER -> eraseUp(cancel)
@@ -2205,12 +2222,13 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
         val s = ed.sel ?: return null
         if (s.ids.size != 1 || lLifting) return null
         val e = ed.selElements().singleOrNull() as? Stroke ?: return null
-        return if (e.poly && !e.locked && e.count >= 2 && ShapeBox.frameOf(e) == null) e else null
+        return if (e.poly && !e.locked && e.count >= 2 && (ed.pointEdit || ShapeBox.frameOf(e) == null)) e else null
     }
 
     /** Jedyny zaznaczony kwadrat, prostokąt lub elipsa z autokorekty (8 uchwytów szerokości i wysokości); w trakcie zmiany — jej bieżąca wersja. */
     private fun shapeSel(): Stroke? {
         if (lLifting) return if (lm == LM.RESIZE) lEls.firstOrNull() as? Stroke else null
+        if (ed.pointEdit) return null
         val s = ed.sel ?: return null
         if (s.ids.size != 1) return null
         val e = ed.selElements().singleOrNull() as? Stroke ?: return null
@@ -2939,7 +2957,11 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
             LM.DRAW -> {
                 var len = 0f
                 for (i in 1 until ln) len += hypot(lp[2 * i] - lp[2 * i - 2], lp[2 * i + 1] - lp[2 * i - 1])
-                if (len * zoom < 14f * dp || ln < (if (settings.lassoRect) 2 else 3)) { lassoTap(page, pgX(pi, downX), pgY(pi, downY)); ln = 0; lm = LM.NONE; return }
+                if (len * zoom < 14f * dp || ln < (if (settings.lassoRect) 2 else 3)) {
+                    lassoTap(page, pgX(pi, downX), pgY(pi, downY)); ln = 0; lm = LM.NONE
+                    selTapT = SystemClock.uptimeMillis(); selTapX = curX; selTapY = curY
+                    return
+                }
                 val poly: FloatArray = if (settings.lassoRect) {
                     // Ramka ciągnięta „na styk” (od końca do końca linii) łapie też to, co leży na samym brzegu (B3).
                     val g = RECT_SLACK_DP * dp / zoom
@@ -2952,7 +2974,13 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
                 val ids = doc.content(page).elements.filter { !it.locked && EraseMath.lassoSelects(it, poly, touch, slop) }.map { it.id }.toSet()
                 ed.select(page.id, ids)
             }
-            LM.MOVE, LM.SCALE, LM.ROTATE, LM.VERTEX, LM.RESIZE, LM.NONE -> if (!toolMoved) lassoTap(page, pgX(pi, curX), pgY(pi, curY))
+            LM.MOVE, LM.SCALE, LM.ROTATE, LM.VERTEX, LM.RESIZE, LM.NONE -> if (!toolMoved) {
+                // F21: drugie dotknięcie tego samego zaznaczenia w krótkim czasie = edycja punktów.
+                val now = SystemClock.uptimeMillis()
+                val again = lm != LM.NONE && now - selTapT < DOUBLE_TAP_MS && hypot(curX - selTapX, curY - selTapY) < 30f * dp
+                selTapT = now; selTapX = curX; selTapY = curY
+                if (again) { selTapT = 0L; ed.editPoints() } else lassoTap(page, pgX(pi, curX), pgY(pi, curY))
+            }
         }
         ln = 0; lm = LM.NONE
     }
@@ -3117,6 +3145,8 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
         private val TAP_SLOPS_DP = floatArrayOf(8f, 14f, 22f)
         /** Zapas prostokąta zaznaczenia (dp ekranu): obiekt na samym brzegu ramki też jest w środku. */
         private const val RECT_SLACK_DP = 4f
+        /** Najdłuższa przerwa między dwoma dotknięciami zaznaczenia, które otwierają edycję punktów (F21). */
+        private const val DOUBLE_TAP_MS = 350L
         /** Lasso „tylko zahacz”: pętla przechodząca tak blisko obiektu (dp ekranu) już go łapie. */
         private const val LASSO_TOUCH_DP = 3f
         /** Promień pędzla formatu w trybie obiektowym (dp ekranu). */

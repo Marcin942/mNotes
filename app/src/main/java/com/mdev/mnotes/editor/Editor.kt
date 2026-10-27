@@ -26,6 +26,7 @@ import com.mdev.mnotes.core.edit.FloodFill
 import com.mdev.mnotes.core.edit.ImageCut
 import com.mdev.mnotes.core.edit.Snip
 import com.mdev.mnotes.core.edit.Sticker
+import com.mdev.mnotes.core.shapes.PointEdit
 import com.mdev.mnotes.core.model.ImageEl
 import com.mdev.mnotes.core.model.ImageFx
 import com.mdev.mnotes.core.model.WhiteBalance
@@ -252,11 +253,11 @@ class Editor(val ctx: Context, val nbId: String) {
     fun record(edit: DocEdit) { doc.record(edit); undoTick++ }
 
     // — Zaznaczenie —
-    fun clearSel() { if (sel != null) { sel = null; transformMode = false; selTick++ } }
+    fun clearSel() { if (sel != null) { sel = null; transformMode = false; pointEdit = false; selTick++ } }
 
     fun select(pageId: String, ids: Set<Int>) {
         val old = sel
-        if (old == null || old.pageId != pageId || old.ids != ids) transformMode = false
+        if (old == null || old.pageId != pageId || old.ids != ids) { transformMode = false; pointEdit = false }
         sel = if (ids.isEmpty()) null else Sel(pageId, ids)
         selTick++
     }
@@ -630,6 +631,38 @@ class Editor(val ctx: Context, val nbId: String) {
                 onDone()
             }
         }
+    }
+
+    // — Edycja punktów (F21) —
+    /** Zaznaczony prostokąt pokazuje wierzchołki zamiast ramki (po podwójnym dotknięciu). Gaśnie przy zmianie zaznaczenia. */
+    var pointEdit by mutableStateOf(false)
+
+    /** Menu punktu po przytrzymaniu uchwytu: [index] wierzchołka łamanej albo punktu kontrolnego krzywej ([curve]). */
+    class PointMenu(val x: Float, val y: Float, val pageId: String, val elementId: Int, val index: Int, val curve: Boolean)
+    var pointMenu by mutableStateOf<PointMenu?>(null)
+
+    /**
+     * Podwójne dotknięcie zaznaczonej kreski: elipsa i kreska odręczna stają się krzywą z kotwicami i uchwytami,
+     * prostokąt pokazuje wierzchołki zamiast ramki. Jedno cofnięcie.
+     */
+    fun editPoints() {
+        val p = selPage() ?: return
+        val st = selElements().singleOrNull() as? Stroke ?: return
+        if (st.locked || readOnly) return
+        if (st.poly) { pointEdit = !pointEdit; view?.invalidate(); return }
+        val c = PointEdit.toCurve(st) ?: return
+        exec(DocEdit.Elements(p.id, ElementsEdit.replace(doc.content(p), mapOf(st.id to c))))
+        selTick++
+        say(T.t("Edycja punktów: przeciągnij kotwice i uchwyty, przytrzymaj kotwicę po więcej opcji", "Point editing: drag anchors and handles, long-press an anchor for more"))
+    }
+
+    /** Akcja z menu punktu: zamienia element [m] wynikiem [f] (null = bez zmian). */
+    fun pointAction(m: PointMenu, f: (Stroke) -> Stroke?) {
+        val p = doc.page(m.pageId) ?: return
+        val st = doc.content(p).byId(m.elementId) as? Stroke ?: return
+        val out = f(st) ?: return
+        exec(DocEdit.Elements(p.id, ElementsEdit.replace(doc.content(p), mapOf(st.id to out))))
+        selTick++
     }
 
     // — Naklejki (F19) —

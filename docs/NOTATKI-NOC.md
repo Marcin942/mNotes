@@ -137,6 +137,37 @@ wariant core 594, wariant lab 623 (te same + 29 testów lab); `assembleCoreDebug
 Nie testowane: nic z UI na urządzeniu (brak tabletu), wydajność kredy na zdjęciu 12 Mpx (praca na 2400 px), Nearby
 w ogóle (wymaga dwóch urządzeń).
 
+## Faza 2 — agent B (od 27.10, gałąź `noc/lab2` od `noc/wszystko`, lista B2-* w `docs-noc/PLAN-NOCY.md`)
+
+Gradle tylko w worktree `mNotes-lab`; `source .toolchain/env.sh` jest w tej sesji zablokowane, więc te same zmienne
+podaję przez `env JAVA_HOME=… ANDROID_HOME=… GRADLE_USER_HOME=… ./gradlew …`. Testy:
+`./gradlew --offline :app:testCoreDebugUnitTest :app:testLabDebugUnitTest :app:assembleCoreDebug :app:assembleLabDebug`.
+Na starcie (`noc/wszystko` @ `471ed08`): lab 696 testów, 0 porażek.
+
+- **B2-5 kreda K1 — poprawki z przeglądu** (+ część B2-6 i B2-7, bo dzielą ten sam przebudowany potok):
+  - `Lab.loadRaster`: obrót z EXIF (jak `Assets.decodeFile`) i dekodowanie od razu do ≤ 2400 px (`core/image/DecodePlan`:
+    `inSampleSize` + skalowanie gęstością w dekoderze). Nie użyłem samego `Assets.decodeFile`, bo próbkuje tylko potęgą
+    dwójki: 12 Mpx (4000 px) wychodziło w pełnym rozmiarze i dopiero `Raster.fit` je zmniejszało (trzy pełne klatki w
+    pamięci). Teraz w szczycie: jedna klatka próbkowana w dekoderze + wynik 2400 px.
+  - Potok podzielony: `BoardPipeline.prepare` (prostowanie, kadr, wyrównanie, wyostrzenie → `BoardSource`) i `finish`
+    (kolor do alfy, gumka). Podgląd liczy `prepare` tylko po zmianie przełączników kroków albo narożników, 60 ms po ostatniej
+    zmianie; suwaki progu, krycia i koloru wołają tylko `finish` (auto-próg policzony raz na źródło).
+  - Ciężka praca na `Dispatchers.Default` (własny zakres `Lab.work`), a nie na jednowątkowym `repo.io`, które zapisuje zeszyt.
+  - `Chalk.autoCut` bez listy pudełek `Integer` (pętla po `IntArray`); mediana w progu tylko po wyrównaniu oświetlenia
+    (bez niego próg = K·σ jak w `kreda.py`).
+  - **UI (wygląd):** nad podglądem chipy „Wynik / Narożniki / Gumka” (ten sam `Choice` co w ustawieniach). „Narożniki”:
+    zdjęcie z czworokątem tablicy w kolorze akcentu i 4 kółkami (półprzezroczyste koło 14 dp + kropka 5 dp); kółko łapie
+    się w promieniu 36 dp, dotyk dalej przewija panel; po puszczeniu przelicza się wynik; „Narożniki automatycznie”
+    wraca do zgadniętych. „Gumka”: palec rysuje pętlę na wyniku (linia akcentu 2 dp), po puszczeniu obszar znika;
+    narysowane pętle widać jako przerywany obrys; „Cofnij gumkę”, „Wyczyść gumkę (n)”. Pod podglądem jedno zdanie
+    podpowiedzi dla trybu. Szachownica pod przezroczystością w kolorach motywu (`canvasBg` + `line`), w ciemnym motywie ciemna.
+  - Po wstawieniu zdjęcia (wariant lab) sprawdzenie w tle na 320 px (`looksLikeDarkBoard`); dla ciemnej tablicy raz dymek
+    „Wygląda jak tablica: różdżka „Oczyść tablicę” w menu zdjęcia zostawi samą kredę (podpowiedź raz; Ustawienia →
+    Laboratorium)”; przełącznik „Podpowiedź po wstawieniu zdjęcia tablicy” w Ustawienia → Laboratorium → Kreda. **Zmiana w
+    `src/main` (dla A przy scaleniu):** `LabFeatures.imageInserted(ed, el)` z pustą domyślną implementacją i jedno wywołanie
+    `Flavor.lab?.imageInserted(this, el)` w `Editor.insertImage` (po zaznaczeniu wstawionego obrazu); core bez zmian zachowania.
+  - **Nauka:** zdjęcie tablicy w notatce bez przepisywania; narożniki i gumka, gdy automat się pomyli (ręka, rama, odblask).
+
 ## Faza 2 — agent A (od 27.10, lista A2-* w `docs-noc/PLAN-NOCY.md`)
 
 Każdy punkt na własnej gałęzi `noc/f2-<temat>` od `noc/wszystko`, po zamknięciu scalony do `noc/wszystko`.

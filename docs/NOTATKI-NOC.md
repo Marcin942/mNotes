@@ -346,3 +346,129 @@ dziedziczy już proces z `start-A.sh`, więc `./gradlew` działa bez niego.
   powstaną kafelki. Mini-mapa (A2-2) pokazuje teraz stronę odwróconą. **Tablet:** PDF → Styl strony → Odwróć kolory (cały
   zeszyt) → zoom 3×, szybkie przewijanie (powinno być jak na zwykłej stronie, także w dwóch zeszytach F4); pisanie piórem
   czerwonym i niebieskim (kolor w trakcie = po puszczeniu), zakreślacz na odwróconej stronie; przesunięcie lassem.
+- **A2-7** animacja stron 260 → 180 ms — `noc/f2-animacja`; `PageShiftTest.defaultDurationFollowsTheMotionRule`. Stałe
+  w `PageShift` (domyślnie 180, suwak 100–400), `Settings.kt`: dziesięć komentarzy sklejonych w ogon linii `imageGridFit`
+  (artefakt scalania) wróciło do swoich ustawień, a komentarz `pipetteKeep` siedział przy `pipetteOriginal`. Kto ustawił
+  wcześniej czas ręcznie, zachowuje swój (suwak pokazuje najwyżej 400). **Tablet:** panel stron → „Dalej” przy widocznych
+  sąsiednich stronach — przejazd krótszy, wyraźny, bez szarpnięcia.
+- **A2-8** tryb wykładu — kolizje — `noc/f2-wyklad`; `BottomStackTest`. Kapsuła zostaje u dołu (16 dp), pasek szukania
+  wchodzi nad nią (72 dp), a dymek nad oba (przy samym pasku szukania dymek też jest teraz nad nim — wcześniej 28 dp
+  wypadało na pasku 14–64 dp). Chip akcji `selected = false`; błąd uruchomienia aparatu → `lectureMode = false` + dymek;
+  etykieta w „⋮” „Tryb wykładu…” (paleta poleceń bez zmian: „Tryb wykładu: zdjęcie na nową stronę”).
+  **Hook dla agenta B (B2-10):** `LabFeatures.onLecturePhoto(ed: Editor, pageId: String, image: ImageEl)` — metoda z
+  domyślną pustą implementacją w `src/main/.../app/LabFeatures.kt`; `Editor.lectureShot` woła ją na wątku UI tuż po
+  `exec(InsertPages)` i `goToPage`. Lab nadpisuje ją w `Lab.kt`: kreda w tle, potem jedna edycja podmieniająca obraz (np.
+  `DocEdit.Elements` z nowym `ImageEl.asset`), więc cofnięcie wraca do oryginału. `Lab.kt` nie był ruszany.
+  **Wygląd:** jak dotąd; kapsuła `FloatingCard` u dołu z chipem w kolorze neutralnym, pasek szukania i dymek wyżej, gdy
+  kapsuła jest widoczna. **Tablet:** „⋮” → „Tryb wykładu…” → anuluj aparat → kapsuła zostaje; Ctrl+F (szukaj) przy
+  włączonej kapsule — pasek nad kapsułą; dymek (np. po zdjęciu) nie zasłania kapsuły; urządzenie bez aparatu → tryb się
+  kończy z komunikatem.
+- **A2-9** L1 nazwy punktów i podmenu — `noc/f2-konstrukcje`; `ConstructOpsTest` (3 nowe testy, stare filtrują kreski).
+  Każda konstrukcja zbiera swoje linie/okręgi i nazwane punkty (`Draw`), nazwa idzie w środek największej wolnej luki
+  kątowej między kierunkami linii przy punkcie (boki, wysokości, środkowe, symetralne, styczne okręgów), odległość = promień
+  kropki + pół przekątnej pola. Litery: A, B, C, O, I, S/G, H, M, P/Q (plan wymieniał A, B, C, O, H; resztę dobrałem wg
+  szkolnych oznaczeń). Nazwy wierzchołków dopisywane przy każdej konstrukcji trójkąta, chyba że w zaznaczeniu są już pola
+  „A/B/C” (zaznacz trójkąt razem z podpisami, a nie powtórzą się). **Wygląd:** podpisy kursywą 11 pt w kolorze pióra, jak
+  podpisy osi w F8; menu: „Konstrukcja” ze strzałką ›, po dotknięciu to samo okno menu pokazuje nagłówek „‹ Konstrukcja”
+  i listę konstrukcji; wskazówka szarym drobnym tekstem w miejscu pozycji. **Tablet:** narysuj trójkąt z przytrzymaniem →
+  zaznacz → przytrzymaj → „Konstrukcja ›” → „Wysokości i ortocentrum”: litery A, B, C na zewnątrz rogów, H obok kropki,
+  nie na liniach; trójkąt prostokątny → „A=H”; zaznacz odręczny trójkąt (bez przytrzymania) → przytrzymaj → wskazówka;
+  Ustawienia → Edytor i pióro → Konstrukcje → wyłącz podpisy.
+- **A2-10** szukanie w „Laboratorium” — `noc/f2-szukanie`; `SettingsQueryTest.labCategoryIsSearchedOnlyInLab`.
+  `SEARCHABLE_CATS = SettingsQuery.searchableCats(Flavor.lab != null)`, w wynikach kategoria 7 rysuje
+  `Flavor.lab?.SettingsSection()`. Uwaga dla B (bez zmian w `Lab.kt`): opisy w grupach lab to gołe `Text` — w wynikach
+  szukania pokażą się razem z pasującym wierszem; jeśli to przeszkadza, owinąć je w `Extra { }` jak w „Obracanie i kąty”.
+  **Tablet (labDebug):** Ustawienia → szukaj „kreda” albo „telefon” → wiersze z „Laboratorium”; w coreDebug brak tej
+  kategorii w wynikach.
+- **A2-11** drobne z przeglądu — `noc/f2-drobne`; `GuideTest.checkYourselfPageExercisesWork`,
+  `MnotesArchiveTest.temporaryArchiveLivesOutsideTheNotebook`. (1) Przewodnik: strona 7 „Sprawdź się” (5 zadań), strona 2
+  zdanie o √/∑. **Wygląd:** jak pozostałe strony przewodnika — tytuł 22 pt w zieleni, polecenia 11,5 pt, szary przerywany
+  trójkąt do przerysowania i dwa grafitowe okręgi (prawdziwe kształty, nie wzory). (2) B5: `MnotesArchive.extract(…, tmpDir)`
+  z `repo.cache` (= `cacheDir`). (3) BACKLOG: naklejki poza eksportem — wpis F19 doprecyzowany. **Tablet:** Biblioteka →
+  Nowy → „Zeszyt-przewodnik” → strona 7: zadania 1 i 2 wykonalne bez rysowania okręgów; import `.mnotes` jak w B5.
+- **Scalenie `noc/lab2`** (po A2-11): trzy commity B (B2-5–B2-7). Jedyny konflikt w `LabFeatures.kt` — obie strony dodały
+  metodę z pustą domyślną implementacją (`onLecturePhoto` A, `imageInserted` B), zostały obie. Testy po scaleniu: core 677,
+  lab 717, 0 błędów; oba APK.
+- **A2-12** B6 i B8 jeszcze raz — `noc/f2-wejscie`; `HoldGestureTest` (4 testy), B8 tylko UI. Przeczytana ścieżka: `onDown` →
+  `beginTool` → `penDown` (start licznika) → `penMove` (dryf) → `holdRunnable` → `trySnapShape` / `curveHold`; podpowiedzi:
+  `ToolBtn` → `TooltipBox`. **B6:** licznik przytrzymania startuje od nowa dopiero po dryfie > 20 dp (było 10 dp), a w chwili
+  odpalenia pióro musi stać (≤ 6 dp w ostatnich 100 ms; jeśli nie — sprawdzenie co 80 ms), bo większy promień sam w sobie
+  łapałby drobne pismo w miejscu. Logika w `core/pen/HoldGesture` (bufor ostatnich 64 próbek). **B8:** `TooltipBox(…,
+  enableUserInput = false)` i własny wyzwalacz: najechanie pokazuje podpowiedź tylko kursorowi myszy (po 600 ms), dotyk i
+  rysik — tylko po przytrzymaniu (czas systemowy long-press); zdarzenia nie są zużywane, kliknięcia bez zmian. Trzecia
+  hipoteza B8 do sprawdzenia: z klawiaturą (etui z klawiaturą) jednoliterowy skrót „H” przełącza na Rękę, gdy żadne pole
+  tekstu nie ma fokusu. **Tablet:** (B6) narysuj prostokąt i przytrzymaj lekko drżącą ręką — kształt w ~0,55 s, a nie po
+  1 s+; napisz drobne słowo bez odrywania (np. „mmm”) — nic się nie prostuje w trakcie; (B8) zaznacz coś lassem, prowadź
+  rysik nad paskiem bez dotykania — żadnych dymków; przytrzymaj przycisk Ręki rysikiem — dymek „Ręka (przewijanie)”; z myszą
+  (DeX) najechanie dalej pokazuje dymek. **Pytanie do Marcina bez zmian:** który uchwyt (B6) i kiedy dokładnie „ręka” (B8).
+- **Scalenie `noc/lab2`** (po A2-12): B2-6 (wektoryzacja, `RealPhotoTest` pomijany bez `KREDA_DIR`) i notatki B2-7; bez
+  konfliktów; testy core 681, lab 726 (2 pominięte), oba APK.
+- **A2-13** FB4 linijka i kątomierz — `noc/f2-linijka`; `ProtractorTest` (6 testów), `ConstructOpsTest` (nowa pozycja
+  „angles”). Linijka istniała już w pełnym zakresie z planu (przesuwanie/obrót dwoma palcami, przyklejanie pióra do krawędzi,
+  podziałka w mm w skali strony) — bez zmian poza wspólnym interfejsem `Instrument`. Dołożony kątomierz i odczyt kąta.
+  **Decyzja:** odczyt kąta „przez zaznaczenie” poszedł do podmenu „Konstrukcja ▸” (tam, gdzie już są operacje na
+  zaznaczonych kształtach), a miara jest widoczna od razu w nazwie pozycji — wstawianie łuku jest opcjonalne.
+  **Wygląd:** kątomierz w tym samym stylu co linijka (wypełnienie akcentem 24–33 % krycia, obwódka akcentu, podziałka
+  grafitowa/biała w ciemnym motywie, opisy 9,5 dp, białe uchwyty z obwódką); dymki z miarą jak przy linijce (ciemna pigułka).
+  Łuki i miary kątów na stronie: kolor pióra, 11 pt, jak nazwy punktów z A2-9. **Tablet:** pasek (albo „⋯”) → Kątomierz;
+  przesuń go palcem, obróć dwoma palcami albo uchwytem; postaw rysik w krzyżyku i prowadź — prosta po promieniu, dymek
+  „35°”; druga prosta z tego samego środka → zaznacz obie lassem → przytrzymaj → „Konstrukcja ›” → „Kąt między prostymi:
+  …” (ta sama miara); trójkąt z przytrzymaniem → „Kąty: … · … · …” → łuki z miarami.
+- **Scalenie `noc/lab2`** (po A2-13): B2-8 („Wyślij stronę do mLabs”, `LabFeatures.commands/Overlay`); bez konfliktów;
+  core 686, lab 732, oba APK.
+
+### Faza 2b — agent A (uwagi Marcina z PDF „Do poprawy w mNotes pt2”, pierwszeństwo przed resztą fazy 2)
+
+PDF-u nie da się tu wyrenderować (brak `pdftoppm`, bez instalowania pakietów) — pracuję z opisu w `PLAN-NOCY.md`.
+Wygląd ikon sprawdzam rysunkiem Java2D z tej samej geometrii (`PreviewHarness`, `MNOTES_PREVIEW_DIR`).
+
+- **2b-A1** ikony gumki/lassa — `noc/f2b-ikony`; `PenGlyphsTest` (`eraserModesShareTheEraserAndDifferInOneMark`,
+  `everyBarItemHasAnIcon`). **Wygląd** (`docs/podglad/ikony-narzedzi.png`: jasny, ciemny i aktywny akcent): gumka jak
+  pióro na przekątnej (gumowa końcówka, opaska, oprawka, kontur 1,35, wypełnienie 16 %), długość zakreślacza; znak trybu
+  w prawym dolnym rogu: fala / trzy okruchy / przerywana pętla / nożyczki. Lasso: przerywana pętla + sznur z supłem
+  (pierwsza wersja z prostym ogonkiem wyglądała jak dymek komiksowy — poprawione po podglądzie); prostokąt: ramka
+  przerywana + pełny kwadratowy uchwyt w rogu. Stan aktywny jak u piór (kolor akcentu z `ToolBtn`). Gumka na pasku
+  pokazuje bieżący tryb (wcześniej ikona Material). **Tablet:** pasek i listwa gumki/lassa — czy ikony stoją w jednym
+  rzędzie z piórami i są czytelne w 36 dp; Ustawienia → Edytor i pióro → Układ paska — te same ikony.
+- **Scalenie `noc/lab2`** (po 2b-A1): B2-9 (parowanie z zobowiązaniem) i projekt 2b-B1; bez konfliktów; core 694, lab 740.
+- **2b-A2** listwa przy narzędziach pomocniczych — `noc/f2b-listwa`; `HelperStripTest` (4 testy). Dwa tryby z planu
+  (a = domyślny, b) jako `Pref("toolbar.helper_strip")`, menu jako lista wyłączonych pozycji (`toolbar.helper_menu`, pusty =
+  wszystko). Stary przełącznik `toolbar.tool_strip` nie jest już czytany (kto miał opcje na listwie, dostaje domyślny tryb a).
+  `Editor.tunePen` i przycisk powrotu idą przez `returnToWriting()` → ostatnie narzędzie pisania (`LastOf`). **Wygląd:**
+  menu to ta sama karta co „Pobierz format” (`m.chrome`, obwódka `m.line`, cień 4 dp, zaokrąglenie 12 dp), w środku te
+  same przyciski co na listwie, ułożone wzdłuż paska; pojawia się 150 ms, gaśnie 180 ms; przycisk powrotu ma glif pióra
+  w jego kolorze (albo krzywej). W Ustawieniach: wybór trybu (chipy) z jednym zdaniem objaśnienia, trzy przełączniki „Menu
+  przy gumce/lassie/laserze” i pod każdym chipy grup. **Tablet:** wybierz gumkę → listwa zostaje przy kolorach, przy
+  ikonie gumki menu z trybami i rozmiarami; dotknij koloru na listwie → wraca pióro (albo Krzywa, jeśli to nią pisałeś);
+  Ustawienia → Wygląd → „Opcje narzędzia + powrót” → opcje gumki na listwie, ostatni przycisk wraca do pisania; wyłącz
+  „Menu przy laserze” → laser bez menu.
+- **Scalenie `noc/lab2`** (po 2b-A2): Nearby 2b-B1 kroki 1–2; bez konfliktów; core 718, lab 764.
+- **2b-A3** mini-mapa: rozmiar i narożnik — `noc/f2b-minimapa`; `MiniMapTest.cornerAndSizeAreConfigurable`. Razem z A2-2
+  (gaśnie po ruchu, tylko palec). **Wygląd:** pod przełącznikiem mini-mapy w Wygląd suwak „Rozmiar mini-mapy: 120 dp”
+  (krok 10) i chipy narożnika; mapa jak dotąd, tylko w wybranym miejscu i wielkości. **Tablet:** ustaw 200 dp i lewy górny
+  → przybliż ≥ 2,5× i przewiń — mapa w lewym górnym rogu, większa; przeciągnięcie palcem po niej przenosi widok.
+- **2b-A4** synonimy w wyszukiwarce ustawień — `noc/f2b-synonimy`; `SettingsSynonymsTest` (3 testy). Zamiast dopisywać
+  ręcznie po kilkanaście słów do ~90 wierszy: słownik grup (`SettingsSynonyms.GROUPS`) i rozszerzanie zapytania w
+  `SettingsQuery.matches`; wiersze, które słownik nie pokrywał (3 w „Laboratorium”), załatał słownik, bez zmian w `Lab.kt`
+  agenta B. Test wymaga ≥ 3 synonimów na wiersz i sam znajdzie nowy wiersz bez nich. **Wygląd:** bez zmian (te same
+  wyniki, więcej trafień). **Tablet:** Ustawienia → szukaj „mazanie”, „lupa”, „wibracje”, „magnes”, „ciemny”, „mapa”,
+  „kreda”, „telefon” — za każdym razem właściwe wiersze; „przyczep” — nowy przełącznik w Gumka i lasso.
+- **Scalenie `noc/lab2`** (po 2b-A4): okno Nearby z diagnostyką (2b-B1 krok 3); bez konfliktów; core 722, lab 768.
+- **2b-A5** naklejki na białym tle — `noc/f2b-naklejki`; `StickerTest` (2 nowe). Zapis naklejki nigdy nie miał tła (test
+  to potwierdza), problemem był podgląd: miniatura na białym papierze w białej karcie. Teraz `Thumbs.render(…, paper =
+  false)` i tło karty z `Sticker.darkBackdrop` (jasność atramentu: > 0,62 ciemne tło, < 0,38 jasne, pomiędzy — motyw).
+  **[założenie z planu]** przezroczyste tło, podgląd na tle dopasowanym; szachownicy nie dodałem — żadna naklejka nie ma
+  dziś przezroczystości, którą trzeba by pokazać (obrazy kredy mają ją, ale nie są rysowane w miniaturze, patrz BACKLOG).
+  **Wygląd:** karty 104 dp z zaokrągleniem 8 dp i obwódką `m.line`, tło #FAFAF7 albo #2B2E33. **Tablet:** narysuj coś
+  białym na ciemnej stronie → zapisz jako naklejkę → „⋮” → „Naklejki…”: karta ciemna, rysunek widać; czarny rysunek w
+  ciemnym motywie — karta jasna; dotknij kosza — „Usunąć?” gaśnie po 3 s.
+- **2b-A6** układ współrzędnych na kratce — `noc/f2b-uklad`; `AxesSnapTest` (5 testów). Układ nie ma w pliku żadnego
+  znacznika (to zwykłe łamane), więc `AxesSnap.frames` rozpoznaje go po kształcie: pozioma i pionowa łamana z dwóch punktów
+  (≥ 40 pt), które się przecinają; oczka siatki z odstępów znaczników i linii siatki. Dzięki temu docisk działa też na
+  układzie narysowanym ręcznie i wyprostowanym (dwie proste na krzyż). Docisk kreski: tylko biegi punktów przy tej samej
+  linii, ciągnące się ≥ max(3 × próg, pół oczka) — przecinanie linii nie robi „ząbków”. Przy włączonym „Przyciągaj do
+  siatki” (stare, co 5 mm) ono ma pierwszeństwo przy przesuwaniu. **Uwaga:** jednostka z okna osi jest na kratce
+  zaokrąglana do pełnych oczek (np. 7 mm → 5 mm przy kratce 5 mm) — okno tego nie pokazuje; do decyzji, czy dopisać zdanie.
+  **Wygląd:** w Ustawieniach grupa „Układ współrzędnych” (przełącznik + suwak progu). **Tablet:** strona w kratkę → „⋮” →
+  „Układ współrzędnych…” → Wstaw: osie i siatka układu leżą na liniach kratki; przesuń układ lassem — początek wskakuje
+  w węzły; narysuj wykres v(t) ze stałym odcinkiem poziomym — odcinek równo na linii, ukośne fragmenty bez zmian.

@@ -454,7 +454,7 @@ class Importer(private val repo: Repository, private val pdf: PdfPool) {
         val dst = repo.dir(id)
         // Ścieżki spoza katalogu zeszytu (zip-slip), obce pliki i warianty archiwum (folder na wierzchu, „\”) obsługuje MnotesArchive.
         val meta: NotebookMeta? = try {
-            MnotesArchive.extract(input, dst, MAX_IMPORT)?.let { NotebookMeta.fromJson(it.metaJson) }
+            MnotesArchive.extract(input, dst, MAX_IMPORT, repo.cache)?.let { NotebookMeta.fromJson(it.metaJson) }
         } catch (_: Throwable) { null }
         if (meta == null) { dst.deleteRecursively(); return null }
         val now = System.currentTimeMillis()

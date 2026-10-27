@@ -11,6 +11,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import com.mdev.mnotes.app.MNotesApp
 import com.mdev.mnotes.core.geom.Axes
+import com.mdev.mnotes.core.geom.AxesSnap
 import com.mdev.mnotes.core.geom.AxesSpec
 import com.mdev.mnotes.core.geom.Bounds
 import com.mdev.mnotes.core.geom.ConstructOps
@@ -261,7 +262,8 @@ class Editor(val ctx: Context, val nbId: String) {
     /** Zmiana z listwy (grubość, kolor): gdy w ręku jest gumka albo lasso, wraca do pisania, bo po to się ją dotyka. */
     fun tunePen(f: (PenKit) -> PenKit) {
         editKit(f)
-        if (!penTool) { tool = Tool.PEN; clearSelIfNotLasso() }
+        // 2b-A2: wraca do ostatniego narzędzia pisania (także krzywej), a nie zawsze do pióra.
+        if (!penTool) returnToWriting()
     }
 
     fun say(msg: String) { toast = msg }
@@ -689,14 +691,15 @@ class Editor(val ctx: Context, val nbId: String) {
     /** F27: wyrównanie wszystkich zaznaczonych pól tekstu (jedno cofnięcie). */
     fun setSelTextAlign(a: Int) = replaceSel { e -> if (e is TextBox && !e.locked) e.copy(align = a) else e }
 
-    /** Ostatnie narzędzie piszące (pióro albo krzywa), do którego wraca [returnToWriting] (F26). */
-    private var lastWriteTool = Tool.PEN
+    /** Ostatnie narzędzie piszące (pióro albo krzywa), do którego wraca [returnToWriting] (F26) i listwa (2b-A2). */
+    private val writeMemory = com.mdev.mnotes.core.layout.LastOf(Tool.PEN) { it == Tool.PEN || it == Tool.CURVE }
+    val lastWriteTool: Tool get() = writeMemory.value
 
     /** F26: odznaczenie narzędzia chwilowego (laser, ręka, lasso) — wraca do ostatniego narzędzia piszącego. */
     fun returnToWriting() { tool = lastWriteTool; clearSelIfNotLasso() }
 
     /** Zapamiętuje narzędzie piszące; wołane przy każdej zmianie narzędzia. */
-    fun noteTool(t: Tool) { if (t == Tool.PEN || t == Tool.CURVE) lastWriteTool = t }
+    fun noteTool(t: Tool) = writeMemory.note(t)
 
     // — Tryb wykładu (pomysł Fable nr 1) —
     var lectureMode by mutableStateOf(false)
@@ -721,15 +724,21 @@ class Editor(val ctx: Context, val nbId: String) {
                 val title = TextBox(Ids.next(), spec.w / 2f, m + 9f, spec.w - 2 * m, 18f, 0f, head, 11f, 0xFF607D8B.toInt())
                 val r = LecturePages.photoRect(size.first, size.second, spec.w, spec.h)
                 val img = ImageEl(Ids.next(), name, r.cx, r.cy, r.w, r.h)
-                exec(DocEdit.InsertPages(listOf((after + 1) to PageSnapshot(newId(), spec, PageContent.of(listOf(title, img))))))
+                val pid = newId()
+                exec(DocEdit.InsertPages(listOf((after + 1) to PageSnapshot(pid, spec, PageContent.of(listOf(title, img))))))
                 view?.goToPage(after + 1)
+                // A2-8: wariant lab może od razu oczyścić zdjęcie tablicy (osobna edycja, cofnięcie wraca do zdjęcia).
+                com.mdev.mnotes.app.Flavor.lab?.onLecturePhoto(this, pid, img)
             }
         }
     }
 
     // — Konstrukcje geometryczne (L1) —
     /** Konstrukcje możliwe dla bieżącego zaznaczenia (trójkąt, proste, okręgi, punkty). */
-    fun constructionOps(): List<ConstructOps.Op> = if (readOnly) emptyList() else ConstructOps.ops(selElements())
+    fun constructionOps(): List<ConstructOps.Op> = if (readOnly) emptyList() else ConstructOps.ops(selElements(), settings.constructNames, T.pl)
+
+    /** Zaznaczenie nie daje konstrukcji, ale ma odręczne kreski — menu podpowiada, jak narysować kształt (A2-9). */
+    fun constructionHint(): Boolean = !readOnly && ConstructOps.needsHint(selElements())
 
     /** Dopisuje wynik konstrukcji w kolorze i grubości aktywnego pióra; zaznacza wynik (jedno cofnięcie). */
     fun applyConstruction(op: ConstructOps.Op) {
@@ -855,11 +864,20 @@ class Editor(val ctx: Context, val nbId: String) {
     fun insertAxes(spec: AxesSpec) {
         val (pi, cx, cy) = view?.viewCenterOnPage() ?: return
         val page = doc.pages.getOrNull(pi) ?: return
-        val s = spec.normalized()
+        var s = spec.normalized()
+        // 2b-A6: na kratce podziałka to wielokrotność oczka, a początek układu leży na węźle — osie i siatka układu
+        // pokrywają się z kratką strony, więc wykres rysuje się „po kratkach”.
+        val grid = if (settings.axesSnap) AxesSnap.pageGrid(page.spec) else null
+        if (grid != null) s = s.copy(unit = AxesSnap.alignInsert(s.unit, s.xStep, 0f, 0f, grid)[0])
         val w = (s.xMax - s.xMin) * s.unit; val h = (s.yMax - s.yMin) * s.unit
         val m = Axes.OVERHANG + Axes.ARROW + 12f
-        val left = (cx - w / 2f).coerceIn(m, maxOf(m, page.spec.w - w - m))
-        val top = (cy - h / 2f).coerceIn(m, maxOf(m, page.spec.h - h - m))
+        var left = (cx - w / 2f).coerceIn(m, maxOf(m, page.spec.w - w - m))
+        var top = (cy - h / 2f).coerceIn(m, maxOf(m, page.spec.h - h - m))
+        if (grid != null) {
+            val ox = left + ((if (s.xMin > 0f) s.xMin else if (s.xMax < 0f) s.xMax else 0f) - s.xMin) * s.unit
+            val oy = top + (s.yMax - (if (s.yMin > 0f) s.yMin else if (s.yMax < 0f) s.yMax else 0f)) * s.unit
+            left += grid.nodeX(ox) - ox; top += grid.nodeY(oy) - oy
+        }
         val d = Axes.build(s, left, top)
         // Kolor aktywnego pióra (zakreślacz dałby blade osie, więc wtedy grafit); siatka to ten sam kolor, przygaszony.
         val ink = (if (pen.kind == PenKind.HIGHLIGHTER) 0xFF37474F.toInt() else pen.color) or (0xFF shl 24)
@@ -1116,6 +1134,10 @@ class Editor(val ctx: Context, val nbId: String) {
     }
 
     fun toggleRuler() { ruler = !ruler; if (ruler) view?.rulerShown() else view?.invalidate() }
+
+    /** Kątomierz na stronie (FB4, A2-13): przesuwany i obracany jak linijka; kreska ze środka idzie po promieniu. */
+    var protractor by mutableStateOf(false)
+    fun toggleProtractor() { protractor = !protractor; if (protractor) view?.protractorShown() else view?.invalidate() }
 
     fun copyPage(i: Int = curIndex()): Boolean {
         val p = doc.pages.getOrNull(i) ?: return false

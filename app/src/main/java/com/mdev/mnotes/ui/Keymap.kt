@@ -161,6 +161,7 @@ object CmdDefs {
         CmdDef("attach", 5, "Przyczep do figur", "Attach to shapes", ""),
         CmdDef("toolSpace", 5, "Wstaw / usuń odstęp", "Insert / remove space", "X"),
         CmdDef("ruler", 5, "Linijka", "Ruler", "R"),
+        CmdDef("protractor", 5, "Kątomierz", "Protractor", ""),
         CmdDef("toolTape", 5, "Taśma (zakryj fragment)", "Tape (cover an area)", "K"),
         CmdDef("tapesToggle", 5, "Zakryj / odkryj wszystkie taśmy", "Cover / reveal all tapes", ""),
         CmdDef("pipette", 5, "Pipeta (próbnik koloru)", "Eyedropper", "I"),

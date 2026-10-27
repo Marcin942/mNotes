@@ -62,4 +62,12 @@ class SettingsQueryTest {
     @Test fun rangesEmptyWhenNothingFound() {
         assertTrue(q("xyz").ranges("Motyw").isEmpty())
     }
+
+    /** A2-10: w wariancie lab wyszukiwarka obejmuje „Laboratorium”; „O aplikacji” nigdy (tam nic się nie ustawia). */
+    @Test fun labCategoryIsSearchedOnlyInLab() {
+        assertEquals((0..6).toList(), SettingsQuery.searchableCats(hasLab = false))
+        assertEquals((0..7).toList(), SettingsQuery.searchableCats(hasLab = true))
+        assertTrue(SettingsQuery.LAB_CAT in SettingsQuery.searchableCats(true))
+        assertFalse(SettingsQuery.LAB_CAT in SettingsQuery.searchableCats(false))
+    }
 }

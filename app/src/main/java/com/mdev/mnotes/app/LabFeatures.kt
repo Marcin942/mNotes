@@ -32,6 +32,13 @@ interface LabFeatures {
     fun SettingsSection()
 
     /**
+     * Zdjęcie z trybu wykładu właśnie trafiło na nową stronę [pageId] jako [image] (A2-8; wołane na wątku UI, po
+     * wstawieniu). Lab może je przepuścić przez kredę jako osobną edycję, więc jedno cofnięcie wraca do oryginału (B2-10).
+     * Domyślnie nic — wariant bez tej funkcji i wspólny kod nie muszą o niej wiedzieć.
+     */
+    fun onLecturePhoto(ed: Editor, pageId: String, image: ImageEl) {}
+
+    /**
      * Zdjęcie [el] właśnie wstawione na stronę (wywołanie z wątku UI). Lab sprawdza w tle, czy to ciemna tablica,
      * i raz podpowiada „Oczyść tablicę”; domyślnie nic, żeby inne implementacje nie musiały o tym wiedzieć.
      */

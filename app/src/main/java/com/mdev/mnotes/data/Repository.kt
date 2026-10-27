@@ -31,6 +31,8 @@ import java.util.concurrent.Executors
  */
 class Repository(ctx: Context) {
     val root = File(ctx.filesDir, "library")
+    /** Pliki tymczasowe (np. archiwum w trakcie importu); system może je sprzątnąć, nie trafiają do kopii. */
+    val cache: File = ctx.cacheDir
     private val nbRoot = File(root, "nb")
     val io: ExecutorService = Executors.newSingleThreadExecutor { Thread(it, "mnotes-io").apply { priority = Thread.NORM_PRIORITY - 1 } }
     private val main = Handler(Looper.getMainLooper())

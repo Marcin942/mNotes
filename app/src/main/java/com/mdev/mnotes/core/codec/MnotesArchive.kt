@@ -44,10 +44,13 @@ object MnotesArchive {
         return null
     }
 
-    /** Rozpakowuje [input] do [dst]; null, gdy to nie jest `.mnotes` albo przekracza [maxBytes]. */
-    fun extract(input: InputStream, dst: File, maxBytes: Long): Result? {
+    /**
+     * Rozpakowuje [input] do [dst]; null, gdy to nie jest `.mnotes` albo przekracza [maxBytes]. Archiwum leży na czas
+     * rozpakowania w [tmpDir] (A2-11: dawniej w samym [dst] — po awarii w połowie zostawało w katalogu zeszytu).
+     */
+    fun extract(input: InputStream, dst: File, maxBytes: Long, tmpDir: File? = null): Result? {
         dst.mkdirs()
-        val tmp = File(dst, ".import.zip")
+        val tmp = if (tmpDir != null) { tmpDir.mkdirs(); File.createTempFile("import", ".zip", tmpDir) } else File(dst, ".import.zip")
         try {
             var total = 0L
             FileOutputStream(tmp).use { o ->

@@ -10,7 +10,7 @@ import kotlin.math.sin
  * Linijka: prostokąt o środku ([cx], [cy]), obrócony o [a] radianów, długości [len] i grubości [thick]
  * (jednostki dokumentu). Układ lokalny: oś u biegnie wzdłuż linijki, oś v w poprzek (v > 0 = „dolna” krawędź).
  */
-class Ruler(var cx: Float, var cy: Float, var a: Float, var len: Float, val thick: Float = 70f) {
+class Ruler(override var cx: Float, override var cy: Float, override var a: Float, var len: Float, val thick: Float = 70f) : Instrument {
     fun u(x: Float, y: Float) = (x - cx) * cos(a) + (y - cy) * sin(a)
     fun v(x: Float, y: Float) = -(x - cx) * sin(a) + (y - cy) * cos(a)
     fun x(u: Float, v: Float) = cx + u * cos(a) - v * sin(a)

@@ -1,6 +1,10 @@
 package com.mdev.mnotes.ui
 
 import com.mdev.mnotes.core.edit.AngleSnap
+import com.mdev.mnotes.core.layout.HelperStrip
+import com.mdev.mnotes.core.layout.MiniMap
+import kotlin.math.roundToInt
+import com.mdev.mnotes.core.layout.PageShift
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -185,8 +189,8 @@ fun SettingsScreen(onBack: () -> Unit, startCat: Int = 0, startQuery: String = "
     }
 }
 
-/** Kategorie, które przeszukujemy (bez „O aplikacji”: sam opis, nic do ustawienia). */
-private val SEARCHABLE_CATS = listOf(0, 1, 2, 3, 4, 5, 6)
+/** Kategorie, które przeszukujemy (bez „O aplikacji”: sam opis, nic do ustawienia; „Laboratorium” tylko w lab). */
+private val SEARCHABLE_CATS = SettingsQuery.searchableCats(Flavor.lab != null)
 
 /** Wyniki wyszukiwania: te same kontrolki co w kategoriach, odfiltrowane i pogrupowane pod nagłówkami kategorii. */
 @Composable
@@ -214,7 +218,8 @@ private fun SearchResults(q: SettingsQuery, raw: String, set: Settings, cats: Li
                     3 -> InputPrefs(set)
                     4 -> NewNotePrefs(set)
                     5 -> PrivacyPrefs(set)
-                    else -> ShortcutsTable(set)
+                    6 -> ShortcutsTable(set)
+                    else -> Flavor.lab?.SettingsSection()
                 }
             }
         }
@@ -298,14 +303,26 @@ private fun Appearance(set: com.mdev.mnotes.data.Settings) {
         ToggleRow(T.t("Delikatna wibracja przy dotknięciu przycisków", "Light vibration when tapping buttons"), set.haptics, keys = "haptyka drgania wibracje vibration haptic") { set.haptics = it }
         ToggleRow(T.t("Podpowiedź z nazwą przycisku (najechanie, przytrzymanie)", "Button name tooltip (hover, long press)"), set.tooltips, keys = "podpowiedź dymek napis nazwa tooltip hover") { set.tooltips = it }
         ToggleRow(T.t("Pokazuj dymki o narzędziach po ich wybraniu", "Show tool tips after picking a tool"), set.toolHints, keys = "dymki komunikaty napis wybrane narzędzie podpowiedź toast hint") { set.toolHints = it }
-        ToggleRow(T.t("Listwa pokazuje opcje gumki, lassa i lasera", "Strip shows eraser, lasso and laser options"), set.toolStrip, keys = "listwa ikonki gumka lasso laser opcje strip eraser") { set.toolStrip = it }
+        HelperStripPrefs(set)
         ToggleRow(
             T.t("Mini-mapa strony po przewinięciu przy dużym powiększeniu (przesuwana palcem)", "Page mini-map after scrolling when zoomed in (moved with a finger)"),
             set.miniMap, keys = "mini mapa podgląd strony nawigacja powiększenie zoom róg minimap overview",
         ) { set.miniMap = it }
+        // 2b-A3: rozmiar i narożnik mini-mapy.
+        if (set.miniMap) {
+            Opt(T.t("Rozmiar mini-mapy: ${set.miniMapSize.toInt()} dp", "Mini-map size: ${set.miniMapSize.toInt()} dp"), "mini mapa rozmiar wielkość duża mała size") {
+                MSlider(set.miniMapSize, MiniMap.MIN_SIZE_DP, MiniMap.MAX_SIZE_DP) { set.miniMapSize = (it / 10f).roundToInt() * 10f }
+            }
+            Opt(T.t("Narożnik mini-mapy", "Mini-map corner"), "mini mapa róg narożnik położenie lewy prawy górny dolny corner position") {
+                Choice(
+                    listOf(T.t("Prawy dolny", "Bottom right"), T.t("Lewy dolny", "Bottom left"), T.t("Prawy górny", "Top right"), T.t("Lewy górny", "Top left")),
+                    set.miniMapCorner,
+                ) { set.miniMapCorner = it }
+            }
+        }
         ToggleRow(T.t("Animacja zmiany kolejności stron", "Animate page reordering"), set.pageAnim, keys = "animacja strony kolejność przesuwanie przestawianie animation reorder pages") { set.pageAnim = it }
         if (set.pageAnim) Opt(T.t("Czas animacji stron: ${set.pageAnimMs} ms", "Page animation time: ${set.pageAnimMs} ms"), "animacja strony czas szybkość duration speed") {
-            MSlider(set.pageAnimMs.toFloat(), 100f, 700f) { set.pageAnimMs = (it / 20).toInt() * 20 }
+            MSlider(set.pageAnimMs.toFloat(), PageShift.MIN_MS.toFloat(), PageShift.MAX_MS.toFloat()) { set.pageAnimMs = (it / 20).toInt() * 20 }
         }
         Opt(T.t("Pasek menu w edytorze (Plik, Edycja, Widok…)", "Editor menu bar (File, Edit, View…)"), "menu menubar") {
             Choice(listOf(T.t("Nigdy", "Never"), T.t("Na dużych ekranach", "On large screens"), T.t("Zawsze", "Always")), set.menuBar) { set.menuBar = it }
@@ -315,6 +332,50 @@ private fun Appearance(set: com.mdev.mnotes.data.Settings) {
         Opt(T.t("Język", "Language"), "language polski angielski english") { Choice(listOf(T.t("Systemowy", "System"), "Polski", "English"), set.lang) { set.lang = it } }
         Opt(T.t("Jednostki", "Units"), "units mm cale milimetry centymetry inches") { Choice(listOf(T.t("Milimetry", "Millimeters"), T.t("Cale", "Inches")), if (set.unitsMm) 0 else 1) { set.unitsMm = it == 0 } }
     }
+}
+
+/**
+ * 2b-A2: listwa przy gumce, lassie i laserze — tryb i zawartość wyskakującego menu (dla których narzędzi, które grupy).
+ * Wiersze są widoczne w wyszukiwarce osobno, więc „gumka menu rozmiary” trafia wprost w przełącznik.
+ */
+@Composable
+private fun HelperStripPrefs(set: com.mdev.mnotes.data.Settings) {
+    Opt(
+        T.t("Listwa przy gumce, lassie i laserze", "Strip with the eraser, lasso and laser"),
+        "listwa pasek boczny gumka lasso laser opcje menu wyskakujące powrót pisanie strip eraser popup back writing",
+    ) {
+        Choice(listOf(T.t("Pisanie + menu przy ikonie", "Writing + menu by the icon"), T.t("Opcje narzędzia + powrót", "Tool options + back")), set.helperStrip) { set.helperStrip = it }
+        Text(
+            if (set.helperStrip == HelperStrip.WRITE_AND_MENU) T.t("Listwa zostaje przy kolorach i grubościach — dotknięcie koloru wraca do pisania; opcje narzędzia wyskakują przy jego ikonie.", "The strip keeps colours and widths — tapping a colour goes back to writing; tool options pop up by its icon.")
+            else T.t("Listwa pokazuje opcje narzędzia, a ostatni przycisk wraca do ostatniego narzędzia pisania.", "The strip shows the tool's options; the last button goes back to the last writing tool."),
+            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 6.dp),
+        )
+    }
+    if (set.helperStrip != HelperStrip.WRITE_AND_MENU) return
+    val cfg = set.helperMenu
+    val groups = listOf(
+        Triple(HelperStrip.Helper.ERASER, T.t("Menu przy gumce", "Menu by the eraser"), "gumka mazanie ścieranie tryby rozmiar zakreślacz eraser"),
+        Triple(HelperStrip.Helper.LASSO, T.t("Menu przy lassie", "Menu by the lasso"), "lasso zaznaczanie kształt prostokąt pętla lasso shape"),
+        Triple(HelperStrip.Helper.LASER, T.t("Menu przy laserze", "Menu by the laser"), "laser wskaźnik kolor śladu pointer colour"),
+    )
+    for ((h, label, keys) in groups) {
+        ToggleRow(label, cfg.menuFor(h), keys = "menu wyskakujące $keys popup") { set.helperMenu = cfg.withMenu(h, it) }
+        if (cfg.menuFor(h)) {
+            val items = HelperStrip.Item.entries.filter { it.helper == h }
+            if (items.size > 1 && rowVisible(label, keys)) FlowRow(Modifier.padding(bottom = 6.dp), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                for (i in items) Chip(helperItemName(i), cfg.shows(i), { set.helperMenu = cfg.withItem(i, !cfg.shows(i)) })
+            }
+        }
+    }
+}
+
+private fun helperItemName(i: HelperStrip.Item) = when (i) {
+    HelperStrip.Item.ERASER_MODES -> T.t("Tryby", "Modes")
+    HelperStrip.Item.ERASER_SIZES -> T.t("Rozmiary", "Sizes")
+    HelperStrip.Item.ERASER_HIGHLIGHTER -> T.t("Pomijanie zakreślacza", "Skip highlighter")
+    HelperStrip.Item.LASSO_SHAPE -> T.t("Kształt pętli", "Loop shape")
+    HelperStrip.Item.LASSO_MODE -> T.t("Co zaznacza", "What it selects")
+    HelperStrip.Item.LASER_COLORS -> T.t("Kolory", "Colours")
 }
 
 @Composable
@@ -371,6 +432,22 @@ private fun EditorPrefs(set: com.mdev.mnotes.data.Settings) {
         if (set.holdToShape) ToggleRow(T.t("Trzymaj dalej, aby wygładzić w krzywą", "Keep holding to smooth into a curve"), set.holdToCurve, keys = "krzywa bezier wygładź gładka curve smooth") { set.holdToCurve = it }
         if (set.holdToShape && set.holdToCurve) Opt(T.t("Dodatkowy czas dla krzywej: ${set.curveHoldMs} ms", "Extra time for a curve: ${set.curveHoldMs} ms"), "krzywa bezier czas opóźnienie curve") { MSlider(set.curveHoldMs.toFloat(), 0f, 1000f) { set.curveHoldMs = (it / 50).toInt() * 50 } }
     }
+    Group(T.t("Układ współrzędnych", "Coordinate axes"), keys = "osie wykres funkcja kratka siatka axes graph plot grid") {
+        ToggleRow(
+            T.t("Układ na kratce i wykres po kratkach", "Axes on the grid, graphs along grid lines"), set.axesSnap,
+            keys = "przyciąganie docisk kratka siatka osie początek wykres linie snap grid axes origin graph",
+        ) { set.axesSnap = it }
+        if (set.axesSnap) Opt(
+            if (set.axesSnapDp <= 0f) T.t("Docisk kresek do siatki: wyłączony", "Strokes to grid lines: off") else T.t("Docisk kresek do siatki: ${set.axesSnapDp.toInt()} dp", "Strokes to grid lines: ${set.axesSnapDp.toInt()} dp"),
+            "próg docisk kreska wykres siatka czułość threshold stroke graph",
+        ) { MSlider(set.axesSnapDp, 0f, 8f) { set.axesSnapDp = Math.round(it).toFloat() } }
+    }
+    Group(T.t("Konstrukcje", "Constructions"), keys = "konstrukcja geometria trójkąt okrąg construction geometry") {
+        ToggleRow(
+            T.t("Podpisuj punkty konstrukcji (A, B, C, O, H…)", "Name construction points (A, B, C, O, H…)"), set.constructNames,
+            keys = "nazwy punktów litery podpis wierzchołki ortocentrum środek okręgu labels names points",
+        ) { set.constructNames = it }
+    }
     Group(T.t("Pędzel formatu", "Format painter"), keys = "malarz kopiuj formatowanie painter") {
         Opt(T.t("Tryb pędzla formatu", "Format painter mode"), "format painter kopiuj formatowanie styl") { Choice(listOf(T.t("Obiektowo", "Object"), "Lasso"), set.painterMode) { set.painterMode = it } }
         ToggleRow(T.t("Szybki przycisk „Pobierz format”", "Quick “Take format” button"), set.painterQuick, keys = "pobierz format pipeta pędzel malarz przycisk pod ikoną szybki") { set.painterQuick = it }
@@ -398,7 +475,7 @@ private fun EditorPrefs(set: com.mdev.mnotes.data.Settings) {
         )
     }
     Group(T.t("Gumka i lasso", "Eraser & lasso"), keys = "wymaż zaznaczanie") {
-        Opt(T.t("Domyślny tryb gumki", "Default eraser mode"), "eraser wymaż kasowanie pikselowa obiektowa") { Choice(listOf(T.t("Obiektowa", "Object"), T.t("Pikselowa", "Pixel"), "Lasso", T.t("Wycinanie", "Cut out")), set.eraserMode) { set.eraserMode = it } }
+        Opt(T.t("Domyślny tryb gumki", "Default eraser mode"), "eraser wymaż kasowanie pikselowa obiektowa wycinanie lasso nożyczki cut out") { Choice(listOf(T.t("Obiektowa", "Object"), T.t("Pikselowa", "Pixel"), "Lasso", T.t("Wycinanie", "Cut out")), set.eraserMode) { set.eraserMode = it } }
         Opt(T.t("Rozmiar gumki: ${set.eraserSize.toInt()} pt", "Eraser size: ${set.eraserSize.toInt()} pt"), "eraser grubość wymaż") { MSlider(set.eraserSize, 1f, 60f) { set.eraserSize = it } }
         ToggleRow(T.t("Gumka pomija zakreślacz", "Eraser ignores highlighter"), set.eraserKeepHighlighter, keys = "eraser wymaż zakreślacz marker") { set.eraserKeepHighlighter = it }
         Opt(T.t("Kształt lassa", "Lasso shape"), "zaznaczanie zaznacz odręczne prostokąt") { Choice(listOf(T.t("Odręczne", "Freehand"), T.t("Prostokąt", "Rectangle")), if (set.lassoRect) 1 else 0) { set.lassoRect = it == 1 } }
@@ -407,6 +484,8 @@ private fun EditorPrefs(set: com.mdev.mnotes.data.Settings) {
         }
         Text(lassoModeHint(set.lassoTouch), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(bottom = 6.dp))
         ToggleRow(T.t("Przyciągaj do siatki", "Snap to grid"), set.snapGrid, keys = "grid siatka magnes snap") { set.snapGrid = it }
+        // F22 był tylko w „⋮” edytora (przegląd Fable §3.2): rodzeństwo przyciągania do siatki.
+        ToggleRow(T.t("Przyczep do figur (końce linii i punkty)", "Attach to shapes (line ends and points)"), set.attach, keys = "przyczep magnes wierzchołek końce punkty figury attach snap vertex") { set.attach = it }
     }
     Group(T.t("Obracanie i kąty", "Rotation & angles"), keys = "$ROTATION_QUERY przyciąganie równe kąty obrót obracanie kątomierz tarcza stopnie rotate snap protractor dial degrees") {
         ToggleRow(T.t("Przyciągaj do równych kątów", "Snap to even angles"), set.rotSnap, keys = "obrót obracanie kąt snap rotate angle") { set.rotSnap = it }

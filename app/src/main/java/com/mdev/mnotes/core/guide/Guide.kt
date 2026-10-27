@@ -42,6 +42,7 @@ object Guide {
                 t("Narysuj kształt i nie odrywaj pióra przez pół sekundy — wyprostuje się. Trzymając dalej, zmieniasz jego rozmiar.", "Draw a shape and keep the pen down for half a second — it snaps. Keep holding to resize it."),
                 t("Spróbuj: prosta, koło, prostokąt, trójkąt, strzałka. Krótkie proste (minus, kreska ułamkowa) też się prostują.", "Try: line, circle, rectangle, triangle, arrow. Short lines (minus, fraction bar) snap too."),
                 t("Narzędzie „Krzywa” na pasku zamienia każdą kreskę w gładką krzywą z uchwytami. Wygładzanie łuków dłuższym przytrzymaniem pióra włączysz w Ustawieniach.", "The “Curve” tool on the toolbar turns every stroke into a smooth curve with handles. Smoothing arcs by holding the pen longer can be turned on in Settings."),
+                t("Symbole √ i ∑ narysowane jednym pociągnięciem i przytrzymane też się wyrównują (panel pióra → „Auto popraw”).", "The √ and ∑ symbols drawn in one stroke and held get straightened too (pen panel → “Auto-correct”)."),
             ), dashed(listOf(circle(130f, 500f, 50f), rect(230f, 450f, 360f, 550f), listOf(400f, 550f, 470f, 450f, 540f, 550f, 400f, 550f)))),
             page(t("Gumka: cztery sposoby", "Eraser: four ways"), listOf(
                 t("Obiektowa usuwa całą kreskę, pikselowa ściera tylko to, nad czym przejdzie, lasso gumki usuwa obrysowane, a wycinanie tnie kreski dokładnie na obrysie.", "Object erases whole strokes, pixel erases only what it passes over, lasso eraser removes what you circle, cut-out cuts strokes exactly along the loop."),
@@ -63,7 +64,23 @@ object Guide {
                 t("Zdjęcie kartki: zaznacz je, „Efekty obrazu” → „Auto: białe tło”, potem jasność i temperatura.", "Photo of a page: select it, “Image effects” → “Auto: white background”, then brightness and temperature."),
                 t("Wszystko da się dostosować: Ustawienia mają wyszukiwarkę (Ctrl+F).", "Everything is customisable: Settings have a search box (Ctrl+F)."),
             ), emptyList()),
+            // A2-11 (przegląd Fable): zadania, które łączą funkcje z nauką — po nich widać, czy przewodnik zadziałał.
+            page(t("Sprawdź się", "Try it yourself"), listOf(
+                t("1. Przerysuj szary trójkąt jednym pociągnięciem i przytrzymaj pióro, aż się wyprostuje. Zaznacz go lassem, przytrzymaj zaznaczenie → „Konstrukcja” → „Okrąg opisany”. Czy środek O leży w środku trójkąta?", "1. Trace the grey triangle in one stroke and hold the pen until it snaps. Select it with the lasso, long-press the selection → “Construction” → “Circumcircle”. Is the centre O inside the triangle?"),
+                t("2. Zaznacz lassem oba okręgi po prawej → „Konstrukcja” → „Przecięcie okręgów”. Pojawią się punkty P i Q.", "2. Lasso both circles on the right → “Construction” → “Circle intersection”. Points P and Q appear."),
+                t("3. Narzędziem Tekst wpisz: \\alpha + \\beta = 90° oraz x^2 + y^2 = r^2 — znaki zamienią się same.", "3. With the Text tool type: \\alpha + \\beta = 90° and x^2 + y^2 = r^2 — the symbols convert as you type."),
+                t("4. Napisz √2 z długą kreską u góry i przytrzymaj pióro — pierwiastek się wyrówna.", "4. Write √2 with a long bar on top and hold the pen — the root straightens."),
+                t("5. Więcej (⋮) → „Układ współrzędnych…” → „t ≥ 0”. Naszkicuj prędkość v(t) samochodu, który rusza i przyspiesza.", "5. More (⋮) → “Coordinate axes…” → “t ≥ 0”. Sketch the velocity v(t) of a car that starts and speeds up."),
+            ), dashed(listOf(listOf(MARGIN + 20f, 640f, MARGIN + 200f, 640f, MARGIN + 70f, 500f, MARGIN + 20f, 640f))) + listOf(ring(400f, 570f, 55f), ring(470f, 570f, 55f))),
         )
+    }
+
+    /** Okrąg jako rozpoznany kształt (elipsa z ramką), żeby „Konstrukcja” działała na nim od razu. */
+    private fun ring(cx: Float, cy: Float, r: Float): Stroke {
+        val xy = circle(cx, cy, r)
+        val pts = FloatArray(xy.size / 2 * 3)
+        for (i in 0 until xy.size / 2) { pts[3 * i] = xy[2 * i]; pts[3 * i + 1] = xy[2 * i + 1]; pts[3 * i + 2] = 1f }
+        return Stroke(Ids.next(), PenKind.BALLPOINT, INK, 1.6f, pts, ellipse = true)
     }
 
     private fun page(title: String, lines: List<String>, extra: List<Element>): Page {

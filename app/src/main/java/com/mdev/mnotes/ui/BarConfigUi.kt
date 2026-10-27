@@ -18,10 +18,7 @@ import androidx.compose.material.icons.rounded.ArrowDownward
 import androidx.compose.material.icons.rounded.ArrowUpward
 import androidx.compose.material.icons.rounded.FormatColorFill
 import androidx.compose.material.icons.rounded.FormatPaint
-import androidx.compose.material.icons.rounded.Gesture
-import androidx.compose.material.icons.rounded.HighlightAlt
 import androidx.compose.material.icons.rounded.PanTool
-import androidx.compose.material.icons.rounded.Timeline
 import androidx.compose.material.icons.rounded.RestartAlt
 import androidx.compose.material.icons.rounded.Colorize
 import androidx.compose.material.icons.rounded.Straighten
@@ -40,6 +37,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import com.mdev.mnotes.core.layout.BarConfig
+import com.mdev.mnotes.core.layout.BarIcons
 import com.mdev.mnotes.core.layout.BarMode
 import com.mdev.mnotes.core.model.PenKind
 import com.mdev.mnotes.editor.T
@@ -69,29 +67,42 @@ internal fun barName(id: String): String = when (id) {
     "tape" -> T.t("Taśma", "Tape")
     "space" -> T.t("Wstaw / usuń odstęp", "Insert / remove space")
     "ruler" -> T.t("Linijka", "Ruler")
+    "protractor" -> T.t("Kątomierz", "Protractor")
     else -> penOf(id)?.let { penName(it) } ?: id
 }
 
 /** Pióro o danym id pozycji paska (np. „fountain”) albo null. */
 internal fun penOf(id: String): PenKind? = PenKind.entries.firstOrNull { it.name.lowercase() == id }
 
-/** Ikona pozycji paska; null dla piór, które mają własny glif ([PenGlyph]). */
-internal fun barVector(id: String, lassoRect: Boolean): ImageVector? = when (id) {
+/** Ikona Material pozycji paska ([BarIcons.Kind.VECTOR]); null dla pozycji z własnym glifem. */
+internal fun barVector(id: String): ImageVector? = when (id) {
     "undo" -> Icons.AutoMirrored.Rounded.Undo
     "redo" -> Icons.AutoMirrored.Rounded.Redo
-    "eraser" -> MIcons.Eraser
     "painter" -> Icons.Rounded.FormatPaint
     "fill" -> Icons.Rounded.FormatColorFill
     "pipette" -> Icons.Rounded.Colorize
-    "lasso" -> if (lassoRect) Icons.Rounded.HighlightAlt else Icons.Rounded.Gesture
     "text" -> Icons.Rounded.TextFields
     "laser" -> Icons.Rounded.TrackChanges
     "hand" -> Icons.Rounded.PanTool
-    "curve" -> Icons.Rounded.Timeline
     "tape" -> Icons.Rounded.VisibilityOff
     "space" -> Icons.Rounded.UnfoldMore
     "ruler" -> Icons.Rounded.Straighten
     else -> null
+}
+
+/** Ikona pozycji paska w Ustawieniach — ten sam glif co na pasku (2b-A1). */
+@Composable
+private fun BarIcon(id: String, set: com.mdev.mnotes.data.Settings, ink: androidx.compose.ui.graphics.Color) {
+    val m = Modifier.size(24.dp)
+    when (BarIcons.kind(id)) {
+        BarIcons.Kind.PEN -> penOf(id)?.let { PenGlyph(it, androidx.compose.ui.graphics.Color(set.penKit.pen(it).color), ink, m) }
+        BarIcons.Kind.ERASER -> EraserModeGlyph(set.eraserMode, ink, m)
+        BarIcons.Kind.LASSO -> LassoGlyph(set.lassoRect, ink, m)
+        BarIcons.Kind.CURVE -> BezierGlyph(ink, m)
+        BarIcons.Kind.PROTRACTOR -> ProtractorGlyph(ink, m)
+        BarIcons.Kind.VECTOR -> barVector(id)?.let { Icon(it, null, Modifier.size(22.dp), tint = ink) }
+        null -> {}
+    }
 }
 
 /**
@@ -136,12 +147,7 @@ internal fun BarLayoutPrefs(set: com.mdev.mnotes.data.Settings) {
             if (i > 0) HorizontalDivider(color = mint.line)
             Column(Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Box(Modifier.size(28.dp), contentAlignment = Alignment.Center) {
-                        val v = barVector(id, set.lassoRect)
-                        val pen = penOf(id)
-                        if (v != null) Icon(v, null, Modifier.size(22.dp), tint = ink)
-                        else if (pen != null) PenGlyph(pen, androidx.compose.ui.graphics.Color(set.penKit.pen(pen).color), ink, Modifier.size(24.dp))
-                    }
+                    Box(Modifier.size(28.dp), contentAlignment = Alignment.Center) { BarIcon(id, set, ink) }
                     Spacer(Modifier.width(10.dp))
                     Text(barName(id), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
                     IconBtn(Icons.Rounded.ArrowUpward, T.t("Przesuń wcześniej", "Move earlier"), { set.barConfig = cfg.move(id, -1) }, enabled = i > 0, size = 34.dp, iconSize = 18.dp)

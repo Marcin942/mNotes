@@ -70,6 +70,7 @@ private fun checked(ed: Editor, set: com.mdev.mnotes.data.Settings, id: String):
     "toolSpace" -> ed.tool == Tool.SPACE
     "toolTape" -> ed.tool == Tool.TAPE
     "ruler" -> ed.ruler
+    "protractor" -> ed.protractor
     "pipette" -> ed.pipette != null
     "eraserObject" -> set.eraserMode == 0
     "eraserPixel" -> set.eraserMode == 1

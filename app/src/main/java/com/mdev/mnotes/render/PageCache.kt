@@ -728,14 +728,15 @@ class Thumbs(private val repo: Repository, assets: Assets, private val pdf: PdfP
     }
 
     /** Renderuje stronę do bitmapy o szerokości [wPx]. Wywoływać poza wątkiem UI. */
-    fun render(nb: String, spec: PageSpec, content: PageContent, wPx: Int): Bitmap {
+    /** Miniatura strony; [paper] = false — same elementy na przezroczystym tle (podgląd naklejki, 2b-A5). */
+    fun render(nb: String, spec: PageSpec, content: PageContent, wPx: Int, paper: Boolean = true): Bitmap {
         val sc = wPx / spec.w
         val h = ceil(spec.h * sc).toInt().coerceAtLeast(1)
-        val bg = spec.pdf?.let { pdf.render(nb, it.asset, it.page, wPx, h) }
+        val bg = if (paper) spec.pdf?.let { pdf.render(nb, it.asset, it.page, wPx, h) } else null
         val bmp = Bitmap.createBitmap(wPx, h, Bitmap.Config.ARGB_8888)
         val c = Canvas(bmp)
         c.scale(sc, h / spec.h)
-        renderer.drawPaper(c, spec, sc, bg)
+        if (paper) renderer.drawPaper(c, spec, sc, bg)
         renderer.drawElements(c, nb, content, 0, null, sc, true, spec.darkPaper)
         if (!spec.inverted) return bmp
         // F11: miniatura (i okładka z pierwszej strony) w odwróconych kolorach, jak strona w edytorze.

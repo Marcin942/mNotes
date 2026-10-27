@@ -37,4 +37,11 @@ class PageShiftTest {
         assertEquals(0f, PageShift.ease(0f), 0f)
         assertEquals(1f, PageShift.ease(1f), 0f)
     }
+
+    /** A2-7: domyślny czas w regule 120–200 ms i w zakresie suwaka. */
+    @Test fun defaultDurationFollowsTheMotionRule() {
+        assertTrue(PageShift.DEFAULT_MS in 120..200)
+        assertTrue(PageShift.DEFAULT_MS in PageShift.MIN_MS..PageShift.MAX_MS)
+        assertTrue(PageShift.MIN_MS > 0)
+    }
 }

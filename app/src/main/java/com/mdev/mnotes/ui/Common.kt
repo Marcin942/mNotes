@@ -48,7 +48,16 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TooltipBox
 import androidx.compose.material3.TooltipDefaults
+import androidx.compose.material3.TooltipState
 import androidx.compose.material3.rememberTooltipState
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.input.pointer.PointerEventType
+import androidx.compose.ui.input.pointer.PointerType
+import androidx.compose.ui.platform.LocalViewConfiguration
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -160,12 +169,41 @@ fun ToolBtn(
     }
     // Podpowiedź można wyłączyć w Ustawieniach (F2): przy rysiku pojawiała się przy każdym najechaniu na pasek.
     if (!LocalTooltips.current) { button(); return }
+    val state = rememberTooltipState()
+    val scope = rememberCoroutineScope()
+    val longMs = LocalViewConfiguration.current.longPressTimeoutMillis
     TooltipBox(
         positionProvider = TooltipDefaults.rememberPlainTooltipPositionProvider(),
         tooltip = { PlainTooltip { Text(if (shortcut != null) "$tip  ($shortcut)" else tip) } },
-        state = rememberTooltipState(),
-    ) { button() }
+        state = state,
+        enableUserInput = false,
+    ) { Box(Modifier.tipTrigger(state, scope, longMs)) { button() } }
 }
+
+/**
+ * Kiedy pokazać podpowiedź przycisku (B8, faza 2 A2-12): po najechaniu tylko myszą — rysik zawieszony nad paskiem
+ * wywoływał dymek „Ręka (przewijanie)”, co wyglądało, jakby pióro zmieniło się w rękę; przytrzymanie palcem albo rysikiem
+ * pokazuje podpowiedź jak dotąd. Zdarzenia nie są zużywane, więc kliknięcie i przytrzymanie przycisku działają bez zmian.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+private fun Modifier.tipTrigger(state: TooltipState, scope: CoroutineScope, longMs: Long) = pointerInput(state) {
+    var job: Job? = null
+    awaitPointerEventScope {
+        while (true) {
+            val e = awaitPointerEvent(PointerEventPass.Initial)
+            val mouse = e.changes.firstOrNull()?.type == PointerType.Mouse
+            when (e.type) {
+                PointerEventType.Enter -> if (mouse) { job?.cancel(); job = scope.launch { delay(HOVER_TIP_MS); state.show() } }
+                PointerEventType.Exit -> { job?.cancel(); state.dismiss() }
+                PointerEventType.Press -> { job?.cancel(); if (mouse) state.dismiss() else job = scope.launch { delay(longMs); state.show() } }
+                PointerEventType.Release -> if (!mouse) job?.cancel()
+                else -> {}
+            }
+        }
+    }
+}
+
+private const val HOVER_TIP_MS = 600L
 
 /** Przycisk-ikona z podpowiedzią (tooltip pokazuje też skrót klawiszowy — wygodne przy myszy). */
 @Composable

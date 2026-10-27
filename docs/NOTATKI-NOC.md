@@ -167,6 +167,34 @@ Na starcie (`noc/wszystko` @ `471ed08`): lab 696 testów, 0 porażek.
     `src/main` (dla A przy scaleniu):** `LabFeatures.imageInserted(ed, el)` z pustą domyślną implementacją i jedno wywołanie
     `Flavor.lab?.imageInserted(this, el)` w `Editor.insertImage` (po zaznaczeniu wstawionego obrazu); core bez zmian zachowania.
   - **Nauka:** zdjęcie tablicy w notatce bez przepisywania; narożniki i gumka, gdy automat się pomyli (ręka, rama, odblask).
+  - Test: lab 707 (było 696), core 667, 0 porażek; oba APK (`45fd396`, `dc22233`). **Tablet:** zdjęcie pionowe z telefonu →
+    różdżka → podgląd stoi pionowo; suwak progu chodzi płynnie (bez przeliczania prostowania); „Narożniki” → przeciągnij
+    kółko → „Wynik”; „Gumka” → obwiedź rękę wykładowcy → znika; 12 Mpx → „Zastosuj” nie zamraża zapisu zeszytu; wstaw
+    zdjęcie tablicy → raz dymek; ciemny motyw → szachownica ciemna.
+- **B2-6 wektoryzacja K2** (`45fd396` mapowanie, `a2256eb` porządki):
+  - Kreski leżą na kredzie: punkt łamanej → `BoardSource.toPhoto` (kadr, odwrotność prostowania, ułamki zdjęcia) →
+    `ChalkStrokes.place` (wycinek obrazu w zeszycie, także obrócony, odbicie, obrót elementu) → strona. Punkty poza widocznym
+    wycinkiem przycinane na krawędzi (bisekcja), grubość z lokalnej skali. Geometria w `core/image/ChalkStrokes.kt`
+    (`ChalkStrokesTest`), `Lab.toStrokes` usunięte.
+  - Fragmentacja: sąsiedztwo m w śledzeniu szkieletu (schodek to nie rozgałęzienie), ostrogi krótsze niż grubość w węźle
+    znikają, węzły połączone krótkim mostkiem to jedno skupisko, w skupisku ścieżki łączą się parami po kącie (< 40°), przy
+    dwóch zawsze; grubość każdej łamanej z transformaty odległości (2·średnia − 1). Testy: linia 45° (3 grubości) ≤ 2 łamane,
+    pierścień 1–2, krzyż ≤ 2 (było 4 i 4), paski 3 i 11 px mają 3 i ~11 (było 7,8 dla obu).
+  - **Prawdziwe zdjęcia** (`RealPhotoTest`): czyta `KREDA_DIR` (pominięty bez niej; zdjęć nie ma w repo), 4 pierwsze z
+    `kreda/blackboard/` na 1000 px: kreda 4–7 % widocznych pikseli, rozrzut tła po wyrównaniu 0,08–0,16, 180–329 kresek,
+    **94,5–99,6 % punktów kresek trafia w jasną kredę zdjęcia; dawne mapowanie 28–51 %** (asercja dokumentuje błąd K2).
+    IoU z wynikami `kreda.py` pominięte: w `kreda/` nie ma PNG wyników dla tych zdjęć (tylko `example.png` 320×114).
+    Uwaga: na dwóch zdjęciach auto-próg dochodzi do górnej granicy 0,50 (szum po wyrównaniu) — do sprawdzenia na tablecie,
+    czy słaba kreda nie ginie. Uruchomienie: `KREDA_DIR=/home/piotr/Projects/Marcin/kreda/blackboard ./gradlew --offline
+    :app:testLabDebugUnitTest --tests '*RealPhotoTest*'`.
+  - Test: lab 712, core 667, 0 porażek. **Tablet:** zdjęcie tablicy → różdżka → „Edytowalne kreski” → kreski na kredzie
+    (także po przycięciu zdjęcia w zeszycie); litery O i krzyżyki jako 1–2 kreski; grube i cienkie linie różnej grubości.
+- **B2-7 mediana K3** (w `45fd396`): `BoardPipeline.prepareMany(count, opt) { load(i) }` wczytuje zdjęcia po jednym i trzyma
+  tylko wyprostowane klatki; zdjęcie bez znalezionej tablicy (narożniki = cały kadr), gdy na innych ją znaleziono, wypada
+  (`skipped`; w panelu „bez tablicy, pominięte: 2”, po „Zastosuj” dymek); bez tablicy na wszystkich — wszystkie całe jak
+  przy wyłączonym prostowaniu; wynik i kreski odnoszą się do zdjęcia odniesienia (pierwszego z tablicą). Test
+  `photoWithoutABoardIsSkippedInsteadOfGhosting`, `failedLoadGivesNull`. **Tablet:** zaznacz 3 zdjęcia, w tym jedno ściany →
+  „Połącz zdjęcia tablicy” → informacja o pominięciu, bez „duchów”.
 
 ## Faza 2 — agent A (od 27.10, lista A2-* w `docs-noc/PLAN-NOCY.md`)
 

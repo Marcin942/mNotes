@@ -16,7 +16,8 @@ KREDA_DIR=/home/piotr/Projects/Marcin/kreda/blackboard KREDA_OUT=/tmp/kreda ./gr
   :app:testLabDebugUnitTest --tests '*KredaPomiaryTest*'
 ```
 
-(`KREDA_OUT` zapisuje podgląd: zdjęcie i krycie kredy obok siebie.) Progi jakości pilnuje osobno `RealPhotoTest`
+(`KREDA_OUT` zapisuje podgląd: zdjęcie z narożnikami tablicy i przyciemnionym „nie-tablicą” obok krycia kredy, a w
+`*-slady.png` mapę pisma z granicami przycięcia; ostatnia kolumna tabeli to odsetek maski odcięty jako ściana.) Progi jakości pilnuje osobno `RealPhotoTest`
 (4 pierwsze zdjęcia: kreda 1–25 %, rozrzut tła < 0,2, ≥ 10 kresek, ≥ 70 % punktów kresek na jasnej kredzie zdjęcia).
 
 ## Co zmienione (każdy krok do wyłączenia w panelu i w Ustawienia → Laboratorium)
@@ -89,5 +90,38 @@ Każde zdjęcie:
   zdjęcie do `kreda/blackboard/` — test pomiarowy od razu je obejmie.
 - **Znany problem: zgadywanie narożników** (`BoardGeometry.guessQuad`) na zdjęciach z dużym kawałkiem ściany i dolną
   listwą (`20260525_144320`, `20260525_134500`) obejmuje ścianę; cienka listwa (nie grubsza od kredy) zostaje wtedy jako
-  długa kreska. Obejście w aplikacji: tryb „Narożniki” w panelu (B2-5). Do poprawy w `guessQuad` jako osobny punkt.
+  długa kreska. Obejście w aplikacji: tryb „Narożniki” w panelu (B2-5). Poprawione częściowo niżej.
 - Czas bez istotnej zmiany (506 → 524 ms na JVM przy 1600 px).
+
+## Narożniki: maska bez ściany (`BoardGeometry.clipToContent`)
+
+Przyczyna (zrzuty z narożnikami w `KREDA_OUT`): ściana, ekran projektora i głowy mają ten sam szary, mało nasycony kolor
+co tablica i łączą się z nią w jedną plamę maski, więc skrajne punkty plamy leżą na ścianie. Poprawka, zachowawcza:
+
+1. **Mapa pisma** (`inkMap`) na podglądzie 400 px: cienkie (top-hat), prawie bezbarwne (nasycenie < 0,2: skóra i ubranie
+   odpadają) jasne ślady, bez długich prostych odcinków w paśmie 3 px (listwy, półka, ramy, nogi stojaka).
+2. **Zakres pisma** (`contentBox`): profil śladów w wierszach i kolumnach, odcinki sklejane przez przerwy ≤ 5 % boku,
+   od pierwszego do ostatniego odcinka z masą ≥ 10 % najcięższego (osobne bloki wzorów zostają), margines 2,5 %.
+3. **Cięcie tylko tam, gdzie maska wychodzi poza kadr** (`clipEdges`): bok kończący się w kadrze to prawdziwa krawędź
+   tablicy i zostaje razem z perspektywą. Bok przesuwa się o ≥ 2 % i **tylko gdy za nim zostaje ≤ 3 % śladów pisma**
+   (bezpiecznik: przycięcie nie może zjeść pisma; test `writingBeyondTheCutKeepsTheSide`).
+
+Próbowałem też cięcia po ramach (listwa, za którą prawie nie ma pisma): na `20260323_135040` „rama” okazała się pasem
+20 kolumn (pochylona długa kreska) i cięcie zjadało pismo z prawej, więc ten wariant odrzuciłem.
+
+Wynik (zmienione zdjęcia; reszta identyczna): sprawdzone na podglądach, żaden wzór nie zginął.
+
+| zdjęcie | maski odcięto | wynik px przed → po | kreda % | kresek | co odpadło |
+|---|---|---|---|---|---|
+| 20260525_134500 | 12 % | 1206×851 → 1126×754 | 4.0 → 4.2 | 596 → 554 | ściana i filar z lewej, dolna półka |
+| 20260525_144320 | 5 % | 1362×939 → 1355×763 | 6.1 → 5.9 | 745 → 737 | ściana pod półką (prawy bok z osobą zostaje: ślady osoby > 3 %) |
+| 20260324_154544 | 3 % | 1564×887 → 1557×685 | 3.6 → 3.3 | 458 → 398 | ekran projektora nad tablicą (głowy na dole zostają) |
+| 20260318_153200 | 27 % | 1590×854 → 1590×643 | 3.9 → 2.7 | 507 → 416 | pusty dół tablicy i półka |
+| 20260326_161035 | 20 % | 1549×798 → 1525×649 | 4.4 → 5.2 | 467 → 453 | ekran pod tablicą |
+| 20260326_161039 | 16 % | 1549×834 → 1541×712 | 4.3 → 5.1 | 440 → 417 | jak wyżej |
+| 20260326_140000 | 11 % | 1366×881 → 1094×790 | 9.4 → 10.4 | 654 → 601 | ściana z boków (obie tablice całe) |
+| 20260318_152749 | 26 % | 1232×828 → 932×799 | 1.9 → 2.5 | 239 → 216 | pusta lewa część; ucięte kadrem „V₀” na samym brzegu |
+| 20260318_153635, 155221, 20260323_135040 | 1–3 % | | ±0,2 | ±10 | drobne paski przy brzegu |
+
+Średnio (24): kreda 3,9 → 3,9 %, kresek 468 → 451 (mniej śmieci ze ściany), fragmenty 19 → 19 %. **Zostaje:** prawy bok
+`20260525_144320` (osoba przy tablicy) i głowy na `20260324_154544`: tam obejściem jest tryb „Narożniki”.

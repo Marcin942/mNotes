@@ -309,6 +309,18 @@ Na starcie (`noc/wszystko` @ `471ed08`): lab 696 testów, 0 porażek.
   `KredaPomiaryTest` (24 zdjęcia, podglądy do oczu). Przegląd §3.5: K0 wyszukiwanie „Laboratorium” zrobił A (A2-10); K1–K5
   — wszystkie pozycje „Co poprawić” zamknięte w B2-5…B2-9 i 2b-B1…B3 (poza scalaniem stron w synchronizacji).
 
+- **2b-B2 c.d., narożniki bez ściany** (`a7d983a`): `guessQuad` obejmował ścianę, ekran projektora i głowy, bo mają kolor
+  tablicy i łączą się z nią w jedną plamę maski. `BoardGeometry.clipToContent`: mapa pisma (top-hat, bez listew i ram,
+  bez kolorów skóry), zakres pisma, przycięcie **tylko boków, którymi maska wychodzi poza kadr**, o ≥ 2 % i tylko gdy za
+  nowym bokiem zostaje ≤ 3 % śladów pisma. 11 z 24 zdjęć zmienionych, każde obejrzane: żaden wzór nie zginął
+  (szczegóły i tabela w `docs/KREDA-POMIARY.md`). Wariant „tnij po ramie” sprawdzony i odrzucony (zjadał pismo na
+  `20260323_135040`). Zostaje: osoba przy prawym boku `20260525_144320`, głowy pod `20260324_154544` (tryb „Narożniki”).
+  Testy: 3 nowe w `BoardDetectTest` (ściana odcięta, pismo za cięciem blokuje je, tablica w kadrze bez zmian); lab 789,
+  core 732, 0 porażek. **Nauka:** zdjęcie tablicy z sali bez ręcznego poprawiania narożników.
+- **Koniec listy B (ok. 21:15):** `noc/wszystko` (A: 2b-A8…A11) scalona do `noc/lab2` bez konfliktów; na scalonym stanie lab 822,
+  core 765, 0 porażek (`KREDA_DIR` ustawione, więc testy na prawdziwych zdjęciach też szły), oba APK. A może scalić `noc/lab2`
+  z powrotem przewinięciem.
+
 ### Co Marcin ma sprawdzić na tablecie — wariant lab, po fazie 2 (kolejność)
 
 Instalacja: `labDebug` z `noc/lab2` (albo `noc/wszystko` po scaleniu przez A) na tablecie **i** na telefonie (Nearby).
@@ -317,7 +329,8 @@ Instalacja: `labDebug` z `noc/lab2` (albo `noc/wszystko` po scaleniu przez A) na
    → podgląd stoi pionowo, suwak progu chodzi płynnie → „Narożniki”: przeciągnij kółko → „Wynik” → „Gumka”: obwiedź rękę →
    „Zastosuj” (zeszyt w tym czasie dalej się zapisuje) → ↶ wraca do zdjęcia.
 2. **Listwy i ramy:** zdjęcie dwóch tablic z listwą → listwa i ściana znikają, wzory zostają; wyłącz kolejno „Usuń listwy…”,
-   „Dociągaj bladą kredę…”, „Usuń drobinki” i porównaj podgląd.
+   „Dociągaj bladą kredę…”, „Usuń drobinki” i porównaj podgląd. Zdjęcie tablicy z kawałkiem ściany pod nią albo z boku
+   (jak `20260525_*`) → „Narożniki” od razu na krawędziach tablicy, nie na ścianie; żaden wzór nie ucięty.
 3. **Kreski:** „Edytowalne kreski” → kreski leżą na kredzie także po przycięciu zdjęcia w zeszycie; litera O i krzyżyk to
    1–2 kreski; grube i cienkie linie mają różną grubość.
 4. **Mediana:** 3 zdjęcia tej samej tablicy (+ jedno zdjęcie ściany) → „Połącz zdjęcia tablicy” → informacja o pominięciu,

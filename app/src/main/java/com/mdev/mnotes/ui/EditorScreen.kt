@@ -126,6 +126,7 @@ import androidx.compose.material.icons.rounded.ArrowDownward
 import androidx.compose.material.icons.rounded.ArrowUpward
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Tune
+import androidx.compose.material.icons.rounded.AutoFixHigh
 import androidx.compose.material.icons.rounded.SelectAll
 import androidx.compose.material.icons.rounded.TouchApp
 import androidx.compose.material.icons.rounded.InvertColors
@@ -179,6 +180,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import com.mdev.mnotes.app.Flavor
 import com.mdev.mnotes.app.app
 import com.mdev.mnotes.core.model.Element
 import com.mdev.mnotes.core.model.ImageEl
@@ -224,7 +226,7 @@ import kotlin.math.roundToInt
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.conflate
 
-enum class Panel { PEN, ERASER, LASSO, TAPE, PAINTER, FILL, PAGES, STYLE, MORE, SELCOLOR, IMAGEFX, ALIGN }
+enum class Panel { PEN, ERASER, LASSO, TAPE, PAINTER, FILL, PAGES, STYLE, MORE, SELCOLOR, IMAGEFX, ALIGN, BOARD }
 
 /** Własne ikony tam, gdzie Material Icons nie ma odpowiednika (gumka). */
 object MIcons {
@@ -1471,6 +1473,7 @@ private fun SelectionBar(ed: Editor, panel: Panel?, toggle: (Panel) -> Unit, edi
         panel == Panel.ALIGN -> { { AlignCard(ed) } }
         else -> null
     }
+    if (panel == Panel.BOARD && els.all { it is ImageEl }) Flavor.lab?.BoardPanel(ed, els.filterIsInstance<ImageEl>()) { toggle(Panel.BOARD) }
     Layout(
         content = {
             Box { SelectionButtons(ed, panel, toggle, editText, els, locked, hasImage, hasColorable) }
@@ -1512,6 +1515,12 @@ private fun SelectionButtons(ed: Editor, panel: Panel?, toggle: (Panel) -> Unit,
             // sam obraz nie ma koloru do zmiany: dostaje własny panel efektów zamiast wyboru koloru
             if (hasColorable) IconBtn(Icons.Rounded.Palette, T.t("Kolor, grubość i styl linii", "Color, width & line style"), { toggle(Panel.SELCOLOR) }, selected = panel == Panel.SELCOLOR, size = 36.dp, iconSize = 20.dp)
             if (hasImage) IconBtn(Icons.Rounded.Tune, T.t("Efekty obrazu", "Image effects"), { toggle(Panel.IMAGEFX) }, selected = panel == Panel.IMAGEFX, size = 36.dp, iconSize = 20.dp)
+            // wariant lab: kreda (zdjęcie tablicy → sama kreda na przezroczystym tle); w core Flavor.lab == null
+            if (Flavor.lab != null && !locked && els.all { it is ImageEl } && els.size <= 6 && !ed.readOnly) IconBtn(
+                Icons.Rounded.AutoFixHigh,
+                if (els.size == 1) T.t("Oczyść tablicę", "Clean up the board") else T.t("Połącz zdjęcia tablicy (bez osób)", "Merge board photos (without people)"),
+                { toggle(Panel.BOARD) }, selected = panel == Panel.BOARD, size = 36.dp, iconSize = 20.dp,
+            )
             if (!locked) IconBtn(Icons.Rounded.CropRotate, T.t("Skaluj i obracaj", "Resize & rotate"), { ed.transformMode = !ed.transformMode }, selected = ed.transformMode, size = 36.dp, iconSize = 20.dp)
             if (!locked && els.size == 1 && els[0] is ImageEl && !ed.readOnly) IconBtn(Icons.Rounded.Crop, T.t("Przytnij", "Crop"), { ed.startCrop() }, size = 36.dp, iconSize = 20.dp)
             if (ed.canFlipSel()) {

@@ -25,6 +25,7 @@ import com.mdev.mnotes.core.edit.CutLine
 import com.mdev.mnotes.core.edit.FloodFill
 import com.mdev.mnotes.core.edit.ImageCut
 import com.mdev.mnotes.core.edit.Snip
+import com.mdev.mnotes.core.model.ImageCrop
 import com.mdev.mnotes.core.model.ImageEl
 import com.mdev.mnotes.core.model.ImageFx
 import com.mdev.mnotes.core.model.WhiteBalance
@@ -268,6 +269,14 @@ class Editor(val ctx: Context, val nbId: String) {
 
     private fun selPage() = sel?.let { doc.page(it.pageId) }
 
+    /** Dodaje [els] na stronę bieżącego zaznaczenia (na wierzch) i zaznacza je; jeden wpis cofania. */
+    fun addOnSelPage(els: List<Element>) {
+        val p = selPage() ?: return
+        if (els.isEmpty()) return
+        exec(DocEdit.Elements(p.id, ElementsEdit.add(doc.content(p), els)))
+        select(p.id, els.map { it.id }.toSet())
+    }
+
     fun deleteSel() {
         val s = sel ?: return; val p = selPage() ?: return
         exec(DocEdit.Elements(p.id, ElementsEdit.remove(doc.content(p), s.ids)))
@@ -337,6 +346,22 @@ class Editor(val ctx: Context, val nbId: String) {
 
     /** Zmienia efekty kolorystyczne zaznaczonych obrazów; [f] dostaje bieżące efekty danego obrazu. */
     fun setSelImageFx(f: (ImageFx) -> ImageFx) = replaceSel { e -> if (e is ImageEl) e.copy(fx = f(e.fx)) else e }
+
+    /**
+     * Podmienia plik zaznaczonego obrazu [imageId] na nowy PNG (np. oczyszczona tablica w wariancie lab): środek i
+     * szerokość zostają, wysokość idzie za proporcjami nowego pliku, wycinek i efekty się zerują. Jeden wpis cofania.
+     */
+    fun replaceSelImageAsset(imageId: Int, png: ByteArray, pxW: Int, pxH: Int, onDone: (Boolean) -> Unit = {}) {
+        val v = view ?: return onDone(false)
+        repo.io.execute {
+            val name = runCatching { repo.importAsset(nbId, png.inputStream(), "png") }.getOrNull()
+            v.post {
+                if (name == null || pxW <= 0 || pxH <= 0) { say(T.t("Nie udało się zapisać obrazu", "Could not save the image")); onDone(false); return@post }
+                replaceSel { e -> if (e is ImageEl && e.id == imageId) e.copy(asset = name, h = e.w * pxH / pxW, crop = ImageCrop.FULL, fx = ImageFx.NONE) else e }
+                onDone(true)
+            }
+        }
+    }
 
     /**
      * F14: wycinek strony pod zaznaczeniem jako obraz — z papierem, wzorem, tłem PDF i wszystkim, co leży w ramce.

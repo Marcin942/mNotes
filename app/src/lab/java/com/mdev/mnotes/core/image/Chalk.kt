@@ -89,13 +89,18 @@ object Chalk {
      * Kolor do alfy względem czarnego albo białego tła. Poniżej [cut] piksel znika, powyżej [solid] jest pełny;
      * kolor kredy odtwarzany jak w GIMP-ie (dzielenie przez krycie), a z [tint] wszystkie kreski dostają ten kolor.
      */
-    fun toAlpha(src: Raster, black: Boolean, cut: Float, solid: Float, tint: Int? = null): Raster {
+    fun toAlpha(src: Raster, black: Boolean, cut: Float, solid: Float, tint: Int? = null, low: Float? = null): Raster {
         val s = max(solid, cut + 1e-3f)
         val out = IntArray(src.px.size)
+        // Histereza (2b-B2): piksel jaśniejszy od [low], ale ciemniejszy od [cut], zostaje tylko w plamie, która ma
+        // choć jeden piksel ≥ [cut]; w takiej plamie krycie liczy się od [low]. Blade fragmenty liter wracają,
+        // odosobnione smugi po gąbce nie.
+        val keep = if (low != null && low < cut) connectedToStrong(src, black, cut, low) else null
         for (i in out.indices) {
             val c = src.px[i]
             val a = strength(c, black)
-            val alpha = ((a - cut) / (s - cut)).coerceIn(0f, 1f) * (Raster.alpha(c) / 255f)
+            val from = if (keep != null && keep[i]) low!! else cut
+            val alpha = ((a - from) / (s - from)).coerceIn(0f, 1f) * (Raster.alpha(c) / 255f)
             if (alpha <= 0f) { out[i] = 0; continue }
             out[i] = if (tint != null) (Raster.q(alpha) shl 24) or (tint and 0xFFFFFF) else {
                 val safe = max(a, 1e-4f)
@@ -105,6 +110,82 @@ object Chalk {
         }
         return Raster(src.w, src.h, out)
     }
+
+    /** Piksele ≥ [low] połączone (8-sąsiedztwo) z jakimkolwiek pikselem ≥ [cut]; widoczne tylko te nieprzezroczyste. */
+    fun connectedToStrong(src: Raster, black: Boolean, cut: Float, low: Float): BooleanArray {
+        val w = src.w; val h = src.h; val n = w * h
+        val a = FloatArray(n) { if (Raster.alpha(src.px[it]) > 127) strength(src.px[it], black) else 0f }
+        val keep = BooleanArray(n)
+        val queue = IntArray(n)
+        var head = 0; var tail = 0
+        for (i in 0 until n) if (a[i] >= cut) { keep[i] = true; queue[tail++] = i }
+        while (head < tail) {
+            val p = queue[head++]
+            val x = p % w; val y = p / w
+            for (dy in -1..1) for (dx in -1..1) {
+                val nx = x + dx; val ny = y + dy
+                if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue
+                val q = ny * w + nx
+                if (!keep[q] && a[q] >= low) { keep[q] = true; queue[tail++] = q }
+            }
+        }
+        return keep
+    }
+
+    /**
+     * Usuwa jasne pasy grubsze niż kreda (2b-B2): listwę między tablicami, ramę, kawałki ściany przy brzegu kadru.
+     * Rdzeń to piksele dalej od tła niż [maxHalf]; znika tylko rdzeń **długi** (rozpiętość ≥ [FRAME_EXTENT] dłuższego
+     * boku obrazu), razem z otoczką do [maxHalf]. Zwarte grube plamy (pogrubione, rozmyte litery) zostają, cienkie kreski
+     * dotykające pasa też. Pierwsza wersja bez warunku długości zjadała pogrubione litery na rozmytym zdjęciu.
+     */
+    fun dropThick(img: Raster, maxHalf: Float): Raster {
+        val w = img.w; val h = img.h; val n = w * h
+        val mask = BooleanArray(n) { Raster.alpha(img.px[it]) > 128 }
+        val d = ChalkVector.distance(mask, w, h)
+        val core = longCores(BooleanArray(n) { d[it] > maxHalf }, w, h, (FRAME_EXTENT * max(w, h)).toInt())
+        if (core.none { it }) return img
+        val toCore = ChalkVector.distance(BooleanArray(n) { !core[it] }, w, h, edgeIsBackground = false)
+        val out = img.px.copyOf()
+        for (i in 0 until n) if (out[i] != 0 && (core[i] || toCore[i] <= maxHalf + 1.5f)) out[i] = 0
+        return Raster(w, h, out)
+    }
+
+    /** Z [core] zostają tylko spójne kawałki (8-sąsiedztwo) o rozpiętości (szer. albo wys. ramki) co najmniej [minExtent]. */
+    private fun longCores(core: BooleanArray, w: Int, h: Int, minExtent: Int): BooleanArray {
+        val out = BooleanArray(core.size)
+        val seen = BooleanArray(core.size)
+        val queue = IntArray(core.size)
+        for (start in core.indices) {
+            if (!core[start] || seen[start]) continue
+            var head = 0; var tail = 0
+            queue[tail++] = start; seen[start] = true
+            var x0 = w; var y0 = h; var x1 = 0; var y1 = 0
+            while (head < tail) {
+                val p = queue[head++]
+                val x = p % w; val y = p / w
+                x0 = min(x0, x); x1 = max(x1, x); y0 = min(y0, y); y1 = max(y1, y)
+                for (dy in -1..1) for (dx in -1..1) {
+                    val nx = x + dx; val ny = y + dy
+                    if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue
+                    val q = ny * w + nx
+                    if (core[q] && !seen[q]) { seen[q] = true; queue[tail++] = q }
+                }
+            }
+            if (max(x1 - x0, y1 - y0) + 1 >= minExtent) for (i in 0 until tail) out[queue[i]] = true
+        }
+        return out
+    }
+
+    /** Rdzeń dłuższy niż ten ułamek boku obrazu to listwa, rama albo ściana, a nie litera. */
+    const val FRAME_EXTENT = 0.08f
+
+    /** Połówka grubości, powyżej której jasny obszar to rama albo listwa, nie kreda: 0,4 % szerokości wyniku, co najmniej 4 px. */
+    fun thickLimit(w: Int): Float = max(4f, w * THICK_FRACTION)
+
+    const val THICK_FRACTION = 0.004f
+
+    /** Próg dociągania bladej kredy jako ułamek progu tła. */
+    const val FAINT_FRACTION = 0.6f
 
     /** Czy punkt (x, y) leży w wielokącie (reguła parzystości przecięć). */
     fun inside(poly: FloatArray, x: Float, y: Float): Boolean {
@@ -152,6 +233,10 @@ data class BoardOptions(
     /** null: wykryj (ciemna tablica albo biała); true: kreda na ciemnym; false: pisak na białym. */
     val black: Boolean? = null,
     val maxSide: Int = 2400,
+    /** Dociągaj bladą kredę połączoną z wyraźną (histereza, 2b-B2). */
+    val faint: Boolean = true,
+    /** Usuń jasne pasy grubsze niż kreda: listwy, ramy, ścianę przy brzegu (2b-B2). */
+    val frames: Boolean = true,
 )
 
 /**
@@ -230,7 +315,8 @@ object BoardPipeline {
     /** Kolor do alfy i gumka na gotowym [src]: tanie, więc podgląd liczy to przy każdym ruchu suwaka. */
     fun finish(src: BoardSource, opt: BoardOptions = BoardOptions(), erase: List<FloatArray> = emptyList()): BoardResult {
         val cut = if (opt.autoCut) src.autoCut else opt.cut
-        var out = Chalk.toAlpha(src.image, src.black, cut, opt.solid, opt.tint)
+        var out = Chalk.toAlpha(src.image, src.black, cut, opt.solid, opt.tint, low = if (opt.faint) cut * Chalk.FAINT_FRACTION else null)
+        if (opt.frames) out = Chalk.dropThick(out, Chalk.thickLimit(out.w))
         if (erase.isNotEmpty()) out = Chalk.erase(out, erase)
         return BoardResult(out, src.quad, src.black, cut, src)
     }

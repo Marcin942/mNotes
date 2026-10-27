@@ -41,10 +41,11 @@ object ChalkVector {
      * Odległość każdego piksela maski od najbliższego tła (fazowana 3-4, w pikselach); poza obrazem jest tło. Kreska
      * grubości t ma na osi odległość ok. (t + 1) / 2, stąd grubość łamanej = 2·średnia − 1.
      */
-    fun distance(mask: BooleanArray, w: Int, h: Int): FloatArray {
+    fun distance(mask: BooleanArray, w: Int, h: Int, edgeIsBackground: Boolean = true): FloatArray {
         val big = Int.MAX_VALUE / 4
         val d = IntArray(w * h) { if (mask[it]) big else 0 }
-        fun at(x: Int, y: Int) = if (x < 0 || y < 0 || x >= w || y >= h) 0 else d[y * w + x]
+        val outside = if (edgeIsBackground) 0 else big
+        fun at(x: Int, y: Int) = if (x < 0 || y < 0 || x >= w || y >= h) outside else d[y * w + x]
         for (y in 0 until h) for (x in 0 until w) {
             val i = y * w + x
             if (d[i] == 0) continue

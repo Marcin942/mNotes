@@ -244,6 +244,8 @@ object Lab : LabFeatures {
         ToggleRow(T.t("Przytnij do tablicy", "Crop to the board"), opt.crop) { change(opt.copy(crop = it)) }
         ToggleRow(T.t("Wyrównaj oświetlenie", "Even out the lighting"), opt.flatten) { change(opt.copy(flatten = it)) }
         ToggleRow(T.t("Wyostrz kredę", "Sharpen the chalk"), opt.sharpen) { change(opt.copy(sharpen = it)) }
+        ToggleRow(T.t("Dociągaj bladą kredę do wyraźnej", "Keep faint chalk joined to clear chalk"), opt.faint) { change(opt.copy(faint = it)) }
+        ToggleRow(T.t("Usuń listwy, ramy i ścianę", "Remove ledges, frames and wall"), opt.frames) { change(opt.copy(frames = it)) }
         ToggleRow(T.t("Próg tła automatycznie", "Automatic background cut"), opt.autoCut) { change(opt.copy(autoCut = it)) }
         if (!opt.autoCut) {
             SectionLabel(T.t("Próg tła: ${(opt.cut * 100).toInt()}%", "Background cut: ${(opt.cut * 100).toInt()}%"))
@@ -425,7 +427,7 @@ object Lab : LabFeatures {
     override fun SettingsSection() {
         val set = LabSettings.of(LocalContext.current)
         NearbySection(set)
-        Group(T.t("Kreda: zdjęcia tablicy", "Chalk: blackboard photos"), keys = "kreda tablica zdjęcie oczyść prostowanie próg narożniki gumka podpowiedź chalk board photo clean corners eraser hint") {
+        Group(T.t("Kreda: zdjęcia tablicy", "Chalk: blackboard photos"), keys = "kreda tablica zdjęcie oczyść prostowanie próg narożniki gumka podpowiedź blada listwy ramy chalk board photo clean corners eraser hint faint ledge frame") {
             Text(
                 T.t(
                     "„Oczyść tablicę” w menu zaznaczonego zdjęcia zostawia samą kredę na przezroczystym tle; kilka zaznaczonych zdjęć tej samej tablicy łączy medianą, która usuwa wykładowcę. Narożniki tablicy i gumkę ustawisz w panelu. Tu wybierasz, które kroki są włączone na start; w panelu zmienisz je dla jednego zdjęcia.",
@@ -436,6 +438,7 @@ object Lab : LabFeatures {
             ToggleRow(T.t("Podpowiedź po wstawieniu zdjęcia tablicy", "Hint after inserting a board photo"), set.boardHint) { set.boardHint = it }
             Steps(set.options()) { o ->
                 set.straighten = o.straighten; set.crop = o.crop; set.flatten = o.flatten; set.sharpen = o.sharpen
+                set.faint = o.faint; set.frames = o.frames
                 set.autoCut = o.autoCut; set.cut = o.cut; set.solid = o.solid
                 set.tint = listOf(null, LabSettings.tintColor(1), LabSettings.tintColor(2)).indexOf(o.tint).coerceAtLeast(0)
             }

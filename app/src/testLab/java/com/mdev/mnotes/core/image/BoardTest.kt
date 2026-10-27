@@ -197,7 +197,7 @@ class BoardPipelineTest {
     @Test
     fun everyStepCanBeSwitchedOff() {
         val photo = Synthetic.photo()
-        val res = BoardPipeline.run(photo, BoardOptions(straighten = false, crop = false, flatten = false, sharpen = false, autoCut = false, cut = 0.5f, solid = 0.7f))
+        val res = BoardPipeline.run(photo, BoardOptions(straighten = false, crop = false, flatten = false, sharpen = false, autoCut = false, cut = 0.5f, solid = 0.7f, faint = false, frames = false))
         assertEquals(photo.w, res.image.w)
         assertEquals(null, res.quad)
         assertEquals(0.5f, res.cut)

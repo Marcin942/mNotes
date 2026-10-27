@@ -146,7 +146,8 @@ class BoardStackTest {
     fun runManyHidesAPersonPresentOnOnlyOnePhoto() {
         val clean = Synthetic.photo(seed = 4)
         val person = Synthetic.photo(seed = 5).also { for (y in 100 until 300) for (x in 170 until 230) it[x, y] = Raster.rgbF(0.85f, 0.7f, 0.6f) }
-        val noCrop = BoardOptions(crop = false)
+        // bez filtra ram: jasna „osoba” to też gruby pas i znika sama; tu sprawdzamy medianę
+        val noCrop = BoardOptions(crop = false, frames = false)
         val res = BoardPipeline.runMany(listOf(person, clean, Synthetic.photo(seed = 6)), noCrop)
         val one = BoardPipeline.run(person, noCrop)
         fun opaqueNear(r: Raster) = (r.h * 3 / 5 until r.h * 3 / 4).sumOf { y -> (r.w * 2 / 5 until r.w * 3 / 5).count { x -> Raster.alpha(r[x, y]) > 128 } }

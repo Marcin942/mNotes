@@ -39,6 +39,8 @@ class LabSettings(ctx: Context) {
     private val tintP = I("board.tint", 0)
     private val nearbyP = B("nearby.enabled", false)
     private val boardHintP = B("board.hint", true)
+    private val faintP = B("board.faint", true)
+    private val framesP = B("board.frames", true)
 
     /** Łącze Nearby (zdjęcie z telefonu); domyślnie wyłączone, bo wymaga Usług Google Play i uprawnień radia. */
     var nearby: Boolean get() = nearbyP.value; set(v) = nearbyP.set(v)
@@ -47,6 +49,8 @@ class LabSettings(ctx: Context) {
     var crop: Boolean get() = cropP.value; set(v) = cropP.set(v)
     var flatten: Boolean get() = flattenP.value; set(v) = flattenP.set(v)
     var sharpen: Boolean get() = sharpenP.value; set(v) = sharpenP.set(v)
+    var faint: Boolean get() = faintP.value; set(v) = faintP.set(v)
+    var frames: Boolean get() = framesP.value; set(v) = framesP.set(v)
     var autoCut: Boolean get() = autoCutP.value; set(v) = autoCutP.set(v)
     var cut: Float get() = cutP.value; set(v) = cutP.set(v)
     var solid: Float get() = solidP.value; set(v) = solidP.set(v)
@@ -60,7 +64,7 @@ class LabSettings(ctx: Context) {
 
     fun options(): BoardOptions = BoardOptions(
         straighten = straighten, crop = crop, flatten = flatten, sharpen = sharpen, autoCut = autoCut,
-        cut = cut, solid = solid, tint = tintColor(tint),
+        cut = cut, solid = solid, tint = tintColor(tint), faint = faint, frames = frames,
     )
 
     companion object {

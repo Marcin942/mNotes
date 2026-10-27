@@ -410,6 +410,7 @@ fun EditorScreen(main: Editor, tabs: TabsCtl, onExit: () -> Unit, onSettings: ()
                         SelectionBar(ed, panel, { toggle(it) }, { textReq(ed) })
                         LectureControls(ed)
                         if (ed.tool == Tool.GEO && !ed.readOnly) GeoHint(ed)
+                        if (ed.tool == Tool.CURVE && !ed.readOnly && ed.curveMode.stepwise) CurveHint(ed)
                         // A2-8: kapsuła wykładu, pasek szukania i dymek jedno nad drugim.
                         val stack = BottomStack.bottoms(ed.lectureMode, ed.searchOpen)
                         if (ed.searchOpen) SearchBar(ed, extraBottom = (stack[0] - BottomStack.SEARCH_BOTTOM).dp)
@@ -852,6 +853,16 @@ private fun PenStripItems(ed: Editor, set: com.mdev.mnotes.data.Settings, vertic
     val scroll = rememberScrollState()
     var menuFor by remember { mutableStateOf<Int?>(null) }
     Lin(vertical, Modifier.padding(4.dp).then(if (vertical) Modifier.verticalScroll(scroll) else Modifier.horizontalScroll(scroll)).graphicsLayer { alpha = if (live) 1f else 0.55f }) {
+        // 2b-A10: z Krzywą w ręku listwa zaczyna się od jej trybów (i wypełnienia konturu), dalej pióro jak zwykle.
+        if (ed.tool == Tool.CURVE) {
+            for (cm in com.mdev.mnotes.core.shapes.CurveMode.entries) {
+                ToolBtn(T.t(cm.pl, cm.en), { ed.curveChoose(cm) }, selected = ed.curveMode == cm, size = sz) { c -> GlyphCanvas(CurveGlyphParts.parts(cm), c, c, Modifier.size(isz + 2.dp)) }
+            }
+            if (ed.curveMode.stepwise) ToolBtn(
+                T.t("Wypełniaj zamknięte krzywe kolorem pisma", "Fill closed curves with the ink colour"), { set.curveFill = !set.curveFill; ed.view?.invalidate() }, selected = set.curveFill, size = sz,
+            ) { c -> Icon(Icons.Rounded.FormatColorFill, null, Modifier.size(isz), tint = c) }
+            BarSep(vertical)
+        }
         for (i in 0 until PenKit.WIDTHS) {
             val on = i == slot.widthIndex
             ToolBtn(
@@ -912,6 +923,24 @@ private fun androidx.compose.foundation.layout.BoxScope.GeoHint(ed: Editor) {
             Text("·  " + ed.geoHint, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             if (ed.geoInputs.isNotEmpty()) IconBtn(Icons.Rounded.Close, T.t("Zacznij wskazywanie od nowa", "Start picking again"), { ed.geoReset() }, size = 30.dp, iconSize = 16.dp)
             else Spacer(Modifier.width(10.dp))
+        }
+    }
+}
+
+/** Podpowiedź Krzywej krok po kroku (2b-A10): tryb i następny ruch; ✓ kończy krzywą, ✕ ją porzuca. */
+@Composable
+private fun androidx.compose.foundation.layout.BoxScope.CurveHint(ed: Editor) {
+    val m = mint
+    ed.curveTick
+    val started = (ed.curveDraft?.count ?: 0) > 0
+    FloatingCard(Modifier.align(Alignment.TopCenter).padding(top = 10.dp).panelEnter()) {
+        Row(Modifier.padding(start = 14.dp, end = 4.dp, top = 6.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(T.t(ed.curveMode.pl, ed.curveMode.en), style = MaterialTheme.typography.labelLarge, color = m.accentText)
+            Text("·  " + ed.curveHint, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            if (started) {
+                if ((ed.curveDraft?.count ?: 0) >= 2) IconBtn(Icons.Rounded.Check, T.t("Zakończ krzywą", "Finish curve"), { ed.curveCommit() }, size = 30.dp, iconSize = 16.dp)
+                IconBtn(Icons.Rounded.Close, T.t("Porzuć krzywą", "Discard curve"), { ed.curveCancel() }, size = 30.dp, iconSize = 16.dp)
+            } else Spacer(Modifier.width(10.dp))
         }
     }
 }
@@ -2128,8 +2157,10 @@ private fun editorKey(e: androidx.compose.ui.input.key.KeyEvent, ed: Editor, cmd
     } else if (!fieldFocused) {
         when (k) {
             Key.Backspace -> if (ed.sel != null && !ed.readOnly && ed.cut == null && ed.crop == null) { ed.deleteSel(); return true }
+            // 2b-A10: Enter kończy krzywą stawianą punktami, Esc ją porzuca.
+            Key.Enter -> if (ed.curveDraft?.isEmpty == false) { ed.curveCommit(); return true }
             Key.Escape -> {
-                if (ed.pipette != null) ed.cancelPipette() else if (ed.cut != null) ed.cancelCut() else if (ed.crop != null) ed.cancelCrop() else if (ed.searchOpen) ed.closeSearch() else if (ed.sel != null) ed.clearSel() else if (!ed.chrome) ed.chrome = true else return false
+                if (ed.curveDraft?.isEmpty == false) ed.curveCancel() else if (ed.pipette != null) ed.cancelPipette() else if (ed.cut != null) ed.cancelCut() else if (ed.crop != null) ed.cancelCrop() else if (ed.searchOpen) ed.closeSearch() else if (ed.sel != null) ed.clearSel() else if (!ed.chrome) ed.chrome = true else return false
                 return true
             }
             Key.DirectionLeft, Key.DirectionRight, Key.DirectionUp, Key.DirectionDown -> if (ed.sel != null && !ed.readOnly) {

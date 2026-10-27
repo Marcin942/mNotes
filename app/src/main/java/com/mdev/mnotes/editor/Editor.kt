@@ -148,7 +148,11 @@ class Editor(val ctx: Context, val nbId: String) {
         view?.applyLayoutMode()
     }
 
-    var tool by mutableStateOf(Tool.PEN)
+    private var toolState by mutableStateOf(Tool.PEN)
+    var tool: Tool
+        get() = toolState
+        // 2b-A10: odejście od Krzywej zapisuje rozpoczętą krzywą (punkty postawione palcem się nie gubią).
+        set(v) { if (toolState == Tool.CURVE && v != Tool.CURVE) curveCommit(); toolState = v }
     var ruler by mutableStateOf(false)
     /** Okno powiększenia (EXT-003): pisanie w powiększonej ramce u dołu, zapis na stronie w skali 1:1. */
     var zoomWin by mutableStateOf(false)
@@ -789,6 +793,44 @@ class Editor(val ctx: Context, val nbId: String) {
         geoReset()
         if (els.isEmpty()) { say(T.t("Ta konstrukcja nie ma rozwiązania dla wskazanych kształtów", "This construction has no solution for the picked shapes")); return }
         exec(DocEdit.Elements(page.id, ElementsEdit.add(doc.content(page), els)))
+    }
+
+    // — Krzywa krok po kroku (2b-A10): przez punkty, kontur, piórko —
+
+    val curveMode: com.mdev.mnotes.core.shapes.CurveMode get() = com.mdev.mnotes.core.shapes.CurveMode.of(settings.curveMode)
+    /** Rozpoczęta krzywa (na stronie [curvePage]); null, gdy nic nie postawiono. */
+    var curveDraft: com.mdev.mnotes.core.shapes.CurveDraft? = null
+        private set
+    var curvePage: String? = null
+    /** Zmienia się z każdym węzłem — podpowiedź nad płótnem się przelicza. */
+    var curveTick by mutableIntStateOf(0)
+    val curveHint: String get() { curveTick; return com.mdev.mnotes.core.shapes.CurveDraft.hint(curveMode, curveDraft?.count ?: 0, T.pl) }
+
+    /** Szkic dla bieżącego trybu; zmiana trybu zaczyna nowy (stary zapisany wcześniej przez [curveChoose]). */
+    fun curveDraftFor(pageId: String): com.mdev.mnotes.core.shapes.CurveDraft {
+        if (curvePage != null && curvePage != pageId) curveCommit()
+        val d = curveDraft?.takeIf { it.mode == curveMode } ?: com.mdev.mnotes.core.shapes.CurveDraft(curveMode).also { curveDraft = it }
+        curvePage = pageId
+        return d
+    }
+
+    fun curveChoose(m: com.mdev.mnotes.core.shapes.CurveMode) { curveCommit(); settings.curveMode = m.ordinal; curveTick++ }
+
+    fun curveCancel() { curveDraft = null; curvePage = null; curveTick++; view?.invalidate() }
+
+    /** Zapisuje rozpoczętą krzywą jako kreskę z uchwytami (zaznaczoną, jak po F17); [close] = domknij (kontur zawsze). */
+    fun curveCommit(close: Boolean = false) {
+        val d = curveDraft
+        val page = curvePage?.let { doc.page(it) }
+        curveDraft = null; curvePage = null; curveTick++
+        view?.invalidate()
+        if (d == null || page == null || readOnly) return
+        val c = d.ctrl(close || d.mode == com.mdev.mnotes.core.shapes.CurveMode.CLOSED) ?: return
+        val shut = com.mdev.mnotes.core.shapes.CurveFit.closed(c)
+        val p = pen
+        val s = Stroke(Ids.next(), p.kind, p.color, p.width, com.mdev.mnotes.core.shapes.Bezier.sample(c), line = p.style, ctrl = c, fill = if (shut && settings.curveFill) p.color or (0xFF shl 24) else 0)
+        exec(DocEdit.Elements(page.id, ElementsEdit.add(doc.content(page), listOf(s))))
+        select(page.id, setOf(s.id))
     }
 
     /** Pomysł Fable 12: jedyny zaznaczony obraz staje się tłem strony — zablokowany i na spodzie, pod pismem. */

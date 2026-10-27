@@ -75,6 +75,11 @@ class Stroke(
      * jej gęsta łamana, więc wszystko poza edycją uchwytów widzi zwykłą kreskę. Null = zwykła kreska.
      */
     val ctrl: FloatArray? = null,
+    /**
+     * Wypełnienie zamkniętej krzywej (2b-A10): kolor ARGB rysowany pod kreską jak słaby zakreślacz (pod spodem dalej
+     * widać pismo, na ciemnym papierze nie świeci); 0 = bez wypełnienia. Liczone z [pts], więc po edycji uchwytów idzie za krzywą.
+     */
+    val fill: Int = 0,
 ) : Element() {
 
     val count: Int get() = pts.size / 3
@@ -89,7 +94,7 @@ class Stroke(
         val out = pts.copyOf()
         out[3 * i] = x; out[3 * i + 1] = y
         if (closed && i == 0) { out[3 * count - 3] = x; out[3 * count - 2] = y }
-        return Stroke(id, pen, color, width, out, locked, poly, ellipse, line, ctrl)
+        return Stroke(id, pen, color, width, out, locked, poly, ellipse, line, ctrl, fill)
     }
 
     override val bounds: Bounds = run {
@@ -110,11 +115,11 @@ class Stroke(
     /** Zakreślacz leży we własnej warstwie i miesza się z papierem mnożeniem (patrz renderer). */
     val multiply: Boolean get() = pen == PenKind.HIGHLIGHTER
 
-    override fun withId(newId: Int): Stroke = Stroke(newId, pen, color, width, pts, locked, poly, ellipse, line, ctrl)
-    override fun withLocked(value: Boolean): Stroke = Stroke(id, pen, color, width, pts, value, poly, ellipse, line, ctrl)
+    override fun withId(newId: Int): Stroke = Stroke(newId, pen, color, width, pts, locked, poly, ellipse, line, ctrl, fill)
+    override fun withLocked(value: Boolean): Stroke = Stroke(id, pen, color, width, pts, value, poly, ellipse, line, ctrl, fill)
 
     fun withStyle(color: Int = this.color, width: Float = this.width, pen: PenKind = this.pen, line: LineStyle = this.line): Stroke =
-        Stroke(id, pen, color, width, pts, locked, poly, ellipse, line, ctrl)
+        Stroke(id, pen, color, width, pts, locked, poly, ellipse, line, ctrl, if (fill != 0 && color != this.color) color else fill)
 
     override fun transformed(m: Affine): Stroke {
         val out = FloatArray(pts.size)
@@ -127,7 +132,7 @@ class Stroke(
             i += 3
         }
         val c = ctrl?.let { src -> FloatArray(src.size) { k -> if (k % 2 == 0) m.mapX(src[k], src[k + 1]) else m.mapY(src[k - 1], src[k]) } }
-        return Stroke(id, pen, color, width * m.scaleFactor, out, locked, poly, ellipse, line, c)
+        return Stroke(id, pen, color, width * m.scaleFactor, out, locked, poly, ellipse, line, c, fill)
     }
 }
 

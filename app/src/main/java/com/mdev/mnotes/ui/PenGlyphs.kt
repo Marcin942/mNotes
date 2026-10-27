@@ -242,6 +242,45 @@ object GeoGlyphParts {
     }
 }
 
+/** Glify trybów narzędzia Krzywa (2b-A10), w siatce 24; krzywe liczone tym samym [com.mdev.mnotes.core.shapes.CurveFit] co narzędzie. */
+object CurveGlyphParts {
+    private fun dot(cx: Float, cy: Float, r: Float = 1.6f) =
+        GlyphPart(GlyphRole.DOT, FloatArray(20) { k -> val a = 2 * Math.PI * (k / 2) / 10; if (k % 2 == 0) cx + r * kotlin.math.cos(a).toFloat() else cy + r * kotlin.math.sin(a).toFloat() })
+
+    private fun curve(role: GlyphRole, closed: Boolean, vararg p: Float): GlyphPart {
+        val c = com.mdev.mnotes.core.shapes.CurveFit.through(p, closed)!!
+        val s = com.mdev.mnotes.core.shapes.Bezier.sample(c, 0.6f)
+        return GlyphPart(role, FloatArray(2 * (s.size / 3)) { k -> s[3 * (k / 2) + k % 2] }, closed)
+    }
+
+    /** Drżąca kreska odręczna: prosta (3, 21)→(21, 10) z drobną falą w poprzek. */
+    private val wobble = FloatArray(2 * 25) { k ->
+        val t = (k / 2) / 24f
+        val wv = 0.9f * kotlin.math.sin(t * 6f * Math.PI.toFloat())
+        if (k % 2 == 0) 3f + 18f * t + wv * 0.52f else 21f - 11f * t + wv * 0.85f
+    }
+
+    fun parts(m: com.mdev.mnotes.core.shapes.CurveMode): List<GlyphPart> = when (m) {
+        // Drżąca kreska odręczna (cienka) i gładka krzywa nad nią z dwoma węzłami.
+        com.mdev.mnotes.core.shapes.CurveMode.FREEHAND -> listOf(
+            GlyphPart(GlyphRole.DETAIL, wobble, false),
+            curve(GlyphRole.MARK, false, 3f, 15.5f, 9f, 9f, 15f, 8f, 21f, 3.5f), dot(3f, 15.5f), dot(21f, 3.5f),
+        )
+        com.mdev.mnotes.core.shapes.CurveMode.THROUGH -> listOf(
+            curve(GlyphRole.MARK, false, 3f, 18f, 8.5f, 8f, 15f, 16f, 21f, 6f), dot(3f, 18f), dot(8.5f, 8f), dot(15f, 16f), dot(21f, 6f),
+        )
+        com.mdev.mnotes.core.shapes.CurveMode.CLOSED -> listOf(
+            curve(GlyphRole.MARK, true, 4f, 12f, 11f, 4f, 20.5f, 9f, 15f, 20f), dot(4f, 12f), dot(11f, 4f), dot(20.5f, 9f), dot(15f, 20f),
+        )
+        // Węzeł z uchwytami stycznej — jak piórko w programach wektorowych.
+        com.mdev.mnotes.core.shapes.CurveMode.PEN -> listOf(
+            curve(GlyphRole.MARK, false, 3f, 19f, 12f, 11f, 21f, 19f),
+            GlyphPart(GlyphRole.DETAIL, floatArrayOf(4.5f, 11f, 19.5f, 11f), false), dot(4.5f, 11f, 1.3f), dot(19.5f, 11f, 1.3f),
+            GlyphPart(GlyphRole.MARK, floatArrayOf(10.4f, 9.4f, 13.6f, 9.4f, 13.6f, 12.6f, 10.4f, 12.6f), true),
+        )
+    }
+}
+
 /**
  * Rysuje części glifu: [tool] = kolor ikony (korpus, znaki), [ink] = kolor atramentu (tylko [GlyphRole.INK]).
  * Wspólne dla piór, gumki i lassa, więc grubości i wypełnienia są wszędzie te same.

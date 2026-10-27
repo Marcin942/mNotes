@@ -226,6 +226,42 @@ class PreviewHarness {
         ImageIO.write(img, "png", File(dir, "theme.png"))
     }
 
+    /** 2b-A10: glify czterech trybów Krzywej i po jednym wyniku każdego trybu na kartce (kontur z wypełnieniem). */
+    private fun curveSheet(dir: String) {
+        val cell = 96
+        val modes = com.mdev.mnotes.core.shapes.CurveMode.entries
+        val sc = 2.4f; val w = 210f; val h = 120f
+        val img = BufferedImage(max(cell * modes.size, (w * sc).toInt()) + 20, cell + 20 + (h * sc).toInt() + 10, BufferedImage.TYPE_INT_ARGB)
+        val g = g2(img)
+        g.color = Color(0xFC, 0xFC, 0xFD); g.fillRect(0, 0, img.width, img.height)
+        modes.forEachIndexed { i, m -> g.drawImage(glyph(com.mdev.mnotes.ui.CurveGlyphParts.parts(m), cell, Color(0x2A, 0x2B, 0x2E), Color.BLACK), 10 + i * cell, 10, null) }
+        val page = paper(PageSpec(paper = Paper.WHITE, template = Template.GRID), sc, w.toInt(), h.toInt())
+        val pg = g2(page); pg.scale(sc.toDouble(), sc.toDouble())
+        val cf = com.mdev.mnotes.core.shapes.CurveFit
+        val wave = FloatArray(160) { k -> val i = k / 2; if (k % 2 == 0) 6f + i * 0.45f else 60f + 18f * sin(i / 9.0).toFloat() + ((i * 7919) % 13 - 6) * 0.12f }
+        val curves = listOf(
+            com.mdev.mnotes.core.shapes.Bezier.fit(wave, cf.freehandTol(1f))!! to 0xFF1B1D21.toInt(),
+            cf.through(floatArrayOf(48f, 90f, 62f, 40f, 80f, 75f, 95f, 30f), false)!! to 0xFF24407E.toInt(),
+            cf.through(floatArrayOf(108f, 60f, 125f, 25f, 150f, 50f, 135f, 95f), true)!! to 0xFFC8433F.toInt(),
+            com.mdev.mnotes.core.shapes.CurveDraft(com.mdev.mnotes.core.shapes.CurveMode.PEN).apply {
+                press(160f, 90f); release(); press(178f, 40f); drag(192f, 40f); release(); press(195f, 95f); release()
+            }.ctrl()!! to 0xFF3E8E5A.toInt(),
+        )
+        for ((c, col) in curves) {
+            val s = com.mdev.mnotes.core.shapes.Bezier.sample(c)
+            val path = Path2D.Float(); path.moveTo(s[0], s[1])
+            for (k in 1 until s.size / 3) path.lineTo(s[3 * k], s[3 * k + 1])
+            if (cf.closed(c)) { path.closePath(); pg.color = Color(col and 0xFFFFFF or (0x47 shl 24), true); pg.fill(path) }
+            pg.color = col(col); pg.stroke = BasicStroke(1.4f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND); pg.draw(path)
+            pg.color = Color(0x2E, 0x7D, 0x4F)
+            for (a in 0 until com.mdev.mnotes.core.shapes.Bezier.anchors(c)) pg.fill(Ellipse2D.Float(c[6 * a] - 1.6f, c[6 * a + 1] - 1.6f, 3.2f, 3.2f))
+        }
+        pg.dispose()
+        g.drawImage(page, 10, cell + 20, null)
+        g.dispose()
+        ImageIO.write(img, "png", File(dir, "curves.png"))
+    }
+
     @Test fun render() {
         val dir = System.getenv("MNOTES_PREVIEW_DIR") ?: return assumeTrue(false)
         System.setProperty("java.awt.headless", "true")
@@ -234,6 +270,7 @@ class PreviewHarness {
         toolSheet(dir)
         geoSheet(dir)
         themeSheet(dir)
+        curveSheet(dir)
 
         // 1) Papier: wycinki 3 wzorów na białym/kremowym papierze, skala jak na tablecie (~2,7 px/pt).
         val tiles = listOf(

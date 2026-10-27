@@ -17,7 +17,7 @@ object Bezier {
 
     /** Kreska [s] z nowymi punktami kontrolnymi [c] (łamana liczona od nowa); styl i id bez zmian. */
     fun withCtrl(s: com.mdev.mnotes.core.model.Stroke, c: FloatArray) =
-        com.mdev.mnotes.core.model.Stroke(s.id, s.pen, s.color, s.width, sample(c), s.locked, false, false, s.line, c)
+        com.mdev.mnotes.core.model.Stroke(s.id, s.pen, s.color, s.width, sample(c), s.locked, false, false, s.line, c, if (CurveFit.closed(c)) s.fill else 0)
 
     /** Liczba kotwic w zapisie [ctrl]. */
     fun anchors(ctrl: FloatArray): Int = (ctrl.size / 2 + 2) / 3
@@ -178,14 +178,23 @@ object Bezier {
         val out = ctrl.copyOf()
         val n = ctrl.size / 2
         if (i !in 0 until n) return out
+        // 2b-A10: w krzywej zamkniętej pierwsza i ostatnia kotwica to ten sam punkt — idą razem, z oboma uchwytami.
+        val closed = CurveFit.closed(ctrl)
         val dx = x - ctrl[2 * i]; val dy = y - ctrl[2 * i + 1]
         out[2 * i] = x; out[2 * i + 1] = y
         if (isAnchor(i)) {
-            for (h in intArrayOf(i - 1, i + 1)) if (h in 0 until n) { out[2 * h] += dx; out[2 * h + 1] += dy }
+            val hs = if (closed && (i == 0 || i == n - 1)) intArrayOf(1, n - 2) else intArrayOf(i - 1, i + 1)
+            if (closed && (i == 0 || i == n - 1)) { out[0] = x; out[1] = y; out[2 * n - 2] = x; out[2 * n - 1] = y }
+            for (h in hs) if (h in 0 until n) { out[2 * h] += dx; out[2 * h + 1] += dy }
             return out
         }
         val a = if (i % 3 == 1) i - 1 else i + 1          // kotwica tego uchwytu
-        val o = if (i % 3 == 1) i - 2 else i + 2          // uchwyt po drugiej stronie kotwicy
+        val o = when {                                     // uchwyt po drugiej stronie kotwicy
+            closed && i == 1 -> n - 2
+            closed && i == n - 2 -> 1
+            i % 3 == 1 -> i - 2
+            else -> i + 2
+        }
         if (o !in 0 until n) return out
         val ax = ctrl[2 * a]; val ay = ctrl[2 * a + 1]
         if (smooth(ctrl, a)) {
@@ -199,10 +208,14 @@ object Bezier {
     /** Czy kotwica [a] jest gładka: jej dwa uchwyty leżą (prawie) na jednej prostej po przeciwnych stronach. */
     fun smooth(ctrl: FloatArray, a: Int): Boolean {
         val n = ctrl.size / 2
-        if (a - 1 < 0 || a + 1 >= n) return false
+        // W zamkniętej krzywej sąsiedzi kotwicy na szwie to uchwyt pierwszego i ostatniego odcinka.
+        val seam = CurveFit.closed(ctrl) && (a == 0 || a == n - 1)
+        val before = if (seam) n - 2 else a - 1
+        val after = if (seam) 1 else a + 1
+        if (before < 0 || after >= n) return false
         val ax = ctrl[2 * a]; val ay = ctrl[2 * a + 1]
-        val u = unit(ctrl[2 * (a - 1)] - ax, ctrl[2 * (a - 1) + 1] - ay)
-        val v = unit(ctrl[2 * (a + 1)] - ax, ctrl[2 * (a + 1) + 1] - ay)
+        val u = unit(ctrl[2 * before] - ax, ctrl[2 * before + 1] - ay)
+        val v = unit(ctrl[2 * after] - ax, ctrl[2 * after + 1] - ay)
         return u[0] * v[0] + u[1] * v[1] < -0.985f
     }
 

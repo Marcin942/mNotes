@@ -93,6 +93,8 @@ class Settings(ctx: Context) {
     var holdToCurve by Pref("input.hold_curve", false)   // F18: nierozpoznana kreska trzymana dalej staje się gładką krzywą; domyślnie wył. (A2-3: pismo)
     var holdCurveHinted by Pref("input.hold_curve_hinted", false)  // dymek „wyłączysz to w Ustawieniach” pokazany już raz
     var curveHoldMs by Pref("input.hold_curve_ms", 350)  // ile dłużej trzymać (ms) po nieudanym rozpoznaniu kształtu
+    var curveMode by Pref("curve.mode", 0)               // 2b-A10: tryb narzędzia Krzywa (core/shapes/CurveMode)
+    var curveFill by Pref("curve.fill", false)           // 2b-A10: zamknięta krzywa dostaje wypełnienie w kolorze pisma
     var twoFingerUndo by Pref("input.two_finger_undo", true)
     var pullAddPage by Pref("input.pull_add_page", true)
     var autoTextPage by Pref("pages.auto_text", true)  // nowa strona, gdy tekst wyjdzie za ostatnią albo zacznie się za nią (F10)

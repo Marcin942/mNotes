@@ -143,6 +143,7 @@ class PageRenderer(private val assets: Assets?) {
         val dk = t?.toDark ?: dark
         when (e) {
             is Stroke -> {
+                if (e.fill != 0 && e.count >= 3) drawStrokeFill(c, e.pts, e.count, if (t == null) e.fill else t.highlighter(e.fill), dk)
                 val col = if (t == null) e.color else if (e.pen == PenKind.HIGHLIGHTER) t.highlighter(e.color) else t.ink(e.color)
                 drawStrokeData(c, e.pen, col, e.width, e.pts, e.count, scale, dk, e.poly, e.line, e.poly || e.ellipse)
             }
@@ -168,6 +169,21 @@ class PageRenderer(private val assets: Assets?) {
         paint.color = if (t.hidden) darken(rgb) else rgb or (0xB0 shl 24)
         c.drawRoundRect(t.cx - t.w / 2, t.cy - t.h / 2, t.cx + t.w / 2, t.cy + t.h / 2, rad, rad, paint)
         c.restore()
+    }
+
+    /** Wypełnienie zamkniętej krzywej (2b-A10): wnętrze łamanej [pts] jak słaby zakreślacz, pod kreską. */
+    fun drawStrokeFill(c: Canvas, pts: FloatArray, n: Int, color: Int, dark: Boolean) {
+        paint.reset(); paint.isAntiAlias = true
+        paint.style = Paint.Style.FILL
+        styleHighlighter(color, FILL_ALPHA, dark)
+        path.rewind()
+        path.fillType = Path.FillType.EVEN_ODD
+        path.moveTo(pts[0], pts[1])
+        for (i in 1 until n) path.lineTo(pts[3 * i], pts[3 * i + 1])
+        path.close()
+        c.drawPath(path, paint)
+        path.rewind()
+        path.fillType = Path.FillType.WINDING
     }
 
     /** Wypełnienie z wiaderka: kontury parzysto-nieparzyście, jako zakreślacz albo kolor jednolity. */
@@ -428,5 +444,7 @@ class PageRenderer(private val assets: Assets?) {
     private companion object {
         /** Gęstość kopii przyciętego obrazu w eksporcie (px na pt): ok. 290 dpi, więcej niż potrzeba do druku. */
         const val BAKE_PX_PER_PT = 4f
+        /** Krycie wypełnienia krzywej: ok. ⅓ zakreślacza — kolor widać, pismo pod spodem też. */
+        const val FILL_ALPHA = 0.28f
     }
 }

@@ -66,6 +66,9 @@ import com.mdev.mnotes.core.pen.LaserColors
 import com.mdev.mnotes.core.pen.PenSpec
 import com.mdev.mnotes.core.pen.StrokeBuilder
 import com.mdev.mnotes.core.shapes.Bezier
+import com.mdev.mnotes.core.shapes.CurveDraft
+import com.mdev.mnotes.core.shapes.CurveFit
+import com.mdev.mnotes.core.shapes.CurveMode
 import com.mdev.mnotes.core.shapes.MathGlyphs
 import com.mdev.mnotes.core.shapes.Shape
 import com.mdev.mnotes.core.shapes.ShapeBox
@@ -629,6 +632,7 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
         drawLasso(c)
         drawSelection(c)
         drawGeoPicks(c)
+        drawCurveDraft(c)
         drawShapeLabel(c)
         drawAttachMark(c)
         drawRing(c)
@@ -1823,6 +1827,86 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
 
     private val geoPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE; strokeCap = Paint.Cap.ROUND; strokeJoin = Paint.Join.ROUND }
 
+    // ───────────────────────── krzywa krok po kroku (2b-A10) ─────────────────────────
+
+    /** Bieżący dotyk należy do szkicu krzywej (tryby przez punkty, kontur, piórko), a nie do zwykłej kreski. */
+    private var curveStep = false
+    private var curveTap = CurveDraft.Tap.ADD
+
+    private fun curveDown() {
+        curveStep = true
+        val pi = pageIdxAt(curX, curY)
+        if (pi < 0 || ed.readOnly) { curveStep = false; mode = Mode.IGNORE; return }
+        val d = ed.curveDraftFor(doc.pages[pi].id)
+        if (d.isEmpty && ed.sel != null) ed.clearSel()
+        val x = pgX(pi, curX); val y = pgY(pi, curY)
+        curveTap = d.tapKind(x, y, 14f * dp / zoom)
+        if (curveTap == CurveDraft.Tap.ADD) d.press(x, y)
+        ed.curveTick++
+    }
+
+    private fun curveMove() {
+        val d = ed.curveDraft ?: return
+        val pi = doc.indexOf(ed.curvePage ?: return)
+        if (pi < 0) return
+        // Przeciągnięcie z pierwszego/ostatniego punktu to jednak nowy węzeł (np. uchwyt piórka), nie zakończenie.
+        if (curveTap != CurveDraft.Tap.ADD && toolMoved) { curveTap = CurveDraft.Tap.ADD; d.press(pgX(pi, downX), pgY(pi, downY)) }
+        if (curveTap == CurveDraft.Tap.ADD) d.drag(pgX(pi, curX), pgY(pi, curY))
+    }
+
+    private fun curveUp(cancel: Boolean) {
+        curveStep = false
+        val d = ed.curveDraft ?: return
+        when {
+            cancel -> if (curveTap == CurveDraft.Tap.ADD) d.dropLast()
+            curveTap == CurveDraft.Tap.CLOSE -> ed.curveCommit(close = true)
+            curveTap == CurveDraft.Tap.FINISH -> ed.curveCommit()
+            else -> d.release()
+        }
+        ed.curveTick++
+    }
+
+    private val curvePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { strokeCap = Paint.Cap.ROUND; strokeJoin = Paint.Join.ROUND }
+
+    /** Szkic krzywej: sama krzywa piórem (z wypełnieniem, gdy będzie), węzły i uchwyty piórka w akcencie. */
+    private fun drawCurveDraft(c: Canvas) {
+        val d = ed.curveDraft ?: return
+        if (ed.tool != Tool.CURVE || d.isEmpty) return
+        val pi = doc.indexOf(ed.curvePage ?: return)
+        if (pi !in 0 until layout.count) return
+        val ox = layout.left(pi); val oy = layout.top(pi)
+        fun sx(x: Float) = (ox + x) * zoom + tx
+        fun sy(y: Float) = (oy + y) * zoom + ty
+        val p = ed.pen
+        val th = themeFor(doc.pages[pi].spec)
+        val ink = th?.ink(p.color) ?: p.color
+        d.ctrl()?.let { cc ->
+            val s = Bezier.sample(cc, 2f / zoom)
+            tmpPath.rewind(); tmpPath.moveTo(sx(s[0]), sy(s[1]))
+            for (k in 1 until s.size / 3) tmpPath.lineTo(sx(s[3 * k]), sy(s[3 * k + 1]))
+            if (CurveFit.closed(cc) && settings.curveFill) {
+                curvePaint.style = Paint.Style.FILL; curvePaint.color = rgbA(ink, 0x48)
+                c.drawPath(tmpPath, curvePaint)
+            }
+            curvePaint.style = Paint.Style.STROKE; curvePaint.color = ink; curvePaint.strokeWidth = max(p.width * zoom, 1.2f * dp)
+            c.drawPath(tmpPath, curvePaint)
+        }
+        geoPaint.color = rgbA(accent, 0xCC); geoPaint.strokeWidth = 1.5f * dp
+        for (i in 0 until d.count) {
+            val x = sx(d.x(i)); val y = sy(d.y(i))
+            if (d.mode == CurveMode.PEN && d.hasHandle(i)) {
+                val hx = sx(d.hx(i)); val hy = sy(d.hy(i))
+                c.drawLine(2f * x - hx, 2f * y - hy, hx, hy, geoPaint)
+                geoPaint.style = Paint.Style.FILL; c.drawCircle(hx, hy, 3.5f * dp, geoPaint); c.drawCircle(2f * x - hx, 2f * y - hy, 3.5f * dp, geoPaint); geoPaint.style = Paint.Style.STROKE
+            }
+            // Pierwszy punkt większy, gdy można w niego stuknąć, żeby domknąć.
+            val r = if (i == 0 && d.count >= 3) 9f * dp else 5f * dp
+            geoPaint.style = Paint.Style.FILL; geoPaint.color = rgbA(accent, if (i == d.count - 1) 0xFF else 0xAA)
+            c.drawCircle(x, y, r, geoPaint)
+            geoPaint.style = Paint.Style.STROKE; geoPaint.color = rgbA(accent, 0xCC)
+        }
+    }
+
     /** Wskazane już wejścia konstrukcji: obrys w kolorze akcentu (półprzezroczysty), żeby było widać, co zostało wybrane. */
     private fun drawGeoPicks(c: Canvas) {
         if (ed.tool != Tool.GEO || ed.geoInputs.isEmpty()) return
@@ -2311,7 +2395,7 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
             invalidate(); return
         }
         when (tool) {
-            Tool.PEN, Tool.CURVE -> penDown(ev, idx)
+            Tool.PEN, Tool.CURVE -> if (tool == Tool.CURVE && ed.curveMode.stepwise) curveDown() else penDown(ev, idx)
             Tool.ERASER -> eraseDown()
             Tool.LASSO -> { lassoDown(); if (mode == Mode.TOOL) postDelayed(holdRunnable, 520L) }
             Tool.SPACE -> spaceDown()
@@ -2328,7 +2412,7 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
         curX = ev.getX(idx); curY = ev.getY(idx)
         if (!toolMoved && hypot(curX - downX, curY - downY) > slop) toolMoved = true
         when (activeTool) {
-            Tool.PEN, Tool.CURVE -> penMove(ev, idx)
+            Tool.PEN, Tool.CURVE -> if (curveStep) curveMove() else penMove(ev, idx)
             Tool.ERASER -> {
                 for (h in 0 until ev.historySize) eraseTo(ev.getHistoricalX(idx, h), ev.getHistoricalY(idx, h))
                 eraseTo(curX, curY)
@@ -2349,7 +2433,7 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
     private fun finishTool(ev: MotionEvent, idx: Int, cancel: Boolean) {
         removeCallbacks(holdRunnable); removeCallbacks(curveHold); removeCallbacks(pointHold)
         when (activeTool) {
-            Tool.PEN, Tool.CURVE -> penUp(cancel)
+            Tool.PEN, Tool.CURVE -> if (curveStep) curveUp(cancel) else penUp(cancel)
             Tool.ERASER -> eraseUp(cancel)
             Tool.LASSO -> lassoUp(cancel)
             Tool.SPACE -> spaceUp(cancel)
@@ -2589,7 +2673,8 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
         var snapped = shapeSnapped
         val sc = shapeCtrl
         // F17: narzędzie Krzywa zamienia każdą kreskę na gładką krzywą Béziera z uchwytami.
-        val curve = if (!cancel && !snapped && activeTool == Tool.CURVE) Bezier.fit(builder.raw.copyOf(2 * builder.rawCount), max(0.8f, 2f * dp / zoom)) else null
+        // 2b-A10: luźniejsza tolerancja — mało węzłów, wygodna edycja uchwytami.
+        val curve = if (!cancel && !snapped && activeTool == Tool.CURVE) Bezier.fit(builder.raw.copyOf(2 * builder.rawCount), CurveFit.freehandTol(dp / zoom)) else null
         val stroke = when {
             cancel -> null
             sc != null -> Stroke(Ids.next(), builder.penKind, builder.penColor, builder.width, Bezier.sample(sc), line = builder.line, ctrl = sc)
@@ -3302,7 +3387,7 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
         val b = s.bounds
         val f = AxesSnap.frames(doc.content(doc.pages[pi]).elements).firstOrNull { it.area.contains(b.cx, b.cy) } ?: return s
         val pts = AxesSnap.followGrid(s.pts, f, settings.axesSnapDp * dp / zoom) ?: return s
-        return Stroke(s.id, s.pen, s.color, s.width, pts, s.locked, s.poly, s.ellipse, s.line, s.ctrl)
+        return Stroke(s.id, s.pen, s.color, s.width, pts, s.locked, s.poly, s.ellipse, s.line, s.ctrl, s.fill)
     }
 
     /** Początek układu współrzędnych w przesuwanym zaznaczeniu ([lEls]) — liczony raz na podniesienie (2b-A6). */

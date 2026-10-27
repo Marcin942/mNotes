@@ -571,3 +571,19 @@ Wygląd ikon sprawdzam rysunkiem Java2D z tej samej geometrii (`PreviewHarness`,
   końcowym; pipetą weź czerwony z kartki i narysuj obok — wygląda tak samo; otwórz PDF wykładu — tło ciemne, tekst jasny;
   zdjęcie na stronie bez zmian (Ustawienia → Wygląd → „Odwracaj też zdjęcia” je odwraca); „Jak powstały” + „Styl strony”
   → F11 na jednej stronie; Eksport → PDF → „Kolory jak na ekranie” wł./wył. i porównaj pliki.
+- **2b-A10** krzywe Béziera, cztery tryby — `noc/f2b-bezier`; `CurveDraftTest` (10 testów), core 761, lab 815, zielone.
+  Logika: `core/shapes/CurveDraft.kt` — `CurveMode` (kolejność listwy, ustawienie `curve.mode`), `CurveFit.through`
+  (dośrodkowy Catmull‑Rom → Bézier, otwarty z odbiciem na końcach, zamknięty z zawinięciem), `CurveFit.freehandTol`,
+  `CurveDraft` (węzły, uchwyt piórka, `tapKind`: dodaj / zakończ / domknij); `Bezier.moved`/`smooth` znają szew krzywej
+  zamkniętej. **Decyzje:** zamknięcie bez nowego pola (kotwica końcowa = początkowa, jak zamknięta łamana); wypełnienie jako
+  pole kreski (`Stroke.fill`, flaga 128 + i32 na końcu rekordu), a nie osobny element — po edycji uchwytów idzie za krzywą;
+  zmiana koloru kreski zmienia też wypełnienie; gumka pikselowa tnie krzywą na zwykłe kreski bez wypełnienia. Palec
+  stawia punkty tylko z „palec rysuje” (jak Geometria); bez tego palec przewija. **Wygląd:** z Krzywą w ręku listwa
+  zaczyna się od 4 glifów trybów (+ wiaderko „wypełniaj” w trybach krokowych), potem pióro jak zwykle; nad płótnem
+  kapsuła jak w Geometrii („Kontur zamknięty · Kolejny punkt; pierwszy albo ostatni stuknięty ponownie domyka”, ✓ i ✕);
+  szkic: krzywa piórem na żywo, węzły w akcencie, pierwszy powiększony, gdy można domknąć, uchwyty piórka jako odcinek
+  z kropkami. Podgląd: `docs/podglad/krzywe-tryby.png`. **Tablet:** pasek → Krzywa → glif „Przez wskazane punkty”:
+  stuknij rysikiem 4–5 punktów → krzywa idzie przez wszystkie; stuknij ostatni drugi raz → gotowa i zaznaczona, przeciągnij
+  kotwicę; „Kontur zamknięty” + wiaderko: 4 punkty → stuknij pierwszy → zamknięty, lekko wypełniony kształt, pismo pod nim
+  widać; „Piórko”: stuknij, przeciągnij (uchwyty jak w Inkscape), stuknij → łuk; ✕ porzuca; „Odręczna”: narysuj falę →
+  krzywa z kilkoma węzłami; otwórz zeszyt w starej wersji aplikacji (jeśli jest) — kontur bez wypełnienia.

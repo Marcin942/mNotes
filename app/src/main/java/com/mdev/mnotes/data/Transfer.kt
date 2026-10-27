@@ -290,6 +290,12 @@ class Exporter(private val repo: Repository, private val assets: Assets, private
         val n = s.count
         if (n <= 0) return
         val pts = s.pts
+        if (s.fill != 0 && n >= 3) {
+            // Jak PageRenderer.drawStrokeFill: słabe wypełnienie mnożone z papierem (na ciemnym — rozświetlane).
+            sb.append("<path fill=\"${hex(s.fill)}\" fill-rule=\"evenodd\" opacity=\"${f(0.28f * (if (dark) 0.84f else 1f))}\" style=\"mix-blend-mode:${if (dark) "screen" else "multiply"}\" d=\"M${f(pts[0])} ${f(pts[1])}")
+            for (i in 1 until n) sb.append("L${f(pts[3 * i])} ${f(pts[3 * i + 1])}")
+            sb.append("Z\"/>\n")
+        }
         val hl = s.pen == PenKind.HIGHLIGHTER
         val alpha = PenSpec.of(s.pen).alpha * (if (hl && dark) 0.84f else 1f)
         val common = (if (alpha < 0.999f) " opacity=\"${f(alpha)}\"" else "") + (if (hl) " style=\"mix-blend-mode:${if (dark) "screen" else "multiply"}\"" else "")

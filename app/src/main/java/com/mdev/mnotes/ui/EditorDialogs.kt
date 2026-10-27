@@ -35,6 +35,7 @@ import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.FormatAlignCenter
 import androidx.compose.material.icons.rounded.FormatAlignLeft
 import androidx.compose.material.icons.rounded.FormatAlignRight
+import androidx.compose.material.icons.rounded.FormatAlignJustify
 import androidx.compose.material.icons.rounded.FormatBold
 import androidx.compose.material.icons.rounded.FormatItalic
 import androidx.compose.material.icons.rounded.FormatStrikethrough
@@ -314,6 +315,7 @@ fun TextDialog(ed: Editor, req: TextRequest) {
             IconBtn(Icons.Rounded.FormatAlignLeft, T.t("Do lewej", "Left"), { align = TextBox.ALIGN_START }, selected = align == TextBox.ALIGN_START, size = 36.dp, iconSize = 20.dp)
             IconBtn(Icons.Rounded.FormatAlignCenter, T.t("Do środka", "Center"), { align = TextBox.ALIGN_CENTER }, selected = align == TextBox.ALIGN_CENTER, size = 36.dp, iconSize = 20.dp)
             IconBtn(Icons.Rounded.FormatAlignRight, T.t("Do prawej", "Right"), { align = TextBox.ALIGN_END }, selected = align == TextBox.ALIGN_END, size = 36.dp, iconSize = 20.dp)
+            IconBtn(Icons.Rounded.FormatAlignJustify, T.t("Wyjustuj", "Justify"), { align = TextBox.ALIGN_JUSTIFY }, selected = align == TextBox.ALIGN_JUSTIFY, size = 36.dp, iconSize = 20.dp)
         }
         FlowRow(Modifier.padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Chip(T.t("Bezszeryfowa", "Sans"), family == TextBox.FAMILY_SANS, { family = TextBox.FAMILY_SANS })

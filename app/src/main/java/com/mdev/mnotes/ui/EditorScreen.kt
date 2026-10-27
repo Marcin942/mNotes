@@ -115,6 +115,10 @@ import androidx.compose.material.icons.rounded.Palette
 import androidx.compose.material.icons.rounded.PanTool
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.ShowChart
+import androidx.compose.material.icons.rounded.FormatAlignLeft
+import androidx.compose.material.icons.rounded.FormatAlignCenter
+import androidx.compose.material.icons.rounded.FormatAlignRight
+import androidx.compose.material.icons.rounded.FormatAlignJustify
 import androidx.compose.material.icons.rounded.Interests
 import androidx.compose.material.icons.rounded.ExpandLess
 import androidx.compose.material.icons.rounded.ExpandMore
@@ -209,6 +213,7 @@ import com.mdev.mnotes.core.pen.ActivePen
 import com.mdev.mnotes.core.pen.ColorSet
 import com.mdev.mnotes.core.pen.InkColor
 import com.mdev.mnotes.core.pen.LaserColors
+import com.mdev.mnotes.core.layout.ToolReturn
 import com.mdev.mnotes.core.pen.LineStyle
 import com.mdev.mnotes.core.pen.PenKit
 import com.mdev.mnotes.editor.Clip
@@ -290,6 +295,9 @@ fun EditorScreen(ed: Editor, tabs: TabsCtl, onExit: () -> Unit, onSettings: () -
     LaunchedEffect(ed.pipette != null) { if (ed.pipette != null) panel = null }
     fun applyLayout(mode: Int) = ed.chooseLayoutMode(mode)
     fun pickTool(t: Tool, p: Panel?) {
+        val temporary = t == Tool.LASER || t == Tool.HAND || t == Tool.LASSO
+        // F26: ponowne dotknięcie narzędzia chwilowego wraca do pisania (opcja), zamiast otwierać jego panel.
+        if (ed.tool == t && ToolReturn.shouldReturn(ed.settings.returnToPen, temporary, true, false, ed.sel != null)) { ed.returnToWriting(); panel = null; return }
         if (ed.tool == t && p != null) toggle(p) else { ed.setToolKey(t); panel = null }
     }
     // Przytrzymanie ikony narzędzia z panelem wybiera je i od razu otwiera jego panel.
@@ -1533,6 +1541,16 @@ private fun SelectionButtons(ed: Editor, panel: Panel?, toggle: (Panel) -> Unit,
             IconBtn(if (locked) Icons.Rounded.LockOpen else Icons.Rounded.Lock, if (locked) T.t("Odblokuj", "Unlock") else T.t("Zablokuj", "Lock"), { ed.lockSel(!locked) }, size = 36.dp, iconSize = 20.dp)
             if (els.size > 1) IconBtn(Icons.Rounded.AlignHorizontalLeft, T.t("Wyrównaj", "Align"), { toggle(Panel.ALIGN) }, selected = panel == Panel.ALIGN, size = 36.dp, iconSize = 20.dp)
             if (els.size == 1 && els[0] is TextBox) IconBtn(Icons.Rounded.Edit, T.t("Edytuj tekst", "Edit text"), editText, size = 36.dp, iconSize = 20.dp)
+            // F27: wyrównanie zaznaczonych pól bez otwierania okna tekstu (kolejne dotknięcia: lewo, środek, prawo, wyjustowane).
+            val texts = els.filterIsInstance<TextBox>()
+            if (texts.isNotEmpty() && texts.size == els.size && !locked) {
+                val a = texts[0].align
+                IconBtn(
+                    when (a) { TextBox.ALIGN_CENTER -> Icons.Rounded.FormatAlignCenter; TextBox.ALIGN_END -> Icons.Rounded.FormatAlignRight; TextBox.ALIGN_JUSTIFY -> Icons.Rounded.FormatAlignJustify; else -> Icons.Rounded.FormatAlignLeft },
+                    T.t("Wyrównanie tekstu (dotknij, by zmienić)", "Text alignment (tap to change)"),
+                    { ed.setSelTextAlign(TextBox.nextAlign(a)) }, size = 36.dp, iconSize = 20.dp,
+                )
+            }
             if (els.size == 1 && els[0] is TextBox && !locked) {
                 val auto = (els[0] as TextBox).fit == TextBox.FIT_AUTO
                 IconBtn(

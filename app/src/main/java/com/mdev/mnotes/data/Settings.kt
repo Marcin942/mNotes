@@ -117,7 +117,9 @@ class Settings(ctx: Context) {
     var laserColor by Pref("laser.color", 0xFF3B30)    // RGB śladu lasera (LaserColors.PALETTE)
     var axesLast by Pref("axes.last", "")
     var guideOffered by Pref("guide.offered", false)
-    var attach by Pref("snap.attach", false)            // F22: końce linii i przeciągane punkty przyczepiają się do innych figur    // zeszyt-przewodnik był już proponowany (F20)              // ostatnio wstawiony układ współrzędnych (AxesSpec.encode), F8    // lasso „tylko zahacz”: wystarczy musnąć obiekt pętlą; domyślnie zbalansowane (połowa obiektu w pętli)
+    var attach by Pref("snap.attach", false)
+    var zoomMaxFactor by Pref("zoom.max_factor", 6f)     // F25: największe powiększenie = mnożnik „100 %” (6 = dawne)
+    var returnToPen by Pref("tools.return_to_pen", false) // F26: ponowne dotknięcie lasera/ręki/lassa albo puste miejsce wraca do pisania            // F22: końce linii i przeciągane punkty przyczepiają się do innych figur    // zeszyt-przewodnik był już proponowany (F20)              // ostatnio wstawiony układ współrzędnych (AxesSpec.encode), F8    // lasso „tylko zahacz”: wystarczy musnąć obiekt pętlą; domyślnie zbalansowane (połowa obiektu w pętli)
     var dockPages by Pref("ui.dockpages", false)    // panel stron zadokowany z lewej na szerokim oknie (LNX-016)
     var samsungMode by Pref("import.samsung_mode", 0) // ostatni wybór w oknie importu Samsung Notes: 0 wygląd oryginału, 1 standard mNotes
     var zoomMag by Pref("zoomwin.mag", 3f)          // powiększenie okna powiększenia (EXT-003): 2–5×

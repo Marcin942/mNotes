@@ -416,6 +416,11 @@ private fun InputPrefs(set: com.mdev.mnotes.data.Settings) {
         ToggleRow(T.t("Cofnij dotknięciem dwóch palców", "Two-finger tap to undo"), set.twoFingerUndo, keys = "undo cofanie gest dwa palce") { set.twoFingerUndo = it }
         ToggleRow(T.t("Odciągnij za ostatnią stroną, aby dodać nową", "Pull past the last page to add a new one"), set.pullAddPage, keys = "nowa strona dodaj pull gest koniec zeszytu") { set.pullAddPage = it }
         ToggleRow(T.t("Nowa strona, gdy tekst wyjdzie za ostatnią", "New page when text runs past the last one"), set.autoTextPage, keys = "nowa strona tekst pole automatycznie koniec auto page text") { set.autoTextPage = it }
+        ToggleRow(T.t("Ponowne dotknięcie lasera, ręki lub lassa wraca do pisania", "Tapping laser, hand or lasso again returns to writing"), set.returnToPen, keys = "odznacz narzędzie powrót pióro pisanie laser ręka lasso pusty obszar return pen") { set.returnToPen = it }
+        Text(T.t("Także dotknięcie pustego miejsca tym narzędziem (bez zaznaczenia).", "Also a tap on an empty spot with that tool (with nothing selected)."), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(bottom = 6.dp))
+        Opt(T.t("Największe powiększenie: ×${set.zoomMaxFactor.toInt()} (domyślnie ×6)", "Maximum zoom: ×${set.zoomMaxFactor.toInt()} (default ×6)"), "zoom powiększenie maksymalne przybliżenie max zoom") {
+            MSlider(set.zoomMaxFactor, 2f, 24f) { set.zoomMaxFactor = Math.round(it).toFloat() }
+        }
         val tapActions = listOf(T.t("Cofnij", "Undo"), T.t("Ponów", "Redo"), T.t("Przybliż / oddal", "Zoom in / out"), T.t("Brak", "None"))
         Opt(T.t("Podwójne dotknięcie palcem", "Finger double tap"), "double tap gest dwukrotne") { Choice(tapActions, set.doubleTap) { set.doubleTap = it } }
         Opt(T.t("Potrójne dotknięcie palcem", "Finger triple tap"), "triple tap gest trzykrotne") { Choice(tapActions, set.tripleTap) { set.tripleTap = it } }

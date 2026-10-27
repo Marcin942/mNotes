@@ -318,6 +318,11 @@ class TextBox(
         const val ALIGN_START = 0
         const val ALIGN_CENTER = 1
         const val ALIGN_END = 2
+        /** Wyjustowanie (F27); starsza wersja pokaże je do lewej. */
+        const val ALIGN_JUSTIFY = 3
+
+        /** Następne wyrównanie w kolejce przycisku na pasku zaznaczenia: lewo → środek → prawo → wyjustowane → lewo. */
+        fun nextAlign(a: Int): Int = when (a) { ALIGN_START -> ALIGN_CENTER; ALIGN_CENTER -> ALIGN_END; ALIGN_END -> ALIGN_JUSTIFY; else -> ALIGN_START }
 
         /** Stała szerokość nadana ręcznie; wysokość wynika z tekstu. Tak działały pola przed wprowadzeniem trybów. */
         const val FIT_HEIGHT = 0

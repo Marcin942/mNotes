@@ -221,7 +221,7 @@ class Editor(val ctx: Context, val nbId: String) {
     /** Wybór narzędzia piszącego z paska: staje się aktywnym piórem i narzędziem, a zaznaczenie znika. */
     fun selectPen(kind: PenKind) {
         editKit { it.withActive(kind) }
-        tool = Tool.PEN; clearSelIfNotLasso()
+        tool = Tool.PEN; clearSelIfNotLasso(); noteTool(Tool.PEN)
     }
 
     /** Pobiera format obiektu do aktywnego pióra; false, gdy obiekt (obraz, taśma) nie ma formatu. */
@@ -633,6 +633,18 @@ class Editor(val ctx: Context, val nbId: String) {
             }
         }
     }
+
+    /** F27: wyrównanie wszystkich zaznaczonych pól tekstu (jedno cofnięcie). */
+    fun setSelTextAlign(a: Int) = replaceSel { e -> if (e is TextBox && !e.locked) e.copy(align = a) else e }
+
+    /** Ostatnie narzędzie piszące (pióro albo krzywa), do którego wraca [returnToWriting] (F26). */
+    private var lastWriteTool = Tool.PEN
+
+    /** F26: odznaczenie narzędzia chwilowego (laser, ręka, lasso) — wraca do ostatniego narzędzia piszącego. */
+    fun returnToWriting() { tool = lastWriteTool; clearSelIfNotLasso() }
+
+    /** Zapamiętuje narzędzie piszące; wołane przy każdej zmianie narzędzia. */
+    fun noteTool(t: Tool) { if (t == Tool.PEN || t == Tool.CURVE) lastWriteTool = t }
 
     // — Porządkowanie obrazów (F23) —
     fun canArrangeSel(): Boolean = !readOnly && selElements().count { it is ImageEl && !it.locked } >= 2
@@ -1110,7 +1122,7 @@ class Editor(val ctx: Context, val nbId: String) {
 
     // — Skróty klawiszowe wspólne z paletą poleceń —
     fun setToolKey(t: Tool) {
-        tool = t; clearSelIfNotLasso()
+        tool = t; clearSelIfNotLasso(); noteTool(t)
         quickFormat = t == Tool.PAINTER && settings.painterQuick
         // Dymki z opisem narzędzia można wyłączyć (F2): po kilku razach już tylko zasłaniają kartkę.
         if (!settings.toolHints) return

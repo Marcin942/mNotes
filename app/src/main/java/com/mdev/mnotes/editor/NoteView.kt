@@ -40,6 +40,8 @@ import com.mdev.mnotes.core.layout.PageDrop
 import com.mdev.mnotes.core.layout.PageOverflow
 import com.mdev.mnotes.core.layout.PageShift
 import com.mdev.mnotes.core.layout.ZoomRegion
+import com.mdev.mnotes.core.layout.ZoomLimits
+import com.mdev.mnotes.core.layout.ToolReturn
 import com.mdev.mnotes.core.model.BoxElement
 import com.mdev.mnotes.core.model.ColorInvert
 import com.mdev.mnotes.core.model.DocEdit
@@ -312,7 +314,7 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
     }
 
     private fun minZoom() = baseZoom() * 0.3f
-    private fun maxZoom() = max(14f, baseZoom() * 6f)
+    private fun maxZoom() = ZoomLimits.maxZoom(baseZoom(), settings.zoomMaxFactor)
 
     private fun clampX(x: Float, z: Float): Float { val cw = layout.docWidth * z; return if (cw <= width) (width - cw) / 2 else x.coerceIn(width - cw, 0f) }
     private fun clampY(y: Float, z: Float): Float { val ch = layout.docHeight * z; return if (ch <= height) (height - ch) / 2 else y.coerceIn(height - ch, 0f) }
@@ -2045,7 +2047,7 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
             Tool.PAINTER -> paintUp(cancel)
             Tool.FILL -> if (!cancel && !toolMoved) fillTap()
             Tool.TEXT -> if (!cancel && !toolMoved) textTap()
-            Tool.LASER -> laser.end(System.currentTimeMillis())
+            Tool.LASER -> { laser.end(System.currentTimeMillis()); if (!cancel && !toolMoved && ToolReturn.shouldReturn(settings.returnToPen, true, false, true, false)) ed.returnToWriting() }
             else -> {}
         }
         predN = 0
@@ -3080,7 +3082,7 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
         val hit = pickAt(page, pgX(pi, sx), pgY(pi, sy), skipLocked = true)
         val s = ed.sel
         when {
-            hit == null -> if (s != null) ed.clearSel()
+            hit == null -> { if (ToolReturn.shouldReturn(settings.returnToPen, ed.tool == Tool.HAND, false, true, s != null)) ed.returnToWriting(); if (s != null) ed.clearSel() }
             hit is TextBox && s != null && s.ids.size == 1 && hit.id in s.ids -> ed.editText(page.id, hit)
             else -> ed.select(page.id, setOf(hit.id))
         }
@@ -3120,7 +3122,7 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
         val hit = pickAt(page, px, py)
         val s = ed.sel
         when {
-            hit == null -> ed.clearSel()
+            hit == null -> { if (ToolReturn.shouldReturn(settings.returnToPen, true, false, true, s != null)) ed.returnToWriting(); ed.clearSel() }
             hit is TextBox && s != null && s.ids.size == 1 && hit.id in s.ids -> ed.editText(page.id, hit)
             else -> ed.select(page.id, setOf(hit.id))
         }

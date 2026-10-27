@@ -204,3 +204,8 @@ dziedziczy już proces z `start-A.sh`, więc `./gradlew` działa bez niego.
   powstaną kafelki. Mini-mapa (A2-2) pokazuje teraz stronę odwróconą. **Tablet:** PDF → Styl strony → Odwróć kolory (cały
   zeszyt) → zoom 3×, szybkie przewijanie (powinno być jak na zwykłej stronie, także w dwóch zeszytach F4); pisanie piórem
   czerwonym i niebieskim (kolor w trakcie = po puszczeniu), zakreślacz na odwróconej stronie; przesunięcie lassem.
+- **A2-7** animacja stron 260 → 180 ms — `noc/f2-animacja`; `PageShiftTest.defaultDurationFollowsTheMotionRule`. Stałe
+  w `PageShift` (domyślnie 180, suwak 100–400), `Settings.kt`: dziesięć komentarzy sklejonych w ogon linii `imageGridFit`
+  (artefakt scalania) wróciło do swoich ustawień, a komentarz `pipetteKeep` siedział przy `pipetteOriginal`. Kto ustawił
+  wcześniej czas ręcznie, zachowuje swój (suwak pokazuje najwyżej 400). **Tablet:** panel stron → „Dalej” przy widocznych
+  sąsiednich stronach — przejazd krótszy, wyraźny, bez szarpnięcia.

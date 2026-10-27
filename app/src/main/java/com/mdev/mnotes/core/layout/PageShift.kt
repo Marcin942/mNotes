@@ -37,6 +37,14 @@ class PageShift(private val from: Map<String, FloatArray>, private val durMs: Lo
     }
 
     companion object {
+        /**
+         * Domyślny czas i zakres suwaka (ms). Reguła wyglądu mNotes to animacje 120–200 ms; 260 ms (pierwsza wersja)
+         * odstawało od reszty interfejsu (A2-7, przegląd Fable).
+         */
+        const val DEFAULT_MS = 180
+        const val MIN_MS = 100
+        const val MAX_MS = 400
+
         /** Ease-out (sześcienna): szybki start, łagodne dojście. */
         fun ease(t: Float): Float { val u = 1f - t; return 1f - u * u * u }
     }

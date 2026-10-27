@@ -56,7 +56,7 @@ class Settings(ctx: Context) {
     var haptics by Pref("ui.haptics", true)          // delikatne wibracje przy dotknięciu przycisków paska narzędzi
     var tooltips by Pref("ui.tooltips", true)        // podpowiedź z nazwą przycisku po najechaniu (mysz, rysik) albo przytrzymaniu
     var pageAnim by Pref("anim.pages", true)          // strony dojeżdżają na nowe miejsce po zmianie kolejności (F6)
-    var pageAnimMs by Pref("anim.pages_ms", 260)      // czas tej animacji (ms)
+    var pageAnimMs by Pref("anim.pages_ms", com.mdev.mnotes.core.layout.PageShift.DEFAULT_MS)  // czas tej animacji (ms), A2-7: 180 zamiast 260
     var toolHints by Pref("ui.tool_hints", true)     // dymek z opisem po wybraniu narzędzia (taśma, pędzel formatu, wiaderko, odstęp)
     var toolbarPos by Pref("toolbar.position", 0)    // 0 góra, 1 dół, 2 lewo, 3 prawo
     var toolbarSize by Pref("toolbar.size", 1)       // 0 mały, 1 normalny, 2 duży
@@ -107,31 +107,31 @@ class Settings(ctx: Context) {
     var painterQuickFadeTake by Pref("painter.quick_fade_take", true)  // przycisk gaśnie po pobraniu formatu
     var painterQuickSec by Pref("painter.quick_sec", 6)                // przycisk gaśnie po tylu sekundach bez dotknięcia; 0 = nigdy
     var fillCloseGaps by Pref("fill.close_gaps", false) // wiaderko domyka szpary węższe niż ok. 2 pt
-    var pipetteKeep by Pref("pipette.keep", false)
+    var pipetteKeep by Pref("pipette.keep", false)   // pobrany pipetą kolor zostaje w zestawie, gdy listwa nie jest pełna; domyślnie znika po zmianie koloru
     /** Pipeta na zakreślaczu: false = kolor widoczny na stronie (po multiply), true = kolor pierwotny kreski. */
-    var pipetteOriginal by Pref("pipette.original", false)  // pobrany pipetą kolor zostaje w zestawie, gdy listwa nie jest pełna; domyślnie znika po zmianie koloru
+    var pipetteOriginal by Pref("pipette.original", false)
     var eraserSize by Pref("eraser.size", 14f)       // promień w pt
     var eraserKeepHighlighter by Pref("eraser.ignore_highlighter", false)
     var lassoRect by Pref("lasso.rect", false)
-    var lassoTouch by Pref("lasso.touch", false)
+    var lassoTouch by Pref("lasso.touch", false)     // lasso „tylko zahacz”: wystarczy musnąć obiekt pętlą; domyślnie zbalansowane (połowa obiektu w pętli)
     var toolStrip by Pref("toolbar.tool_strip", true)  // listwa obok strony pokazuje opcje gumki, lassa i lasera, gdy są w ręku (F7)
     var laserColor by Pref("laser.color", 0xFF3B30)    // RGB śladu lasera (LaserColors.PALETTE)
-    var axesLast by Pref("axes.last", "")
-    var guideOffered by Pref("guide.offered", false)
-    var attach by Pref("snap.attach", false)
+    var axesLast by Pref("axes.last", "")            // ostatnio wstawiony układ współrzędnych (AxesSpec.encode), F8
+    var guideOffered by Pref("guide.offered", false) // zeszyt-przewodnik był już proponowany (F20)
+    var attach by Pref("snap.attach", false)         // F22: końce linii i przeciągane punkty przyczepiają się do innych figur
     var zoomMaxFactor by Pref("zoom.max_factor", 6f)     // F25: największe powiększenie = mnożnik „100 %” (6 = dawne)
-    var returnToPen by Pref("tools.return_to_pen", false)
+    var returnToPen by Pref("tools.return_to_pen", false) // F26: ponowne dotknięcie lasera/ręki/lassa albo puste miejsce wraca do pisania
     // F28: auto-korekta symboli po przytrzymaniu pióra (każdy osobno); w zeszycie Marcina wybrane pierwiastek i suma.
     var mathRoot by Pref("math.root", true)
     var mathSum by Pref("math.sum", true)
     var mathIntegral by Pref("math.integral", false)
     var mathHinted by Pref("math.hinted", false)          // dymek „gdzie to wyłączyć” po pierwszej zamianie (A2-4) już był
     var dualFraction by Pref("dual.fraction", 0.5f)      // F4: część wysokości dla górnego zeszytu
-    var dualSyncZoom by Pref("dual.sync_zoom", true)
-    var mathText by Pref("text.math_unicode", true)
-    var paletteRecent by Pref("palette.recent", "")
-    var miniMap by Pref("view.minimap", false)
-    var imageGridFit by Pref("images.grid_fit", false)    // pomysł Fable 11: wstawione zdjęcie wyrównane do kratki             // pomysł Fable 3: mini-mapa strony przy dużym powiększeniu       // pomysł Fable 2: ostatnio użyte polecenia palety (id po przecinku)      // L2: \alpha, x^2, a_1 → α, x², a₁ w polach tekstu     // F4: wspólne powiększenie obu rzędów // F26: ponowne dotknięcie lasera/ręki/lassa albo puste miejsce wraca do pisania            // F22: końce linii i przeciągane punkty przyczepiają się do innych figur    // zeszyt-przewodnik był już proponowany (F20)              // ostatnio wstawiony układ współrzędnych (AxesSpec.encode), F8    // lasso „tylko zahacz”: wystarczy musnąć obiekt pętlą; domyślnie zbalansowane (połowa obiektu w pętli)
+    var dualSyncZoom by Pref("dual.sync_zoom", true)     // F4: wspólne powiększenie obu rzędów
+    var mathText by Pref("text.math_unicode", true)      // L2: \alpha, x^2, a_1 → α, x², a₁ w polach tekstu
+    var paletteRecent by Pref("palette.recent", "")      // pomysł Fable 2: ostatnio użyte polecenia palety (id po przecinku)
+    var miniMap by Pref("view.minimap", false)           // pomysł Fable 3: mini-mapa strony przy dużym powiększeniu; domyślnie wył. (A2-2)
+    var imageGridFit by Pref("images.grid_fit", false)   // pomysł Fable 11: wstawione zdjęcie wyrównane do kratki
     var dockPages by Pref("ui.dockpages", false)    // panel stron zadokowany z lewej na szerokim oknie (LNX-016)
     var samsungMode by Pref("import.samsung_mode", 0) // ostatni wybór w oknie importu Samsung Notes: 0 wygląd oryginału, 1 standard mNotes
     var zoomMag by Pref("zoomwin.mag", 3f)          // powiększenie okna powiększenia (EXT-003): 2–5×

@@ -1,6 +1,7 @@
 package com.mdev.mnotes.ui
 
 import com.mdev.mnotes.core.edit.AngleSnap
+import com.mdev.mnotes.core.layout.PageShift
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -305,7 +306,7 @@ private fun Appearance(set: com.mdev.mnotes.data.Settings) {
         ) { set.miniMap = it }
         ToggleRow(T.t("Animacja zmiany kolejności stron", "Animate page reordering"), set.pageAnim, keys = "animacja strony kolejność przesuwanie przestawianie animation reorder pages") { set.pageAnim = it }
         if (set.pageAnim) Opt(T.t("Czas animacji stron: ${set.pageAnimMs} ms", "Page animation time: ${set.pageAnimMs} ms"), "animacja strony czas szybkość duration speed") {
-            MSlider(set.pageAnimMs.toFloat(), 100f, 700f) { set.pageAnimMs = (it / 20).toInt() * 20 }
+            MSlider(set.pageAnimMs.toFloat(), PageShift.MIN_MS.toFloat(), PageShift.MAX_MS.toFloat()) { set.pageAnimMs = (it / 20).toInt() * 20 }
         }
         Opt(T.t("Pasek menu w edytorze (Plik, Edycja, Widok…)", "Editor menu bar (File, Edit, View…)"), "menu menubar") {
             Choice(listOf(T.t("Nigdy", "Never"), T.t("Na dużych ekranach", "On large screens"), T.t("Zawsze", "Always")), set.menuBar) { set.menuBar = it }

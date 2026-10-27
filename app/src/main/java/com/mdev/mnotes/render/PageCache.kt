@@ -616,6 +616,14 @@ class PageCache(
     }
 
     /** Tło PDF strony (niska skala) dla lupy; zleca renderowanie bazy, jeśli jej jeszcze nie ma. */
+    /** Bitmapa całej strony w skali bazy (papier i treść) — do mini-mapy; null, dopóki baza się nie wyrenderuje. */
+    fun overview(page: PageState): Bitmap? {
+        val e = entry(page)
+        e.base.stamp = frame
+        requestBase(page, e)
+        return e.base.bmp
+    }
+
     fun backdrop(page: PageState): Bitmap? {
         val e = entry(page)
         e.base.stamp = frame

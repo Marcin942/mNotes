@@ -42,6 +42,7 @@ import com.mdev.mnotes.core.layout.PageOverflow
 import com.mdev.mnotes.core.layout.PageShift
 import com.mdev.mnotes.core.layout.ZoomRegion
 import com.mdev.mnotes.core.layout.ZoomLimits
+import com.mdev.mnotes.core.layout.MiniMap
 import com.mdev.mnotes.core.layout.ToolReturn
 import com.mdev.mnotes.core.model.BoxElement
 import com.mdev.mnotes.core.model.ColorInvert
@@ -133,7 +134,7 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
     private val tmpMatrix = Matrix()
 
     // — stan wejścia —
-    private enum class Mode { NONE, IGNORE, NAV, TOOL, RULER, PICK, CUT, CROP }
+    private enum class Mode { NONE, IGNORE, NAV, TOOL, RULER, PICK, CUT, CROP, MINI }
     private enum class LM { NONE, DRAW, MOVE, SCALE, ROTATE, VERTEX, RESIZE }
 
     private var mode = Mode.NONE
@@ -617,6 +618,54 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
         if (pullOff > 0f) { c.restore(); drawPullHint(c, pullOff) }
         drawLaser(c)
         drawZoomWin(c)
+        drawMiniMap(c)
+    }
+
+    // ───────────────────────── mini-mapa (pomysł Fable 3) ─────────────────────────
+
+    private val miniPaint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
+    private val miniRect = RectF()
+
+    /** Mini-mapa bieżącej strony, gdy powiększenie jest duże (i nie ma okna powiększenia); inaczej null. */
+    private fun miniGeom(): MiniMap.Geometry? {
+        if (!settings.miniMap || width == 0 || ed.zoomWin || layout.count == 0) return null
+        if (zoom < baseZoom() * MiniMap.MIN_ZOOM_FACTOR) return null
+        val pi = ed.pageIndex.coerceIn(0, layout.count - 1)
+        val spec = doc.pages[pi].spec
+        val vis = Bounds(docX(0f) - layout.left(pi), docY(0f) - layout.top(pi), docX(width.toFloat()) - layout.left(pi), docY(height.toFloat()) - layout.top(pi))
+        return MiniMap.geometry(spec.w, spec.h, vis, width.toFloat(), height.toFloat(), 120f * dp, 150f * dp, 14f * dp)
+    }
+
+    private fun drawMiniMap(c: Canvas) {
+        val g = miniGeom() ?: return
+        val pi = ed.pageIndex.coerceIn(0, layout.count - 1)
+        val page = doc.pages[pi]
+        val b = g.box
+        miniRect.set(b.l, b.t, b.r, b.b)
+        miniPaint.style = Paint.Style.FILL; miniPaint.color = 0x33000000
+        c.drawRoundRect(miniRect.left - 1f * dp, miniRect.top - 1f * dp, miniRect.right + 2f * dp, miniRect.bottom + 2f * dp, 6f * dp, 6f * dp, miniPaint)
+        miniPaint.color = page.spec.paper
+        c.drawRect(miniRect, miniPaint)
+        cache.overview(page)?.let { c.drawBitmap(it, null, miniRect, miniPaint) }
+        miniPaint.style = Paint.Style.STROKE; miniPaint.strokeWidth = 1f * dp; miniPaint.color = if (darkUi) 0x55FFFFFF else 0x33000000
+        c.drawRect(miniRect, miniPaint)
+        val v = g.view
+        miniPaint.style = Paint.Style.FILL; miniPaint.color = (accent and 0xFFFFFF) or (0x30 shl 24)
+        c.drawRect(v.l, v.t, v.r, v.b, miniPaint)
+        miniPaint.style = Paint.Style.STROKE; miniPaint.strokeWidth = 1.5f * dp; miniPaint.color = accent
+        c.drawRect(v.l, v.t, v.r, v.b, miniPaint)
+    }
+
+    /** Ustawia widok tak, by punkt strony pod (sx, sy) na mini-mapie był na środku ekranu. */
+    private fun miniMove(sx: Float, sy: Float) {
+        val g = miniGeom() ?: return
+        val pi = ed.pageIndex.coerceIn(0, layout.count - 1)
+        val spec = doc.pages[pi].spec
+        val p = MiniMap.toPage(g, sx, sy, spec.w, spec.h)
+        stopAnim()
+        tx = width / 2f - (layout.left(pi) + p[0]) * zoom
+        ty = height / 2f - (layout.top(pi) + p[1]) * zoom
+        moved()
     }
 
     private fun requestPage(i: Int, rvb: Bounds) {
@@ -1220,6 +1269,8 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
         }
         if (ed.cut != null && cutDown(ev, t)) return
         if (ed.crop != null && cropDown(ev, t)) return
+        // Pomysł Fable 3: dotknięcie mini-mapy przenosi widok (pióro i palec), zamiast pisać pod nią.
+        if (miniGeom()?.box?.contains(ev.x, ev.y) == true) { mode = Mode.MINI; miniMove(ev.x, ev.y); return }
         val rh = if (isStylus(t)) 0 else rulerHit(ev.x, ev.y)
         when {
             t == MotionEvent.TOOL_TYPE_MOUSE -> {
@@ -1262,7 +1313,7 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
             Mode.TOOL -> if (toolType == MotionEvent.TOOL_TYPE_FINGER && t == MotionEvent.TOOL_TYPE_FINGER) { cancelTool(); startNav(ev) }
             Mode.NAV -> if (isStylus(t) && !navOnly(ev, idx)) { endNavQuiet(); beginTool(ev, idx) } else { navMax = max(navMax, liveCount(ev)); rebase(ev, -1) }
             Mode.RULER -> if (isStylus(t) && !navOnly(ev, idx)) { mode = Mode.NONE; rulerGrab = 0; beginTool(ev, idx) } else rulerRebase(ev, -1)
-            Mode.PICK -> {}
+            Mode.PICK, Mode.MINI -> {}
             Mode.CUT -> if (t == MotionEvent.TOOL_TYPE_FINGER && cutPid != -1 && cutType == MotionEvent.TOOL_TYPE_FINGER) { cutAbort(); startNav(ev); removeCallbacks(longPress) }
             Mode.CROP -> if (t == MotionEvent.TOOL_TYPE_FINGER && cropPid != -1 && cropType == MotionEvent.TOOL_TYPE_FINGER) { cropAbort(); startNav(ev); removeCallbacks(longPress) }
             Mode.IGNORE, Mode.NONE -> {
@@ -1282,6 +1333,7 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
             Mode.PICK -> { pickX = ev.x; pickY = ev.y; pickColor = sampleColor(ev.x, ev.y); invalidate() }
             Mode.CUT -> cutMove(ev)
             Mode.CROP -> cropMove(ev)
+            Mode.MINI -> miniMove(ev.x, ev.y)
             Mode.TOOL -> { val idx = ev.findPointerIndex(toolPid); if (idx >= 0) toolMove(ev, idx) }
             else -> {}
         }

@@ -126,6 +126,7 @@ object CmdDefs {
         CmdDef("insertImage", 3, "Wstaw obraz…", "Insert image…", "Ctrl+I"),
         CmdDef("pageBackground", 3, "Obraz jako tło strony…", "Image as page background…", ""),
         CmdDef("insertAxes", 3, "Układ współrzędnych…", "Coordinate axes…", ""),
+        CmdDef("arrangeImages", 1, "Uporządkuj zaznaczone obrazy", "Arrange selected images", ""),
         CmdDef("stickers", 3, "Naklejki…", "Stickers…", ""),
         CmdDef("stickerSave", 3, "Zapisz zaznaczenie jako naklejkę…", "Save selection as sticker…", ""),
         CmdDef("snipImage", 3, "Wycinek zaznaczenia jako obraz", "Snip selection as image", ""),

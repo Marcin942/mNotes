@@ -24,6 +24,7 @@ import com.mdev.mnotes.core.edit.CropPlace
 import com.mdev.mnotes.core.edit.CutLine
 import com.mdev.mnotes.core.edit.FloodFill
 import com.mdev.mnotes.core.edit.ImageCut
+import com.mdev.mnotes.core.edit.ImageArrange
 import com.mdev.mnotes.core.edit.Snip
 import com.mdev.mnotes.core.edit.Sticker
 import com.mdev.mnotes.core.shapes.PointEdit
@@ -631,6 +632,25 @@ class Editor(val ctx: Context, val nbId: String) {
                 onDone()
             }
         }
+    }
+
+    // — Porządkowanie obrazów (F23) —
+    fun canArrangeSel(): Boolean = !readOnly && selElements().count { it is ImageEl && !it.locked } >= 2
+
+    /** Zaznaczone obrazy w równych wierszach w prostokącie, który razem zajmowały (bez obrotu, proporcje bez zmian). */
+    fun arrangeSel() {
+        val p = selPage() ?: return
+        val imgs = selElements().filterIsInstance<ImageEl>().filter { !it.locked }
+        if (imgs.size < 2) return
+        var area = Bounds.EMPTY
+        for (e in imgs) area = area.union(e.bounds)
+        // Kolejność czytania: od góry, w wierszu od lewej.
+        val sorted = imgs.sortedWith(compareBy({ (it.cy / 30f).toInt() }, { it.cx }))
+        val slots = ImageArrange.arrange(sorted.map { it.w / it.h.coerceAtLeast(1e-3f) }, area)
+        val map = HashMap<Int, Element>()
+        for ((i, im) in sorted.withIndex()) { val s = slots[i]; map[im.id] = im.copy(cx = s.cx, cy = s.cy, w = s.w, h = s.h, rot = 0f) }
+        exec(DocEdit.Elements(p.id, ElementsEdit.replace(doc.content(p), map)))
+        selTick++
     }
 
     // — Edycja punktów (F21) —

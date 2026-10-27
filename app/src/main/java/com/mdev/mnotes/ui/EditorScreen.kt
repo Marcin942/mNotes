@@ -1712,6 +1712,7 @@ private fun CtxMenuOverlay(ed: Editor, openStyle: () -> Unit) {
                     Item(T.t("Wycinek jako obraz", "Snip as image"), enabled = !ed.readOnly) { ed.snipSel(false) }
                     Item(T.t("Kopiuj wycinek do schowka", "Copy snip to clipboard")) { ed.snipSel(true) }
                     Item(T.t("Zapisz jako naklejkę…", "Save as sticker…")) { ed.stickerSaveOpen = true }
+                    if (ed.canArrangeSel()) Item(T.t("Uporządkuj obrazy", "Arrange images")) { ed.arrangeSel() }
                 }
                 Item(T.t("Wklej", "Paste"), "Ctrl+V", ed.canPaste() && !ed.readOnly) { ed.paste(if (cm.pageIndex >= 0) Triple(cm.pageIndex, cm.lx, cm.ly) else null) }
                 if (cm.hasSel) {

@@ -110,7 +110,6 @@ import androidx.compose.material.icons.rounded.Fullscreen
 import androidx.compose.material.icons.rounded.Gesture
 import androidx.compose.material.icons.rounded.Highlight
 import androidx.compose.material.icons.rounded.HighlightAlt
-import androidx.compose.material.icons.rounded.Image
 import androidx.compose.material.icons.rounded.Lock
 import androidx.compose.material.icons.rounded.LockOpen
 import androidx.compose.material.icons.rounded.MoreVert
@@ -126,6 +125,7 @@ import androidx.compose.material.icons.rounded.Interests
 import androidx.compose.material.icons.rounded.ViewAgenda
 import androidx.compose.material.icons.rounded.Dashboard
 import androidx.compose.material.icons.rounded.PhotoCamera
+import androidx.compose.material.icons.rounded.AddPhotoAlternate
 import androidx.compose.material.icons.rounded.ExpandLess
 import androidx.compose.material.icons.rounded.ExpandMore
 import androidx.compose.material.icons.rounded.WbAuto
@@ -536,7 +536,12 @@ private fun PageCluster(ed: Editor, panel: Panel?, toggle: (Panel) -> Unit, goTo
         val bm = ed.isBookmarked(ed.pageIndex)
         IconBtn(if (bm) Icons.Rounded.Bookmark else Icons.Rounded.BookmarkBorder, T.t("Zakładka", "Bookmark"), { ed.toggleBookmark() }, selected = bm, shortcut = "Ctrl+B")
         IconBtn(Icons.Rounded.ViewSidebar, T.t("Strony", "Pages"), { toggle(Panel.PAGES) }, selected = panel == Panel.PAGES, shortcut = "F9")
-        IconBtn(Icons.Rounded.Image, T.t("Wstaw obraz", "Insert image"), pickImage, enabled = !ed.readOnly)
+        // 2b-A14: obraz z pliku (ramka z górami i plusem) i zdjęcie tablicy (aparat przy tablicy) — dwie różne ikony, jeden
+        // przepływ aparatu: zdjęcie na nową stronę jak w trybie wykładu, w wersji lab od razu przez kredę.
+        IconBtn(Icons.Rounded.AddPhotoAlternate, T.t("Wstaw obraz z pliku", "Insert image from file"), pickImage, enabled = !ed.readOnly, shortcut = "Ctrl+I")
+        ToolBtn(T.t("Zdjęcie tablicy — aparat, zdjęcie na nową stronę", "Board photo — camera, photo on a new page"), { ed.lectureShootTick++ }, enabled = !ed.readOnly) { c ->
+            BoardCameraIcon(c, Modifier.size(24.dp))
+        }
         if (Flavor.lab?.phoneButton() == true) IconBtn(Icons.Rounded.PhoneAndroid, T.t("Zdjęcie z telefonu", "Photo from phone"), { toggle(Panel.PHONE) }, selected = panel == Panel.PHONE, enabled = !ed.readOnly)
         IconBtn(Icons.Rounded.MoreVert, T.t("Więcej", "More"), { toggle(Panel.MORE) }, selected = panel == Panel.MORE)
     }

@@ -131,6 +131,7 @@ object CmdDefs {
         CmdDef("stations", 2, "Stanowiska…", "Workspaces…", ""),
         CmdDef("profileNext", 2, "Przełącz profil pracy (kolejny / bez profilu)", "Switch work profile (next / none)", ""),
         CmdDef("lecture", 3, "Tryb wykładu: zdjęcie na nową stronę", "Lecture mode: photo on a new page", ""),
+        CmdDef("boardPhoto", 3, "Zdjęcie tablicy (aparat → nowa strona)", "Board photo (camera → new page)", ""),
         CmdDef("stickers", 3, "Naklejki…", "Stickers…", ""),
         CmdDef("stickerSave", 3, "Zapisz zaznaczenie jako naklejkę…", "Save selection as sticker…", ""),
         CmdDef("snipImage", 3, "Wycinek zaznaczenia jako obraz", "Snip selection as image", ""),

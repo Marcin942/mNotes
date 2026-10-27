@@ -46,7 +46,8 @@ internal fun BoxScope.LectureControls(ed: Editor) {
         runCatching { camera.launch(FileProvider.getUriForFile(ctx, "${ctx.packageName}.files", f)) }
             .onFailure { pending.value = null; f.delete(); ed.lectureMode = false; ed.say(T.t("Brak aplikacji aparatu", "No camera app")) }
     }
-    LaunchedEffect(ed.lectureShootTick) { if (ed.lectureShootTick > 0 && ed.lectureMode) shoot() }
+    // 2b-A14: ten sam aparat dla trybu wykładu i przycisku „Zdjęcie tablicy” w nagłówku (bez kapsuły trybu).
+    LaunchedEffect(ed.lectureShootTick) { if (ed.lectureShootTick > ed.lectureShootDone) { ed.lectureShootDone = ed.lectureShootTick; shoot() } }
     if (!ed.lectureMode) return
     FloatingCard(Modifier.align(Alignment.BottomCenter).padding(bottom = BottomStack.CAPSULE_BOTTOM.dp).panelEnter()) {
         Row(Modifier.padding(horizontal = 10.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {

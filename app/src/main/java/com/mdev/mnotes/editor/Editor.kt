@@ -757,6 +757,8 @@ class Editor(val ctx: Context, val nbId: String) {
     var lectureMode by mutableStateOf(false)
     /** Rośnie, gdy trzeba otworzyć aparat (kapsuła trybu wykładu go obserwuje). */
     var lectureShootTick by mutableIntStateOf(0)
+    /** Ostatnie obsłużone żądanie zdjęcia: ponowne wejście ekranu w kompozycję nie otwiera aparatu drugi raz (2b-A14). */
+    var lectureShootDone = 0
     private var lectureN = 0
 
     fun lectureFile(): java.io.File = java.io.File(ctx.cacheDir, "share/wyklad-${System.currentTimeMillis()}.jpg").apply { parentFile?.mkdirs() }

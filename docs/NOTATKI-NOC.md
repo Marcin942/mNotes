@@ -642,3 +642,13 @@ Wygląd ikon sprawdzam rysunkiem Java2D z tej samej geometrii (`PreviewHarness`,
   widok do prawej krawędzi i pisz przy niej → płótno się wydłuża (mini-mapa w rogu pokazuje większą stronę); to samo przy
   lewej krawędzi — treść nie skacze; cofnij — płótno wraca; szczypnij maksymalnie — widać całe płótno; Ctrl+0 / „Dopasuj” —
   cała treść; Eksport → PNG → obraz samego rysunku z małym marginesem; pamięć przy długim rysowaniu.
+- **2b-A14** aparat i tablica — `noc/f2b-aparat`; `KeymapTest.everyCommandHasAnAction` (nowy), core 781, lab 838, zielone.
+  Nagłówek: ikona wstawiania obrazu z pliku → `AddPhotoAlternate` (ramka z górami i plusem), nowy przycisk „Zdjęcie
+  tablicy” z glifem B (`BoardCameraIcon`). Jeden przepływ: `ed.lectureShootTick++` → aparat systemowy (bez uprawnienia
+  CAMERA) → `Editor.lectureShot` (nowa strona z datą) → w lab `Flavor.lab.onLecturePhoto` (kreda). Tryb wykładu dalej
+  włącza kapsułę i używa tej samej ścieżki. **Decyzja:** „Zdjęcie tablicy” wkłada zdjęcie na nową stronę (jak tryb
+  wykładu), nie na bieżącą — notatki z wykładu nie lądują pod zdjęciem; do potwierdzenia. **Tablet:** w nagłówku dwie
+  różne ikony obok siebie: obraz z plusem (galeria/pliki) i aparat przy tablicy; dotknij aparatu → aparat systemowy →
+  zrób zdjęcie → nowa strona za bieżącą z datą i zdjęciem; w lab zdjęcie ciemnej tablicy po chwili zamienia się w samą
+  kredę, ↶ wraca do zdjęcia; obróć tablet podczas aparatu — po powrocie aparat nie otwiera się drugi raz.
+- **Faza 2b — lista A wyczerpana** (2b-A1…A14). Dalej reszta fazy 2: A2-14, A2-15.

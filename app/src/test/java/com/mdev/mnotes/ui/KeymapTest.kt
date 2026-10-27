@@ -5,6 +5,7 @@ import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.io.File
 
 class KeymapTest {
     @Test fun parseAndLabelRoundTrip() {
@@ -36,5 +37,12 @@ class KeymapTest {
             val prev = seen.put(c!!, d.id)
             assertTrue("${d.id} and $prev share ${d.key}", prev == null)
         }
+    }
+
+    /** 2b-A12/A14: każde polecenie z listy ma akcję w mapie edytora — paleta nie pokaże martwej pozycji. */
+    @Test fun everyCommandHasAnAction() {
+        val src = File("src/main/java/com/mdev/mnotes/ui/EditorDialogs.kt").readText()
+        val missing = CmdDefs.list.map { it.id }.filter { id -> "\"" + id + "\" to (" !in src }
+        assertTrue("polecenia bez akcji: " + missing, missing.isEmpty())
     }
 }

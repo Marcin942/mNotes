@@ -720,8 +720,11 @@ class Editor(val ctx: Context, val nbId: String) {
                 val title = TextBox(Ids.next(), spec.w / 2f, m + 9f, spec.w - 2 * m, 18f, 0f, head, 11f, 0xFF607D8B.toInt())
                 val r = LecturePages.photoRect(size.first, size.second, spec.w, spec.h)
                 val img = ImageEl(Ids.next(), name, r.cx, r.cy, r.w, r.h)
-                exec(DocEdit.InsertPages(listOf((after + 1) to PageSnapshot(newId(), spec, PageContent.of(listOf(title, img))))))
+                val pid = newId()
+                exec(DocEdit.InsertPages(listOf((after + 1) to PageSnapshot(pid, spec, PageContent.of(listOf(title, img))))))
                 view?.goToPage(after + 1)
+                // A2-8: wariant lab może od razu oczyścić zdjęcie tablicy (osobna edycja, cofnięcie wraca do zdjęcia).
+                com.mdev.mnotes.app.Flavor.lab?.onLecturePhoto(this, pid, img)
             }
         }
     }

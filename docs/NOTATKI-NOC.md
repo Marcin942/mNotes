@@ -209,3 +209,15 @@ dziedziczy już proces z `start-A.sh`, więc `./gradlew` działa bez niego.
   (artefakt scalania) wróciło do swoich ustawień, a komentarz `pipetteKeep` siedział przy `pipetteOriginal`. Kto ustawił
   wcześniej czas ręcznie, zachowuje swój (suwak pokazuje najwyżej 400). **Tablet:** panel stron → „Dalej” przy widocznych
   sąsiednich stronach — przejazd krótszy, wyraźny, bez szarpnięcia.
+- **A2-8** tryb wykładu — kolizje — `noc/f2-wyklad`; `BottomStackTest`. Kapsuła zostaje u dołu (16 dp), pasek szukania
+  wchodzi nad nią (72 dp), a dymek nad oba (przy samym pasku szukania dymek też jest teraz nad nim — wcześniej 28 dp
+  wypadało na pasku 14–64 dp). Chip akcji `selected = false`; błąd uruchomienia aparatu → `lectureMode = false` + dymek;
+  etykieta w „⋮” „Tryb wykładu…” (paleta poleceń bez zmian: „Tryb wykładu: zdjęcie na nową stronę”).
+  **Hook dla agenta B (B2-10):** `LabFeatures.onLecturePhoto(ed: Editor, pageId: String, image: ImageEl)` — metoda z
+  domyślną pustą implementacją w `src/main/.../app/LabFeatures.kt`; `Editor.lectureShot` woła ją na wątku UI tuż po
+  `exec(InsertPages)` i `goToPage`. Lab nadpisuje ją w `Lab.kt`: kreda w tle, potem jedna edycja podmieniająca obraz (np.
+  `DocEdit.Elements` z nowym `ImageEl.asset`), więc cofnięcie wraca do oryginału. `Lab.kt` nie był ruszany.
+  **Wygląd:** jak dotąd; kapsuła `FloatingCard` u dołu z chipem w kolorze neutralnym, pasek szukania i dymek wyżej, gdy
+  kapsuła jest widoczna. **Tablet:** „⋮” → „Tryb wykładu…” → anuluj aparat → kapsuła zostaje; Ctrl+F (szukaj) przy
+  włączonej kapsule — pasek nad kapsułą; dymek (np. po zdjęciu) nie zasłania kapsuły; urządzenie bez aparatu → tryb się
+  kończy z komunikatem.

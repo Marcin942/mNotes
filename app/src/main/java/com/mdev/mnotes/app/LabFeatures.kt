@@ -27,4 +27,11 @@ interface LabFeatures {
     /** Kategoria „Laboratorium” w ustawieniach. */
     @Composable
     fun SettingsSection()
+
+    /**
+     * Zdjęcie z trybu wykładu właśnie trafiło na nową stronę [pageId] jako [image] (A2-8; wołane na wątku UI, po
+     * wstawieniu). Lab może je przepuścić przez kredę jako osobną edycję, więc jedno cofnięcie wraca do oryginału (B2-10).
+     * Domyślnie nic — wariant bez tej funkcji i wspólny kod nie muszą o niej wiedzieć.
+     */
+    fun onLecturePhoto(ed: Editor, pageId: String, image: ImageEl) {}
 }

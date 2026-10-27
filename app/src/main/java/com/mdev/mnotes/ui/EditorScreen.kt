@@ -214,6 +214,7 @@ import com.mdev.mnotes.core.layout.BarEntry
 import com.mdev.mnotes.core.layout.BarConfig
 import com.mdev.mnotes.core.layout.BarFit
 import com.mdev.mnotes.core.layout.BarMode
+import com.mdev.mnotes.core.layout.BottomStack
 import com.mdev.mnotes.core.pen.ActivePen
 import com.mdev.mnotes.core.pen.ColorSet
 import com.mdev.mnotes.core.pen.InkColor
@@ -397,8 +398,10 @@ fun EditorScreen(ed: Editor, tabs: TabsCtl, onExit: () -> Unit, onSettings: () -
                         }
                         SelectionBar(ed, panel, { toggle(it) }, { textReq(ed) })
                         LectureControls(ed)
-                        if (ed.searchOpen) SearchBar(ed)
-                        EdToast(ed)
+                        // A2-8: kapsuła wykładu, pasek szukania i dymek jedno nad drugim.
+                        val stack = BottomStack.bottoms(ed.lectureMode, ed.searchOpen)
+                        if (ed.searchOpen) SearchBar(ed, extraBottom = (stack[0] - BottomStack.SEARCH_BOTTOM).dp)
+                        EdToast(ed, stack[1].dp)
                     }
                     CtxMenuOverlay(ed, { panel = Panel.STYLE })
                     PointMenuOverlay(ed)
@@ -1785,14 +1788,15 @@ internal fun CtxMenuOverlay(ed: Editor, openStyle: (() -> Unit)?, tools: Editor 
     }
 }
 
+/** Dymek z komunikatem u dołu płótna; [bottom] z [com.mdev.mnotes.core.layout.BottomStack], żeby nie leżał na kapsule ani pasku szukania. */
 @Composable
-internal fun androidx.compose.foundation.layout.BoxScope.EdToast(ed: Editor) {
+internal fun androidx.compose.foundation.layout.BoxScope.EdToast(ed: Editor, bottom: androidx.compose.ui.unit.Dp = 28.dp) {
     val msg = ed.toast
     LaunchedEffect(msg) { if (msg != null) { delay(2200); if (ed.toast == msg) ed.toast = null } }
     if (msg == null) return
     Text(
         msg, color = Color.White, style = MaterialTheme.typography.bodyMedium,
-        modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 28.dp).clip(RoundedCornerShape(10.dp)).background(Color(0xE6222428)).padding(horizontal = 16.dp, vertical = 10.dp),
+        modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = bottom).clip(RoundedCornerShape(10.dp)).background(Color(0xE6222428)).padding(horizontal = 16.dp, vertical = 10.dp),
     )
 }
 
@@ -1814,7 +1818,7 @@ private fun MoreMenu(ed: Editor, set: com.mdev.mnotes.data.Settings, close: () -
             MenuRow(Icons.Rounded.Palette, T.t("Styl strony…", "Page style…"), "") { openStyle() }
             if (!ed.readOnly) MenuRow(Icons.Rounded.ShowChart, T.t("Układ współrzędnych…", "Coordinate axes…"), "") { close(); ed.axesOpen = true }
             if (!ed.readOnly) MenuRow(Icons.Rounded.Interests, T.t("Naklejki…", "Stickers…"), "") { close(); ed.stickersOpen = true }
-            if (!ed.readOnly) MenuRow(Icons.Rounded.PhotoCamera, T.t("Tryb wykładu (zdjęcia na kolejnych stronach)", "Lecture mode (photos on new pages)"), "") { close(); ed.lectureMode = true; ed.lectureShootTick++ }
+            if (!ed.readOnly) MenuRow(Icons.Rounded.PhotoCamera, T.t("Tryb wykładu…", "Lecture mode…"), "") { close(); ed.lectureMode = true; ed.lectureShootTick++ }
             if (ed.dualId == null) MenuRow(Icons.Rounded.ViewAgenda, T.t("Drugi zeszyt poniżej…", "Second notebook below…"), "") { close(); ed.dualPick = true }
             else MenuRow(Icons.Rounded.ViewAgenda, T.t("Zamknij drugi zeszyt", "Close the second notebook"), "") { close(); ed.dualId = null }
             MenuRow(Icons.Rounded.Fullscreen, T.t("Ukryj paski (tryb skupienia)", "Hide bars (focus mode)"), "F11") { ed.chrome = false; close() }

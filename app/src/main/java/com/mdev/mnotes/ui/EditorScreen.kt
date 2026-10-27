@@ -847,12 +847,12 @@ private fun EraserStripItems(ed: Editor, set: com.mdev.mnotes.data.Settings, ver
     val sz = barSize(set); val isz = barIcon(set)
     val scroll = rememberScrollState()
     Lin(vertical, Modifier.padding(4.dp).then(if (vertical) Modifier.verticalScroll(scroll) else Modifier.horizontalScroll(scroll))) {
-        val names = listOf(T.t("Gumka obiektowa — usuwa całe kreski", "Object eraser — removes whole strokes"), T.t("Gumka pikselowa — ściera tylko to, nad czym przejdzie", "Pixel eraser — erases only what it passes over"), T.t("Lasso gumki — usuwa to, co obrysujesz", "Lasso eraser — removes what you circle"))
-        for (mode in 0..2) {
+        val names = listOf(T.t("Gumka obiektowa — usuwa całe kreski", "Object eraser — removes whole strokes"), T.t("Gumka pikselowa — ściera tylko to, nad czym przejdzie", "Pixel eraser — erases only what it passes over"), T.t("Lasso gumki — usuwa to, co obrysujesz", "Lasso eraser — removes what you circle"), T.t("Wycinanie — tnie kreski dokładnie na obrysie", "Cut out — cuts strokes exactly along the loop"))
+        for (mode in 0..3) {
             val on = set.eraserMode == mode
             ToolBtn(names[mode], { if (on) toggle(Panel.ERASER) else set.eraserMode = mode }, selected = on, size = sz) { c -> EraserModeGlyph(mode, c, Modifier.size(isz + 2.dp)) }
         }
-        if (set.eraserMode != 2) {
+        if (set.eraserMode < 2) {
             BarSep(vertical)
             for (s in ERASER_SIZES) {
                 val on = kotlin.math.abs(set.eraserSize - s) < 0.5f
@@ -1052,7 +1052,9 @@ private fun ToolPanel(ed: Editor, set: com.mdev.mnotes.data.Settings, panel: Pan
                         Chip(T.t("Obiektowa", "Object"), set.eraserMode == 0, { set.eraserMode = 0 })
                         Chip(T.t("Pikselowa", "Pixel"), set.eraserMode == 1, { set.eraserMode = 1 })
                         Chip(T.t("Lasso", "Lasso"), set.eraserMode == 2, { set.eraserMode = 2 })
+                        Chip(T.t("Wycinanie", "Cut out"), set.eraserMode == 3, { set.eraserMode = 3 })
                     }
+                    if (set.eraserMode == 3) Text(T.t("Obrysuj fragment: kreski zostaną przecięte dokładnie na obrysie, a to, co w środku, zniknie.", "Circle a part: strokes are cut exactly along the loop and everything inside is removed."), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         SectionLabel(T.t("Rozmiar", "Size")); Spacer(Modifier.weight(1f))
                         Text(String.format("%.0f pt", set.eraserSize), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)

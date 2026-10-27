@@ -58,7 +58,7 @@ private fun DrawScope.eraserBlock(color: Color, cx: Float, cy: Float, s: Float) 
     drawPath(back, color)
 }
 
-/** Tryb gumki: 0 obiektowa (klocek nad całą kreską), 1 pikselowa (kreska przerwana pod klockiem), 2 lasso gumki. */
+/** Tryb gumki: 0 obiektowa (klocek nad całą kreską), 1 pikselowa (kreska przerwana pod klockiem), 2 lasso gumki, 3 wycinanie. */
 @Composable
 fun EraserModeGlyph(mode: Int, color: Color, modifier: Modifier = Modifier) {
     Canvas(modifier) {
@@ -73,9 +73,17 @@ fun EraserModeGlyph(mode: Int, color: Color, modifier: Modifier = Modifier) {
                 drawLine(color, Offset(u(16f), u(20f)), Offset(u(21.5f), u(20f)), u(1.8f), StrokeCap.Round)
                 for (i in 0..2) drawRect(color, Offset(u(9.5f + 2.2f * i), u(19.2f + (i % 2) * 1.2f)), Size(u(1.2f), u(1.2f)))
             }
-            else -> {
+            2 -> {
                 loop(color, rect = false, w = 1.6f)
                 eraserBlock(color, 12f, 10.5f, 4f)
+            }
+            else -> {
+                // Wycinanie: przerywana pętla i nożyczki (dwa oczka, ostrza skrzyżowane).
+                loop(color, rect = false, w = 1.6f)
+                drawCircle(color, u(1.9f), Offset(u(9f), u(14f)), style = Stroke(u(1.4f)))
+                drawCircle(color, u(1.9f), Offset(u(15f), u(14f)), style = Stroke(u(1.4f)))
+                drawLine(color, Offset(u(10.3f), u(12.6f)), Offset(u(15.5f), u(7f)), u(1.5f), StrokeCap.Round)
+                drawLine(color, Offset(u(13.7f), u(12.6f)), Offset(u(8.5f), u(7f)), u(1.5f), StrokeCap.Round)
             }
         }
     }

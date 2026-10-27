@@ -25,6 +25,7 @@ import com.mdev.mnotes.core.edit.AngleSnap
 import com.mdev.mnotes.core.edit.CropFrame
 import com.mdev.mnotes.core.edit.CropHandle
 import com.mdev.mnotes.core.edit.CutLine
+import com.mdev.mnotes.core.edit.CutOut
 import com.mdev.mnotes.core.edit.EraseMath
 import com.mdev.mnotes.core.edit.EraseSession
 import com.mdev.mnotes.core.edit.ImageCut
@@ -759,7 +760,7 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
     }
 
     private fun drawLasso(c: Canvas) {
-        val eraser = activeTool == Tool.ERASER && settings.eraserMode == 2
+        val eraser = activeTool == Tool.ERASER && settings.eraserMode >= 2
         val replaces = eraser || (activeTool == Tool.PAINTER && settings.painterMode == 1)
         if (mode != Mode.TOOL || lm != LM.DRAW && !replaces || ln == 0 || lPage !in 0 until layout.count) return
         val col = if (eraser) 0xFFE5484D.toInt() else if (replaces) ed.pen.color or (0xFF shl 24) else accent
@@ -859,7 +860,7 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
         else return
         when (t) {
             Tool.ERASER -> {
-                if (settings.eraserMode == 2) return
+                if (settings.eraserMode >= 2) return
                 ringPaint.color = if (darkUi) 0xCCFFFFFF.toInt() else 0xCC202124.toInt()
                 c.drawCircle(x, y, settings.eraserSize * zoom, ringPaint)
             }
@@ -2521,13 +2522,13 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
         eraseStart.clear(); eraseLastPage = -1
         eraseSession = null; eraseSessionPage = null; erasePending = false; eraseNextApply = 0L
         // Lasso gumki zaczęte poza stroną (tło, szczelina) należy do najbliższej strony, jak zwykłe lasso (B4).
-        if (settings.eraserMode == 2) { val pi = layout.nearest(docX(curX), docY(curY)); if (pi < 0) { mode = Mode.IGNORE; return }; lPage = pi; ln = 0; addLasso(pgX(pi, curX), pgY(pi, curY)) }
+        if (settings.eraserMode >= 2) { val pi = layout.nearest(docX(curX), docY(curY)); if (pi < 0) { mode = Mode.IGNORE; return }; lPage = pi; ln = 0; addLasso(pgX(pi, curX), pgY(pi, curY)) }
         else eraseTo(curX, curY)
         if (ed.sel != null) ed.clearSel()
     }
 
     private fun eraseTo(sx: Float, sy: Float) {
-        if (settings.eraserMode == 2) { if (lPage >= 0) addLasso(pgX(lPage, sx), pgY(lPage, sy)); return }
+        if (settings.eraserMode >= 2) { if (lPage >= 0) addLasso(pgX(lPage, sx), pgY(lPage, sy)); return }
         val pi = pageIdxAt(sx, sy)
         if (pi < 0) { eraseLastPage = -1; return }
         val px = pgX(pi, sx); val py = pgY(pi, sy)
@@ -2579,13 +2580,19 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
     private fun eraseUp(cancel: Boolean) {
         flushErase(); eraseNextApply = 0L
         eraseSession = null; eraseSessionPage = null
-        if (settings.eraserMode == 2) {
+        if (settings.eraserMode >= 2) {
             val pi = lPage
             if (!cancel && ln >= 3 && pi in doc.pages.indices) {
                 val page = doc.pages[pi]
                 val poly = lp.copyOf(2 * ln)
-                val ids = doc.content(page).elements.filter { !it.locked && it !is TapeEl && EraseMath.selectedByLasso(it, poly) }.map { it.id }.toSet()
-                if (ids.isNotEmpty()) ed.exec(DocEdit.Elements(page.id, ElementsEdit.remove(doc.content(page), ids)))
+                val cur = doc.content(page)
+                if (settings.eraserMode == 3) {
+                    // F12: wycinanie — kreski przecięte dokładnie na obrysie, w środku nic nie zostaje.
+                    CutOut.apply(cur.elements, poly)?.let { ed.exec(DocEdit.Elements(page.id, ElementsEdit.diff(cur, PageContent.of(it)))) }
+                } else {
+                    val ids = cur.elements.filter { !it.locked && it !is TapeEl && EraseMath.selectedByLasso(it, poly) }.map { it.id }.toSet()
+                    if (ids.isNotEmpty()) ed.exec(DocEdit.Elements(page.id, ElementsEdit.remove(cur, ids)))
+                }
             }
             ln = 0; lPage = -1
             return

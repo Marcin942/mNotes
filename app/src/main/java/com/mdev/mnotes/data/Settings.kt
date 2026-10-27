@@ -97,7 +97,7 @@ class Settings(ctx: Context) {
     var smoothing by Pref("pen.smoothing", 1f)       // mnożnik wygładzania piór 0..2
 
     // — Narzędzia —
-    var eraserMode by Pref("eraser.mode", 0)         // 0 obiektowa, 1 pikselowa
+    var eraserMode by Pref("eraser.mode", 0)         // 0 obiektowa, 1 pikselowa, 2 lasso gumki, 3 wycinanie (F12)
     var painterMode by Pref("painter.mode", 0)       // pędzel formatu: 0 obiekty pod rysikiem, 1 lasso
     var painterQuick by Pref("painter.quick", true)  // pierwsze dotknięcie pędzla pokazuje pod nim szybki przycisk „Pobierz format”
     var painterQuickFadeUse by Pref("painter.quick_fade_use", true)    // przycisk gaśnie, gdy zaczynasz malować pędzlem

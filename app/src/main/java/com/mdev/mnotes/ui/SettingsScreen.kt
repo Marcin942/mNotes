@@ -381,7 +381,7 @@ private fun EditorPrefs(set: com.mdev.mnotes.data.Settings) {
         )
     }
     Group(T.t("Gumka i lasso", "Eraser & lasso"), keys = "wymaż zaznaczanie") {
-        Opt(T.t("Domyślny tryb gumki", "Default eraser mode"), "eraser wymaż kasowanie pikselowa obiektowa") { Choice(listOf(T.t("Obiektowa", "Object"), T.t("Pikselowa", "Pixel"), "Lasso"), set.eraserMode) { set.eraserMode = it } }
+        Opt(T.t("Domyślny tryb gumki", "Default eraser mode"), "eraser wymaż kasowanie pikselowa obiektowa") { Choice(listOf(T.t("Obiektowa", "Object"), T.t("Pikselowa", "Pixel"), "Lasso", T.t("Wycinanie", "Cut out")), set.eraserMode) { set.eraserMode = it } }
         Opt(T.t("Rozmiar gumki: ${set.eraserSize.toInt()} pt", "Eraser size: ${set.eraserSize.toInt()} pt"), "eraser grubość wymaż") { MSlider(set.eraserSize, 1f, 60f) { set.eraserSize = it } }
         ToggleRow(T.t("Gumka pomija zakreślacz", "Eraser ignores highlighter"), set.eraserKeepHighlighter, keys = "eraser wymaż zakreślacz marker") { set.eraserKeepHighlighter = it }
         Opt(T.t("Kształt lassa", "Lasso shape"), "zaznaczanie zaznacz odręczne prostokąt") { Choice(listOf(T.t("Odręczne", "Freehand"), T.t("Prostokąt", "Rectangle")), if (set.lassoRect) 1 else 0) { set.lassoRect = it == 1 } }

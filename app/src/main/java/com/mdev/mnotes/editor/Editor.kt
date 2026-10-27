@@ -680,6 +680,7 @@ class Editor(val ctx: Context, val nbId: String) {
                 exec(DocEdit.Elements(page.id, ElementsEdit.add(doc.content(page), listOf(el))))
                 tool = Tool.LASSO
                 select(page.id, setOf(el.id))
+                com.mdev.mnotes.app.Flavor.lab?.imageInserted(this, el)
                 onDone()
             }
         }

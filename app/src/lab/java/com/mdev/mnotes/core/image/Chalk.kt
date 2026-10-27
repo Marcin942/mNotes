@@ -60,20 +60,29 @@ object Chalk {
         if (black) Raster.maxRgb(c) else 1f - Raster.minRgb(c)
 
     /**
-     * Próg tła z ziarna samego obrazu, w [0.10, 0.50]: mediana + K × σ szumu. Jak w kreda.py σ jest odporne (z
-     * percentyli, nie z odchylenia), ale liczone z górnej połowy rozkładu: po wyrównaniu oświetlenia część tła jest
-     * obcięta do zera i zwykłe MAD zaniżało σ, przez co szum przechodził jako półprzezroczysta mgła.
+     * Próg tła z ziarna samego obrazu, w [0.10, 0.50]: K × σ szumu, a po wyrównaniu oświetlenia ([flattened]) jeszcze
+     * plus mediana. Jak w kreda.py σ jest odporne (z percentyli, nie z odchylenia), ale liczone z górnej połowy rozkładu:
+     * po wyrównaniu część tła jest obcięta do zera i zwykłe MAD zaniżało σ, przez co szum przechodził jako mgła. Bez
+     * wyrównania tło nie leży przy zerze, a mediana nasycała próg i gubiła słabą kredę: wtedy K × σ jak w kreda.py.
+     * Liczone po [IntArray] bez listy pośredniej (12 Mpx to ~4 mln pudełek `Integer`).
      */
-    fun autoCut(src: Raster, black: Boolean): Float {
-        val visible = src.px.filter { Raster.alpha(it) > 127 }
-        if (visible.isEmpty()) return AUTO_CUT_MIN
-        val step = max(1, visible.size / 400_000)
-        val v = FloatArray((visible.size + step - 1) / step) { strength(visible[it * step], black) }
+    fun autoCut(src: Raster, black: Boolean, flattened: Boolean = true): Float {
+        val px = src.px
+        var visible = 0
+        for (c in px) if (Raster.alpha(c) > 127) visible++
+        if (visible == 0) return AUTO_CUT_MIN
+        val step = max(1, visible / 400_000)
+        val v = FloatArray((visible + step - 1) / step)
+        var seen = 0; var n = 0
+        for (c in px) {
+            if (Raster.alpha(c) <= 127) continue
+            if (seen++ % step == 0) v[n++] = strength(c, black)
+        }
         v.sort()
         fun pct(p: Double) = v[((v.size - 1) * p).toInt()]
         val med = pct(0.5)
         val sigma = if (med > 1f / 255f) pct(0.8413) - med else pct(0.9772) / 2f
-        return (med + AUTO_CUT_K * sigma).coerceIn(AUTO_CUT_MIN, AUTO_CUT_MAX)
+        return ((if (flattened) med else 0f) + AUTO_CUT_K * sigma).coerceIn(AUTO_CUT_MIN, AUTO_CUT_MAX)
     }
 
     /**
@@ -145,8 +154,47 @@ data class BoardOptions(
     val maxSide: Int = 2400,
 )
 
-/** Wynik potoku: obraz kredy na przezroczystym tle i użyte parametry (do pokazania w panelu i powtórzenia). */
-class BoardResult(val image: Raster, val quad: Quad?, val black: Boolean, val cut: Float)
+/**
+ * Wynik potoku: obraz kredy na przezroczystym tle i użyte parametry (do pokazania w panelu i powtórzenia). [quad] jest
+ * w pikselach zdjęcia po pomniejszeniu do `maxSide`; [source] mówi, skąd w zdjęciu pochodzi każdy piksel [image].
+ */
+class BoardResult(val image: Raster, val quad: Quad?, val black: Boolean, val cut: Float, val source: BoardSource? = null)
+
+/**
+ * Tablica po krokach geometrii i filtrów (prostowanie, kadr, wyrównanie, wyostrzenie), przed kolorem do alfy. To
+ * najdroższa część potoku: panel liczy ją raz, a suwaki progu, krycia i koloru wołają tylko [BoardPipeline.finish].
+ *
+ * Mapowanie wstecz ([toPhoto]): piksel wyniku → kadr ([cropX], [cropY]) → prostowanie ([warp]: prostokąt → czworokąt
+ * w pikselach pomniejszonego zdjęcia [fitW]×[fitH]) → ułamek szerokości i wysokości zdjęcia. Dzięki temu kreski z
+ * wektoryzacji (K2) leżą na kredzie w zdjęciu, a nie na wyprostowanym i przyciętym obrazie rozciągniętym na zdjęcie.
+ */
+class BoardSource(
+    val image: Raster,
+    val black: Boolean,
+    val quad: Quad?,
+    val flattened: Boolean,
+    val fitW: Int,
+    val fitH: Int,
+    val cropX: Int = 0,
+    val cropY: Int = 0,
+    val warp: Homography? = null,
+    /** Przy kilku zdjęciach (K3): które było odniesieniem (do niego odnosi się [toPhoto]) i które wypadły. */
+    val ref: Int = 0,
+    val skipped: List<Int> = emptyList(),
+) {
+    /** Auto-próg zależy tylko od obrazu po filtrach, więc liczy się raz na źródło (nie przy każdym ruchu suwaka). */
+    val autoCut: Float by lazy { Chalk.autoCut(image, black, flattened) }
+
+    /**
+     * Punkt wyniku w układzie indeksów pikseli (środek piksela i to i) jako (u, v) ∈ [0, 1]² zdjęcia: 0, 0 to lewy
+     * górny róg zdjęcia, 1, 1 prawy dolny. Bez prostowania i kadru: u = (x + 0.5) / [fitW], jak dawne `toStrokes`.
+     */
+    fun toPhoto(x: Float, y: Float): FloatArray {
+        var px = x + cropX; var py = y + cropY
+        warp?.let { val p = it.map(px.toDouble(), py.toDouble()); px = p[0].toFloat(); py = p[1].toFloat() }
+        return floatArrayOf((px + 0.5f) / fitW, (py + 0.5f) / fitH)
+    }
+}
 
 object BoardPipeline {
     /**
@@ -154,37 +202,89 @@ object BoardPipeline {
      * oświetlenia → wyostrzenie → kolor do alfy → gumka. Kolejność jak w kreda.py (`build_board_source`, `recompute`).
      * [quad] jest w pikselach [photo]; wielokąty gumki [erase] w pikselach wyniku (użytkownik maluje je na podglądzie).
      */
-    fun run(photo: Raster, opt: BoardOptions = BoardOptions(), quad: Quad? = null, erase: List<FloatArray> = emptyList()): BoardResult {
+    fun run(photo: Raster, opt: BoardOptions = BoardOptions(), quad: Quad? = null, erase: List<FloatArray> = emptyList()): BoardResult =
+        finish(prepare(photo, opt, quad), opt, erase)
+
+    /** Kroki geometrii i filtrów; wynik zależy od [photo], [quad] i przełączników kroków, nie od progu, krycia ani koloru. */
+    fun prepare(photo: Raster, opt: BoardOptions = BoardOptions(), quad: Quad? = null): BoardSource {
         var img = photo.fit(opt.maxSide)
+        val fitW = img.w; val fitH = img.h
         val k = img.w.toFloat() / photo.w
         val black = opt.black ?: !looksWhite(img)
         var used: Quad? = null
+        var back: Homography? = null
         if (opt.straighten) {
-            used = quad?.scaled(k) ?: BoardGeometry.guessQuad(img, black)
-            img = BoardGeometry.warp(img, used)
+            val q = quad?.scaled(k) ?: BoardGeometry.guessQuad(img, black)
+            used = q
+            val (w, h) = q.rectSize()
+            back = Homography.of(Quad.of(0f, 0f, w - 1f, 0f, w - 1f, h - 1f, 0f, h - 1f), q)
+            img = BoardGeometry.warp(img, q)
         }
-        if (opt.crop) img = cropToBoard(img, black)
+        var cx = 0; var cy = 0
+        if (opt.crop) cropToBoardAt(img, black).let { (cut, x, y) -> img = cut; cx = x; cy = y }
         if (opt.flatten) img = Chalk.flatten(img, black)
         if (opt.sharpen) img = Chalk.sharpen(img)
-        val cut = if (opt.autoCut) Chalk.autoCut(img, black) else opt.cut
-        var out = Chalk.toAlpha(img, black, cut, opt.solid, opt.tint)
-        if (erase.isNotEmpty()) out = Chalk.erase(out, erase)
-        return BoardResult(out, used, black, cut)
+        return BoardSource(img, black, used, opt.flatten, fitW, fitH, cx, cy, back)
     }
 
-    /**
-     * Kilka zdjęć tej samej tablicy (K3): każde wyprostowane własnymi narożnikami do rozmiaru pierwszego, mediana
-     * usuwa to, co zasłaniało tablicę tylko na części zdjęć, potem reszta potoku jak dla jednego zdjęcia.
-     */
+    /** Kolor do alfy i gumka na gotowym [src]: tanie, więc podgląd liczy to przy każdym ruchu suwaka. */
+    fun finish(src: BoardSource, opt: BoardOptions = BoardOptions(), erase: List<FloatArray> = emptyList()): BoardResult {
+        val cut = if (opt.autoCut) src.autoCut else opt.cut
+        var out = Chalk.toAlpha(src.image, src.black, cut, opt.solid, opt.tint)
+        if (erase.isNotEmpty()) out = Chalk.erase(out, erase)
+        return BoardResult(out, src.quad, src.black, cut, src)
+    }
+
+    /** Kilka zdjęć tej samej tablicy w pamięci (testy); aplikacja woła [prepareMany] z wczytywaniem po jednym. */
     fun runMany(photos: List<Raster>, opt: BoardOptions = BoardOptions()): BoardResult {
         require(photos.isNotEmpty()) { "brak zdjęć" }
         if (photos.size == 1) return run(photos[0], opt)
-        val fitted = photos.map { it.fit(opt.maxSide) }
-        val black = opt.black ?: !looksWhite(fitted[0])
-        val quads = fitted.map { if (opt.straighten) BoardGeometry.guessQuad(it, black) else Quad.full(it.w, it.h) }
-        val merged = BoardStack.alignedMedian(fitted, quads)
-        val res = run(merged, opt.copy(straighten = false, black = black))
-        return BoardResult(res.image, quads[0], black, res.cut)
+        return finish(prepareMany(photos.size, opt) { photos[it] }!!, opt)
+    }
+
+    /**
+     * Kilka zdjęć tej samej tablicy (K3): każde wyprostowane własnymi narożnikami do rozmiaru zdjęcia odniesienia,
+     * mediana usuwa to, co zasłaniało tablicę tylko na części zdjęć, potem reszta potoku jak dla jednego zdjęcia.
+     *
+     * [load] wczytuje zdjęcie i, i od razu po wyprostowaniu zostaje tylko jego klatka: w pamięci nie siedzi 6 pełnych
+     * zdjęć naraz. Zdjęcie, na którym tablicy nie znaleziono (narożniki = cały kadr), wypada, jeśli na innych ją
+     * znaleziono: jego klatka nie byłaby wyrównana i mediana dałaby „duchy” ([BoardSource.skipped]). Gdy tablicy nie
+     * znaleziono nigdzie, wszystkie idą całe, jak przy wyłączonym prostowaniu (statyw). null, gdy zdjęcia nie da się wczytać.
+     */
+    fun prepareMany(count: Int, opt: BoardOptions = BoardOptions(), load: (Int) -> Raster?): BoardSource? {
+        require(count > 0) { "brak zdjęć" }
+        var black = opt.black
+        val frames = ArrayList<Raster>()
+        val skipped = ArrayList<Int>()
+        // zdjęcia bez znalezionej tablicy, zanim wiadomo, czy na którymkolwiek ją znaleziono
+        val whole = ArrayList<Pair<Int, Raster>>()
+        var ref = -1; var refQuad: Quad? = null; var refSize = 0 to 0; var refFit = 0 to 0
+        for (i in 0 until count) {
+            val img = load(i)?.fit(opt.maxSide) ?: return null
+            val b = black ?: !looksWhite(img)
+            black = b
+            val q = if (opt.straighten) BoardGeometry.guessQuad(img, b) else Quad.full(img.w, img.h)
+            if (opt.straighten && q.isFull(img.w, img.h)) {
+                if (ref >= 0) skipped += i else whole += i to img
+                continue
+            }
+            if (ref < 0) {
+                ref = i; refQuad = q; refSize = q.rectSize(); refFit = img.w to img.h
+                skipped += whole.map { it.first }
+                whole.clear()
+            }
+            frames += BoardGeometry.warp(img, q, refSize)
+        }
+        if (ref < 0) {
+            val (first, img) = whole[0]
+            ref = first; refQuad = Quad.full(img.w, img.h); refSize = refQuad.rectSize(); refFit = img.w to img.h
+            for ((_, w) in whole) frames += BoardGeometry.warp(w, Quad.full(w.w, w.h), refSize)
+        }
+        val merged = BoardStack.median(frames)
+        val s = prepare(merged, opt.copy(straighten = false, black = black))
+        val (w, h) = refSize
+        val back = Homography.of(Quad.of(0f, 0f, w - 1f, 0f, w - 1f, h - 1f, 0f, h - 1f), refQuad!!)
+        return BoardSource(s.image, s.black, refQuad, s.flattened, refFit.first, refFit.second, s.cropX, s.cropY, back, ref, skipped)
     }
 
     /** Biała tablica (pisak): jasne, mało nasycone tło przeważa w środku obrazu. */
@@ -199,10 +299,13 @@ object BoardPipeline {
     }
 
     /** Kadr do prostokąta otaczającego tablicę; poza tablicą przezroczysto (rama, ściana, półka). */
-    fun cropToBoard(img: Raster, black: Boolean): Raster {
+    fun cropToBoard(img: Raster, black: Boolean): Raster = cropToBoardAt(img, black).first
+
+    /** To samo z lewym górnym rogiem kadru w pikselach [img] (do mapowania wyniku z powrotem na zdjęcie). */
+    fun cropToBoardAt(img: Raster, black: Boolean): Triple<Raster, Int, Int> {
         val small = img.fit(BoardGeometry.WORK)
-        val mask = BoardGeometry.boardMask(small, black) ?: return img
-        if (mask.count { it } < 0.1 * mask.size) return img
+        val mask = BoardGeometry.boardMask(small, black) ?: return Triple(img, 0, 0)
+        if (mask.count { it } < 0.1 * mask.size) return Triple(img, 0, 0)
         var x0 = small.w; var y0 = small.h; var x1 = 0; var y1 = 0
         for (p in mask.indices) if (mask[p]) {
             val x = p % small.w; val y = p / small.w
@@ -216,6 +319,6 @@ object BoardPipeline {
             val sx = ((cx0 + x) / k).toInt().coerceIn(0, small.w - 1); val sy = ((cy0 + y) / k).toInt().coerceIn(0, small.h - 1)
             if (!mask[sy * small.w + sx]) out[x, y] = out[x, y] and 0x00FFFFFF
         }
-        return out
+        return Triple(out, cx0, cy0)
     }
 }

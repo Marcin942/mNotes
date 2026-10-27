@@ -34,4 +34,10 @@ interface LabFeatures {
      * Domyślnie nic — wariant bez tej funkcji i wspólny kod nie muszą o niej wiedzieć.
      */
     fun onLecturePhoto(ed: Editor, pageId: String, image: ImageEl) {}
+
+    /**
+     * Zdjęcie [el] właśnie wstawione na stronę (wywołanie z wątku UI). Lab sprawdza w tle, czy to ciemna tablica,
+     * i raz podpowiada „Oczyść tablicę”; domyślnie nic, żeby inne implementacje nie musiały o tym wiedzieć.
+     */
+    fun imageInserted(ed: Editor, el: ImageEl) {}
 }

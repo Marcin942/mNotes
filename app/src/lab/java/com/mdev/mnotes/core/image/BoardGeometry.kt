@@ -30,6 +30,12 @@ class Quad(val pts: FloatArray) {
     fun rectSize(): Pair<Int, Int> =
         max(8, max(side(0, 1), side(3, 2)).roundToInt()) to max(8, max(side(0, 3), side(1, 2)).roundToInt())
 
+    /** Czy to [full] dla obrazu [w]×[h], czyli „tablicy nie znaleziono” w [BoardGeometry.guessQuad]. */
+    fun isFull(w: Int, h: Int): Boolean {
+        val f = full(w, h).pts
+        return pts.indices.all { abs(pts[it] - f[it]) < 0.5f }
+    }
+
     /** Czy czworokąt jest wypukły (wszystkie iloczyny wektorowe kolejnych boków mają ten sam znak). */
     fun isConvex(): Boolean {
         var pos = 0; var neg = 0

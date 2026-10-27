@@ -123,6 +123,7 @@ import androidx.compose.material.icons.rounded.FormatAlignRight
 import androidx.compose.material.icons.rounded.FormatAlignJustify
 import androidx.compose.material.icons.rounded.Interests
 import androidx.compose.material.icons.rounded.ViewAgenda
+import androidx.compose.material.icons.rounded.Dashboard
 import androidx.compose.material.icons.rounded.PhotoCamera
 import androidx.compose.material.icons.rounded.ExpandLess
 import androidx.compose.material.icons.rounded.ExpandMore
@@ -152,6 +153,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -233,6 +235,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import com.mdev.mnotes.editor.CropRatio
 import com.mdev.mnotes.editor.Editor
 import com.mdev.mnotes.editor.NoteView
+import com.mdev.mnotes.editor.Station
 import com.mdev.mnotes.editor.T
 import com.mdev.mnotes.editor.Tool
 import kotlin.math.roundToInt
@@ -271,15 +274,19 @@ fun penName(k: PenKind) = when (k) {
  * (także górnego), a panele i okna kontekstowe kotwiczą się do krawędzi strony.
  */
 @Composable
-fun EditorScreen(ed: Editor, tabs: TabsCtl, onExit: () -> Unit, onSettings: () -> Unit, onShortcuts: () -> Unit, onColorSets: () -> Unit) {
+fun EditorScreen(main: Editor, tabs: TabsCtl, onExit: () -> Unit, onSettings: () -> Unit, onShortcuts: () -> Unit, onColorSets: () -> Unit) {
     val ctx = LocalContext.current
+    // 2b-A7: stanowisko — otwarty zeszyt i dokumenty dołożone pod nim; paski, panele i menu działają na aktywnym rzędzie.
+    val st = remember(main) { main.station ?: Station(ctx, main) }
+    DisposableEffect(st) { onDispose { st.closeAll() } }
+    val ed = st.active
     val set = ed.settings
     val m = mint
     var panel by remember { mutableStateOf<Panel?>(null) }
     var palette by remember { mutableStateOf(false) }
     var goTo by remember { mutableStateOf(false) }
     val focus = remember { FocusRequester() }
-    val dialogOpen = palette || goTo || ed.exportOpen || ed.axesOpen || ed.stickersOpen || ed.stickerSaveOpen || ed.dualPick || ed.textReq != null
+    val dialogOpen = palette || goTo || ed.exportOpen || ed.axesOpen || ed.stickersOpen || ed.stickerSaveOpen || st.picking || st.listing || ed.textReq != null
     val searchTyping = ed.searchOpen && fieldFocused
     val widthDp = androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp
     val showMenu = ed.chrome && menuBarVisible(set.menuBar, widthDp)
@@ -331,7 +338,7 @@ fun EditorScreen(ed: Editor, tabs: TabsCtl, onExit: () -> Unit, onSettings: () -
         else -> set.optionsPos
     }
 
-    val cmds = remember(set.keyMap, tabs.on) {
+    val cmds = remember(set.keyMap, tabs.on, ed) {
         commandList(ed, set, ::pickTool, { panel = it }, ::pickImage, { goTo = true }, ::applyLayout, onSettings, onShortcuts, { palette = true }, onExit, tabs)
     }
 
@@ -368,8 +375,8 @@ fun EditorScreen(ed: Editor, tabs: TabsCtl, onExit: () -> Unit, onSettings: () -
                 if (strip == 0) PenStrip(ed, set, 0, pos, panel, onColorSets) { toggle(it) }
                 Box(Modifier.weight(1f).fillMaxHeight()) {
                     // Pierwsze dotknięcie strony (pióro lub palec) zamyka otwarty panel, więc nigdy nie zasłania pisania.
-                    // F4: płótno z jednym zeszytem albo dwoma rzędami (drugi zeszyt poniżej).
-                    EditorCanvas(ed) { panel = null }
+                    // 2b-A7: płótno z jednym zeszytem albo stanowisko (dokumenty jeden pod drugim na wspólnym polu).
+                    EditorCanvas(st) { panel = null }
                     // Panele i okienka kotwiczą się do krawędzi strony, tuż przy pasku, z którego wyszły.
                     Box(Modifier.fillMaxSize().imePadding()) {
                         // Pod panelami: otwarty panel zasłania kapsułę, a pierwsze dotknięcie strony go zamyka.
@@ -421,7 +428,8 @@ fun EditorScreen(ed: Editor, tabs: TabsCtl, onExit: () -> Unit, onSettings: () -
         if (ed.exportOpen) ExportDialog(ed.nbId, ed.pageIndex, { ed.doc.flush() }) { ed.exportOpen = false }
         if (ed.axesOpen) AxesDialog(ed) { ed.axesOpen = false }
         if (ed.stickersOpen) StickersDialog(ed) { ed.stickersOpen = false }
-        if (ed.dualPick) DualPickDialog(ed) { ed.dualPick = false }
+        if (st.picking) StationPickDialog(st) { st.picking = false }
+        if (st.listing) StationsDialog(st, tabs.open) { st.listing = false }
         if (ed.stickerSaveOpen) SaveStickerDialog(ed) { ed.stickerSaveOpen = false }
         if (panel == Panel.PHONE) Flavor.lab?.PhonePanel(ed) { panel = null }
         Flavor.lab?.Overlay(ed)
@@ -1930,8 +1938,9 @@ private fun MoreMenu(ed: Editor, set: com.mdev.mnotes.data.Settings, close: () -
             if (!ed.readOnly) MenuRow(Icons.Rounded.ShowChart, T.t("Układ współrzędnych…", "Coordinate axes…"), "") { close(); ed.axesOpen = true }
             if (!ed.readOnly) MenuRow(Icons.Rounded.Interests, T.t("Naklejki…", "Stickers…"), "") { close(); ed.stickersOpen = true }
             if (!ed.readOnly) MenuRow(Icons.Rounded.PhotoCamera, T.t("Tryb wykładu…", "Lecture mode…"), "") { close(); ed.lectureMode = true; ed.lectureShootTick++ }
-            if (ed.dualId == null) MenuRow(Icons.Rounded.ViewAgenda, T.t("Drugi zeszyt poniżej…", "Second notebook below…"), "") { close(); ed.dualPick = true }
-            else MenuRow(Icons.Rounded.ViewAgenda, T.t("Zamknij drugi zeszyt", "Close the second notebook"), "") { close(); ed.dualId = null }
+            // 2b-A7: stanowisko — kolejne dokumenty pod spodem i zapisane układy (przełączane jak karty).
+            MenuRow(Icons.Rounded.ViewAgenda, T.t("Dołóż zeszyt poniżej…", "Add notebook below…"), "") { close(); ed.station?.picking = true }
+            MenuRow(Icons.Rounded.Dashboard, T.t("Stanowiska…", "Workspaces…"), "") { close(); ed.station?.listing = true }
             MenuRow(Icons.Rounded.Fullscreen, T.t("Ukryj paski (tryb skupienia)", "Hide bars (focus mode)"), "F11") { ed.chrome = false; close() }
             ToggleRow(T.t("Tylko do odczytu", "Read-only"), ed.readOnly) { ed.readOnly = it }
             ToggleRow(T.t("Okno powiększenia (pisz w powiększeniu)", "Zoom window (write magnified)"), ed.zoomWin) { ed.toggleZoomWin(); close() }

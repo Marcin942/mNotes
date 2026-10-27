@@ -272,7 +272,7 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
         val s = ed.sel ?: return@Runnable
         val id = s.ids.singleOrNull() ?: return@Runnable
         performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
-        ed.pointMenu = Editor.PointMenu(downX, downY, s.pageId, id, vIdx, vCtrl)
+        ed.pointMenu = Editor.PointMenu(downX, downY + hostOffsetY, s.pageId, id, vIdx, vCtrl)
         lm = LM.NONE; mode = Mode.IGNORE
         invalidate()
     }
@@ -320,6 +320,8 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
 
     /** „100%”: dopasowanie do szerokości (pion), wysokości (poziom) lub całej strony (pojedyncza). */
     fun baseZoom(): Float {
+        // 2b-A7: w rzędzie stanowiska wysokość widoku wynika z powiększenia, więc „100 %” podaje pole, nie widok.
+        baseZoomOverride?.let { return it }
         if (width == 0 || layout.count == 0) return 1f
         return when (ed.layoutMode) {
             0 -> width / layout.docWidth
@@ -468,7 +470,8 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
         val pi = doc.indexOf(s.pageId); if (pi < 0) return null
         val b = (if (lLifting) lM.mapBounds(lBounds) else selBounds()) ?: return null
         val ox = layout.left(pi); val oy = layout.top(pi)
-        return RectF((ox + b.l) * zoom + tx, (oy + b.t) * zoom + ty, (ox + b.r) * zoom + tx, (oy + b.b) * zoom + ty)
+        val h = hostOffsetY
+        return RectF((ox + b.l) * zoom + tx, (oy + b.t) * zoom + ty + h, (ox + b.r) * zoom + tx, (oy + b.b) * zoom + ty + h)
     }
 
     /** Prostokąt (w pikselach widoku) opisany na ramce przycinania; do ustawiania panelu tak, by jej nie zasłaniał. */
@@ -570,7 +573,7 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
         if (!inited) {
             inited = true
             ed.pageIndex = doc.meta.lastPage.coerceIn(0, max(0, doc.pages.size - 1))
-            zoom = baseZoom()
+            zoom = startZoom ?: baseZoom()
             goToPage(ed.pageIndex, false)
         } else {
             val cx = docX(ow / 2f); val cy = docY(oh / 2f)
@@ -584,10 +587,12 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
         c.clipRect(0, 0, width, height)
         c.drawColor(viewBg)
         if (doc.pages.isEmpty() || layout.count == 0) return
-        val vb = Bounds(docX(0f), docY(0f), docX(width.toFloat()), docY(height.toFloat()))
+        // 2b-A7: rząd stanowiska widać tylko w pasie [band]; reszty nie rysujemy i nie zamawiamy dla niej kafelków.
+        val bt = band?.get(0) ?: 0f; val bb = band?.get(1) ?: height.toFloat()
+        val vb = Bounds(docX(0f), docY(bt), docX(width.toFloat()), docY(bb))
         val range = layout.visibleRange(vb)
         // Kafelki przygotowujemy z zapasem poza ekranem (w kierunku przewijania), żeby brzeg nie był chwilowo miękki.
-        val mx = width * 0.3f / zoom; val my = height * 0.3f / zoom
+        val mx = width * 0.3f / zoom; val my = (bb - bt) * 0.3f / zoom
         val rvb = Bounds(vb.l - mx, vb.t - my, vb.r + mx, vb.b + my)
         val reqRange = if (mode == Mode.NAV) range else layout.visibleRange(rvb)
         cache.configure(settings.renderQuality)
@@ -1173,7 +1178,47 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
 
     private fun isStylus(t: Int) = t == MotionEvent.TOOL_TYPE_STYLUS || t == MotionEvent.TOOL_TYPE_ERASER
 
+    // ───────────────────────── stanowisko (2b-A7): widok jako rząd wspólnego pola ─────────────────────────
+
+    /** Położenie widoku w polu stanowiska (px): menu i pasek zaznaczenia, rysowane w polu, przesuwają się o tyle. */
+    var hostOffsetY = 0f
+    /** „100 %” narzucone przez stanowisko; null — liczone z rozmiaru widoku jak zwykle. */
+    var baseZoomOverride: Float? = null
+    /** Powiększenie na start (pierwszy rozmiar widoku); null — „100 %”. */
+    var startZoom: Float? = null
+    /** Widoczny pas widoku (od, do) w jego współrzędnych; null — cały widok. */
+    var band: FloatArray? = null
+        set(v) { field = v; invalidate() }
+    /** Pionowy ruch palca przekazywany polu (rząd sam przesuwa się tylko w poziomie); null — zwykły widok. */
+    var onPanY: ((Float) -> Unit)? = null
+    var onFlingY: ((Float) -> Unit)? = null
+    /** Dotknięcie widoku (rząd staje się aktywny: jego zaznaczenie, panele, menu). */
+    var onTouched: (() -> Unit)? = null
+    /**
+     * Zaznaczenie przeciągnięte poza rząd: elementy w układzie strony po przesunięciu i środek w px widoku; true —
+     * przyjął je inny rząd, więc stąd znikają.
+     */
+    var onDropOutside: ((List<Element>, Float, Float) -> Boolean)? = null
+    /** Środek szczypnięcia (y w px widoku) — pole trzyma ten punkt w miejscu, gdy rzędy zmieniają wysokość. */
+    var zoomAnchorY = Float.NaN
+        private set
+
+    /** Koniec stanowiska: widok wraca do zwykłego płótna (cały widok, własne „100 %”, pionowy ruch u siebie). */
+    fun leaveStation() {
+        if (baseZoomOverride == null && onPanY == null && band == null && hostOffsetY == 0f) return
+        baseZoomOverride = null; startZoom = null; band = null; hostOffsetY = 0f
+        onPanY = null; onFlingY = null; onTouched = null; onDropOutside = null; onZoomChange = null
+    }
+
+    /** Przyjmuje elementy z innego rzędu (zeszytu [fromNb]) środkiem w punkcie widoku ([sx], [sy]). */
+    fun dropIn(els: List<Element>, fromNb: String, sx: Float, sy: Float) {
+        if (layout.count == 0 || ed.readOnly) return
+        val pi = layout.nearest(docX(sx), docY(sy)).coerceIn(0, layout.count - 1)
+        ed.pasteElements(els, fromNb, Triple(pi, pgX(pi, sx), pgY(pi, sy)))
+    }
+
     override fun onTouchEvent(raw: MotionEvent): Boolean {
+        if (raw.actionMasked == MotionEvent.ACTION_DOWN) onTouched?.invoke()
         if (ed.zoomWin) {
             val used = zwTouch(raw)
             if (used != null) return used
@@ -1442,6 +1487,7 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
         val cx = sx / n; val cy = sy / n
         var span = 0f
         if (n >= 2) { for (i in 0 until ev.pointerCount) if (isLive(ev, i, -1)) span += hypot(ev.getX(i) - cx, ev.getY(i) - cy); span /= n }
+        if (n >= 2) zoomAnchorY = cy
         if (n >= 2 && lastSpan > 0f && span > 0f) zoomAbout(cx, cy, span / lastSpan)
         if (n >= 2 && pull > 0f) endPull(false)
         panWithPull(cx - lastCx, cy - lastCy, pullEligible && n == 1 && navMax == 1)
@@ -1487,8 +1533,10 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
                     val cw = layout.docWidth * zoom; val ch = layout.docHeight * zoom
                     val minX = if (cw <= width) ((cw - width) / 2).toInt() else 0
                     val maxX = if (cw <= width) minX else (cw - width).toInt()
-                    val minY = if (ch <= height) ((ch - height) / 2).toInt() else 0
-                    val maxY = if (ch <= height) minY else (ch - height).toInt()
+                    var minY = if (ch <= height) ((ch - height) / 2).toInt() else 0
+                    var maxY = if (ch <= height) minY else (ch - height).toInt()
+                    // Rząd stanowiska: pionowy rzut przejmuje pole, rząd leci tylko w bok.
+                    onFlingY?.let { it(vy); minY = (-ty).toInt(); maxY = minY }
                     scroller.fling((-tx).toInt(), (-ty).toInt(), (-vx).toInt(), (-vy).toInt(), minX, maxX, minY, maxY)
                     postInvalidateOnAnimation()
                 } else snapIfNeeded()
@@ -1533,7 +1581,8 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
         if (pullOk && pull > 0f) {
             if (d > 0f) { val r = min(pull, d); pull -= r; d -= r } else { pull -= d; d = 0f }
         }
-        if (ax) { tx += d; ty += other } else { ty += d; tx += other }
+        val toHost = onPanY
+        if (ax) { tx += d; if (toHost != null) toHost(other) else ty += other } else { ty += d; tx += other }
         if (pullOk) {
             val lim = pullLimit()
             val cur = if (ax) tx else ty
@@ -3325,12 +3374,29 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
         // Puszczenie palca nie przesuwa już obiektu: ruch z ostatniej, nienarysowanej paczki zdarzeń (drgnięcie przy
         // odrywaniu palca) pomijamy, więc obiekt zostaje dokładnie tam, gdzie był widoczny.
         if (!cancel && (lm == LM.MOVE || lm == LM.SCALE || lm == LM.ROTATE)) lMShown?.let { lM = it }
+        val wasMove = lm == LM.MOVE
         val tgt = if (cancel) lPage else dropPage()
         lLifting = false
         lm = LM.NONE; ln = 0
         vBase = null; rFrame = null; tBase = null; shapeLabel = null
         if (page == null || orig == null || lifted == null) return
         val m = lM
+        // 2b-A7: zaznaczenie upuszczone poza rzędem stanowiska przechodzi do dokumentu pod palcem.
+        val outside = onDropOutside
+        if (!cancel && wasMove && outside != null && (curY < 0f || curY > height) && lEls.isNotEmpty()) {
+            val moved = lEls.map { it.transformed(m) }
+            var b = Bounds.EMPTY
+            for (e in moved) b = b.union(e.bounds)
+            val cx = (layout.left(lPage) + b.cx) * zoom + tx; val cy = (layout.top(lPage) + b.cy) * zoom + ty
+            if (outside(moved, cx, cy)) {
+                // Na stronie stan „podniesiony” to już oryginał bez tych elementów — zapisujemy tylko krok cofania.
+                ed.record(DocEdit.Elements(page.id, ElementsEdit.remove(orig, lIds)))
+                ed.clearSel()
+                lOrig = null; lLifted = null; lEls = emptyList(); lM = Affine.IDENTITY
+                ed.selTick++
+                return
+            }
+        }
         if (cancel || (m.isIdentity && !vertex)) {
             doc.applyElements(page.id, ElementsEdit.diff(lifted, orig))
         } else if (tgt != lPage) {
@@ -3457,7 +3523,7 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
             val s = ed.sel
             if (hit != null && (s == null || hit.id !in s.ids)) { ed.tool = Tool.LASSO; ed.select(page.id, setOf(hit.id)); hasSel = true }
         }
-        ed.ctxMenu = Editor.CtxMenu(sx, sy, pi, hasSel, px, py)
+        ed.ctxMenu = Editor.CtxMenu(sx, sy + hostOffsetY, pi, hasSel, px, py)
         invalidate()
     }
 

@@ -457,3 +457,24 @@ Wygląd ikon sprawdzam rysunkiem Java2D z tej samej geometrii (`PreviewHarness`,
   **Wygląd:** w Ustawieniach grupa „Układ współrzędnych” (przełącznik + suwak progu). **Tablet:** strona w kratkę → „⋮” →
   „Układ współrzędnych…” → Wstaw: osie i siatka układu leżą na liniach kratki; przesuń układ lassem — początek wskakuje
   w węzły; narysuj wykres v(t) ze stałym odcinkiem poziomym — odcinek równo na linii, ukośne fragmenty bez zmian.
+- **Scalenie `noc/lab2`** (po 2b-A6): kreda 2b-B2; bez konfliktów; core 729, lab 780.
+- **2b-A7** stanowiska (N dokumentów na jednym polu) — `noc/f2b-stanowiska`; `WorkbenchTest` (5), reszta UI.
+  **Decyzja projektowa:** zamiast przebudowy `NoteView` na wiele dokumentów (ok. 3,5 tys. linii z jednym `doc`/`layout`/`ed`)
+  każdy dokument ma własny `NoteView` w trybie rzędu, a pole (`ui/StationCanvas`) układa je jeden pod drugim we własnym
+  `Layout` z jednym przesunięciem pionowym. Haki w `NoteView`: pionowy ruch i rzut idą do pola (`onPanY/onFlingY`), rząd
+  przesuwa się tylko w bok; „100 %” narzuca pole (`baseZoomOverride`, inaczej wysokość rzędu ↔ powiększenie sprzęgały się);
+  widoczny pas (`band`) ogranicza rysowanie i kafelki; `hostOffsetY` przesuwa menu i pasek zaznaczenia rysowane w polu;
+  upuszczenie zaznaczenia poza rzędem (`onDropOutside` → `dropIn` → `Editor.pasteElements`) przenosi elementy. `EditorScreen`
+  pracuje na `Station.active` (dotknięty rząd). Dawne `DualCanvas.kt`, `Editor.dualId/dualPick` i ustawienia
+  `dual.fraction`/`dual.sync_zoom` usunięte (`DualRows` zostaje: wspólne powiększenie i lista kandydatów). **Ograniczenia:**
+  przeciągany obiekt znika z widoku, gdy wyjdzie poza swój rząd (widać go znów po upuszczeniu w docelowym); skróty klawiszowe
+  w `MainActivity` działają na zeszyt otwarty z biblioteki, nie na aktywny rząd; pasek wycinania/kadrowania obrazu nie
+  uwzględnia przesunięcia rzędu (tylko w pierwszym rzędzie jest na miejscu). **Wygląd:** rzędy jeden pod drugim z 10 dp
+  przerwy w kolorze płótna; nad każdym rzędem chip 10 dp zaokrąglenia: tytuł (aktywny — tło `accentSoft`, obwódka i tekst
+  w akcencie), ✕ przy dołożonych; okna `MDialog` „Dołóż zeszyt na stanowisko” (lista jak dawniej + „Nowy zeszyt”) i
+  „Stanowiska” (pole nazwy, lista z dokumentami w drugiej linii, kosz z potwierdzeniem). **Tablet:** „⋮” → „Dołóż zeszyt
+  poniżej…” dwa razy → trzy rzędy; przewiń pole palcem w pionie (też w przerwie między rzędami) i rzutem; każdy rząd w bok
+  osobno; szczypnij — rzędy rosną razem, palce zostają nad tym samym miejscem; zaznacz lassem fragment w rzędzie 1 i
+  przeciągnij do rzędu 3 → przenosi się (cofnięcie w obu); przytrzymaj zaznaczenie w rzędzie 2 → menu przy zaznaczeniu;
+  panel stron po dotknięciu rzędu 2 pokazuje jego strony; „⋮” → „Stanowiska…” → zapisz „Wykład + zadania”, zamknij
+  rzędy ✕, otwórz stanowisko z listy; pamięć i płynność przy trzech PDF-ach.

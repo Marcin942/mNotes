@@ -124,16 +124,14 @@ class Editor(val ctx: Context, val nbId: String) {
     var layoutMode by mutableIntStateOf(doc.meta.let { ViewMode.resolve(it.viewMode, it.pdfDoc, settings.viewNotebook, settings.viewPdf) })
         private set
 
-    // — Dwa zeszyty w jednym obszarze (F4) —
-    /** Zeszyt w dolnym rzędzie albo null (jeden zeszyt jak zwykle). */
-    var dualId by mutableStateOf<String?>(null)
-    /** Otwarte okno wyboru zeszytu do dolnego rzędu. */
-    var dualPick by mutableStateOf(false)
+    // — Stanowisko (2b-A7, dawniej dwa zeszyty F4) —
+    /** Stanowisko, do którego należy ten edytor (główny zeszyt albo dołożony rząd); null poza edytorem. */
+    var station: Station? = null
     private var rowSaved: Int? = null
 
     /**
-     * Rząd stron: w trybie dwóch zeszytów strony leżą poziomo (każdy rząd przesuwa się w bok), ale wybór nie trafia
-     * do zeszytu — po zamknięciu drugiego wraca układ sprzed.
+     * Rząd stron: na stanowisku strony leżą poziomo (każdy rząd przesuwa się w bok), ale wybór nie trafia do zeszytu —
+     * po zamknięciu dołożonych rzędów wraca układ sprzed.
      */
     fun forceRowLayout(on: Boolean) {
         if (on) { if (rowSaved == null) rowSaved = layoutMode; layoutMode = 1 }
@@ -329,16 +327,24 @@ class Editor(val ctx: Context, val nbId: String) {
     /** [at] = (indeks strony, x, y) miejsca wklejenia (np. punkt przytrzymania); domyślnie środek widoku. */
     fun paste(at: Triple<Int, Float, Float>? = null) {
         if (Clip.els.isEmpty()) { pasteSystem(at); return }
+        pasteElements(Clip.els, Clip.nb, at)
+    }
+
+    /**
+     * Wkleja [els] z zeszytu [fromNb] środkiem w [at] (indeks strony, x, y; domyślnie środek widoku), z kopiami obrazów
+     * i nowymi id; zaznacza wynik. Też przeniesienie zaznaczenia z innego rzędu stanowiska (2b-A7).
+     */
+    fun pasteElements(els: List<Element>, fromNb: String, at: Triple<Int, Float, Float>? = null) {
         val v = view ?: return
         val (pi, cx, cy) = at ?: v.viewCenterOnPage() ?: return
-        val page = doc.pages[pi]
+        val page = doc.pages.getOrNull(pi) ?: return
         var b = Bounds.EMPTY
-        for (e in Clip.els) b = b.union(e.bounds)
+        for (e in els) b = b.union(e.bounds)
         val dx = cx - b.cx; val dy = cy - b.cy
-        val copies = Clip.els.map { e ->
+        val copies = els.map { e ->
             var n = dup(e, dx, dy)
-            if (n is ImageEl && Clip.nb != nbId) {
-                val src = repo.assetFile(Clip.nb, n.asset)
+            if (n is ImageEl && fromNb != nbId) {
+                val src = repo.assetFile(fromNb, n.asset)
                 if (src.exists()) {
                     val name = newId() + "." + src.extension.ifEmpty { "jpg" }
                     runCatching { src.copyTo(repo.assetFile(nbId, name), true) }

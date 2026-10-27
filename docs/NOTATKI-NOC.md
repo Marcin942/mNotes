@@ -278,6 +278,18 @@ Na starcie (`noc/wszystko` @ `471ed08`): lab 696 testów, 0 porażek.
   na zdjęciach z dużym kawałkiem ściany (obejście: tryb „Narożniki”). Test: lab 747, core 693, 0 porażek; `RealPhotoTest`
   z `KREDA_DIR` dalej ≥ 94 % punktów kresek na kredzie. **Tablet:** zdjęcie dwóch tablic z listwą → różdżka → listwa
   znika, wzory zostają; pogrubiony napis zostaje; wyłącz kolejno trzy nowe przełączniki i porównaj podgląd.
+- **2b-B3 „Zdjęcie tablicy” w lab** (`bac8564` scalenie `noc/wszystko` z hookiem A2-8, `3feab65`). `Lab.onLecturePhoto`:
+  zdjęcie z trybu wykładu, jeśli to ciemna tablica (`looksLikeDarkBoard`), przechodzi w tle przez kredę z krokami z
+  Ustawień; plik obrazu podmienia się jako **osobna edycja** (obraz zostaje w tym samym miejscu i szerokości), więc strona
+  od razu pokazuje wynik (podgląd), a jedno cofnięcie (↶) wraca do zdjęcia — dymek mówi to wprost. Zdjęcia, które nie są
+  tablicą (kartka, slajd), zostają bez zmian; zdjęcie przesunięte albo usunięte w trakcie liczenia też nie jest ruszane.
+  Przełącznik „Zdjęcie z trybu wykładu od razu przez kredę” w Ustawienia → Laboratorium → Kreda (domyślnie włączony).
+  **Ikona** dla 2b-A14: `ui/BoardCameraGlyph.kt` (`BoardCameraIcon`) — tablica z półką i falką kredy, w prawym dolnym rogu
+  aparat z obiektywem; te same role i grubości co glify piór i gumki z 2b-A1 (`GlyphCanvas`), jednobarwna; test siatki
+  24×24. **Nie podpięta do paska** — to część A (2b-A14: jeden przycisk „Zdjęcie tablicy” i nowa ikona wstawiania
+  obrazu); nowy plik, więc scalenie bez konfliktów. Test: lab 785, core 731, 0 porażek, oba APK. **Nauka:** zdjęcie
+  tablicy na wykładzie od razu jako czysta kreda w notatce. **Tablet:** „⋮” → „Tryb wykładu…” → zdjęcie tablicy → po
+  chwili na nowej stronie sama kreda i dymek; ↶ → oryginalne zdjęcie; zdjęcie kartki → bez zmian.
 
 ## Faza 2 — agent A (od 27.10, lista A2-* w `docs-noc/PLAN-NOCY.md`)
 

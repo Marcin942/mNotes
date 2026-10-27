@@ -302,6 +302,33 @@ Na starcie (`noc/wszystko` @ `471ed08`): lab 696 testów, 0 porażek.
   tablicy na wykładzie od razu jako czysta kreda w notatce. **Tablet:** „⋮” → „Tryb wykładu…” → zdjęcie tablicy → po
   chwili na nowej stronie sama kreda i dymek; ↶ → oryginalne zdjęcie; zdjęcie kartki → bez zmian.
 
+- **B2-11 testy z przeglądu §3.5a i przegląd własny:** (1) zgodność kresek ze zdjęciem — `ChalkStrokesTest` i
+  `RealPhotoTest` (94–100 % punktów na kredzie); (2) regresja fragmentacji — `ChalkVectorTest` (45°, pierścień, krzyż,
+  różne grubości, przerwy); (3) IoU z wynikami `kreda.py` — **niewykonalne tutaj**: w `kreda/` nie ma PNG wyników dla
+  zdjęć z `blackboard/`, a `kreda.py` wymaga OpenCV/numpy, których w tym środowisku nie ma (bez pip). Zamiast tego
+  `KredaPomiaryTest` (24 zdjęcia, podglądy do oczu). Przegląd §3.5: K0 wyszukiwanie „Laboratorium” zrobił A (A2-10); K1–K5
+  — wszystkie pozycje „Co poprawić” zamknięte w B2-5…B2-9 i 2b-B1…B3 (poza scalaniem stron w synchronizacji).
+
+### Co Marcin ma sprawdzić na tablecie — wariant lab, po fazie 2 (kolejność)
+
+Instalacja: `labDebug` z `noc/lab2` (albo `noc/wszystko` po scaleniu przez A) na tablecie **i** na telefonie (Nearby).
+
+1. **Kreda, jedno zdjęcie:** wstaw zdjęcie tablicy zrobione pionowo telefonem → raz dymek „Wygląda jak tablica…” → różdżka
+   → podgląd stoi pionowo, suwak progu chodzi płynnie → „Narożniki”: przeciągnij kółko → „Wynik” → „Gumka”: obwiedź rękę →
+   „Zastosuj” (zeszyt w tym czasie dalej się zapisuje) → ↶ wraca do zdjęcia.
+2. **Listwy i ramy:** zdjęcie dwóch tablic z listwą → listwa i ściana znikają, wzory zostają; wyłącz kolejno „Usuń listwy…”,
+   „Dociągaj bladą kredę…”, „Usuń drobinki” i porównaj podgląd.
+3. **Kreski:** „Edytowalne kreski” → kreski leżą na kredzie także po przycięciu zdjęcia w zeszycie; litera O i krzyżyk to
+   1–2 kreski; grube i cienkie linie mają różną grubość.
+4. **Mediana:** 3 zdjęcia tej samej tablicy (+ jedno zdjęcie ściany) → „Połącz zdjęcia tablicy” → informacja o pominięciu,
+   wykładowca znika, bez „duchów”.
+5. **Tryb wykładu:** zdjęcie tablicy → na nowej stronie po chwili sama kreda + dymek; ↶ → zdjęcie; zdjęcie kartki bez zmian.
+6. **Nearby (dwa urządzenia):** `docs/NEARBY-PRZEBUDOWA.md` §5 — parowanie (role same, te same 6 cyfr), lokalizacja
+   wyłączona → zdanie „Włącz lokalizację…”, 3 zdjęcia z postępem, Bluetooth wyłączony w połowie → wznowienie,
+   „Diagnostyka” → „Kopiuj raport”; potem „Wyślij zeszyt” / „Odbierz zeszyt”.
+7. **Wyślij do mLabs:** Plik → „Wyślij stronę do mLabs…” → dwa pliki (PNG i JSON) w wybranej aplikacji.
+8. **Core:** `coreDebug` — brak różdżki, ikony telefonu, „Laboratorium” i polecenia „Wyślij do mLabs”.
+
 ## Faza 2 — agent A (od 27.10, lista A2-* w `docs-noc/PLAN-NOCY.md`)
 
 Każdy punkt na własnej gałęzi `noc/f2-<temat>` od `noc/wszystko`, po zamknięciu scalony do `noc/wszystko`.

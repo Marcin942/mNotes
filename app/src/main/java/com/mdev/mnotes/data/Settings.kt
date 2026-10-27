@@ -109,7 +109,9 @@ class Settings(ctx: Context) {
     var eraserSize by Pref("eraser.size", 14f)       // promień w pt
     var eraserKeepHighlighter by Pref("eraser.ignore_highlighter", false)
     var lassoRect by Pref("lasso.rect", false)
-    var lassoTouch by Pref("lasso.touch", false)    // lasso „tylko zahacz”: wystarczy musnąć obiekt pętlą; domyślnie zbalansowane (połowa obiektu w pętli)
+    var lassoTouch by Pref("lasso.touch", false)
+    var toolStrip by Pref("toolbar.tool_strip", true)  // listwa obok strony pokazuje opcje gumki, lassa i lasera, gdy są w ręku (F7)
+    var laserColor by Pref("laser.color", 0xFF3B30)    // RGB śladu lasera (LaserColors.PALETTE)    // lasso „tylko zahacz”: wystarczy musnąć obiekt pętlą; domyślnie zbalansowane (połowa obiektu w pętli)
     var dockPages by Pref("ui.dockpages", false)    // panel stron zadokowany z lewej na szerokim oknie (LNX-016)
     var samsungMode by Pref("import.samsung_mode", 0) // ostatni wybór w oknie importu Samsung Notes: 0 wygląd oryginału, 1 standard mNotes
     var zoomMag by Pref("zoomwin.mag", 3f)          // powiększenie okna powiększenia (EXT-003): 2–5×

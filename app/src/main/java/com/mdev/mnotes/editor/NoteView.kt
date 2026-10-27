@@ -48,6 +48,7 @@ import com.mdev.mnotes.core.model.PageSpace
 import com.mdev.mnotes.core.model.PenKind
 import com.mdev.mnotes.core.model.Stroke
 import com.mdev.mnotes.core.model.TextBox
+import com.mdev.mnotes.core.pen.LaserColors
 import com.mdev.mnotes.core.pen.PenSpec
 import com.mdev.mnotes.core.pen.StrokeBuilder
 import com.mdev.mnotes.core.shapes.ShapeBox
@@ -896,9 +897,12 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
     // Warstwy od zewnątrz: kolorowa poświata, korpus, biały rdzeń („prześwietlony” środek jak w GoodNotes).
     private val laserHalfDp = floatArrayOf(11f, 7f, 3.8f, 1.7f)
     private val laserAlpha = floatArrayOf(0.16f, 0.34f, 1f, 1f)
-    private val laserColor = intArrayOf(0xFF3B30, 0xFF3B30, 0xFF2A1F, 0xFFFFFF)
+    private var laserColor = LaserColors.layers(LaserColors.DEFAULT)
+    private var laserRgb = LaserColors.DEFAULT
 
     private fun laserFill(layer: Int, k: Float) {
+        // Kolor wybierany na listwie lasera (F7); warstwy liczone tylko przy zmianie.
+        if (laserRgb != settings.laserColor) { laserRgb = settings.laserColor; laserColor = LaserColors.layers(laserRgb) }
         laserPaint.color = (((laserAlpha[layer] * k * 255f).toInt().coerceIn(0, 255)) shl 24) or laserColor[layer]
     }
 

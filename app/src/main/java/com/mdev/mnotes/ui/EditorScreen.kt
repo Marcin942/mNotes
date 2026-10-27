@@ -122,6 +122,8 @@ import androidx.compose.material.icons.rounded.ArrowDownward
 import androidx.compose.material.icons.rounded.ArrowUpward
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Tune
+import androidx.compose.material.icons.rounded.SelectAll
+import androidx.compose.material.icons.rounded.TouchApp
 import androidx.compose.material.icons.rounded.InvertColors
 import androidx.compose.material.icons.rounded.RestartAlt
 import androidx.compose.material3.DropdownMenu
@@ -200,6 +202,7 @@ import com.mdev.mnotes.core.layout.BarMode
 import com.mdev.mnotes.core.pen.ActivePen
 import com.mdev.mnotes.core.pen.ColorSet
 import com.mdev.mnotes.core.pen.InkColor
+import com.mdev.mnotes.core.pen.LaserColors
 import com.mdev.mnotes.core.pen.LineStyle
 import com.mdev.mnotes.core.pen.PenKit
 import com.mdev.mnotes.editor.Clip
@@ -632,7 +635,10 @@ private fun ToolBar(ed: Editor, set: com.mdev.mnotes.data.Settings, vertical: Bo
     tool("painter", 11, Icons.Rounded.FormatPaint, T.t("Pędzel formatu — przenosi kolor i styl aktywnego pióra", "Format painter — applies the active pen's colour and style"), "B", Tool.PAINTER, Panel.PAINTER)
     tool("fill", 12, Icons.Rounded.FormatColorFill, T.t("Wypełnienie (wiaderko)", "Fill (paint bucket)"), "F", Tool.FILL, Panel.FILL, hold = true)
     icon("pipette", 2, 17, Icons.Rounded.Colorize, T.t("Pipeta — pobierz kolor ze strony", "Eyedropper — pick a colour from the page"), "I", !ro, ed.pipette != null, pin = false) { if (ed.pipette != null) ed.cancelPipette() else ed.pipetteForCurrent() }
-    tool("lasso", 4, if (set.lassoRect) Icons.Rounded.HighlightAlt else Icons.Rounded.Gesture, T.t("Lasso", "Lasso"), "L", Tool.LASSO, Panel.LASSO)
+    // Lasso z ikoną z przerywanej linii (F7), odręczne albo prostokątne — jak pętla na stronie.
+    items += BarItem("lasso", 2, 4, T.t("Lasso", "Lasso"), "L", !ro, ed.tool == Tool.LASSO, ed.tool == Tool.LASSO, { pickTool(Tool.LASSO, Panel.LASSO) }) { c, s ->
+        LassoGlyph(set.lassoRect, c, Modifier.size(s))
+    }
     tool("text", 7, Icons.Rounded.TextFields, T.t("Tekst", "Text"), "T", Tool.TEXT, null)
     tool("laser", 14, Icons.Rounded.TrackChanges, T.t("Laser", "Laser"), "O", Tool.LASER, null, enabled = true)
     tool("hand", 10, Icons.Rounded.PanTool, T.t("Ręka (przewijanie)", "Hand (pan)"), "H", Tool.HAND, null, enabled = true)
@@ -780,11 +786,18 @@ private fun PenStrip(ed: Editor, set: com.mdev.mnotes.data.Settings, side: Int, 
 private fun PenStripItems(ed: Editor, set: com.mdev.mnotes.data.Settings, vertical: Boolean, panel: Panel?, onColorSets: () -> Unit, toggle: (Panel) -> Unit) {
     val sz = barSize(set)
     val isz = barIcon(set)
+    // F7: z gumką, lassem albo laserem w ręku listwa pokazuje ich opcje (jak przy piórze); można to wyłączyć w Ustawieniach.
+    if (set.toolStrip) when (ed.tool) {
+        Tool.ERASER -> { EraserStripItems(ed, set, vertical, panel, toggle); return }
+        Tool.LASSO -> { LassoStripItems(ed, set, vertical, panel, toggle); return }
+        Tool.LASER -> { LaserStripItems(ed, set, vertical); return }
+        else -> {}
+    }
     val kit = ed.kit
     val kind = kit.active
     val slot = kit.slot(kind)
     val cs = kit.setOf(kind)
-    // Z gumką albo lassem w ręku listwa przygasa, a dotknięcie jej wraca do pisania; ponowne dotknięcie wybranej
+    // Z innym narzędziem w ręku listwa przygasa, a dotknięcie jej wraca do pisania; ponowne dotknięcie wybranej
     // pozycji otwiera panel, w którym zmienia się jej wartość.
     val live = ed.penTool
     val scroll = rememberScrollState()
@@ -820,6 +833,57 @@ private fun PenStripItems(ed: Editor, set: com.mdev.mnotes.data.Settings, vertic
             Icons.Rounded.Palette, T.t("Kolory i ustawienia pióra", "Colours and pen settings"),
             { if (!live) ed.setToolKey(Tool.PEN); toggle(Panel.PEN) }, selected = panel == Panel.PEN, size = sz, iconSize = isz,
         )
+    }
+}
+
+/** Rozmiary gumki na listwie (pt); ponowne dotknięcie wybranego otwiera panel z suwakiem. */
+private val ERASER_SIZES = floatArrayOf(4f, 14f, 32f)
+
+/** Listwa gumki (F7): trzy tryby z ikonami, trzy rozmiary, „Nie ruszaj zakreślacza” i panel. */
+@Composable
+private fun EraserStripItems(ed: Editor, set: com.mdev.mnotes.data.Settings, vertical: Boolean, panel: Panel?, toggle: (Panel) -> Unit) {
+    val sz = barSize(set); val isz = barIcon(set)
+    val scroll = rememberScrollState()
+    Lin(vertical, Modifier.padding(4.dp).then(if (vertical) Modifier.verticalScroll(scroll) else Modifier.horizontalScroll(scroll))) {
+        val names = listOf(T.t("Gumka obiektowa — usuwa całe kreski", "Object eraser — removes whole strokes"), T.t("Gumka pikselowa — ściera tylko to, nad czym przejdzie", "Pixel eraser — erases only what it passes over"), T.t("Lasso gumki — usuwa to, co obrysujesz", "Lasso eraser — removes what you circle"))
+        for (mode in 0..2) {
+            val on = set.eraserMode == mode
+            ToolBtn(names[mode], { if (on) toggle(Panel.ERASER) else set.eraserMode = mode }, selected = on, size = sz) { c -> EraserModeGlyph(mode, c, Modifier.size(isz + 2.dp)) }
+        }
+        if (set.eraserMode != 2) {
+            BarSep(vertical)
+            for (s in ERASER_SIZES) {
+                val on = kotlin.math.abs(set.eraserSize - s) < 0.5f
+                ToolBtn(T.t("Rozmiar gumki", "Eraser size") + String.format(" %.0f pt", s), { if (on) toggle(Panel.ERASER) else set.eraserSize = s }, selected = on, size = sz) { c -> EraserSizeGlyph(s, c, Modifier.size(isz + 2.dp)) }
+            }
+        }
+        BarSep(vertical)
+        IconBtn(Icons.Rounded.Highlight, T.t("Nie ruszaj zakreślacza", "Keep highlighter"), { set.eraserKeepHighlighter = !set.eraserKeepHighlighter }, selected = set.eraserKeepHighlighter, size = sz, iconSize = isz)
+        IconBtn(Icons.Rounded.Tune, T.t("Ustawienia gumki", "Eraser settings"), { toggle(Panel.ERASER) }, selected = panel == Panel.ERASER, size = sz, iconSize = isz)
+    }
+}
+
+/** Listwa lassa (F7): kształt pętli (ikony z przerywanej linii), tryb zaznaczania i panel. */
+@Composable
+private fun LassoStripItems(ed: Editor, set: com.mdev.mnotes.data.Settings, vertical: Boolean, panel: Panel?, toggle: (Panel) -> Unit) {
+    val sz = barSize(set); val isz = barIcon(set)
+    Lin(vertical, Modifier.padding(4.dp)) {
+        ToolBtn(T.t("Lasso odręczne", "Freehand lasso"), { if (!set.lassoRect) toggle(Panel.LASSO) else set.lassoRect = false }, selected = !set.lassoRect, size = sz) { c -> LassoGlyph(false, c, Modifier.size(isz + 2.dp)) }
+        ToolBtn(T.t("Zaznaczanie prostokątem", "Rectangle selection"), { if (set.lassoRect) toggle(Panel.LASSO) else set.lassoRect = true }, selected = set.lassoRect, size = sz) { c -> LassoGlyph(true, c, Modifier.size(isz + 2.dp)) }
+        BarSep(vertical)
+        IconBtn(Icons.Rounded.SelectAll, T.t("Zbalansowane — połowa obiektu w pętli", "Balanced — half of the object in the loop"), { set.lassoTouch = false }, selected = !set.lassoTouch, size = sz, iconSize = isz)
+        IconBtn(Icons.Rounded.TouchApp, T.t("Tylko zahacz — wystarczy musnąć obiekt", "Just touch — brushing the object is enough"), { set.lassoTouch = true }, selected = set.lassoTouch, size = sz, iconSize = isz)
+        BarSep(vertical)
+        IconBtn(Icons.Rounded.Tune, T.t("Ustawienia lassa", "Lasso settings"), { toggle(Panel.LASSO) }, selected = panel == Panel.LASSO, size = sz, iconSize = isz)
+    }
+}
+
+/** Listwa lasera (F7): kolor śladu. */
+@Composable
+private fun LaserStripItems(ed: Editor, set: com.mdev.mnotes.data.Settings, vertical: Boolean) {
+    val sz = barSize(set)
+    Lin(vertical, Modifier.padding(4.dp)) {
+        for (c in LaserColors.PALETTE) StripDot(Color(0xFF000000.toInt() or c), set.laserColor == c, sz) { set.laserColor = c }
     }
 }
 

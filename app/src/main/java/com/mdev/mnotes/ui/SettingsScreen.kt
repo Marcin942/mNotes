@@ -293,6 +293,7 @@ private fun Appearance(set: com.mdev.mnotes.data.Settings) {
         ToggleRow(T.t("Delikatna wibracja przy dotknięciu przycisków", "Light vibration when tapping buttons"), set.haptics, keys = "haptyka drgania wibracje vibration haptic") { set.haptics = it }
         ToggleRow(T.t("Podpowiedź z nazwą przycisku (najechanie, przytrzymanie)", "Button name tooltip (hover, long press)"), set.tooltips, keys = "podpowiedź dymek napis nazwa tooltip hover") { set.tooltips = it }
         ToggleRow(T.t("Pokazuj dymki o narzędziach po ich wybraniu", "Show tool tips after picking a tool"), set.toolHints, keys = "dymki komunikaty napis wybrane narzędzie podpowiedź toast hint") { set.toolHints = it }
+        ToggleRow(T.t("Listwa pokazuje opcje gumki, lassa i lasera", "Strip shows eraser, lasso and laser options"), set.toolStrip, keys = "listwa ikonki gumka lasso laser opcje strip eraser") { set.toolStrip = it }
         ToggleRow(T.t("Animacja zmiany kolejności stron", "Animate page reordering"), set.pageAnim, keys = "animacja strony kolejność przesuwanie przestawianie animation reorder pages") { set.pageAnim = it }
         if (set.pageAnim) Opt(T.t("Czas animacji stron: ${set.pageAnimMs} ms", "Page animation time: ${set.pageAnimMs} ms"), "animacja strony czas szybkość duration speed") {
             MSlider(set.pageAnimMs.toFloat(), 100f, 700f) { set.pageAnimMs = (it / 20).toInt() * 20 }

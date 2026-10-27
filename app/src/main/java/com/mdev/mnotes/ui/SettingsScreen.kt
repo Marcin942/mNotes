@@ -186,8 +186,8 @@ fun SettingsScreen(onBack: () -> Unit, startCat: Int = 0, startQuery: String = "
     }
 }
 
-/** Kategorie, które przeszukujemy (bez „O aplikacji”: sam opis, nic do ustawienia). */
-private val SEARCHABLE_CATS = listOf(0, 1, 2, 3, 4, 5, 6)
+/** Kategorie, które przeszukujemy (bez „O aplikacji”: sam opis, nic do ustawienia; „Laboratorium” tylko w lab). */
+private val SEARCHABLE_CATS = SettingsQuery.searchableCats(Flavor.lab != null)
 
 /** Wyniki wyszukiwania: te same kontrolki co w kategoriach, odfiltrowane i pogrupowane pod nagłówkami kategorii. */
 @Composable
@@ -215,7 +215,8 @@ private fun SearchResults(q: SettingsQuery, raw: String, set: Settings, cats: Li
                     3 -> InputPrefs(set)
                     4 -> NewNotePrefs(set)
                     5 -> PrivacyPrefs(set)
-                    else -> ShortcutsTable(set)
+                    6 -> ShortcutsTable(set)
+                    else -> Flavor.lab?.SettingsSection()
                 }
             }
         }

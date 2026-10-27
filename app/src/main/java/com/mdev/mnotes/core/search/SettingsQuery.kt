@@ -31,6 +31,15 @@ class SettingsQuery private constructor(private val stems: List<String>) {
     }
 
     companion object {
+        /** Indeks kategorii „Laboratorium” w Ustawieniach (jest tylko w wariancie lab, przed „O aplikacji”). */
+        const val LAB_CAT = 7
+
+        /**
+         * Kategorie przeszukiwane przez wyszukiwarkę ustawień: wszystkie z ustawieniami, bez „O aplikacji” (sam opis).
+         * „Laboratorium” tylko w wariancie lab — wcześniej pomijane, więc jego słowa kluczowe nic nie znajdowały (A2-10).
+         */
+        fun searchableCats(hasLab: Boolean): List<Int> = (0 until LAB_CAT).toList() + if (hasLab) listOf(LAB_CAT) else emptyList()
+
         /** Puste lub białe zapytanie daje `null` (brak filtrowania). */
         fun of(q: String): SettingsQuery? {
             val words = TextSearch.words(q)

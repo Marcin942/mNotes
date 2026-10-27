@@ -232,3 +232,9 @@ dziedziczy już proces z `start-A.sh`, więc `./gradlew` działa bez niego.
   zaznacz → przytrzymaj → „Konstrukcja ›” → „Wysokości i ortocentrum”: litery A, B, C na zewnątrz rogów, H obok kropki,
   nie na liniach; trójkąt prostokątny → „A=H”; zaznacz odręczny trójkąt (bez przytrzymania) → przytrzymaj → wskazówka;
   Ustawienia → Edytor i pióro → Konstrukcje → wyłącz podpisy.
+- **A2-10** szukanie w „Laboratorium” — `noc/f2-szukanie`; `SettingsQueryTest.labCategoryIsSearchedOnlyInLab`.
+  `SEARCHABLE_CATS = SettingsQuery.searchableCats(Flavor.lab != null)`, w wynikach kategoria 7 rysuje
+  `Flavor.lab?.SettingsSection()`. Uwaga dla B (bez zmian w `Lab.kt`): opisy w grupach lab to gołe `Text` — w wynikach
+  szukania pokażą się razem z pasującym wierszem; jeśli to przeszkadza, owinąć je w `Extra { }` jak w „Obracanie i kąty”.
+  **Tablet (labDebug):** Ustawienia → szukaj „kreda” albo „telefon” → wiersze z „Laboratorium”; w coreDebug brak tej
+  kategorii w wynikach.

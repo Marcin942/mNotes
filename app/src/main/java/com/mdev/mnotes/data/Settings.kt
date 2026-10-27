@@ -129,6 +129,7 @@ class Settings(ctx: Context) {
     var dualFraction by Pref("dual.fraction", 0.5f)      // F4: część wysokości dla górnego zeszytu
     var dualSyncZoom by Pref("dual.sync_zoom", true)     // F4: wspólne powiększenie obu rzędów
     var mathText by Pref("text.math_unicode", true)      // L2: \alpha, x^2, a_1 → α, x², a₁ w polach tekstu
+    var constructNames by Pref("construct.names", true)  // L1 (A2-9): konstrukcje podpisują punkty A, B, C, O, H…
     var paletteRecent by Pref("palette.recent", "")      // pomysł Fable 2: ostatnio użyte polecenia palety (id po przecinku)
     var miniMap by Pref("view.minimap", false)           // pomysł Fable 3: mini-mapa strony przy dużym powiększeniu; domyślnie wył. (A2-2)
     var imageGridFit by Pref("images.grid_fit", false)   // pomysł Fable 11: wstawione zdjęcie wyrównane do kratki

@@ -79,6 +79,8 @@ import androidx.compose.material.icons.rounded.UnfoldMore
 import androidx.compose.material.icons.rounded.VisibilityOff
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.automirrored.rounded.ArrowForward
+import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowLeft
+import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.rounded.Redo
 import androidx.compose.material.icons.automirrored.rounded.Undo
 import androidx.compose.material.icons.rounded.Add
@@ -1746,9 +1748,22 @@ internal fun CtxMenuOverlay(ed: Editor, openStyle: (() -> Unit)?, tools: Editor 
         trailingIcon = if (hint.isNotEmpty()) { { Text(hint, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant) } } else null,
         onClick = { close(); onClick() },
     )
+    // A2-9: konstrukcje w podmenu „Konstrukcja ▸” (trójkąt dawał 5 pozycji w i tak długim menu); „‹” wraca.
+    var sub by remember(cm) { mutableStateOf(false) }
+    val cons = remember(cm) { if (cm.hasSel) ed.constructionOps() else emptyList() }
     Box(Modifier.fillMaxSize()) {
         Box(Modifier.offset { IntOffset(cm.x.toInt(), cm.y.toInt()) }) {
             DropdownMenu(true, { close() }) {
+                if (sub) {
+                    DropdownMenuItem(
+                        text = { Text(T.t("Konstrukcja", "Construction"), style = MaterialTheme.typography.titleSmall) },
+                        leadingIcon = { Icon(Icons.AutoMirrored.Rounded.KeyboardArrowLeft, T.t("Wstecz", "Back")) },
+                        onClick = { sub = false },
+                    )
+                    HorizontalDivider()
+                    for (op in cons) Item(T.t(op.pl, op.en)) { ed.applyConstruction(op) }
+                    return@DropdownMenu
+                }
                 if (cm.hasSel) {
                     Item(T.t("Wytnij", "Cut"), "Ctrl+X") { ed.cutSel() }
                     Item(T.t("Kopiuj", "Copy"), "Ctrl+C") { ed.copySel() }
@@ -1759,14 +1774,17 @@ internal fun CtxMenuOverlay(ed: Editor, openStyle: (() -> Unit)?, tools: Editor 
                     Item(T.t("Zapisz jako naklejkę…", "Save as sticker…")) { ed.stickerSaveOpen = true }
                     if (ed.canArrangeSel()) Item(T.t("Uporządkuj obrazy", "Arrange images")) { ed.arrangeSel() }
                     if (ed.canStickBackground()) Item(T.t("Przyklej do strony jako tło", "Stick to page as background")) { ed.stickBackground() }
-                    // L1: konstrukcje dla zaznaczonych kształtów (trójkąt, proste, okręgi, punkty).
-                    val cons = remember(cm) { ed.constructionOps() }
-                    if (cons.isNotEmpty()) {
-                        HorizontalDivider()
-                        Text(T.t("Konstrukcja", "Construction"), Modifier.padding(horizontal = 16.dp, vertical = 4.dp), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        for (op in cons) Item(T.t(op.pl, op.en)) { ed.applyConstruction(op) }
-                        HorizontalDivider()
-                    }
+                    // L1: konstrukcje dla zaznaczonych kształtów (trójkąt, proste, okręgi, punkty) — jedna pozycja z podmenu.
+                    if (cons.isNotEmpty()) DropdownMenuItem(
+                        text = { Text(T.t("Konstrukcja", "Construction")) },
+                        trailingIcon = { Icon(Icons.AutoMirrored.Rounded.KeyboardArrowRight, null) },
+                        onClick = { sub = true },
+                    )
+                    else if (remember(cm) { ed.constructionHint() }) Text(
+                        T.t("Konstrukcje: zaznacz kształty narysowane z przytrzymaniem", "Constructions: select shapes drawn with a hold"),
+                        Modifier.padding(horizontal = 16.dp, vertical = 6.dp).widthIn(max = 240.dp),
+                        style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
                 }
                 Item(T.t("Wklej", "Paste"), "Ctrl+V", ed.canPaste() && !ed.readOnly) { ed.paste(if (cm.pageIndex >= 0) Triple(cm.pageIndex, cm.lx, cm.ly) else null) }
                 if (cm.hasSel) {

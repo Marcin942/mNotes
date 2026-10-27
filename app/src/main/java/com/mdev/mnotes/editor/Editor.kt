@@ -731,7 +731,10 @@ class Editor(val ctx: Context, val nbId: String) {
 
     // — Konstrukcje geometryczne (L1) —
     /** Konstrukcje możliwe dla bieżącego zaznaczenia (trójkąt, proste, okręgi, punkty). */
-    fun constructionOps(): List<ConstructOps.Op> = if (readOnly) emptyList() else ConstructOps.ops(selElements())
+    fun constructionOps(): List<ConstructOps.Op> = if (readOnly) emptyList() else ConstructOps.ops(selElements(), settings.constructNames, T.pl)
+
+    /** Zaznaczenie nie daje konstrukcji, ale ma odręczne kreski — menu podpowiada, jak narysować kształt (A2-9). */
+    fun constructionHint(): Boolean = !readOnly && ConstructOps.needsHint(selElements())
 
     /** Dopisuje wynik konstrukcji w kolorze i grubości aktywnego pióra; zaznacza wynik (jedno cofnięcie). */
     fun applyConstruction(op: ConstructOps.Op) {

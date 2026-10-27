@@ -372,6 +372,12 @@ private fun EditorPrefs(set: com.mdev.mnotes.data.Settings) {
         if (set.holdToShape) ToggleRow(T.t("Trzymaj dalej, aby wygładzić w krzywą", "Keep holding to smooth into a curve"), set.holdToCurve, keys = "krzywa bezier wygładź gładka curve smooth") { set.holdToCurve = it }
         if (set.holdToShape && set.holdToCurve) Opt(T.t("Dodatkowy czas dla krzywej: ${set.curveHoldMs} ms", "Extra time for a curve: ${set.curveHoldMs} ms"), "krzywa bezier czas opóźnienie curve") { MSlider(set.curveHoldMs.toFloat(), 0f, 1000f) { set.curveHoldMs = (it / 50).toInt() * 50 } }
     }
+    Group(T.t("Konstrukcje", "Constructions"), keys = "konstrukcja geometria trójkąt okrąg construction geometry") {
+        ToggleRow(
+            T.t("Podpisuj punkty konstrukcji (A, B, C, O, H…)", "Name construction points (A, B, C, O, H…)"), set.constructNames,
+            keys = "nazwy punktów litery podpis wierzchołki ortocentrum środek okręgu labels names points",
+        ) { set.constructNames = it }
+    }
     Group(T.t("Pędzel formatu", "Format painter"), keys = "malarz kopiuj formatowanie painter") {
         Opt(T.t("Tryb pędzla formatu", "Format painter mode"), "format painter kopiuj formatowanie styl") { Choice(listOf(T.t("Obiektowo", "Object"), "Lasso"), set.painterMode) { set.painterMode = it } }
         ToggleRow(T.t("Szybki przycisk „Pobierz format”", "Quick “Take format” button"), set.painterQuick, keys = "pobierz format pipeta pędzel malarz przycisk pod ikoną szybki") { set.painterQuick = it }

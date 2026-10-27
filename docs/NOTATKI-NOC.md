@@ -221,3 +221,14 @@ dziedziczy już proces z `start-A.sh`, więc `./gradlew` działa bez niego.
   kapsuła jest widoczna. **Tablet:** „⋮” → „Tryb wykładu…” → anuluj aparat → kapsuła zostaje; Ctrl+F (szukaj) przy
   włączonej kapsule — pasek nad kapsułą; dymek (np. po zdjęciu) nie zasłania kapsuły; urządzenie bez aparatu → tryb się
   kończy z komunikatem.
+- **A2-9** L1 nazwy punktów i podmenu — `noc/f2-konstrukcje`; `ConstructOpsTest` (3 nowe testy, stare filtrują kreski).
+  Każda konstrukcja zbiera swoje linie/okręgi i nazwane punkty (`Draw`), nazwa idzie w środek największej wolnej luki
+  kątowej między kierunkami linii przy punkcie (boki, wysokości, środkowe, symetralne, styczne okręgów), odległość = promień
+  kropki + pół przekątnej pola. Litery: A, B, C, O, I, S/G, H, M, P/Q (plan wymieniał A, B, C, O, H; resztę dobrałem wg
+  szkolnych oznaczeń). Nazwy wierzchołków dopisywane przy każdej konstrukcji trójkąta, chyba że w zaznaczeniu są już pola
+  „A/B/C” (zaznacz trójkąt razem z podpisami, a nie powtórzą się). **Wygląd:** podpisy kursywą 11 pt w kolorze pióra, jak
+  podpisy osi w F8; menu: „Konstrukcja” ze strzałką ›, po dotknięciu to samo okno menu pokazuje nagłówek „‹ Konstrukcja”
+  i listę konstrukcji; wskazówka szarym drobnym tekstem w miejscu pozycji. **Tablet:** narysuj trójkąt z przytrzymaniem →
+  zaznacz → przytrzymaj → „Konstrukcja ›” → „Wysokości i ortocentrum”: litery A, B, C na zewnątrz rogów, H obok kropki,
+  nie na liniach; trójkąt prostokątny → „A=H”; zaznacz odręczny trójkąt (bez przytrzymania) → przytrzymaj → wskazówka;
+  Ustawienia → Edytor i pióro → Konstrukcje → wyłącz podpisy.

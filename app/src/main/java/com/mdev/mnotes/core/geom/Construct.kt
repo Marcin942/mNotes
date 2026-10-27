@@ -130,6 +130,27 @@ object Construct {
         return Line(m - n * (len / 2f), m + n * (len / 2f))
     }
 
+    /** Kąt przy wierzchołku [v] między ramionami do [a] i [b] (stopnie, 0–180). */
+    fun angleDeg(a: P, v: P, b: P): Float {
+        val ux = a.x - v.x; val uy = a.y - v.y; val wx = b.x - v.x; val wy = b.y - v.y
+        val l = hypot(ux, uy) * hypot(wx, wy)
+        if (l < 1e-9f) return 0f
+        return Math.toDegrees(kotlin.math.acos(((ux * wx + uy * wy) / l).toDouble().coerceIn(-1.0, 1.0))).toFloat()
+    }
+
+    /** Kąt między dwiema prostymi: wierzchołek (przecięcie) i ramiona do dalszych końców odcinków. */
+    class Corner(val v: P, val a: P, val b: P) { val deg: Float get() = angleDeg(a, v, b) }
+
+    /**
+     * Kąt, jaki tworzą odcinki [l1] i [l2] (A2-13: odczyt kąta przez zaznaczenie): wierzchołek w przecięciu prostych,
+     * ramiona w stronę dalszych końców — dla odcinków ze wspólnym końcem to po prostu kąt między nimi. Null dla równoległych.
+     */
+    fun corner(l1: Line, l2: Line): Corner? {
+        val v = intersect(l1, l2) ?: return null
+        fun far(l: Line) = if (l.a.dist(v) >= l.b.dist(v)) l.a else l.b
+        return Corner(v, far(l1), far(l2))
+    }
+
     /** Dwusieczna kąta przy wierzchołku [v] między ramionami do [a] i [b] (półprosta długości [len]). */
     fun angleBisector(a: P, v: P, b: P, len: Float): Line {
         val u = (a - v).let { it * (1f / hypot(it.x, it.y).coerceAtLeast(1e-6f)) }

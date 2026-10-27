@@ -1123,6 +1123,10 @@ class Editor(val ctx: Context, val nbId: String) {
 
     fun toggleRuler() { ruler = !ruler; if (ruler) view?.rulerShown() else view?.invalidate() }
 
+    /** Kątomierz na stronie (FB4, A2-13): przesuwany i obracany jak linijka; kreska ze środka idzie po promieniu. */
+    var protractor by mutableStateOf(false)
+    fun toggleProtractor() { protractor = !protractor; if (protractor) view?.protractorShown() else view?.invalidate() }
+
     fun copyPage(i: Int = curIndex()): Boolean {
         val p = doc.pages.getOrNull(i) ?: return false
         Clip.pageNb = nbId; Clip.page = p.spec to doc.content(p)

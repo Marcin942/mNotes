@@ -318,3 +318,16 @@ dziedziczy już proces z `start-A.sh`, więc `./gradlew` działa bez niego.
   1 s+; napisz drobne słowo bez odrywania (np. „mmm”) — nic się nie prostuje w trakcie; (B8) zaznacz coś lassem, prowadź
   rysik nad paskiem bez dotykania — żadnych dymków; przytrzymaj przycisk Ręki rysikiem — dymek „Ręka (przewijanie)”; z myszą
   (DeX) najechanie dalej pokazuje dymek. **Pytanie do Marcina bez zmian:** który uchwyt (B6) i kiedy dokładnie „ręka” (B8).
+- **Scalenie `noc/lab2`** (po A2-12): B2-6 (wektoryzacja, `RealPhotoTest` pomijany bez `KREDA_DIR`) i notatki B2-7; bez
+  konfliktów; testy core 681, lab 726 (2 pominięte), oba APK.
+- **A2-13** FB4 linijka i kątomierz — `noc/f2-linijka`; `ProtractorTest` (6 testów), `ConstructOpsTest` (nowa pozycja
+  „angles”). Linijka istniała już w pełnym zakresie z planu (przesuwanie/obrót dwoma palcami, przyklejanie pióra do krawędzi,
+  podziałka w mm w skali strony) — bez zmian poza wspólnym interfejsem `Instrument`. Dołożony kątomierz i odczyt kąta.
+  **Decyzja:** odczyt kąta „przez zaznaczenie” poszedł do podmenu „Konstrukcja ▸” (tam, gdzie już są operacje na
+  zaznaczonych kształtach), a miara jest widoczna od razu w nazwie pozycji — wstawianie łuku jest opcjonalne.
+  **Wygląd:** kątomierz w tym samym stylu co linijka (wypełnienie akcentem 24–33 % krycia, obwódka akcentu, podziałka
+  grafitowa/biała w ciemnym motywie, opisy 9,5 dp, białe uchwyty z obwódką); dymki z miarą jak przy linijce (ciemna pigułka).
+  Łuki i miary kątów na stronie: kolor pióra, 11 pt, jak nazwy punktów z A2-9. **Tablet:** pasek (albo „⋯”) → Kątomierz;
+  przesuń go palcem, obróć dwoma palcami albo uchwytem; postaw rysik w krzyżyku i prowadź — prosta po promieniu, dymek
+  „35°”; druga prosta z tego samego środka → zaznacz obie lassem → przytrzymaj → „Konstrukcja ›” → „Kąt między prostymi:
+  …” (ta sama miara); trójkąt z przytrzymaniem → „Kąty: … · … · …” → łuki z miarami.

@@ -85,6 +85,10 @@ object ConstructOps {
                 val len = max(a.dist(b), max(b.dist(c), c.dist(a)))
                 line(Construct.bisector(a, b, len), true); line(Construct.bisector(b, c, len), true); line(Construct.bisector(c, a, len), true)
             })
+            // A2-13 (FB4): kąty trójkąta odczytane z zaznaczenia — miary już w nazwie pozycji, „wstaw” dorysowuje łuki.
+            val corners = listOf(Construct.Corner(a, b, c), Construct.Corner(b, c, a), Construct.Corner(c, a, b))
+            val list = corners.joinToString(" · ") { deg(it.deg, pl) }
+            out += Op("angles", "Kąty: $list", "Angles: $list", { col, w -> corners.flatMap { angleMark(it, col, w, pl) } })
         }
         if (i.points.size >= 3) {
             val (a, b, c) = i.points
@@ -94,6 +98,10 @@ object ConstructOps {
         }
         val given = i.lines.take(2)
         if (i.lines.size >= 2) out += Op("xll", "Punkt przecięcia prostych", "Intersection of lines", draw(given) { Construct.intersect(i.lines[0], i.lines[1])?.let { dot(it, "P") } })
+        if (i.lines.size == 2) Construct.corner(i.lines[0], i.lines[1])?.let { k ->
+            val d = deg(k.deg, pl)
+            out += Op("angle", "Kąt między prostymi: $d", "Angle between the lines: $d", { col, w -> angleMark(k, col, w, pl) })
+        }
         if (i.lines.isNotEmpty() && i.circles.isNotEmpty()) out += Op("xlc", "Przecięcie prostej i okręgu", "Line–circle intersection", draw(given) {
             around(i.circles[0]); Construct.intersect(i.lines[0], i.circles[0]).forEachIndexed { k, p -> dot(p, PAIR[k]) }
         })
@@ -130,6 +138,35 @@ object ConstructOps {
      */
     fun needsHint(els: List<Element>): Boolean =
         ops(els, names = false).isEmpty() && els.any { it is Stroke && !it.poly && !it.ellipse && it.ctrl == null && it.count > 2 }
+
+    /** Miara kąta do podpisu: pełne stopnie bez części dziesiętnej („90°”), inaczej jedna cyfra po przecinku (PL) / kropce. */
+    fun deg(d: Float, pl: Boolean = true): String {
+        val r = Math.round(d * 10f) / 10f
+        if (abs(r - Math.round(r)) < 0.05f) return "${Math.round(r)}°"
+        val s = "%.1f".format(java.util.Locale.ROOT, r)
+        return (if (pl) s.replace('.', ',') else s) + "°"
+    }
+
+    /**
+     * Zaznaczenie kąta jak w zeszycie: łuk przy wierzchołku między ramionami i miara obok, na dwusiecznej (A2-13).
+     * Promień łuku: ćwierć krótszego ramienia, 10–36 pt.
+     */
+    fun angleMark(k: Construct.Corner, color: Int, width: Float, pl: Boolean = true): List<Element> {
+        val v = k.v
+        val a0 = atan2(k.a.y - v.y, k.a.x - v.x); val a1 = atan2(k.b.y - v.y, k.b.x - v.x)
+        var d = a1 - a0
+        while (d > PI) d -= (2 * PI).toFloat(); while (d <= -PI) d += (2 * PI).toFloat()
+        val rad = (0.25f * kotlin.math.min(k.a.dist(v), k.b.dist(v))).coerceIn(10f, 36f)
+        val n = (abs(d) * rad / 1.5f).toInt().coerceIn(6, 120)
+        val pts = FloatArray(3 * (n + 1)) { j -> val t = a0 + d * (j / 3) / n; when (j % 3) { 0 -> v.x + rad * cos(t); 1 -> v.y + rad * sin(t); else -> 1f } }
+        val arc = Stroke(Ids.next(), PenKind.BALLPOINT, color, max(0.6f, width * 0.8f), pts)
+        val text = deg(k.deg, pl)
+        val tw = text.length * LABEL_PT * 0.62f + 3f; val th = LABEL_PT * 1.3f
+        val mid = a0 + d / 2f
+        val dist = rad + 0.5f * hypot(tw, th) + 2f
+        val label = TextBox(Ids.next(), v.x + dist * cos(mid), v.y + dist * sin(mid), tw, th, 0f, text, LABEL_PT, color, align = TextBox.ALIGN_CENTER)
+        return listOf(arc, label)
+    }
 
     const val LABEL_PT = 11f
     private val VERTEX_NAMES = setOf("A", "B", "C")

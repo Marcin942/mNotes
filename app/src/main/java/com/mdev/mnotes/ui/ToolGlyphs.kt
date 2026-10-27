@@ -106,6 +106,25 @@ fun BezierGlyph(color: Color, modifier: Modifier = Modifier) {
     }
 }
 
+/** Kątomierz (A2-13): półkole na linii bazowej, trzy kreski podziałki i promień od środka — jak szkolny przyrząd. */
+@Composable
+fun ProtractorGlyph(color: Color, modifier: Modifier = Modifier) {
+    Canvas(modifier) {
+        val c = Offset(u(12f), u(17f))
+        drawArc(color, 180f, 180f, false, Offset(u(3f), u(8f)), androidx.compose.ui.geometry.Size(u(18f), u(18f)), style = Stroke(u(1.8f), cap = StrokeCap.Round))
+        drawLine(color, Offset(u(2.5f), u(17f)), Offset(u(21.5f), u(17f)), u(1.8f), StrokeCap.Round)
+        for (deg in intArrayOf(30, 90, 150)) {
+            val a = Math.toRadians(deg.toDouble())
+            val o = Offset(c.x + u(9f) * kotlin.math.cos(a).toFloat(), c.y - u(9f) * kotlin.math.sin(a).toFloat())
+            val i = Offset(c.x + u(6.6f) * kotlin.math.cos(a).toFloat(), c.y - u(6.6f) * kotlin.math.sin(a).toFloat())
+            drawLine(color, i, o, u(1.2f), StrokeCap.Round)
+        }
+        val a = Math.toRadians(55.0)
+        drawLine(color, c, Offset(c.x + u(7f) * kotlin.math.cos(a).toFloat(), c.y - u(7f) * kotlin.math.sin(a).toFloat()), u(1.2f), StrokeCap.Round)
+        drawCircle(color, u(1.3f), c)
+    }
+}
+
 /** Rozmiar gumki: okrąg tym większy, im większa gumka (pierwiastek, żeby 2 i 40 pt zmieściły się w przycisku). */
 @Composable
 fun EraserSizeGlyph(pt: Float, color: Color, modifier: Modifier = Modifier) {

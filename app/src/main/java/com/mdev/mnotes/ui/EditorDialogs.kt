@@ -171,6 +171,7 @@ fun commandList(
         "attach" to ({ true } to { set.attach = !set.attach; ed.say(if (set.attach) T.t("Przyczepianie do figur włączone", "Attach to shapes on") else T.t("Przyczepianie do figur wyłączone", "Attach to shapes off")) }),
         "toolSpace" to ({ !ed.readOnly } to { pickTool(Tool.SPACE, null) }),
         "ruler" to ({ !ed.readOnly } to { ed.toggleRuler() }),
+        "protractor" to ({ !ed.readOnly } to { ed.toggleProtractor() }),
         "toolTape" to ({ !ed.readOnly } to { pickTool(Tool.TAPE, Panel.TAPE) }),
         "tapesToggle" to ({ !ed.readOnly } to { ed.toggleAllTapes() }),
         "pipette" to ({ !ed.readOnly } to { ed.pipetteForCurrent() }),

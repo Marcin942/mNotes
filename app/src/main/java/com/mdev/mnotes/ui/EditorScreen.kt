@@ -676,6 +676,10 @@ private fun ToolBar(ed: Editor, set: com.mdev.mnotes.data.Settings, vertical: Bo
     tool("tape", 15, Icons.Rounded.VisibilityOff, T.t("Taśma — zakryj fragment (do nauki)", "Tape — cover an area (for study)"), "K", Tool.TAPE, Panel.TAPE)
     tool("space", 16, Icons.Rounded.UnfoldMore, T.t("Wstaw / usuń odstęp", "Insert / remove space"), "X", Tool.SPACE, null)
     icon("ruler", 2, 13, Icons.Rounded.Straighten, T.t("Linijka", "Ruler"), "R", !ro, ed.ruler, pin = false) { ed.toggleRuler() }
+    // A2-13: kątomierz obok linijki; niski priorytet, więc na wąskim pasku trafia pod „⋯”.
+    items += BarItem("protractor", 2, 19, T.t("Kątomierz — kreska ze środka idzie po promieniu", "Protractor — a stroke from the centre follows a ray"), null, !ro, ed.protractor, false, { ed.toggleProtractor() }) { c, s ->
+        ProtractorGlyph(c, Modifier.size(s))
+    }
 
     // Kolejność i tryby wybiera użytkownik (Ustawienia albo przytrzymanie przycisku); pozycje zbudowane wyżej mają
     // kolejność domyślną, więc tu tylko się je układa.

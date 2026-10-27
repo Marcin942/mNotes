@@ -25,6 +25,7 @@ import androidx.compose.material.icons.rounded.Timeline
 import androidx.compose.material.icons.rounded.RestartAlt
 import androidx.compose.material.icons.rounded.Colorize
 import androidx.compose.material.icons.rounded.Straighten
+import androidx.compose.material.icons.rounded.Architecture
 import androidx.compose.material.icons.rounded.TextFields
 import androidx.compose.material.icons.rounded.TrackChanges
 import androidx.compose.material.icons.rounded.UnfoldMore
@@ -69,6 +70,7 @@ internal fun barName(id: String): String = when (id) {
     "tape" -> T.t("Taśma", "Tape")
     "space" -> T.t("Wstaw / usuń odstęp", "Insert / remove space")
     "ruler" -> T.t("Linijka", "Ruler")
+    "protractor" -> T.t("Kątomierz", "Protractor")
     else -> penOf(id)?.let { penName(it) } ?: id
 }
 
@@ -91,6 +93,7 @@ internal fun barVector(id: String, lassoRect: Boolean): ImageVector? = when (id)
     "tape" -> Icons.Rounded.VisibilityOff
     "space" -> Icons.Rounded.UnfoldMore
     "ruler" -> Icons.Rounded.Straighten
+    "protractor" -> Icons.Rounded.Architecture
     else -> null
 }
 

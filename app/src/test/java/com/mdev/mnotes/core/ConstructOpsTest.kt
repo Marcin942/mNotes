@@ -35,7 +35,7 @@ class ConstructOpsTest {
 
     @Test fun triangleOffersCentersAndBuildsCircumcircle() {
         val ops = ConstructOps.ops(listOf(tri))
-        assertEquals(listOf("circum", "in", "medians", "altitudes", "bisectors"), ops.map { it.id })
+        assertEquals(listOf("circum", "in", "medians", "altitudes", "bisectors", "angles"), ops.map { it.id })
         val res = ops.first { it.id == "circum" }.build(0xFF000000.toInt(), 1.2f)
         val c = res.filterIsInstance<Stroke>().first { it.ellipse }
         val f = ShapeBox.frameOf(c)

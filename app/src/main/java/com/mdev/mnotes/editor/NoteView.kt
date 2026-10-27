@@ -33,6 +33,8 @@ import com.mdev.mnotes.core.edit.PipetteMath
 import com.mdev.mnotes.core.geom.Affine
 import com.mdev.mnotes.core.geom.Attach
 import com.mdev.mnotes.core.geom.Bounds
+import com.mdev.mnotes.core.geom.Instrument
+import com.mdev.mnotes.core.geom.Protractor
 import com.mdev.mnotes.core.geom.Ruler
 import com.mdev.mnotes.core.layout.DocLayout
 import com.mdev.mnotes.core.layout.DualRows
@@ -611,6 +613,7 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
         c.restore()
 
         drawRuler(c)
+        drawProtractor(c)
         drawSpace(c)
         drawTapePreview(c)
         drawPicker(c)
@@ -1605,18 +1608,36 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
 
     private fun rulerHandleOff() = min(17f * dp, ruler.len * zoom * 0.25f) / zoom
 
-    /** 0 poza linijką, 1 korpus (przesuwanie), ±2 uchwyt obrotu na końcu u = ±len/2. */
+    /**
+     * 0 poza przyrządami, 1 korpus (przesuwanie), ±2 uchwyt obrotu na końcu linijki albo linii bazowej kątomierza.
+     * Trafiony przyrząd zapamiętuje [hitInstr] (linijka ma pierwszeństwo, gdy leżą na sobie).
+     */
     private fun rulerHit(sx: Float, sy: Float): Int {
-        if (!ed.ruler || ed.readOnly) return 0
+        if (ed.readOnly) return 0
         val x = docX(sx); val y = docY(sy)
-        val u = ruler.u(x, y); val v = ruler.v(x, y)
         val r = 24f * dp / zoom
-        for (s in intArrayOf(1, -1)) if (hypot(u - s * (ruler.len / 2 - rulerHandleOff()), v) < r) return 2 * s
-        return if (ruler.inBody(x, y, 8f * dp / zoom)) 1 else 0
+        if (ed.ruler) {
+            val u = ruler.u(x, y); val v = ruler.v(x, y)
+            hitInstr = ruler
+            for (s in intArrayOf(1, -1)) if (hypot(u - s * (ruler.len / 2 - rulerHandleOff()), v) < r) return 2 * s
+            if (ruler.inBody(x, y, 8f * dp / zoom)) return 1
+        }
+        if (ed.protractor) {
+            val u = prot.u(x, y); val v = prot.v(x, y)
+            hitInstr = prot
+            for (s in intArrayOf(1, -1)) if (hypot(u - s * (prot.r - protHandleOff()), v - prot.base / 2) < r) return 2 * s
+            if (prot.inBody(x, y, 0f)) return 1
+        }
+        return 0
     }
+
+    /** Przyrząd przesuwany albo obracany w bieżącym geście (linijka albo kątomierz). */
+    private var grabbed: Instrument = ruler
+    private var hitInstr: Instrument = ruler
 
     private fun startRuler(ev: MotionEvent, hit: Int) {
         mode = Mode.RULER
+        grabbed = hitInstr
         rulerGrab = if (hit == 1) 1 else 2
         rulerHandle = if (hit < 0) -1 else 1
         rLastX = ev.x; rLastY = ev.y; rulerSnapped = false
@@ -1644,22 +1665,22 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
                 if (rulerGrab == 3) {
                     var d = ang - rLastAng
                     if (d > PI) d -= (2 * PI).toFloat() else if (d < -PI) d += (2 * PI).toFloat()
-                    ruler.a += d
-                    ruler.cx += (cx - rLastX) / zoom; ruler.cy += (cy - rLastY) / zoom
+                    grabbed.a += d
+                    grabbed.cx += (cx - rLastX) / zoom; grabbed.cy += (cy - rLastY) / zoom
                 }
                 rulerGrab = 3; rLastX = cx; rLastY = cy; rLastAng = ang
             }
             rulerGrab == 1 -> {
-                ruler.cx += (ev.x - rLastX) / zoom; ruler.cy += (ev.y - rLastY) / zoom
+                grabbed.cx += (ev.x - rLastX) / zoom; grabbed.cy += (ev.y - rLastY) / zoom
                 rLastX = ev.x; rLastY = ev.y
             }
             rulerGrab == 2 -> {
-                val a = atan2(docY(ev.y) - ruler.cy, docX(ev.x) - ruler.cx) - (if (rulerHandle > 0) 0f else PI.toFloat())
+                val a = atan2(docY(ev.y) - grabbed.cy, docX(ev.x) - grabbed.cx) - (if (rulerHandle > 0) 0f else PI.toFloat())
                 val s = Ruler.snap(a, 2.2f * (PI / 180).toFloat())
                 val on = s != a
                 if (on && !rulerSnapped) performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
                 rulerSnapped = on
-                ruler.a = s
+                grabbed.a = s
             }
         }
         invalidate()
@@ -1724,7 +1745,7 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
                 val d = abs(rulerU1 - rulerU0)
                 if (mm) "%.1f cm".format(d / unit / 10f) else "%.2f in".format(d / 72f)
             }
-            rulerGrab != 0 -> "%.1f°".format((((Math.toDegrees(ruler.a.toDouble()) % 180) + 180) % 180))
+            rulerGrab != 0 && grabbed === ruler -> "%.1f°".format((((Math.toDegrees(ruler.a.toDouble()) % 180) + 180) % 180))
             else -> null
         }
         if (label != null) {
@@ -1735,6 +1756,89 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
             c.drawRoundRect(scx - w / 2, scy - h / 2, scx + w / 2, scy + h / 2, h / 2, h / 2, rulerFill)
             c.drawText(label, scx, scy + 3.4f * dp, rulerText)
         }
+    }
+
+    // ───────────────────────── kątomierz (FB4, A2-13) ─────────────────────────
+
+    private val prot = Protractor(0f, 0f, 0f, 150f)
+    private var protPlaced = false
+
+    /** Wywoływane po włączeniu kątomierza: kładzie go na środku widoku, jeśli jeszcze nie leżał albo zniknął z ekranu. */
+    fun protractorShown() {
+        val sx = prot.cx * zoom + tx; val sy = prot.cy * zoom + ty
+        if (!protPlaced || sx < 0f || sy < 0f || sx > width || sy > height) {
+            val pw = doc.pages.firstOrNull()?.spec?.w ?: 595f
+            prot.r = (pw * 0.3f).coerceIn(90f, 200f)
+            prot.cx = docX(width / 2f); prot.cy = docY(height / 2f) + prot.r * 0.4f; prot.a = 0f
+            protPlaced = true
+        }
+        invalidate()
+    }
+
+    private fun protHandleOff() = min(14f * dp, prot.r * zoom * 0.12f) / zoom
+
+    /** Półkole jak linijka (półprzezroczysty akcent z obwódką), podziałka co 1°/5°/10°, opisy, środek i uchwyty obrotu. */
+    private fun drawProtractor(c: Canvas) {
+        if (!ed.protractor || ed.readOnly) return
+        if (!protPlaced) protractorShown()
+        val z = zoom; val r = prot.r * z; val base = prot.base * z
+        val scx = prot.cx * z + tx; val scy = prot.cy * z + ty
+        val ink = if (darkUi) 0xE6FFFFFF.toInt() else 0xE61F2933.toInt()
+        c.save()
+        c.translate(scx, scy)
+        c.rotate(Math.toDegrees(prot.a.toDouble()).toFloat())
+        tmpPath.rewind()
+        tmpPath.moveTo(-r, base); tmpPath.lineTo(-r, 0f)
+        tmpPath.arcTo(-r, -r, r, r, 180f, 180f, false)
+        tmpPath.lineTo(r, base); tmpPath.close()
+        rulerFill.color = rgbA(accent, if (darkUi) 0x55 else 0x3D)
+        rulerEdge.color = rgbA(accent, 0xD0)
+        c.drawPath(tmpPath, rulerFill)
+        c.drawPath(tmpPath, rulerEdge)
+        // Podziałka od 0° (prawy koniec bazy) do 180°; przy małym kątomierzu co 5°, żeby kreski się nie zlewały.
+        val perDeg = r * PI.toFloat() / 180f
+        val stride = if (perDeg >= 3.5f * dp) 1 else 5
+        val tl = min(14f * dp, r * 0.16f)
+        rulerTick.color = rgbA(ink, 0xB0)
+        rulerText.color = rgbA(ink, 0xCC)
+        tmpPath.rewind()
+        for (d in 0..180 step stride) {
+            val a = Math.toRadians(d.toDouble()); val cs = cos(a).toFloat(); val sn = sin(a).toFloat()
+            val l = tl * Protractor.tick(d)
+            tmpPath.moveTo(r * cs, -r * sn); tmpPath.lineTo((r - l) * cs, -(r - l) * sn)
+        }
+        c.drawPath(tmpPath, rulerTick)
+        if (r > 70f * dp) {
+            val every = if (perDeg * 10f >= 22f * dp) 10 else 30
+            val rr = r - tl - 9f * dp
+            for (d in 0..180 step every) {
+                val a = Math.toRadians(d.toDouble())
+                c.drawText("$d", rr * cos(a).toFloat(), -rr * sin(a).toFloat() + 3.4f * dp, rulerText)
+            }
+        }
+        // Środek: tu zaczyna się promień piórem.
+        c.drawLine(-7f * dp, 0f, 7f * dp, 0f, rulerTick)
+        c.drawLine(0f, -7f * dp, 0f, 2f * dp, rulerTick)
+        c.drawCircle(0f, 0f, 3.5f * dp, rulerEdge)
+        handleStroke.color = accent
+        val ho = protHandleOff() * z
+        for (s in intArrayOf(1, -1)) {
+            c.drawCircle(s * (r - ho), base / 2, 7f * dp, handleFill)
+            c.drawCircle(s * (r - ho), base / 2, 7f * dp, handleStroke)
+        }
+        c.restore()
+        // Etykieta: miara promienia przy piórze albo kąt obrotu kątomierza na środku.
+        val (label, lx, ly) = when {
+            liveActive && protRay -> Triple(com.mdev.mnotes.core.geom.ConstructOps.deg(Protractor.shown(protDeg), T.pl), curX, curY - 36f * dp)
+            rulerGrab != 0 && grabbed === prot -> Triple("%.1f°".format((((Math.toDegrees(prot.a.toDouble()) % 180) + 180) % 180)), scx, scy - r * 0.45f)
+            else -> return
+        }
+        rulerText.color = 0xFFFFFFFF.toInt()
+        val w = rulerText.measureText(label) + 18f * dp
+        val h = 22f * dp
+        rulerFill.color = rgbA(0xFF1F2933.toInt(), 0xE0)
+        c.drawRoundRect(lx - w / 2, ly - h / 2, lx + w / 2, ly + h / 2, h / 2, h / 2, rulerFill)
+        c.drawText(label, lx, ly + 3.4f * dp, rulerText)
     }
 
     // ───────────────────────── pipeta ─────────────────────────
@@ -2199,7 +2303,23 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
             if (side != 0) { rulerSide = side; rulerU0 = ruler.u(x, y).coerceIn(-ruler.len / 2, ruler.len / 2); rulerU1 = rulerU0 }
         }
         feedPen(ev, idx)
+        // A2-13: kreska zaczęta w środku kątomierza to promień — prosta od środka, kąt co 1°, długość za piórem.
+        protRay = rulerSide == 0 && ed.protractor && prot.nearCenter(docX(curX), docY(curY), 16f * dp / zoom)
+        if (protRay) { shapeSnapped = true; shapeKind = ShapeKind.LINE; shapePoly = true; shapeLabel = null; protRayUpdate() }
         armHold()
+    }
+
+    private var protRay = false
+    private var protDeg = 0f
+
+    /** Promień kątomierza do bieżącego położenia pióra (w układzie strony, jak inne kształty w trakcie). */
+    private fun protRayUpdate() {
+        val ox = layout.left(livePage); val oy = layout.top(livePage)
+        val r = prot.ray(docX(curX), docY(curY))
+        if (r[2] != protDeg && (r[2] % 15f == 0f)) performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
+        protDeg = r[2]
+        shapePts = floatArrayOf(prot.cx - ox, prot.cy - oy, 1f, r[0] - ox, r[1] - oy, 1f)
+        invalidate()
     }
 
     private fun feedPen(ev: MotionEvent, idx: Int) {
@@ -2221,6 +2341,7 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
 
     private fun penMove(ev: MotionEvent, idx: Int) {
         if (!liveActive) return
+        if (protRay) { protRayUpdate(); return }
         if (shapeSnapped) { adjustSnapped(); return }
         feedPen(ev, idx)
         // Ślizgający się rysik dryfuje: licznik przytrzymania zeruje dopiero wyraźny ruch poza promieniem dryfu wokół punktu
@@ -2384,8 +2505,11 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
             curve != null -> { snapped = true; Stroke(Ids.next(), builder.penKind, builder.penColor, builder.width, Bezier.sample(curve), line = builder.line, ctrl = curve) }
             else -> builder.finish(Ids.next())
         }
-        val quiet = heldCurve && activeTool != Tool.CURVE
-        shapeSnapped = false; shapeLabel = null; shapeCtrl = null; heldCurve = false
+        // Promienie kątomierza też bez zaznaczania: rysuje się je jeden po drugim (ramiona kąta).
+        val quiet = (heldCurve && activeTool != Tool.CURVE) || protRay
+        val tiny = protRay && shapePts.size >= 6 && hypot(shapePts[3] - shapePts[0], shapePts[4] - shapePts[1]) < 2f
+        shapeSnapped = false; shapeLabel = null; shapeCtrl = null; heldCurve = false; protRay = false
+        if (tiny) { invalidate(); return }   // samo dotknięcie środka kątomierza nie zostawia kropki
         if (stroke == null || pi !in doc.pages.indices) return
         val page = doc.pages[pi]
         ed.exec(DocEdit.Elements(page.id, ElementsEdit.add(doc.content(page), listOf(stroke))))

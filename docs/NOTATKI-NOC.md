@@ -264,6 +264,21 @@ Na starcie (`noc/wszystko` @ `471ed08`): lab 696 testów, 0 porażek.
     samymi, lokalizacja wyłączona → zdanie „Włącz lokalizację…”, 3 zdjęcia z postępem, Bluetooth wyłączony w połowie →
     wznowienie, Diagnostyka → „Kopiuj raport” i wklej Marcinowi, jeśli coś nie działa).
 
+- **2b-B2 kreda — pomiary i poprawki** (`917a60d`, `2067ec1`; raport `docs/KREDA-POMIARY.md`). Pomiar na **24**
+  zdjęciach z `kreda/blackboard/` (plan mówił o 10; biorę wszystkie) przed i po: udział kredy, liczba kresek, średnia
+  długość, fragmenty < 10 px, próg, czas (`KredaPomiaryTest`, `KREDA_DIR`; `KREDA_OUT` zapisuje podglądy do oczu).
+  Główne znalezisko: listwa między tablicami, rama i kawałki ściany szły jako kreda (do 14,8 % pikseli). Nowe kroki,
+  każdy z przełącznikiem (panel i Ustawienia → Laboratorium → Kreda): „Usuń listwy, ramy i ścianę” (pasy grubsze niż
+  kreda i długie ≥ 8 % boku; zwarte pogrubione litery zostają — pierwsza wersja bez tego warunku je zjadała, widać to
+  było na podglądzie), „Dociągaj bladą kredę do wyraźnej” (histereza: blade piksele połączone z wyraźnymi zostają),
+  „Usuń drobinki (ziarno tablicy)”; wektoryzacja łączy przerwane kreski po kierunku. Wynik: kreda % 6,6 → 3,9 (pismo
+  zostaje, sprawdzone na podglądach), kresek 485 → 468, fragmenty 21 → 19 %, czas bez zmian. **Nie poprawione:** próg
+  globalny dobija do 0,50 na 9/24 zdjęć (próg lokalny odłożony — w pustych miejscach wyciągałby smugi, a bez zdjęcia z
+  okładki PDF nie umiem tego uczciwie sprawdzić; prośba o to zdjęcie w `kreda/blackboard/`), `guessQuad` obejmuje ścianę
+  na zdjęciach z dużym kawałkiem ściany (obejście: tryb „Narożniki”). Test: lab 747, core 693, 0 porażek; `RealPhotoTest`
+  z `KREDA_DIR` dalej ≥ 94 % punktów kresek na kredzie. **Tablet:** zdjęcie dwóch tablic z listwą → różdżka → listwa
+  znika, wzory zostają; pogrubiony napis zostaje; wyłącz kolejno trzy nowe przełączniki i porównaj podgląd.
+
 ## Faza 2 — agent A (od 27.10, lista A2-* w `docs-noc/PLAN-NOCY.md`)
 
 Każdy punkt na własnej gałęzi `noc/f2-<temat>` od `noc/wszystko`, po zamknięciu scalony do `noc/wszystko`.

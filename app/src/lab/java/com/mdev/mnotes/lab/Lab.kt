@@ -406,6 +406,37 @@ object Lab : LabFeatures {
     @Composable
     override fun PhonePanel(ed: Editor, close: () -> Unit) = com.mdev.mnotes.lab.nearby.PhoneLinkDialog(com.mdev.mnotes.core.nearby.LinkMode.RECEIVE, ed, close)
 
+    /**
+     * Zdjęcie z trybu wykładu (2b-B3, hook A2-8): gdy to ciemna tablica, przechodzi przez kredę z krokami z Ustawień
+     * i podmienia plik obrazu jako **osobna** edycja — zdjęcie na stronie to podgląd, a jedno cofnięcie wraca do
+     * oryginału. Inne zdjęcia (kartka, slajd) zostają bez zmian. Wyłączane w Ustawienia → Laboratorium.
+     */
+    override fun onLecturePhoto(ed: Editor, pageId: String, image: ImageEl) {
+        val set = LabSettings.of(ed.view?.context ?: return)
+        if (!set.lecture) return
+        val file = ed.repo.assetFile(ed.nbId, image.asset)
+        val opt = set.options()
+        work.launch {
+            val photo = loadRaster(file, opt.maxSide) ?: return@launch
+            if (!BoardGeometry.looksLikeDarkBoard(photo)) return@launch
+            val out = BoardPipeline.run(photo, opt).image
+            val png = encodePng(out) ?: return@launch
+            ed.repo.io.execute {
+                val name = runCatching { ed.repo.importAsset(ed.nbId, png.inputStream(), "png") }.getOrNull() ?: return@execute
+                ed.view?.post {
+                    val page = ed.doc.page(pageId) ?: return@post
+                    val cur = ed.doc.content(page)
+                    // użytkownik mógł już zdjęcie przesunąć albo usunąć: bierzemy je z bieżącej treści strony
+                    val el = cur.elements.firstOrNull { it.id == image.id } as? ImageEl ?: return@post
+                    if (el.asset != image.asset) return@post
+                    val clean = el.copy(asset = name, h = el.w * out.h / out.w, crop = com.mdev.mnotes.core.model.ImageCrop.FULL, fx = com.mdev.mnotes.core.model.ImageFx.NONE)
+                    ed.exec(com.mdev.mnotes.core.model.DocEdit.Elements(page.id, com.mdev.mnotes.core.model.ElementsEdit.replace(cur, mapOf(el.id to clean))))
+                    ed.say(T.t("Tablica oczyszczona: sama kreda. Cofnij (↶), żeby wrócić do zdjęcia.", "Board cleaned: chalk only. Undo (↶) to get the photo back."))
+                }
+            }
+        }
+    }
+
     /** Po wstawieniu zdjęcia ciemnej tablicy raz podpowiada „Oczyść tablicę”; sprawdzenie na 320 px w tle. */
     override fun imageInserted(ed: Editor, el: ImageEl) {
         val set = LabSettings.of(ed.view?.context ?: return)
@@ -437,6 +468,7 @@ object Lab : LabFeatures {
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(vertical = 6.dp),
             )
             ToggleRow(T.t("Podpowiedź po wstawieniu zdjęcia tablicy", "Hint after inserting a board photo"), set.boardHint) { set.boardHint = it }
+            ToggleRow(T.t("Zdjęcie z trybu wykładu od razu przez kredę", "Lecture-mode photo straight through chalk cleanup"), set.lecture) { set.lecture = it }
             Steps(set.options()) { o ->
                 set.straighten = o.straighten; set.crop = o.crop; set.flatten = o.flatten; set.sharpen = o.sharpen
                 set.faint = o.faint; set.frames = o.frames; set.specks = o.specks

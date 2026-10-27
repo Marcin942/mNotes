@@ -2790,7 +2790,10 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
                 for (i in 1 until ln) len += hypot(lp[2 * i] - lp[2 * i - 2], lp[2 * i + 1] - lp[2 * i - 1])
                 if (len * zoom < 14f * dp || ln < (if (settings.lassoRect) 2 else 3)) { lassoTap(page, pgX(pi, downX), pgY(pi, downY)); ln = 0; lm = LM.NONE; return }
                 val poly: FloatArray = if (settings.lassoRect) {
-                    val x0 = lp[0]; val y0 = lp[1]; val x1 = lp[2 * (ln - 1)]; val y1 = lp[2 * (ln - 1) + 1]
+                    // Ramka ciągnięta „na styk” (od końca do końca linii) łapie też to, co leży na samym brzegu (B3).
+                    val g = RECT_SLACK_DP * dp / zoom
+                    val x0 = min(lp[0], lp[2 * (ln - 1)]) - g; val y0 = min(lp[1], lp[2 * (ln - 1) + 1]) - g
+                    val x1 = max(lp[0], lp[2 * (ln - 1)]) + g; val y1 = max(lp[1], lp[2 * (ln - 1) + 1]) + g
                     floatArrayOf(x0, y0, x1, y0, x1, y1, x0, y1)
                 } else lp.copyOf(2 * ln)
                 val ids = doc.content(page).elements.filter { !it.locked && EraseMath.selectedByLasso(it, poly) }.map { it.id }.toSet()
@@ -2953,6 +2956,8 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
         const val ROTATE_OFFSET_DP = 52f
         private const val ROTATE_HIT_DP = 20f
         private val TAP_SLOPS_DP = floatArrayOf(8f, 14f, 22f)
+        /** Zapas prostokąta zaznaczenia (dp ekranu): obiekt na samym brzegu ramki też jest w środku. */
+        private const val RECT_SLACK_DP = 4f
         /** Promień pędzla formatu w trybie obiektowym (dp ekranu). */
         private const val PAINT_R_DP = 7f
         /** Gumka: przemalowanie do tylu ms nie wymusza przerw; dłuższe czeka ERASE_REST × własny czas (najwyżej ERASE_MAX_WAIT_MS). */

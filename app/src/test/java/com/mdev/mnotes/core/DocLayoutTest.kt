@@ -61,6 +61,18 @@ class DocLayoutTest {
         assertEquals(842f, l.docHeight, 0f)
     }
 
+    /** B4: lasso zaczęte poza stroną (margines, tło obok, przerwa) należy do najbliższej strony, a nie „donikąd”. */
+    @Test
+    fun outsidePointsBelongToNearestPage() {
+        val l = DocLayout.of(listOf(a4, a4, a4), LayoutMode.VERTICAL, gap = 14f, pad = 20f)
+        assertEquals(-1, l.pageAt(5f, 30f))
+        assertEquals(0, l.nearest(5f, 30f))          // na lewo od pierwszej strony
+        assertEquals(0, l.nearest(300f, -50f))       // nad dokumentem
+        assertEquals(1, l.nearest(700f, 20f + 842f + 14f + 400f))   // na prawo od drugiej
+        assertEquals(1, l.nearest(300f, 20f + 842f + 10f))          // w przerwie bliżej drugiej
+        assertEquals(2, l.nearest(300f, 1e6f))       // pod dokumentem
+    }
+
     @Test
     fun emptyLayout() {
         val l = DocLayout.of(emptyList(), LayoutMode.VERTICAL)

@@ -217,34 +217,60 @@ object EraseMath {
         return out.toArray()
     }
 
-    /** Wielokąt zaznaczenia lasso: parzysto-nieparzysta reguła przecięć promienia. */
+    /**
+     * Wielokąt zaznaczenia lasso, reguła niezerowego nawinięcia. Pętla, która przecina samą siebie (dwa nachodzące
+     * okrążenia), obejmuje też część wspólną; reguła parzysto-nieparzysta ją wycinała (B7).
+     */
     fun polygonContains(poly: FloatArray, x: Float, y: Float): Boolean {
         val n = poly.size / 2
-        var inside = false
+        var wn = 0
         var j = n - 1
         for (i in 0 until n) {
-            val xi = poly[2 * i]; val yi = poly[2 * i + 1]
             val xj = poly[2 * j]; val yj = poly[2 * j + 1]
-            if ((yi > y) != (yj > y) && x < (xj - xi) * (y - yi) / (yj - yi) + xi) inside = !inside
+            val xi = poly[2 * i]; val yi = poly[2 * i + 1]
+            val side = (xi - xj) * (y - yj) - (x - xj) * (yi - yj)
+            if (yj <= y) { if (yi > y && side > 0f) wn++ } else if (yi <= y && side < 0f) wn--
             j = i
         }
-        return inside
+        return wn != 0
     }
 
-    /** Kreska i wypełnienie wpadają do zaznaczenia, gdy co najmniej połowa ich punktów leży w wielokącie; ramki — gdy środek. */
+    /**
+     * Punkty kreski rozłożone równo po długości (bez samych końców): prosta z dwoma punktami ma tyle samo próbek co
+     * pismo, więc linia od rogu do rogu ramki prostokąta trafia do zaznaczenia (B3, B10).
+     */
+    fun samplesAlong(e: Stroke, count: Int = 48): FloatArray {
+        val p = e.pts
+        val n = e.count
+        if (n <= 1) return if (n == 1) floatArrayOf(p[0], p[1]) else FloatArray(0)
+        var total = 0f
+        for (i in 1 until n) total += hypot(p[3 * i] - p[3 * i - 3], p[3 * i + 1] - p[3 * i - 2])
+        if (total <= 1e-6f) return floatArrayOf(p[0], p[1])
+        val out = FloatArray(2 * count)
+        var seg = 1
+        var acc = 0f
+        var segLen = hypot(p[3] - p[0], p[4] - p[1])
+        for (k in 0 until count) {
+            val target = total * (k + 0.5f) / count
+            while (acc + segLen < target && seg < n - 1) {
+                acc += segLen; seg++
+                segLen = hypot(p[3 * seg] - p[3 * seg - 3], p[3 * seg + 1] - p[3 * seg - 2])
+            }
+            val t = if (segLen <= 1e-6f) 0f else ((target - acc) / segLen).coerceIn(0f, 1f)
+            out[2 * k] = p[3 * seg - 3] + (p[3 * seg] - p[3 * seg - 3]) * t
+            out[2 * k + 1] = p[3 * seg - 2] + (p[3 * seg + 1] - p[3 * seg - 2]) * t
+        }
+        return out
+    }
+
+    /** Kreska i wypełnienie wpadają do zaznaczenia, gdy co najmniej połowa ich długości leży w wielokącie; ramki — gdy środek. */
     fun selectedByLasso(e: Element, poly: FloatArray): Boolean = when (e) {
         is Stroke -> {
+            val s = samplesAlong(e)
             var inside = 0
-            val n = e.count
-            val step = max(1, n / 48)
-            var cnt = 0
-            var i = 0
-            while (i < n) {
-                if (polygonContains(poly, e.pts[3 * i], e.pts[3 * i + 1])) inside++
-                cnt++
-                i += step
-            }
-            inside * 2 >= cnt
+            val cnt = s.size / 2
+            for (k in 0 until cnt) if (polygonContains(poly, s[2 * k], s[2 * k + 1])) inside++
+            cnt > 0 && inside * 2 >= cnt
         }
         is BoxElement -> polygonContains(poly, e.cx, e.cy)
         is FillEl -> {

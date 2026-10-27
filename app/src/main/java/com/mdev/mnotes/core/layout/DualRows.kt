@@ -28,6 +28,14 @@ object DualRows {
     }
 
     /**
+     * Przesunięcie uchwytu rozdzielacza (px) w trakcie przeciągania: rzędy mają jeszcze wysokości z [committed], a uchwyt
+     * stoi już tam, gdzie wypadnie podział [preview] (NaN = nie przeciągamy). Wysokości obu płócien zmieniają się raz, po
+     * puszczeniu — zmiana co klatkę kazała obu widokom liczyć kafelki od nowa (A2-5).
+     */
+    fun handleOffset(h: Float, committed: Float, preview: Float, divider: Float): Float =
+        if (preview.isNaN()) 0f else heights(h, preview, divider)[0] - heights(h, committed, divider)[0]
+
+    /**
      * Wspólne powiększenie: drugi rząd przyjmuje skalę [zoom] pierwszego, obciętą do własnych granic [min]..[max]
      * (rząd może mieć inny „100 %”, bo ma inną wysokość). Null = różnica pomijalna, nic nie zmieniać (bez pętli).
      */

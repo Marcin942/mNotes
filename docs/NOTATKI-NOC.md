@@ -180,3 +180,14 @@ dziedziczy już proces z `start-A.sh`, więc `./gradlew` działa bez niego.
   pióra bez zmian poza dopiskiem „(każdy osobno)” w nagłówku; w Ustawienia → Edytor i pióro → Pióro trzy nowe `ToggleRow`
   pod „Przytrzymaj, aby wyprostować kształt”. **Tablet:** √ z długą kreską i przytrzymaniem → wyrównany + dymek (tylko raz);
   napisz „ve”, „vo” odręcznie z przytrzymaniem na końcu „v” → zostaje pismem; Ustawienia → szukaj „pierwiastek”.
+- **A2-5** F4 dwa zeszyty (zostają dwa płótna) — `noc/f2-dwa-zeszyty`; `DualRowsTest.handleMovesAloneWhileDragging`, reszta
+  UI. Dolny rząd: `CtxMenuOverlay(ed2, openStyle = null, tools = ed)` i `PointMenuOverlay(ed2)` (teraz `internal`), okno
+  „Zapisz jako naklejkę” dla dolnego zeszytu; „Zaznacz wszystko” przełącza narzędzie przez górny edytor (pasek jest wspólny),
+  „Styl strony…” ukryte (panel stylu zna tylko górny zeszyt). Dymek raz na otwarcie dolnego zeszytu przy pierwszym
+  zaznaczeniu. Rozdzielacz: `graphicsLayer.translationY` + `zIndex` w trakcie, `frac` dopiero w `onDragEnd` (anulowanie
+  gestu wraca na miejsce). **Wygląd:** rozdzielacz jak dotąd (pasek `m.chrome` 40 dp), w trakcie przeciągania unosi się z
+  cieniem 6 dp nad dolnym płótnem, płótna nie migają; okno wyboru przy braku innych zeszytów: zdanie „Nie ma innych
+  zeszytów. Utwórz nowy — otworzy się poniżej…” i przycisk akcentu „Utwórz zeszyt”. **Tablet:** „⋮” → „Drugi zeszyt
+  poniżej…” → zaznacz coś lassem w dolnym rzędzie → dymek; przytrzymaj zaznaczenie → menu (np. „Duplikuj”, „Okrąg opisany”
+  dla trójkąta); przytrzymaj wierzchołek łamanej → menu punktu; przeciągnij rozdzielacz — płótna zmieniają wysokość po
+  puszczeniu, bez szarpania; na świeżej instalacji z jednym zeszytem „Drugi zeszyt poniżej…” → „Utwórz zeszyt”.

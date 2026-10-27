@@ -1698,7 +1698,7 @@ private fun colorOf(e: com.mdev.mnotes.core.model.Element?): Int? = when (e) {
 // ─────────────────────────────── Menu kontekstowe, toast ───────────────────────────────
 
 @Composable
-private fun PointMenuOverlay(ed: Editor) {
+internal fun PointMenuOverlay(ed: Editor) {
     val pm = ed.pointMenu ?: return
     fun close() { ed.pointMenu = null }
     @Composable
@@ -1729,8 +1729,12 @@ private fun PointMenuOverlay(ed: Editor) {
     }
 }
 
+/**
+ * Menu kontekstowe płótna. F4 (A2-5): dolny zeszyt ma to samo menu, ale bez „Styl strony…” ([openStyle] = null, panel
+ * stylu działa na górny), a narzędzie zmienia przez [tools] = górny edytor, bo pasek narzędzi jest wspólny.
+ */
 @Composable
-private fun CtxMenuOverlay(ed: Editor, openStyle: () -> Unit) {
+internal fun CtxMenuOverlay(ed: Editor, openStyle: (() -> Unit)?, tools: Editor = ed) {
     val cm = ed.ctxMenu ?: return
     fun close() { ed.ctxMenu = null }
     @Composable
@@ -1770,9 +1774,9 @@ private fun CtxMenuOverlay(ed: Editor, openStyle: () -> Unit) {
                     Item(T.t("Usuń", "Delete"), "Del") { ed.deleteSel() }
                 }
                 HorizontalDivider()
-                Item(T.t("Zaznacz wszystko na stronie", "Select all on page"), "Ctrl+A") { ed.setToolKey(Tool.LASSO); ed.selectAllOnPage() }
+                Item(T.t("Zaznacz wszystko na stronie", "Select all on page"), "Ctrl+A") { tools.setToolKey(Tool.LASSO); ed.selectAllOnPage() }
                 Item(T.t("Dodaj stronę po tej", "Add page after this"), "Ctrl+Shift+N") { ed.addPage(cm.pageIndex) }
-                Item(T.t("Styl strony…", "Page style…")) { openStyle() }
+                if (openStyle != null) Item(T.t("Styl strony…", "Page style…")) { openStyle() }
                 HorizontalDivider()
                 Item(T.t("Cofnij", "Undo"), "Ctrl+Z", ed.canUndo) { ed.undo() }
                 Item(T.t("Ponów", "Redo"), "Ctrl+Y", ed.canRedo) { ed.redo() }

@@ -34,4 +34,17 @@ class DualRowsTest {
         val list = listOf(Nb("a", 1), Nb("b", 5), Nb("c", 3))
         assertEquals(listOf("b", "c"), DualRows.candidates(list, { it.id }, { it.opened }, setOf("a")).map { it.id })
     }
+
+    /** A2-5: w trakcie przeciągania jedzie tylko uchwyt; po puszczeniu przesunięcie znika, bo zmieniają się wysokości. */
+    @Test fun handleMovesAloneWhileDragging() {
+        assertEquals(0f, DualRows.handleOffset(1000f, 0.5f, Float.NaN, 20f), 0f)
+        var preview = 0.5f
+        repeat(10) { preview = DualRows.dragged(preview, 10f, 1000f, 20f) }   // 10 ruchów po 10 px
+        assertEquals(100f, DualRows.handleOffset(1000f, 0.5f, preview, 20f), 0.5f)
+        // Po puszczeniu: nowy podział zatwierdzony, uchwyt na miejscu.
+        assertEquals(0f, DualRows.handleOffset(1000f, preview, preview, 20f), 0f)
+        // Uchwyt nie wyjeżdża poza granice rzędów.
+        repeat(100) { preview = DualRows.dragged(preview, 50f, 1000f, 20f) }
+        assertEquals(980f * (DualRows.MAX_FRACTION - 0.5f), DualRows.handleOffset(1000f, 0.5f, preview, 20f), 1e-2f)
+    }
 }

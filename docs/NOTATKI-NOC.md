@@ -191,3 +191,16 @@ dziedziczy już proces z `start-A.sh`, więc `./gradlew` działa bez niego.
   poniżej…” → zaznacz coś lassem w dolnym rzędzie → dymek; przytrzymaj zaznaczenie → menu (np. „Duplikuj”, „Okrąg opisany”
   dla trójkąta); przytrzymaj wierzchołek łamanej → menu punktu; przeciągnij rozdzielacz — płótna zmieniają wysokość po
   puszczeniu, bez szarpania; na świeżej instalacji z jednym zeszytem „Drugi zeszyt poniżej…” → „Utwórz zeszyt”.
+- **A2-6** F11 odwrócone kolory — wydajność — `noc/f2-odwrocenie`; `ColorInvertTest.liveInkMatchesCommittedLook`.
+  **Odstępstwo od planu (świadome):** plan mówił „odwracać kafelki w `PageCache` + test, że odwrócony kafelek jest
+  cache’owany”. Zrobiłem wariant z przeglądu Fable (§3.2 F11): `PageCache.draw(…, inverted)` rysuje te same kafelki i bazę
+  farbą z `ColorMatrixColorFilter` (dwie farby i jeden filtr tworzone raz na `PageCache`). Na GPU filtr w farbie to kilka
+  instrukcji w shaderze; nie ma warstwy na klatkę ani drugiej kopii każdego kafelka (pamięć ×2 przy dwóch płótnach F4),
+  przełączenie zostaje natychmiastowe, a łatanie kafelków i pipeta działają na oryginale jak dotąd. Nie ma więc „kafelka
+  odwróconego” do cache’owania — test sprawdza za to kluczowe założenie drugiej zmiany: kreska w trakcie rysowana od razu
+  odwróconym kolorem (`ColorInvert.liveInk`) daje ten sam piksel co kafelek po zatwierdzeniu, a dla kreski półprzezroczystej
+  (macierz obcina nasycone kanały) już nie — dlatego zakreślacz i pióra z kryciem < 1 dalej rysują w trakcie przez warstwę.
+  Warstwa została też dla obiektów przesuwanych lassem (tylko w trakcie przeciągania) i dla rysowania wektorowego, zanim
+  powstaną kafelki. Mini-mapa (A2-2) pokazuje teraz stronę odwróconą. **Tablet:** PDF → Styl strony → Odwróć kolory (cały
+  zeszyt) → zoom 3×, szybkie przewijanie (powinno być jak na zwykłej stronie, także w dwóch zeszytach F4); pisanie piórem
+  czerwonym i niebieskim (kolor w trakcie = po puszczeniu), zakreślacz na odwróconej stronie; przesunięcie lassem.

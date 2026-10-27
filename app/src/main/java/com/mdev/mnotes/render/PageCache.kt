@@ -78,6 +78,11 @@ class PageCache(
     private val ui = PageRenderer(assets)
     private val tilePaint = Paint(Paint.FILTER_BITMAP_FLAG)
     private val basePaint = Paint(Paint.FILTER_BITMAP_FLAG)
+    // F11 (A2-6): odwrócona strona to te same kafelki rysowane z filtrem w farbie — bez warstwy na każdą klatkę i bez
+    // drugiej kopii bitmap; przełączenie jest dalej natychmiastowe, a pipeta i łatanie kafelków widzą oryginał.
+    private val invertFilter = android.graphics.ColorMatrixColorFilter(android.graphics.ColorMatrix(ColorInvert.MATRIX))
+    private val tilePaintInv = Paint(Paint.FILTER_BITMAP_FLAG).apply { colorFilter = invertFilter }
+    private val basePaintInv = Paint(Paint.FILTER_BITMAP_FLAG).apply { colorFilter = invertFilter }
     private val rect = RectF()
     private val layers = ArrayList<Level>(MAX_LEVELS)
     private val sorted = ArrayList<Level>(MAX_LEVELS)
@@ -197,9 +202,11 @@ class PageCache(
     /**
      * Rysuje stronę w jej układzie (canvas ma już początek w rogu strony, przycięty do strony): [vis] = widoczny
      * fragment strony (pt), [req] = fragment, dla którego przygotowujemy kafelki (z zapasem). Zwraca false, gdy nie
-     * ma jeszcze żadnej bitmapy — wtedy widok rysuje wektorowo.
+     * ma jeszcze żadnej bitmapy — wtedy widok rysuje wektorowo. [inverted] = strona w odwróconych kolorach (F11).
      */
-    fun draw(c: Canvas, page: PageState, vis: Bounds, req: Bounds, left: Float, top: Float, zoom: Float): Boolean {
+    fun draw(c: Canvas, page: PageState, vis: Bounds, req: Bounds, left: Float, top: Float, zoom: Float, inverted: Boolean = false): Boolean {
+        val tilePaint = if (inverted) tilePaintInv else tilePaint
+        val basePaint = if (inverted) basePaintInv else basePaint
         val e = entry(page)
         want(page, e, vis, req, left, top)
         val spec = page.spec

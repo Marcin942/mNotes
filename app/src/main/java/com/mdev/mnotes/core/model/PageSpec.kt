@@ -14,7 +14,9 @@ enum class Template(val code: Int, val defaultSpacing: Float) {
     ISO_GRID(5, 16f),
     CORNELL(6, 22f),
     STAFF(7, 7f),
-    CHECKLIST(8, 26f);
+    CHECKLIST(8, 26f),
+    /** Papier milimetrowy (pomysł Fable 9): rozstaw = oczko grube (1 cm), cienkie linie co 1/10. Stara wersja pokaże gładką kartkę. */
+    MILLIMETER(9, 28.35f);
 
     companion object {
         fun fromCode(code: Int): Template = entries.firstOrNull { it.code == code } ?: BLANK

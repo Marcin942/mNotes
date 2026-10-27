@@ -41,7 +41,23 @@ object TemplateGeometry {
             Template.CORNELL -> cornell(spec, sp)
             Template.STAFF -> staff(spec, sp)
             Template.CHECKLIST -> checklist(spec, sp)
+            Template.MILLIMETER -> millimeter(spec, max(spec.spacing, 10f))
         }
+    }
+
+    /** Papier milimetrowy: grube linie co [sp] (domyślnie 1 cm), cienkie co [sp]/10, wyśrodkowane jak kratka. */
+    private fun millimeter(s: PageSpec, sp: Float): TemplateGeom {
+        val o = Out()
+        val minor = sp / 10f
+        val x0 = (s.w % sp) / 2f
+        val y0 = (s.h % sp) / 2f
+        var i = 0
+        var x = x0
+        while (x <= s.w - x0 + 0.01f) { if (i % 10 == 0) o.heavyLine(x, y0, x, s.h - y0) else o.line(x, y0, x, s.h - y0); x += minor; i++ }
+        i = 0
+        var y = y0
+        while (y <= s.h - y0 + 0.01f) { if (i % 10 == 0) o.heavyLine(x0, y, s.w - x0, y) else o.line(x0, y, s.w - x0, y); y += minor; i++ }
+        return o.done()
     }
 
     private class Out {

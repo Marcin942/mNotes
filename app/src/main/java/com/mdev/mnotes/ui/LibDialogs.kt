@@ -64,6 +64,7 @@ fun templateName(t: Template) = when (t) {
     Template.BLANK -> T.t("Czysta", "Blank"); Template.LINED -> T.t("Linie", "Lined"); Template.GRID -> T.t("Kratka", "Grid")
     Template.DOTS -> T.t("Kropki", "Dots"); Template.ISO_DOTS -> T.t("Kropki izo", "Iso dots"); Template.ISO_GRID -> T.t("Siatka izo", "Iso grid")
     Template.CORNELL -> T.t("Cornell", "Cornell"); Template.STAFF -> T.t("Pięciolinia", "Staff"); Template.CHECKLIST -> T.t("Lista zadań", "Checklist")
+    Template.MILLIMETER -> T.t("Milimetrowy", "Millimetre")
 }
 
 fun paperName(c: Int) = when (c) {

@@ -20,7 +20,11 @@ class Assets(private val repo: Repository) {
     private val pending = HashSet<String>()
     private val lru = object : LinkedHashMap<String, Bitmap>(32, 0.75f, true) {}
     private var bytes = 0L
-    var onLoaded: (() -> Unit)? = null
+    /** Słuchacze „obraz zdekodowany” — po jednym na widok płótna (F4: dwa zeszyty naraz to dwa widoki). Wątek UI. */
+    private val loaded = LinkedHashSet<() -> Unit>()
+
+    fun addLoaded(f: () -> Unit) { loaded.add(f) }
+    fun removeLoaded(f: () -> Unit) { loaded.remove(f) }
 
     @Synchronized private fun getCached(key: String): Bitmap? = lru[key]
 
@@ -46,7 +50,7 @@ class Assets(private val repo: Repository) {
             val b = load(nb, name)
             if (b != null) put(key, b)
             synchronized(pending) { pending.remove(key) }
-            if (b != null) main.post { onLoaded?.invoke() }
+            if (b != null) main.post { for (f in loaded.toList()) f() }
         }
         return null
     }

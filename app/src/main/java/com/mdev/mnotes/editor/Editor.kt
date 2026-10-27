@@ -119,6 +119,23 @@ class Editor(val ctx: Context, val nbId: String) {
     var layoutMode by mutableIntStateOf(doc.meta.let { ViewMode.resolve(it.viewMode, it.pdfDoc, settings.viewNotebook, settings.viewPdf) })
         private set
 
+    // — Dwa zeszyty w jednym obszarze (F4) —
+    /** Zeszyt w dolnym rzędzie albo null (jeden zeszyt jak zwykle). */
+    var dualId by mutableStateOf<String?>(null)
+    /** Otwarte okno wyboru zeszytu do dolnego rzędu. */
+    var dualPick by mutableStateOf(false)
+    private var rowSaved: Int? = null
+
+    /**
+     * Rząd stron: w trybie dwóch zeszytów strony leżą poziomo (każdy rząd przesuwa się w bok), ale wybór nie trafia
+     * do zeszytu — po zamknięciu drugiego wraca układ sprzed.
+     */
+    fun forceRowLayout(on: Boolean) {
+        if (on) { if (rowSaved == null) rowSaved = layoutMode; layoutMode = 1 }
+        else { rowSaved?.let { layoutMode = it }; rowSaved = null }
+        view?.applyLayoutMode()
+    }
+
     /** Zmiana układu przez użytkownika: pamiętana w tym dokumencie, więc przy następnym otwarciu wraca. */
     fun chooseLayoutMode(mode: Int) {
         if (!ViewMode.valid(mode)) return

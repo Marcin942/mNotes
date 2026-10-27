@@ -123,7 +123,9 @@ class Settings(ctx: Context) {
     // F28: auto-korekta symboli po przytrzymaniu pióra (każdy osobno); w zeszycie Marcina wybrane pierwiastek i suma.
     var mathRoot by Pref("math.root", true)
     var mathSum by Pref("math.sum", true)
-    var mathIntegral by Pref("math.integral", false) // F26: ponowne dotknięcie lasera/ręki/lassa albo puste miejsce wraca do pisania            // F22: końce linii i przeciągane punkty przyczepiają się do innych figur    // zeszyt-przewodnik był już proponowany (F20)              // ostatnio wstawiony układ współrzędnych (AxesSpec.encode), F8    // lasso „tylko zahacz”: wystarczy musnąć obiekt pętlą; domyślnie zbalansowane (połowa obiektu w pętli)
+    var mathIntegral by Pref("math.integral", false)
+    var dualFraction by Pref("dual.fraction", 0.5f)      // F4: część wysokości dla górnego zeszytu
+    var dualSyncZoom by Pref("dual.sync_zoom", true)     // F4: wspólne powiększenie obu rzędów // F26: ponowne dotknięcie lasera/ręki/lassa albo puste miejsce wraca do pisania            // F22: końce linii i przeciągane punkty przyczepiają się do innych figur    // zeszyt-przewodnik był już proponowany (F20)              // ostatnio wstawiony układ współrzędnych (AxesSpec.encode), F8    // lasso „tylko zahacz”: wystarczy musnąć obiekt pętlą; domyślnie zbalansowane (połowa obiektu w pętli)
     var dockPages by Pref("ui.dockpages", false)    // panel stron zadokowany z lewej na szerokim oknie (LNX-016)
     var samsungMode by Pref("import.samsung_mode", 0) // ostatni wybór w oknie importu Samsung Notes: 0 wygląd oryginału, 1 standard mNotes
     var zoomMag by Pref("zoomwin.mag", 3f)          // powiększenie okna powiększenia (EXT-003): 2–5×

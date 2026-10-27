@@ -35,6 +35,7 @@ import com.mdev.mnotes.core.geom.Attach
 import com.mdev.mnotes.core.geom.Bounds
 import com.mdev.mnotes.core.geom.Ruler
 import com.mdev.mnotes.core.layout.DocLayout
+import com.mdev.mnotes.core.layout.DualRows
 import com.mdev.mnotes.core.layout.LayoutMode
 import com.mdev.mnotes.core.layout.PageDrop
 import com.mdev.mnotes.core.layout.PageOverflow
@@ -244,6 +245,8 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
     private var shiftIds: List<String> = emptyList()
     private var pageShift: PageShift? = null
     private var shiftNow = 0L
+    /** Odświeżenie po zdekodowaniu obrazu; pole przed blokiem init, bo ten je rejestruje. */
+    private val onAssetLoaded: () -> Unit = { cache.invalidateAll(); invalidate() }
 
     // laser
     private val laser = LaserTrail()
@@ -277,7 +280,7 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
         isFocusable = false
         doc.listener = this
         ed.view = this
-        ed.app.assets.onLoaded = { cache.invalidateAll(); invalidate() }
+        ed.app.assets.addLoaded(onAssetLoaded)
         rebuildLayout()
     }
 
@@ -326,6 +329,7 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
 
     private fun moved() {
         tx = clampX(tx, zoom); ty = clampY(ty, zoom)
+        if (zoom != reportedZoom) { reportedZoom = zoom; if (!following) onZoomChange?.invoke(zoom) }
         if (layout.count > 0) {
             val i = layout.nearest(docX(width / 2f), docY(height / 2f))
             if (i != ed.pageIndex) ed.pageIndex = i
@@ -480,12 +484,39 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
         return sbVal
     }
 
+    private var disposed = false
+
+    /**
+     * Zwalnia widok. Może przyjść dwa razy (zamknięcie edytora i zdjęcie widoku z ekranu) i po utworzeniu nowszego
+     * widoku tego samego zeszytu — wtedy nie zabiera mu słuchacza dokumentu (F4: płótna pojawiają się i znikają).
+     */
     fun dispose() {
+        if (disposed) return
+        disposed = true
         removeCallbacks(holdRunnable); removeCallbacks(longPress); cancelPendingDouble()
         stopAnim()
-        doc.listener = null
-        ed.app.assets.onLoaded = null
+        if (doc.listener === this) doc.listener = null
+        if (ed.view === this) ed.view = null
+        ed.app.assets.removeLoaded(onAssetLoaded)
         cache.dispose()
+    }
+
+    val currentZoom: Float get() = zoom
+
+    /** F4: zgłasza zmianę powiększenia (wspólne powiększenie dwóch rzędów). */
+    var onZoomChange: ((Float) -> Unit)? = null
+    private var reportedZoom = 0f
+    private var following = false
+
+    /** F4: przyjmuje powiększenie drugiego rzędu (wokół środka widoku), bez odbijania go z powrotem. */
+    fun followZoom(z: Float) {
+        if (width == 0) return
+        val nz = DualRows.follow(z, zoom, minZoom(), maxZoom()) ?: return
+        following = true
+        stopAnim()
+        zoomAbout(width / 2f, height / 2f, nz / zoom)
+        moved()
+        following = false
     }
 
     // ───────────────────────── DocListener ─────────────────────────

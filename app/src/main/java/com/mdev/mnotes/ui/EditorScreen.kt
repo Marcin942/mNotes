@@ -120,6 +120,7 @@ import androidx.compose.material.icons.rounded.FormatAlignCenter
 import androidx.compose.material.icons.rounded.FormatAlignRight
 import androidx.compose.material.icons.rounded.FormatAlignJustify
 import androidx.compose.material.icons.rounded.Interests
+import androidx.compose.material.icons.rounded.ViewAgenda
 import androidx.compose.material.icons.rounded.ExpandLess
 import androidx.compose.material.icons.rounded.ExpandMore
 import androidx.compose.material.icons.rounded.WbAuto
@@ -270,7 +271,7 @@ fun EditorScreen(ed: Editor, tabs: TabsCtl, onExit: () -> Unit, onSettings: () -
     var palette by remember { mutableStateOf(false) }
     var goTo by remember { mutableStateOf(false) }
     val focus = remember { FocusRequester() }
-    val dialogOpen = palette || goTo || ed.exportOpen || ed.axesOpen || ed.stickersOpen || ed.stickerSaveOpen || ed.textReq != null
+    val dialogOpen = palette || goTo || ed.exportOpen || ed.axesOpen || ed.stickersOpen || ed.stickerSaveOpen || ed.dualPick || ed.textReq != null
     val searchTyping = ed.searchOpen && fieldFocused
     val widthDp = androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp
     val showMenu = ed.chrome && menuBarVisible(set.menuBar, widthDp)
@@ -358,14 +359,9 @@ fun EditorScreen(ed: Editor, tabs: TabsCtl, onExit: () -> Unit, onSettings: () -
                 if (ed.chrome && pos == 2) SideRail(ed, set, panel, ::pickTool, ::holdTool, ::pickPen, right = false)
                 if (strip == 0) PenStrip(ed, set, 0, pos, panel, onColorSets) { toggle(it) }
                 Box(Modifier.weight(1f).fillMaxHeight()) {
-                    AndroidView(
-                        factory = { c -> NoteView(c, ed).apply { layoutParams = ViewGroup.LayoutParams(-1, -1) } },
-                        update = { v -> v.accent = m.accent.toArgb(); v.viewBg = m.canvasBg.toArgb(); v.darkUi = m.dark },
-                        // Pierwsze dotknięcie strony (pióro lub palec) zamyka otwarty panel, więc nigdy nie zasłania pisania.
-                        modifier = Modifier.fillMaxSize().clipToBounds().pointerInput(Unit) {
-                            awaitEachGesture { awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial); panel = null }
-                        },
-                    )
+                    // Pierwsze dotknięcie strony (pióro lub palec) zamyka otwarty panel, więc nigdy nie zasłania pisania.
+                    // F4: płótno z jednym zeszytem albo dwoma rzędami (drugi zeszyt poniżej).
+                    EditorCanvas(ed) { panel = null }
                     // Panele i okienka kotwiczą się do krawędzi strony, tuż przy pasku, z którego wyszły.
                     Box(Modifier.fillMaxSize().imePadding()) {
                         // Pod panelami: otwarty panel zasłania kapsułę, a pierwsze dotknięcie strony go zamyka.
@@ -414,6 +410,7 @@ fun EditorScreen(ed: Editor, tabs: TabsCtl, onExit: () -> Unit, onSettings: () -
         if (ed.exportOpen) ExportDialog(ed.nbId, ed.pageIndex, { ed.doc.flush() }) { ed.exportOpen = false }
         if (ed.axesOpen) AxesDialog(ed) { ed.axesOpen = false }
         if (ed.stickersOpen) StickersDialog(ed) { ed.stickersOpen = false }
+        if (ed.dualPick) DualPickDialog(ed) { ed.dualPick = false }
         if (ed.stickerSaveOpen) SaveStickerDialog(ed) { ed.stickerSaveOpen = false }
         if (palette) PaletteDialog(cmds) { palette = false }
     }
@@ -1762,7 +1759,7 @@ private fun CtxMenuOverlay(ed: Editor, openStyle: () -> Unit) {
 }
 
 @Composable
-private fun androidx.compose.foundation.layout.BoxScope.EdToast(ed: Editor) {
+internal fun androidx.compose.foundation.layout.BoxScope.EdToast(ed: Editor) {
     val msg = ed.toast
     LaunchedEffect(msg) { if (msg != null) { delay(2200); if (ed.toast == msg) ed.toast = null } }
     if (msg == null) return
@@ -1790,6 +1787,8 @@ private fun MoreMenu(ed: Editor, set: com.mdev.mnotes.data.Settings, close: () -
             MenuRow(Icons.Rounded.Palette, T.t("Styl strony…", "Page style…"), "") { openStyle() }
             if (!ed.readOnly) MenuRow(Icons.Rounded.ShowChart, T.t("Układ współrzędnych…", "Coordinate axes…"), "") { close(); ed.axesOpen = true }
             if (!ed.readOnly) MenuRow(Icons.Rounded.Interests, T.t("Naklejki…", "Stickers…"), "") { close(); ed.stickersOpen = true }
+            if (ed.dualId == null) MenuRow(Icons.Rounded.ViewAgenda, T.t("Drugi zeszyt poniżej…", "Second notebook below…"), "") { close(); ed.dualPick = true }
+            else MenuRow(Icons.Rounded.ViewAgenda, T.t("Zamknij drugi zeszyt", "Close the second notebook"), "") { close(); ed.dualId = null }
             MenuRow(Icons.Rounded.Fullscreen, T.t("Ukryj paski (tryb skupienia)", "Hide bars (focus mode)"), "F11") { ed.chrome = false; close() }
             ToggleRow(T.t("Tylko do odczytu", "Read-only"), ed.readOnly) { ed.readOnly = it }
             ToggleRow(T.t("Okno powiększenia (pisz w powiększeniu)", "Zoom window (write magnified)"), ed.zoomWin) { ed.toggleZoomWin(); close() }

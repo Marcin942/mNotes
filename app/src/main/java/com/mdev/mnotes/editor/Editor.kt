@@ -11,6 +11,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import com.mdev.mnotes.app.MNotesApp
 import com.mdev.mnotes.core.geom.Axes
+import com.mdev.mnotes.core.geom.AxesSnap
 import com.mdev.mnotes.core.geom.AxesSpec
 import com.mdev.mnotes.core.geom.Bounds
 import com.mdev.mnotes.core.geom.ConstructOps
@@ -863,11 +864,20 @@ class Editor(val ctx: Context, val nbId: String) {
     fun insertAxes(spec: AxesSpec) {
         val (pi, cx, cy) = view?.viewCenterOnPage() ?: return
         val page = doc.pages.getOrNull(pi) ?: return
-        val s = spec.normalized()
+        var s = spec.normalized()
+        // 2b-A6: na kratce podziałka to wielokrotność oczka, a początek układu leży na węźle — osie i siatka układu
+        // pokrywają się z kratką strony, więc wykres rysuje się „po kratkach”.
+        val grid = if (settings.axesSnap) AxesSnap.pageGrid(page.spec) else null
+        if (grid != null) s = s.copy(unit = AxesSnap.alignInsert(s.unit, s.xStep, 0f, 0f, grid)[0])
         val w = (s.xMax - s.xMin) * s.unit; val h = (s.yMax - s.yMin) * s.unit
         val m = Axes.OVERHANG + Axes.ARROW + 12f
-        val left = (cx - w / 2f).coerceIn(m, maxOf(m, page.spec.w - w - m))
-        val top = (cy - h / 2f).coerceIn(m, maxOf(m, page.spec.h - h - m))
+        var left = (cx - w / 2f).coerceIn(m, maxOf(m, page.spec.w - w - m))
+        var top = (cy - h / 2f).coerceIn(m, maxOf(m, page.spec.h - h - m))
+        if (grid != null) {
+            val ox = left + ((if (s.xMin > 0f) s.xMin else if (s.xMax < 0f) s.xMax else 0f) - s.xMin) * s.unit
+            val oy = top + (s.yMax - (if (s.yMin > 0f) s.yMin else if (s.yMax < 0f) s.yMax else 0f)) * s.unit
+            left += grid.nodeX(ox) - ox; top += grid.nodeY(oy) - oy
+        }
         val d = Axes.build(s, left, top)
         // Kolor aktywnego pióra (zakreślacz dałby blade osie, więc wtedy grafit); siatka to ten sam kolor, przygaszony.
         val ink = (if (pen.kind == PenKind.HIGHLIGHTER) 0xFF37474F.toInt() else pen.color) or (0xFF shl 24)

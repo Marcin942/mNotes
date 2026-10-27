@@ -447,3 +447,13 @@ Wygląd ikon sprawdzam rysunkiem Java2D z tej samej geometrii (`PreviewHarness`,
   **Wygląd:** karty 104 dp z zaokrągleniem 8 dp i obwódką `m.line`, tło #FAFAF7 albo #2B2E33. **Tablet:** narysuj coś
   białym na ciemnej stronie → zapisz jako naklejkę → „⋮” → „Naklejki…”: karta ciemna, rysunek widać; czarny rysunek w
   ciemnym motywie — karta jasna; dotknij kosza — „Usunąć?” gaśnie po 3 s.
+- **2b-A6** układ współrzędnych na kratce — `noc/f2b-uklad`; `AxesSnapTest` (5 testów). Układ nie ma w pliku żadnego
+  znacznika (to zwykłe łamane), więc `AxesSnap.frames` rozpoznaje go po kształcie: pozioma i pionowa łamana z dwóch punktów
+  (≥ 40 pt), które się przecinają; oczka siatki z odstępów znaczników i linii siatki. Dzięki temu docisk działa też na
+  układzie narysowanym ręcznie i wyprostowanym (dwie proste na krzyż). Docisk kreski: tylko biegi punktów przy tej samej
+  linii, ciągnące się ≥ max(3 × próg, pół oczka) — przecinanie linii nie robi „ząbków”. Przy włączonym „Przyciągaj do
+  siatki” (stare, co 5 mm) ono ma pierwszeństwo przy przesuwaniu. **Uwaga:** jednostka z okna osi jest na kratce
+  zaokrąglana do pełnych oczek (np. 7 mm → 5 mm przy kratce 5 mm) — okno tego nie pokazuje; do decyzji, czy dopisać zdanie.
+  **Wygląd:** w Ustawieniach grupa „Układ współrzędnych” (przełącznik + suwak progu). **Tablet:** strona w kratkę → „⋮” →
+  „Układ współrzędnych…” → Wstaw: osie i siatka układu leżą na liniach kratki; przesuń układ lassem — początek wskakuje
+  w węzły; narysuj wykres v(t) ze stałym odcinkiem poziomym — odcinek równo na linii, ukośne fragmenty bez zmian.

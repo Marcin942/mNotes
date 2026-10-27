@@ -432,6 +432,16 @@ private fun EditorPrefs(set: com.mdev.mnotes.data.Settings) {
         if (set.holdToShape) ToggleRow(T.t("Trzymaj dalej, aby wygładzić w krzywą", "Keep holding to smooth into a curve"), set.holdToCurve, keys = "krzywa bezier wygładź gładka curve smooth") { set.holdToCurve = it }
         if (set.holdToShape && set.holdToCurve) Opt(T.t("Dodatkowy czas dla krzywej: ${set.curveHoldMs} ms", "Extra time for a curve: ${set.curveHoldMs} ms"), "krzywa bezier czas opóźnienie curve") { MSlider(set.curveHoldMs.toFloat(), 0f, 1000f) { set.curveHoldMs = (it / 50).toInt() * 50 } }
     }
+    Group(T.t("Układ współrzędnych", "Coordinate axes"), keys = "osie wykres funkcja kratka siatka axes graph plot grid") {
+        ToggleRow(
+            T.t("Układ na kratce i wykres po kratkach", "Axes on the grid, graphs along grid lines"), set.axesSnap,
+            keys = "przyciąganie docisk kratka siatka osie początek wykres linie snap grid axes origin graph",
+        ) { set.axesSnap = it }
+        if (set.axesSnap) Opt(
+            if (set.axesSnapDp <= 0f) T.t("Docisk kresek do siatki: wyłączony", "Strokes to grid lines: off") else T.t("Docisk kresek do siatki: ${set.axesSnapDp.toInt()} dp", "Strokes to grid lines: ${set.axesSnapDp.toInt()} dp"),
+            "próg docisk kreska wykres siatka czułość threshold stroke graph",
+        ) { MSlider(set.axesSnapDp, 0f, 8f) { set.axesSnapDp = Math.round(it).toFloat() } }
+    }
     Group(T.t("Konstrukcje", "Constructions"), keys = "konstrukcja geometria trójkąt okrąg construction geometry") {
         ToggleRow(
             T.t("Podpisuj punkty konstrukcji (A, B, C, O, H…)", "Name construction points (A, B, C, O, H…)"), set.constructNames,

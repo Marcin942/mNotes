@@ -33,6 +33,7 @@ import com.mdev.mnotes.core.edit.PipetteMath
 import com.mdev.mnotes.core.geom.Affine
 import com.mdev.mnotes.core.geom.Attach
 import com.mdev.mnotes.core.geom.Bounds
+import com.mdev.mnotes.core.geom.AxesSnap
 import com.mdev.mnotes.core.geom.Instrument
 import com.mdev.mnotes.core.geom.Protractor
 import com.mdev.mnotes.core.geom.Ruler
@@ -2504,7 +2505,7 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
             sc != null -> Stroke(Ids.next(), builder.penKind, builder.penColor, builder.width, Bezier.sample(sc), line = builder.line, ctrl = sc)
             snapped -> Stroke(Ids.next(), builder.penKind, builder.penColor, builder.width, shapePts.copyOf(), false, shapePoly, shapeKind == ShapeKind.ELLIPSE, builder.line)
             curve != null -> { snapped = true; Stroke(Ids.next(), builder.penKind, builder.penColor, builder.width, Bezier.sample(curve), line = builder.line, ctrl = curve) }
-            else -> builder.finish(Ids.next())
+            else -> builder.finish(Ids.next())?.let { axesFollow(pi, it) }
         }
         // Promienie kątomierza też bez zaznaczania: rysuje się je jeden po drugim (ramiona kąta).
         val quiet = (heldCurve && activeTool != Tool.CURVE) || protRay
@@ -3202,6 +3203,31 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
         applyInBackground(pi, els, ghost = els.all { it !is ImageEl || it.alpha >= 0.999f }, apply = apply)
     }
 
+    /**
+     * 2b-A6: odręczna kreska w obszarze układu współrzędnych — fragmenty biegnące wzdłuż linii jego siatki (w progu
+     * `axes.snap_dp` dp ekranu) kładą się dokładnie na niej; przecięcia linii i reszta kreski bez zmian.
+     */
+    private fun axesFollow(pi: Int, s: Stroke): Stroke {
+        if (!settings.axesSnap || settings.axesSnapDp <= 0f || pi !in doc.pages.indices) return s
+        val b = s.bounds
+        val f = AxesSnap.frames(doc.content(doc.pages[pi]).elements).firstOrNull { it.area.contains(b.cx, b.cy) } ?: return s
+        val pts = AxesSnap.followGrid(s.pts, f, settings.axesSnapDp * dp / zoom) ?: return s
+        return Stroke(s.id, s.pen, s.color, s.width, pts, s.locked, s.poly, s.ellipse, s.line, s.ctrl)
+    }
+
+    /** Początek układu współrzędnych w przesuwanym zaznaczeniu ([lEls]) — liczony raz na podniesienie (2b-A6). */
+    private var lAxesFor: Any? = null
+    private var lAxesOrigin: FloatArray? = null
+
+    /** Przesunięcie zaznaczenia z układem współrzędnych tak, by jego początek trafił w węzeł kratki strony; null — bez zmian. */
+    private fun axesMoveSnap(dx: Float, dy: Float): FloatArray? {
+        if (!settings.axesSnap) return null
+        if (lAxesFor !== lEls) { lAxesFor = lEls; lAxesOrigin = AxesSnap.frames(lEls).firstOrNull()?.let { floatArrayOf(it.ox, it.oy) } }
+        val o = lAxesOrigin ?: return null
+        val grid = AxesSnap.pageGrid(doc.pages[lPage].spec) ?: return null
+        return AxesSnap.snapMove(o[0], o[1], dx, dy, grid)
+    }
+
     private fun lassoMove() {
         if (lPage !in 0 until layout.count) return
         val px = pgX(lPage, curX); val py = pgY(lPage, curY)
@@ -3213,6 +3239,7 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
                     LM.MOVE -> {
                         var dx = px - lStartX; var dy = py - lStartY
                         if (settings.snapGrid || ed.gridSnap) { val g = 14.17f; dx = (dx / g).roundToInt() * g; dy = (dy / g).roundToInt() * g }
+                        else axesMoveSnap(dx, dy)?.let { dx = it[0]; dy = it[1] }
                         Affine.translation(dx, dy)
                     }
                     LM.SCALE -> {

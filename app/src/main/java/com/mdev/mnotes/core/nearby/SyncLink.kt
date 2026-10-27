@@ -8,6 +8,17 @@ import java.io.IOException
 import java.nio.ByteBuffer
 import java.security.MessageDigest
 
+/**
+ * Wynik prośby o uprawnienia łącza: wszystko poza lokalizacją musi być przyznane, a z lokalizacji wystarczy jedna
+ * (Android 12+ pozwala dać tylko przybliżoną; to nie jest odmowa łącza).
+ */
+object LinkPermissions {
+    fun granted(result: Map<String, Boolean>): Boolean {
+        val location = result.filterKeys { "LOCATION" in it }
+        return result.filterKeys { "LOCATION" !in it }.values.all { it } && (location.isEmpty() || location.values.any { it })
+    }
+}
+
 /** Kto się ogłasza (tablet: [HOST]) i kto szuka (telefon: [CLIENT]); od roli zależy kolejność w identyfikatorze sesji. */
 enum class SyncRole { HOST, CLIENT; val opposite get() = if (this == HOST) CLIENT else HOST }
 
@@ -178,29 +189,53 @@ data class SyncPlan(val send: List<String>, val request: List<String>, val confl
 }
 
 /**
- * Parowanie bez serwera: w trybie parowania obie strony wymieniają jawnie [Offer] (klucz publiczny i nazwę
- * urządzenia), liczą klucz pary i pokazują sześć cyfr [SyncCrypto.sas]; użytkownik potwierdza, że są takie same.
- * Tekst [Offer.toCode] może też iść kodem QR (gdy w aplikacji będzie skaner).
+ * Parowanie bez serwera, wersja 2 (commit-then-reveal, jak porównanie liczb w Bluetooth SSP): każda strona najpierw
+ * wysyła [Commit] = SHA-256 swojej [Offer] (klucz publiczny, losowy nonce, nazwa), a samą ofertę dopiero po otrzymaniu
+ * zobowiązania drugiej strony. Napastnik w środku musi więc zobowiązać się do swojego klucza, zanim pozna nonce
+ * ofiary, i nie dobierze klucza pod sześć cyfr [SyncCrypto.sas]. Wersja 1 (jawna oferta od razu) nie jest przyjmowana:
+ * obie aplikacje muszą być w tej samej wersji. Tekst [Offer.toCode] może też iść kodem QR (gdy będzie skaner).
  */
 object Pairing {
     const val PAIRING_NAME = "mn-parowanie"
-    private const val PREFIX = "mnotes-para:1:"
+    private const val PREFIX = "mnotes-para:2:"
+    private const val COMMIT_PREFIX = "mnotes-zobowiazanie:2:"
+    const val NONCE_LEN = 16
 
-    class Offer(val publicKey: ByteArray, val deviceName: String) {
+    /** Zobowiązanie do oferty: tylko skrót, nic nie zdradza. */
+    class Commit(val hash: ByteArray) {
         fun encode(): ByteArray = ByteArrayOutputStream().also { bo ->
-            DataOutputStream(bo).use { it.writeUTF(PREFIX); it.writeInt(publicKey.size); it.write(publicKey); it.writeUTF(deviceName.take(40)) }
+            DataOutputStream(bo).use { it.writeUTF(COMMIT_PREFIX); it.writeInt(hash.size); it.write(hash) }
         }.toByteArray()
-
-        fun toCode(): String = PREFIX + java.util.Base64.getUrlEncoder().withoutPadding().encodeToString(publicKey) + ":" + deviceName.take(40)
     }
 
-    fun decode(b: ByteArray): Offer? = try {
+    class Offer(val publicKey: ByteArray, val nonce: ByteArray, val deviceName: String) {
+        fun encode(): ByteArray = ByteArrayOutputStream().also { bo ->
+            DataOutputStream(bo).use {
+                it.writeUTF(PREFIX); it.writeInt(publicKey.size); it.write(publicKey); it.writeInt(nonce.size); it.write(nonce); it.writeUTF(deviceName.take(40))
+            }
+        }.toByteArray()
+
+        /** Skrót całej zakodowanej oferty (klucz, nonce i nazwa: żadnego z nich nie da się zmienić po zobowiązaniu). */
+        fun commitment(): ByteArray = SyncCrypto.sha256(encode())
+
+        fun toCode(): String = PREFIX + java.util.Base64.getUrlEncoder().withoutPadding().run { encodeToString(publicKey) + ":" + encodeToString(nonce) } + ":" + deviceName.take(40)
+    }
+
+    /** [Commit] albo [Offer]; null dla obcych bajtów (także oferty wersji 1). */
+    fun decode(b: ByteArray): Any? = try {
         DataInputStream(ByteArrayInputStream(b)).use { i ->
-            if (i.readUTF() != PREFIX) return null
-            val n = i.readInt()
-            if (n !in 60..200) return null
-            val key = ByteArray(n).also { i.readFully(it) }
-            Offer(key, i.readUTF())
+            when (i.readUTF()) {
+                COMMIT_PREFIX -> { val n = i.readInt(); if (n != 32) null else Commit(ByteArray(n).also { i.readFully(it) }) }
+                PREFIX -> {
+                    val n = i.readInt()
+                    if (n !in 60..200) return null
+                    val key = ByteArray(n).also { i.readFully(it) }
+                    val m = i.readInt()
+                    if (m != NONCE_LEN) return null
+                    Offer(key, ByteArray(m).also { i.readFully(it) }, i.readUTF())
+                }
+                else -> null
+            }
         }
     } catch (_: IOException) {
         null
@@ -208,10 +243,60 @@ object Pairing {
 
     fun fromCode(code: String): Offer? {
         if (!code.startsWith(PREFIX)) return null
-        val rest = code.removePrefix(PREFIX)
-        val cut = rest.indexOf(':')
-        if (cut <= 0) return null
-        val key = runCatching { java.util.Base64.getUrlDecoder().decode(rest.substring(0, cut)) }.getOrNull() ?: return null
-        return Offer(key, rest.substring(cut + 1))
+        val parts = code.removePrefix(PREFIX).split(":", limit = 3)
+        if (parts.size != 3) return null
+        val dec = java.util.Base64.getUrlDecoder()
+        val key = runCatching { dec.decode(parts[0]) }.getOrNull() ?: return null
+        val nonce = runCatching { dec.decode(parts[1]) }.getOrNull()?.takeIf { it.size == NONCE_LEN } ?: return null
+        return Offer(key, nonce, parts[2])
+    }
+}
+
+/**
+ * Parowanie jednej strony (czysta logika, bez Nearby): [start] daje zobowiązanie do wysłania od razu po połączeniu,
+ * [receive] przyjmuje wiadomość drugiej strony i mówi, co odesłać i czy jest już wynik. Własna oferta wychodzi tylko
+ * w odpowiedzi na zobowiązanie drugiej strony; oferta bez wcześniejszego zobowiązania albo niezgodna z nim (podmieniony
+ * klucz, nonce, nazwa) rzuca [CryptoException] i parowanie trzeba zacząć od nowa.
+ */
+class PairingSession(
+    deviceName: String,
+    private val keys: SyncCrypto.EphemeralKeys = SyncCrypto.generateKeys(),
+    nonce: ByteArray = ByteArray(Pairing.NONCE_LEN).also { java.security.SecureRandom().nextBytes(it) },
+) {
+    class Result(val sas: String, val peerName: String, val pairKey: ByteArray)
+
+    /** [send]: wiadomości do wysłania w tej kolejności; [result]: wynik, gdy oferta drugiej strony się zgadza. */
+    class Step(val send: List<ByteArray> = emptyList(), val result: Result? = null)
+
+    private val mine = Pairing.Offer(keys.publicKey, nonce, deviceName)
+    private var committed = false
+    private var revealed = false
+    private var peerCommit: ByteArray? = null
+    var result: Result? = null
+        private set
+
+    /** Zobowiązanie do własnej oferty (pierwsza wiadomość po połączeniu). */
+    fun start(): ByteArray { committed = true; return Pairing.Commit(mine.commitment()).encode() }
+
+    fun receive(raw: ByteArray): Step {
+        if (result != null) throw CryptoException("parowanie już zakończone")
+        return when (val m = Pairing.decode(raw)) {
+            is Pairing.Commit -> {
+                if (peerCommit != null) throw CryptoException("drugie zobowiązanie w jednym parowaniu")
+                peerCommit = m.hash
+                val out = ArrayList<ByteArray>()
+                if (!committed) out += start()
+                if (!revealed) { revealed = true; out += mine.encode() }
+                Step(out)
+            }
+            is Pairing.Offer -> {
+                val commit = peerCommit ?: throw CryptoException("oferta przed zobowiązaniem")
+                if (!SyncCrypto.same(commit, m.commitment())) throw CryptoException("oferta nie zgadza się ze zobowiązaniem (podmieniony klucz?)")
+                if (SyncCrypto.same(m.publicKey, mine.publicKey)) throw CryptoException("własny klucz odbity z powrotem")
+                val key = SyncCrypto.pairKey(keys, m.publicKey)
+                Result(SyncCrypto.sas(key, mine.nonce, m.nonce), m.deviceName, key).let { result = it; Step(result = it) }
+            }
+            else -> throw CryptoException("to nie jest wiadomość parowania")
+        }
     }
 }

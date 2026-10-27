@@ -50,6 +50,19 @@ class RecognizerTest {
     }
 
     @Test
+    fun userTextBecomesOneSureBlockAndEmptyTextNone() {
+        assertEquals(null, PageExport.userBlock("  \n ", 595f, 842f))
+        val block = PageExport.userBlock("  v = s / t\n", 595f, 842f)!!
+        val o = JSONObject(PageExport.json("Fizyka", 2, "2026-10-27", "fizyka-s2.png", 595f, 842f, listOf(block)))
+        val b = o.getJSONArray("bloki").getJSONObject(0)
+        assertEquals("tekst", b.getString("typ"))
+        assertEquals("v = s / t", b.getString("tresc"))
+        assertEquals(1.0, b.getDouble("pewnosc"), 0.0)
+        assertEquals(PageExport.USER_ENGINE, b.getString("silnik"))
+        assertEquals(842.0, b.getJSONArray("ramka").getDouble(3), 1e-9)
+    }
+
+    @Test
     fun fileStemIsAsciiWithoutSpaces() {
         assertEquals("fizyka-1-s3", PageExport.fileStem("Fizyka 1", 3))
         assertEquals("zolta-lodz-s12", PageExport.fileStem("Żółta Łódź!", 12))

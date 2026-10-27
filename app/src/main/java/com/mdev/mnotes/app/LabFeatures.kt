@@ -4,6 +4,9 @@ import androidx.compose.runtime.Composable
 import com.mdev.mnotes.core.model.ImageEl
 import com.mdev.mnotes.editor.Editor
 
+/** Polecenie wariantu lab w menu i palecie poleceń (Ctrl+K); [group] to indeks grupy z `CmdDefs.groups`. */
+class LabCommand(val id: String, val group: Int, val pl: String, val en: String, val enabled: () -> Boolean, val run: () -> Unit)
+
 /**
  * Punkt zaczepienia wariantu `lab` (kreda, rozpoznawanie, Nearby). Wariant `core` daje [Flavor.lab] = null, więc
  * wspólny kod pyta tylko o ten interfejs i nigdy nie widzi kodu laboratorium; implementacja leży w `src/lab/`.
@@ -33,4 +36,11 @@ interface LabFeatures {
      * i raz podpowiada „Oczyść tablicę”; domyślnie nic, żeby inne implementacje nie musiały o tym wiedzieć.
      */
     fun imageInserted(ed: Editor, el: ImageEl) {}
+
+    /** Polecenia laboratorium dopisywane do listy poleceń edytora [ed] (menu, paleta); w core żadnych. */
+    fun commands(ed: Editor): List<LabCommand> = emptyList()
+
+    /** Okna laboratorium otwierane poleceniami z [commands], rysowane raz nad edytorem; domyślnie nic. */
+    @Composable
+    fun Overlay(ed: Editor) {}
 }

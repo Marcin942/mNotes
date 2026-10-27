@@ -33,6 +33,7 @@ import com.mdev.mnotes.core.geom.Ruler
 import com.mdev.mnotes.core.layout.DocLayout
 import com.mdev.mnotes.core.layout.LayoutMode
 import com.mdev.mnotes.core.layout.PageDrop
+import com.mdev.mnotes.core.layout.PageOverflow
 import com.mdev.mnotes.core.layout.PageShift
 import com.mdev.mnotes.core.layout.ZoomRegion
 import com.mdev.mnotes.core.model.BoxElement
@@ -2959,7 +2960,12 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
 
     private fun textTap() {
         val pi = pageIdxAt(curX, curY)
-        if (pi < 0) return
+        if (pi < 0) {
+            // F10: dotknięcie tuż za ostatnią stroną zaczyna tekst na nowej stronie.
+            val x = docX(curX); val y = docY(curY)
+            if (settings.autoTextPage && !ed.readOnly && PageOverflow.beyondEnd(layout, x, y)) ed.newTextAfterEnd(x, y, layout)
+            return
+        }
         val page = doc.pages[pi]
         val px = pgX(pi, curX); val py = pgY(pi, curY)
         val hit = hitTop(page, px, py)

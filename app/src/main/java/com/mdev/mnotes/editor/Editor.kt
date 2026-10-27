@@ -3,6 +3,8 @@ package com.mdev.mnotes.editor
 import android.content.Context
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import com.mdev.mnotes.core.layout.DocLayout
+import com.mdev.mnotes.core.layout.PageOverflow
 import com.mdev.mnotes.core.layout.ViewMode
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
@@ -453,12 +455,34 @@ class Editor(val ctx: Context, val nbId: String) {
         val content = doc.content(p)
         if (req.existing == null) {
             if (t == null || t.text.isBlank()) return
-            exec(DocEdit.Elements(p.id, ElementsEdit.add(content, listOf(t))))
+            exec(withOverflowPage(p, t, DocEdit.Elements(p.id, ElementsEdit.add(content, listOf(t)))))
             select(p.id, setOf(t.id))
         } else {
             if (t == null || t.text.isBlank()) { exec(DocEdit.Elements(p.id, ElementsEdit.remove(content, setOf(req.existing.id)))); clearSel() }
-            else exec(DocEdit.Elements(p.id, ElementsEdit.replace(content, mapOf(req.existing.id to t))))
+            else exec(withOverflowPage(p, t, DocEdit.Elements(p.id, ElementsEdit.replace(content, mapOf(req.existing.id to t)))))
         }
+    }
+
+    /**
+     * F10: tekst, który wychodzi poza dół ostatniej strony, dostaje za nią nową, pustą stronę w tym samym stylu; obie
+     * zmiany cofa jedno cofnięcie. Wyłączane w Ustawieniach („Nowa strona, gdy tekst wyjdzie za ostatnią”).
+     */
+    private fun withOverflowPage(p: PageState, t: TextBox, edit: DocEdit): DocEdit {
+        val last = doc.pages.lastOrNull() ?: return edit
+        if (!settings.autoTextPage || !PageOverflow.textOverflows(last.id == p.id, t.bounds.b, p.spec.h)) return edit
+        say(T.t("Tekst wychodzi poza ostatnią stronę — dodano nową", "Text runs past the last page — a new page was added"))
+        val snap = PageSnapshot(newId(), p.spec.copy(pdf = null), PageContent.EMPTY)
+        return DocEdit.Group(listOf(edit, DocEdit.InsertPages(listOf(doc.pages.size to snap))))
+    }
+
+    /** F10: dotknięcie narzędziem Tekst tuż za ostatnią stroną zakłada nową stronę i tam zaczyna pole tekstowe. */
+    fun newTextAfterEnd(x: Float, y: Float, layout: DocLayout) {
+        val last = doc.pages.lastOrNull() ?: return
+        val spec = last.spec.copy(pdf = null)
+        val at = PageOverflow.onNewPage(layout, x, y, spec.w, spec.h)
+        val snap = PageSnapshot(newId(), spec, PageContent.EMPTY)
+        exec(DocEdit.InsertPages(listOf(doc.pages.size to snap)))
+        newText(snap.id, at[0], at[1])
     }
 
     /** Czy jest co wkleić: schowek wewnętrzny albo systemowy. */

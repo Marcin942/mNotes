@@ -92,6 +92,7 @@ class Settings(ctx: Context) {
     var holdMs by Pref("input.hold_ms", 550)
     var twoFingerUndo by Pref("input.two_finger_undo", true)
     var pullAddPage by Pref("input.pull_add_page", true)
+    var autoTextPage by Pref("pages.auto_text", true)  // nowa strona, gdy tekst wyjdzie za ostatnią albo zacznie się za nią (F10)
     var renderQuality by Pref("render.quality", 0)   // jakość renderowania strony: 0 zrównoważona, 1 ostra, 2 oszczędna, 3 klasyczna (obraz) — patrz RenderProfile
     var smoothing by Pref("pen.smoothing", 1f)       // mnożnik wygładzania piór 0..2
 

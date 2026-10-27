@@ -52,3 +52,5 @@ Rysunki z „Pomysły mNotes.pdf” odczytane własnym rasteryzatorem (Python, b
 
 ### Pomysły Fable (gałąź `noc/fable`)
 - **1 Tryb wykładu** — `LecturePagesTest`. **Wygląd:** kapsuła `FloatingCard` u dołu płótna (napis „Tryb wykładu”, chip z aparatem, ✕), nagłówek strony szarym 11 pt. Tablet: „⋮” → „Tryb wykładu…” → zdjęcie → nowa strona; drugie zdjęcie z kapsuły; ✕; cofnij; sprawdzić aparat Samsunga (zgoda na zapis do pliku aplikacji).
+- **2 Paleta z historią** — `CommandRankTest`. **Wygląd:** bez zmian w oknie palety, inna kolejność wyników. Tablet/klawiatura: Ctrl+K, użyj „Układ współrzędnych”, otwórz paletę ponownie — jest na górze; wpisz „zrodlo”, „wsprz”.
+- **10 Gest dwoma palcami cofnij / trzema ponów** — już istniał (`input.two_finger_undo`, Ustawienia → Wejście); bez zmian.

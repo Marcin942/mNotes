@@ -67,6 +67,7 @@ import androidx.compose.material.icons.rounded.Checklist
 import androidx.compose.material.icons.rounded.FormatListNumbered
 import androidx.compose.material.icons.rounded.FormatListBulleted
 import com.mdev.mnotes.core.text.ListText
+import com.mdev.mnotes.core.search.CommandRank
 import com.mdev.mnotes.core.text.MathText
 import com.mdev.mnotes.core.text.TextFit
 import androidx.compose.ui.text.input.TextFieldValue
@@ -194,13 +195,16 @@ fun PaletteDialog(cmds: List<Cmd>, onDismiss: () -> Unit) {
     var q by remember { mutableStateOf("") }
     var cur by remember { mutableIntStateOf(0) }
     val focus = remember { FocusRequester() }
+    val set = LocalContext.current.app.settings
+    // Pomysł Fable 2: ostatnio użyte na górze, wyszukiwanie bez wielkości liter i polskich znaków, przedrostki słów wyżej.
+    val recent = remember { CommandRank.decode(set.paletteRecent) }
     val list = remember(q, cmds) {
-        val t = q.trim().lowercase()
-        if (t.isEmpty()) cmds else cmds.filter { c -> t.split(' ').all { it in c.title.lowercase() || it in c.keyText.lowercase() || it in CmdDefs.groupName(c.def.group).lowercase() } }
+        val items = cmds.map { c -> CommandRank.Item(c.def.id, c.title, c.keyText + " " + CmdDefs.groupName(c.def.group)) }
+        CommandRank.rank(items, q, recent).map { cmds[it] }
     }
     LaunchedEffect(Unit) { runCatching { focus.requestFocus() } }
     LaunchedEffect(q) { cur = 0 }
-    fun run(c: Cmd?) { if (c != null && c.enabled) { onDismiss(); c.run() } }
+    fun run(c: Cmd?) { if (c != null && c.enabled) { set.paletteRecent = CommandRank.encode(CommandRank.used(recent, c.def.id)); onDismiss(); c.run() } }
     Dialog(onDismissRequest = onDismiss) {
         Column(
             Modifier.fillMaxWidth().widthMax().shadow(18.dp, RoundedCornerShape(14.dp)).clip(RoundedCornerShape(14.dp))

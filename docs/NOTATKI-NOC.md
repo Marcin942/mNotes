@@ -397,3 +397,9 @@ Wygląd ikon sprawdzam rysunkiem Java2D z tej samej geometrii (`PreviewHarness`,
   (gaśnie po ruchu, tylko palec). **Wygląd:** pod przełącznikiem mini-mapy w Wygląd suwak „Rozmiar mini-mapy: 120 dp”
   (krok 10) i chipy narożnika; mapa jak dotąd, tylko w wybranym miejscu i wielkości. **Tablet:** ustaw 200 dp i lewy górny
   → przybliż ≥ 2,5× i przewiń — mapa w lewym górnym rogu, większa; przeciągnięcie palcem po niej przenosi widok.
+- **2b-A4** synonimy w wyszukiwarce ustawień — `noc/f2b-synonimy`; `SettingsSynonymsTest` (3 testy). Zamiast dopisywać
+  ręcznie po kilkanaście słów do ~90 wierszy: słownik grup (`SettingsSynonyms.GROUPS`) i rozszerzanie zapytania w
+  `SettingsQuery.matches`; wiersze, które słownik nie pokrywał (3 w „Laboratorium”), załatał słownik, bez zmian w `Lab.kt`
+  agenta B. Test wymaga ≥ 3 synonimów na wiersz i sam znajdzie nowy wiersz bez nich. **Wygląd:** bez zmian (te same
+  wyniki, więcej trafień). **Tablet:** Ustawienia → szukaj „mazanie”, „lupa”, „wibracje”, „magnes”, „ciemny”, „mapa”,
+  „kreda”, „telefon” — za każdym razem właściwe wiersze; „przyczep” — nowy przełącznik w Gumka i lasso.

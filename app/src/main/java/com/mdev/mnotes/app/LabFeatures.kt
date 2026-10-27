@@ -16,6 +16,14 @@ interface LabFeatures {
     @Composable
     fun BoardPanel(ed: Editor, imgs: List<ImageEl>, close: () -> Unit)
 
+    /** Czy pokazać przycisk „Zdjęcie z telefonu” (łącze Nearby włączone w ustawieniach laboratorium). */
+    @Composable
+    fun phoneButton(): Boolean
+
+    /** Okno „Zdjęcie z telefonu”: tablet czeka na zdjęcia ze sparowanego telefonu i wstawia je na stronę. */
+    @Composable
+    fun PhonePanel(ed: Editor, close: () -> Unit)
+
     /** Kategoria „Laboratorium” w ustawieniach. */
     @Composable
     fun SettingsSection()

@@ -37,6 +37,10 @@ class LabSettings(ctx: Context) {
     private val cutP = F("board.cut", 0.25f)
     private val solidP = F("board.solid", 0.85f)
     private val tintP = I("board.tint", 0)
+    private val nearbyP = B("nearby.enabled", false)
+
+    /** Łącze Nearby (zdjęcie z telefonu); domyślnie wyłączone, bo wymaga Usług Google Play i uprawnień radia. */
+    var nearby: Boolean get() = nearbyP.value; set(v) = nearbyP.set(v)
 
     var straighten: Boolean get() = straightenP.value; set(v) = straightenP.set(v)
     var crop: Boolean get() = cropP.value; set(v) = cropP.set(v)

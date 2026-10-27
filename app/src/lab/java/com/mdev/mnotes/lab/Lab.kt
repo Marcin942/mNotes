@@ -201,8 +201,15 @@ object Lab : LabFeatures {
     }
 
     @Composable
+    override fun phoneButton(): Boolean = LabSettings.of(LocalContext.current).nearby
+
+    @Composable
+    override fun PhonePanel(ed: Editor, close: () -> Unit) = com.mdev.mnotes.lab.nearby.ReceivePhotosDialog(ed, close)
+
+    @Composable
     override fun SettingsSection() {
         val set = LabSettings.of(LocalContext.current)
+        NearbySection(set)
         Group(T.t("Kreda: zdjęcia tablicy", "Chalk: blackboard photos"), keys = "kreda tablica zdjęcie oczyść prostowanie próg chalk board photo clean") {
             Text(
                 T.t(
@@ -216,6 +223,41 @@ object Lab : LabFeatures {
                 set.autoCut = o.autoCut; set.cut = o.cut; set.solid = o.solid
                 set.tint = listOf(null, LabSettings.tintColor(1), LabSettings.tintColor(2)).indexOf(o.tint).coerceAtLeast(0)
             }
+        }
+    }
+
+    /** Łącze z telefonem: przełącznik, parowanie, wysyłanie zdjęcia (to samo menu na tablecie i telefonie). */
+    @Composable
+    private fun NearbySection(set: LabSettings) {
+        val ctx = LocalContext.current
+        val store = remember { com.mdev.mnotes.lab.nearby.PairStore(ctx) }
+        var dialog by remember { mutableStateOf(0) }
+        var tick by remember { mutableStateOf(0) }
+        Group(T.t("Telefon i tablet (Nearby)", "Phone and tablet (Nearby)"), keys = "nearby telefon tablet zdjęcie bluetooth parowanie wyślij phone pair send") {
+            Text(
+                T.t(
+                    "Zdjęcie zrobione telefonem trafia od razu na stronę na tablecie, przez Bluetooth albo Wi-Fi Direct, bez internetu i bez wspólnej sieci. Wymaga Usług Google Play na obu urządzeniach; każda ramka jest szyfrowana kluczem pary.",
+                    "A photo taken with the phone lands right on the tablet page, over Bluetooth or Wi-Fi Direct, without internet or a shared network. Needs Google Play services on both devices; every frame is encrypted with the pair key.",
+                ),
+                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(vertical = 6.dp),
+            )
+            ToggleRow(T.t("Włącz łącze z telefonem", "Enable the phone link"), set.nearby) { set.nearby = it }
+            if (set.nearby) {
+                tick
+                Text(
+                    if (store.paired) T.t("Sparowano z „${store.peerName}”.", "Paired with “${store.peerName}”.") else T.t("Brak sparowanego urządzenia.", "No paired device."),
+                    style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(vertical = 4.dp),
+                )
+                androidx.compose.material3.TextButton(onClick = { dialog = 1 }) { Text(T.t("Sparuj z drugim urządzeniem", "Pair with the other device")) }
+                if (store.paired) {
+                    androidx.compose.material3.TextButton(onClick = { dialog = 2 }) { Text(T.t("Wyślij zdjęcie na tablet (na telefonie)", "Send a photo to the tablet (on the phone)")) }
+                    androidx.compose.material3.TextButton(onClick = { store.clear(); tick++ }) { Text(T.t("Usuń parę", "Forget the pair"), color = MaterialTheme.colorScheme.error) }
+                }
+            }
+        }
+        when (dialog) {
+            1 -> com.mdev.mnotes.lab.nearby.PairDialog(com.mdev.mnotes.core.nearby.SyncRole.CLIENT) { dialog = 0; tick++ }
+            2 -> com.mdev.mnotes.lab.nearby.SendPhotoDialog { dialog = 0 }
         }
     }
 

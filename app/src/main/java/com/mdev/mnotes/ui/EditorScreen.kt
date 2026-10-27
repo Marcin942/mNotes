@@ -127,6 +127,7 @@ import androidx.compose.material.icons.rounded.ArrowUpward
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.material.icons.rounded.AutoFixHigh
+import androidx.compose.material.icons.rounded.PhoneAndroid
 import androidx.compose.material.icons.rounded.SelectAll
 import androidx.compose.material.icons.rounded.TouchApp
 import androidx.compose.material.icons.rounded.InvertColors
@@ -226,7 +227,7 @@ import kotlin.math.roundToInt
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.conflate
 
-enum class Panel { PEN, ERASER, LASSO, TAPE, PAINTER, FILL, PAGES, STYLE, MORE, SELCOLOR, IMAGEFX, ALIGN, BOARD }
+enum class Panel { PEN, ERASER, LASSO, TAPE, PAINTER, FILL, PAGES, STYLE, MORE, SELCOLOR, IMAGEFX, ALIGN, BOARD, PHONE }
 
 /** Własne ikony tam, gdzie Material Icons nie ma odpowiednika (gumka). */
 object MIcons {
@@ -405,6 +406,7 @@ fun EditorScreen(ed: Editor, tabs: TabsCtl, onExit: () -> Unit, onSettings: () -
         if (goTo) GoToDialog(ed) { goTo = false }
         if (ed.exportOpen) ExportDialog(ed.nbId, ed.pageIndex, { ed.doc.flush() }) { ed.exportOpen = false }
         if (ed.axesOpen) AxesDialog(ed) { ed.axesOpen = false }
+        if (panel == Panel.PHONE) Flavor.lab?.PhonePanel(ed) { panel = null }
         if (palette) PaletteDialog(cmds) { palette = false }
     }
 }
@@ -501,6 +503,7 @@ private fun PageCluster(ed: Editor, panel: Panel?, toggle: (Panel) -> Unit, goTo
         IconBtn(if (bm) Icons.Rounded.Bookmark else Icons.Rounded.BookmarkBorder, T.t("Zakładka", "Bookmark"), { ed.toggleBookmark() }, selected = bm, shortcut = "Ctrl+B")
         IconBtn(Icons.Rounded.ViewSidebar, T.t("Strony", "Pages"), { toggle(Panel.PAGES) }, selected = panel == Panel.PAGES, shortcut = "F9")
         IconBtn(Icons.Rounded.Image, T.t("Wstaw obraz", "Insert image"), pickImage, enabled = !ed.readOnly)
+        if (Flavor.lab?.phoneButton() == true) IconBtn(Icons.Rounded.PhoneAndroid, T.t("Zdjęcie z telefonu", "Photo from phone"), { toggle(Panel.PHONE) }, selected = panel == Panel.PHONE, enabled = !ed.readOnly)
         IconBtn(Icons.Rounded.MoreVert, T.t("Więcej", "More"), { toggle(Panel.MORE) }, selected = panel == Panel.MORE)
     }
 }

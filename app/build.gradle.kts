@@ -67,6 +67,9 @@ dependencies {
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.androidx.profileinstaller)
     implementation(libs.kotlinx.coroutines.android)
+    // Jedyna nowa zależność nocy (uzgodniony wyjątek, powód w docs/NOTATKI-NOC.md): łącze Nearby tylko w wariancie lab,
+    // za przełącznikiem w ustawieniach; wariant core jej nie ma.
+    "labImplementation"(libs.play.services.nearby)
     testImplementation(libs.junit)
     testImplementation(libs.org.json)
     debugImplementation(libs.androidx.compose.ui.tooling)

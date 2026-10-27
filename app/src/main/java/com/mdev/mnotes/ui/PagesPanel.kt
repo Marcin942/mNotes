@@ -389,7 +389,10 @@ private fun PageThumbItem(
     val wPx = 360
     // Wersja przychodzi parametrem (B2): czytana tutaj nie budziła pominiętego kafla, więc po edycji zostawała
     // stara miniatura, np. pusta kartka świeżo dodanej strony, dopóki coś innego go nie przerysowało.
-    val key = "p:${page.id}:$version:$wPx"
+    // 2b-A9: miniatura w trybie ciemnym/jasnym jak strona w edytorze (inny tryb = inna miniatura).
+    val theme = com.mdev.mnotes.core.color.ThemeMap.forPage(spec.paper, spec.inverted, ed.settings.pageTheme)
+    val photos = ed.settings.pageThemePhotos
+    val key = "p:${page.id}:$version:$wPx:${theme?.toDark}:$photos"
     // Do czasu nowej miniatury widać poprzednią, a nie pustą kartkę.
     var bmp by remember(page.id) { mutableStateOf<Bitmap?>(null) }
     var shownKey by remember(page.id) { mutableStateOf("") }
@@ -399,7 +402,7 @@ private fun PageThumbItem(
         else {
             // Zawartość czytamy na wątku UI (bezpieczne dla modelu), rysujemy w tle.
             val content = remember(key) { ed.doc.content(page) }
-            LaunchedEffect(key) { thumbs.async(key, { thumbs.render(ed.nbId, spec, content, wPx) }) { if (it != null) { bmp = it; shownKey = key } } }
+            LaunchedEffect(key) { thumbs.async(key, { thumbs.render(ed.nbId, spec, content, wPx, theme = theme, photos = photos) }) { if (it != null) { bmp = it; shownKey = key } } }
         }
     }
     val scale by animateFloatAsState(if (lifted) 1.05f else 1f, tween(120), label = "lift")

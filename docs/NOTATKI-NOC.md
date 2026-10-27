@@ -555,3 +555,19 @@ Wygląd ikon sprawdzam rysunkiem Java2D z tej samej geometrii (`PreviewHarness`,
   z przytrzymaniem, dotknij jednego i drugiego → P, Q i prosta; „Prostopadła przez punkt”: dotknij odcinka, potem
   dowolnego miejsca → przerywana prostopadła ze spodkiem F; „Okrąg: środek i punkt” — dwa dotknięcia jak cyrklem;
   trójkąt → „Wysokości”; cofnij jednym ruchem.
+- **2b-A9** tryb ciemny/jasny stron — `noc/f2b-tryb-ciemny`; projekt `docs/TRYB-CIEMNY.md`; `ThemeMapTest` (9 testów),
+  core 751, lab 805, zielone. Logika: `core/color/ThemeMap` (OKLab; papier i szarości — odwrócona jasność w granicach
+  0,12…0,94; kolor — ten sam odcień, jasność przesunięta tylko do kontrastu ≥ wyjściowego; zakreślacz ≤ 0,6 na ciemnym,
+  ≥ 0,8 na jasnym; macierz dla PDF i zdjęć). Rysowanie: przekształcenie wypalane w kafelkach (`PageRenderer.theme`,
+  `PageCache.themeOf`), zmiana trybu czyści kafelki; kreska w trakcie, lasso, mini-mapa, miniatury panelu stron — ten
+  sam `Transform`; pipeta odwraca widoczny kolor. Stary filtr F11 usunięty (flaga w pliku bez zmian, stare zeszyty
+  otwierają się jak dawniej). **Decyzje:** okładki w bibliotece w oryginale; eksport SVG/MD zawsze w oryginale; zdjęcia
+  domyślnie nieodwracane. **Wygląd:** w „⋮” nowa sekcja „Strony” z trzema chipami pod „Układem stron”; w Ustawieniach →
+  Wygląd „Strony zeszytów” (chipy) i przełącznik zdjęć; w oknie eksportu przełącznik „Kolory jak na ekranie” tylko dla
+  PDF/PNG i tylko, gdy ekran różni się od oryginału. Podgląd kolorów: `docs/podglad/tryb-ciemny.png`. **Nie
+  sprawdzone:** płynność pierwszego przeliczenia kafelków przy długim PDF (na JVM nie da się zmierzyć). **Tablet:**
+  zeszyt z białymi stronami i pismem czarnym, czerwonym, granatowym i zakreślaczem → „⋮” → Strony → „Ciemne”: tło ciemne,
+  czerń jasna, czerwony dalej czerwony, zakreślacz nie świeci; pisz granatem — kreska w trakcie od razu w kolorze
+  końcowym; pipetą weź czerwony z kartki i narysuj obok — wygląda tak samo; otwórz PDF wykładu — tło ciemne, tekst jasny;
+  zdjęcie na stronie bez zmian (Ustawienia → Wygląd → „Odwracaj też zdjęcia” je odwraca); „Jak powstały” + „Styl strony”
+  → F11 na jednej stronie; Eksport → PDF → „Kolory jak na ekranie” wł./wył. i porównaj pliki.

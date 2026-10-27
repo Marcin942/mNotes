@@ -1968,6 +1968,14 @@ private fun MoreMenu(ed: Editor, set: com.mdev.mnotes.data.Settings, close: () -
                 Chip(T.t("Poziomo", "Horizontal"), ed.layoutMode == 1, { applyLayout(1) })
                 Chip(T.t("Pojedyncza", "Single"), ed.layoutMode == 2, { applyLayout(2) })
             }
+            // 2b-A9: tryb stron dla wszystkich zeszytów (F11 w „Stylu strony” zostaje przełącznikiem jednej strony).
+            SectionLabel(T.t("Strony", "Pages"))
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                for ((mode, label) in pageThemeLabels()) Chip(label, set.pageTheme == mode, {
+                    set.pageTheme = mode
+                    (ed.station?.rows ?: listOf(ed)).forEach { it.view?.invalidate() }
+                })
+            }
             HorizontalDivider(Modifier.padding(vertical = 4.dp), color = m.line)
             MenuRow(Icons.Rounded.FitScreen, T.t("Dopasuj do szerokości", "Fit width"), "Ctrl+0") { ed.view?.fitWidth(); close() }
             MenuRow(Icons.Rounded.Palette, T.t("Styl strony…", "Page style…"), "") { openStyle() }
@@ -1989,6 +1997,12 @@ private fun MoreMenu(ed: Editor, set: com.mdev.mnotes.data.Settings, close: () -
         }
     }
 }
+
+fun pageThemeLabels() = listOf(
+    com.mdev.mnotes.core.color.ThemeMap.MIXED to T.t("Jak powstały", "As made"),
+    com.mdev.mnotes.core.color.ThemeMap.LIGHT to T.t("Jasne", "Light"),
+    com.mdev.mnotes.core.color.ThemeMap.DARK to T.t("Ciemne", "Dark"),
+)
 
 @Composable
 fun MenuRow(icon: ImageVector, text: String, hint: String, onClick: () -> Unit) {
@@ -2056,10 +2070,18 @@ private fun StylePanel(ed: Editor, close: () -> Unit) {
             }
             ToggleRow(T.t("Zastosuj do całego zeszytu", "Apply to whole notebook"), all) { all = it }
             // F11: ciemny tryb dokumentu także dla stron PDF (w przeciwieństwie do wzoru i papieru).
-            ToggleRow(T.t("Odwróć kolory (ciemny tryb)", "Invert colours (dark mode)"), spec.inverted) { on ->
+            ToggleRow(T.t("Odwróć kolory tej strony (F11)", "Invert this page's colours (F11)"), spec.inverted) { on ->
                 if (all) ed.restyleAll { it.withInverted(on) } else ed.setSpec(idx, spec.withInverted(on))
             }
-            if (spec.inverted) Text(T.t("Jasność odwrócona, odcienie zostają. Tylko na ekranie: eksport i druk są w oryginale.", "Brightness inverted, hues kept. Screen only: export and print stay original."), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            if (ed.settings.pageTheme != com.mdev.mnotes.core.color.ThemeMap.MIXED) Text(
+                T.t("Teraz wszystkie strony są w trybie z „⋮” → Strony; ten przełącznik zadziała po wybraniu tam „Jak powstały”.",
+                    "All pages now follow “⋮” → Pages; this switch works again after choosing “As made” there."),
+                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+            ) else if (spec.inverted) Text(
+                T.t("Jasne tło staje się ciemne i odwrotnie; kolory pisma zostają rozpoznawalne. Tylko na ekranie: eksport jest w oryginale, chyba że w oknie eksportu włączysz „Kolory jak na ekranie”.",
+                    "Light background becomes dark and vice versa; ink colours stay recognisable. Screen only: export stays original unless you turn on “Colours as on screen” in the export window."),
+                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
             if (isPdf) Text(T.t("Strona PDF — wzór i papier pochodzą z dokumentu.", "PDF page — template and paper come from the document."), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             else {
                 SectionLabel(T.t("Wzór", "Template"))

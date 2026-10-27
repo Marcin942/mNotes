@@ -48,7 +48,7 @@ import com.mdev.mnotes.core.layout.ZoomLimits
 import com.mdev.mnotes.core.layout.MiniMap
 import com.mdev.mnotes.core.layout.ToolReturn
 import com.mdev.mnotes.core.model.BoxElement
-import com.mdev.mnotes.core.model.ColorInvert
+import com.mdev.mnotes.core.color.ThemeMap
 import com.mdev.mnotes.core.model.DocEdit
 import com.mdev.mnotes.core.model.Element
 import com.mdev.mnotes.core.model.TapeEl
@@ -587,6 +587,7 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
         c.clipRect(0, 0, width, height)
         c.drawColor(viewBg)
         if (doc.pages.isEmpty() || layout.count == 0) return
+        syncTheme()
         // 2b-A7: rząd stanowiska widać tylko w pasie [band]; reszty nie rysujemy i nie zamawiamy dla niej kafelków.
         val bt = band?.get(0) ?: 0f; val bb = band?.get(1) ?: height.toFloat()
         val vb = Bounds(docX(0f), docY(bt), docX(width.toFloat()), docY(bb))
@@ -672,14 +673,12 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
         val o = 2f * dp
         miniPaint.style = Paint.Style.FILL; miniPaint.color = fade(shadowPaint.color)
         c.drawRect(miniRect.left - 0.5f * o, miniRect.top, miniRect.right + 0.5f * o, miniRect.bottom + o, miniPaint)
-        val inv = page.spec.inverted
-        miniPaint.color = fade(if (inv) ColorInvert.apply(page.spec.paper) else page.spec.paper)
+        // Baza strony ma przekształcenie trybu ciemnego/jasnego już wypalone (2b-A9); papier pod nią w tym samym kolorze.
+        miniPaint.color = fade(themeFor(page.spec)?.dstPaper ?: page.spec.paper)
         c.drawRect(miniRect, miniPaint)
-        // Odwrócona strona (F11) także na mapie: ta sama bazowa bitmapa z filtrem, jak kafelki na płótnie.
         cache.overview(page)?.let {
-            miniPaint.color = fade(-0x1); miniPaint.colorFilter = if (inv) invertPaint.colorFilter else null
+            miniPaint.color = fade(-0x1)
             c.drawBitmap(it, null, miniRect, miniPaint)
-            miniPaint.colorFilter = null
         }
         miniPaint.style = Paint.Style.STROKE; miniPaint.strokeWidth = 1f; miniPaint.color = fade(borderPaint.color)
         c.drawRect(miniRect, miniPaint)
@@ -730,22 +729,34 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
         c.clipRect(0f, 0f, spec.w, spec.h)
         val vis = Bounds(vb.l - r.l, vb.t - r.t, vb.r - r.l, vb.b - r.t)
         val req = Bounds(rvb.l - r.l, rvb.t - r.t, rvb.r - r.l, rvb.b - r.t)
-        // F11: kafelki zostają w oryginale, a odwraca je filtr w farbie (A2-6); warstwa tylko dla rzadkiego rysowania wektorowego.
-        if (!cache.draw(c, page, vis, req, r.l, r.t, zoom, spec.inverted)) {
-            if (spec.inverted) invertLayer(c, spec, vis)
+        // 2b-A9: tryb ciemny/jasny jest wypalony w kafelkach; rysowanie wektorowe (zanim powstaną) idzie przez to samo przekształcenie.
+        if (!cache.draw(c, page, vis, req, r.l, r.t, zoom)) {
+            renderer.theme = themeFor(spec); renderer.themePhotos = settings.pageThemePhotos
             renderer.drawPaper(c, spec, zoom, null)
             val content = page.content
             if (content != null) renderer.drawElements(c, doc.id, cache.visible(page.id, content), 0, vis, zoom, false, spec.darkPaper)
+            renderer.theme = null
         }
         c.restoreToCount(sc)
         c.drawRect(r.l, r.t, r.r, r.b, borderPaint)
     }
 
-    private val invertPaint = Paint().apply { colorFilter = ColorMatrixColorFilter(ColorMatrix(ColorInvert.MATRIX)) }
+    // ───────────────────────── tryb ciemny/jasny stron (2b-A9) ─────────────────────────
 
-    /** Warstwa z odwróconymi kolorami na widocznej części strony [vis] (w pt strony); zamyka ją restoreToCount wołającego. */
-    private fun invertLayer(c: Canvas, spec: com.mdev.mnotes.core.model.PageSpec, vis: Bounds) {
-        c.saveLayer(max(0f, vis.l), max(0f, vis.t), min(spec.w, vis.r), min(spec.h, vis.b), invertPaint)
+    private var themeKey = -1
+
+    /** Przekształcenie strony o stylu [spec] w bieżącym trybie (Ustawienia / „⋮”); null — strona jak powstała. */
+    private fun themeFor(spec: com.mdev.mnotes.core.model.PageSpec) = ThemeMap.forPage(spec.paper, spec.inverted, settings.pageTheme)
+
+    /** Po zmianie trybu kafelki (z wypalonym przekształceniem) liczą się od nowa. */
+    private fun syncTheme() {
+        val k = settings.pageTheme * 2 + (if (settings.pageThemePhotos) 1 else 0)
+        if (k == themeKey) return
+        val first = themeKey < 0
+        themeKey = k
+        cache.themeOf = { s -> themeFor(s) }
+        cache.themePhotos = settings.pageThemePhotos
+        if (!first) cache.invalidateAll()
     }
 
     private fun drawLive(c: Canvas) {
@@ -755,14 +766,11 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
             val s1 = c.save()
             c.translate(layout.left(livePage), layout.top(livePage))
             c.clipRect(0f, 0f, spec.w, spec.h)
-            // Na odwróconej stronie kreska w trakcie rysowania wygląda tak samo jak po zatwierdzeniu. Kryjący atrament od razu
-            // odwróconym kolorem (A2-6, bez warstwy na klatkę); zakreślacz i pióra półprzezroczyste mieszają się z tłem,
-            // więc tylko one dostają warstwę z filtrem.
-            val mixes = builder.penKind == PenKind.HIGHLIGHTER || PenSpec.of(builder.penKind).alpha < 1f
-            val ink = ColorInvert.liveInk(builder.penColor, spec.inverted, mixes)
-            if (ink == null) invertLayer(c, spec, vb.offset(-layout.left(livePage), -layout.top(livePage)))
-            val col = ink ?: builder.penColor
-            if (shapeSnapped) renderer.drawStrokeData(c, builder.penKind, col, builder.width, shapePts, shapePts.size / 3, zoom, spec.darkPaper, shapePoly, builder.line, true)
+            // Na przekształconej stronie (tryb ciemny/jasny, 2b-A9) kreska w trakcie ma ten sam kolor co po zatwierdzeniu.
+            val th = themeFor(spec)
+            val col = if (th == null) builder.penColor else if (builder.penKind == PenKind.HIGHLIGHTER) th.highlighter(builder.penColor) else th.ink(builder.penColor)
+            val dk = th?.toDark ?: spec.darkPaper
+            if (shapeSnapped) renderer.drawStrokeData(c, builder.penKind, col, builder.width, shapePts, shapePts.size / 3, zoom, dk, shapePoly, builder.line, true)
             else {
                 val n = builder.count
                 var total = n
@@ -778,8 +786,8 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
                         scratch[3 * (n + k) + 2] = pl
                     }
                     total = n + predN
-                    renderer.drawStrokeData(c, builder.penKind, col, builder.width, scratch, total, zoom, spec.darkPaper, line = builder.line)
-                } else renderer.drawStrokeData(c, builder.penKind, col, builder.width, builder.pts, total, zoom, spec.darkPaper, line = builder.line)
+                    renderer.drawStrokeData(c, builder.penKind, col, builder.width, scratch, total, zoom, dk, line = builder.line)
+                } else renderer.drawStrokeData(c, builder.penKind, col, builder.width, builder.pts, total, zoom, dk, line = builder.line)
             }
             c.restoreToCount(s1)
         }
@@ -789,11 +797,12 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
             val s2 = c.save()
             c.translate(layout.left(tgt), layout.top(tgt))
             c.clipRect(0f, 0f, spec.w, spec.h)
-            if (spec.inverted) invertLayer(c, spec, vb.offset(-layout.left(tgt), -layout.top(tgt)))
             c.translate(layout.left(lPage) - layout.left(tgt), layout.top(lPage) - layout.top(tgt))
             c.concat(matrixOf(lM))
             val z = zoom * lM.scaleFactor
+            renderer.theme = themeFor(spec); renderer.themePhotos = settings.pageThemePhotos
             for (el in lEls) renderer.drawElement(c, doc.id, el, z, false, spec.darkPaper)
+            renderer.theme = null
             c.restoreToCount(s2)
             lMShown = lM
         }
@@ -1928,7 +1937,9 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
         val col = cache.pixel(page, pgX(pi, sx), pgY(pi, sy))
         if (col == 0) return 0
         if (settings.pipetteOriginal) originalColorAt(page, pgX(pi, sx), pgY(pi, sy))?.let { return it }
-        return col or 0xFF000000.toInt()
+        // 2b-A9: na przekształconej stronie widać kolor po przekształceniu — atrament, który tak wygląda, to odwrotność.
+        val shown = col or 0xFF000000.toInt()
+        return themeFor(spec)?.reverse()?.ink(shown) ?: shown
     }
 
     /** Pierwotny kolor kreski albo wypełnienia pod punktem strony (zakreślacz ma pierwszeństwo przed pismem, bez rozjaśnienia przez przezroczystość); null, gdy nic tam nie ma. */

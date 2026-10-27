@@ -193,6 +193,39 @@ class PreviewHarness {
         ImageIO.write(img, "png", File(dir, "geo.png"))
     }
 
+    /** 2b-A9: ta sama notatka jak powstała (lewa kolumna) i po [com.mdev.mnotes.core.color.ThemeMap] (prawa), dla trzech papierów. */
+    private fun themeSheet(dir: String) {
+        val tm = com.mdev.mnotes.core.color.ThemeMap
+        val inks = listOf(0xFF1B1D21, 0xFF24407E, 0xFFC8433F, 0xFF3E8E5A, 0xFF8A4FB8, 0xFFE8A33D).map { it.toInt() }
+        val hl = 0xFFFFE066.toInt()
+        val papers = listOf(Paper.WHITE, Paper.IVORY, Paper.DARK)
+        val sc = 2.4f; val w = 250; val h = 30 * inks.size + 40
+        val pw = (w * sc).toInt(); val ph = (h * sc).toInt()
+        val img = BufferedImage(pw * 2 + 30, (ph + 10) * papers.size + 10, BufferedImage.TYPE_INT_ARGB)
+        val sg = g2(img); sg.color = Color(0x70, 0x70, 0x70); sg.fillRect(0, 0, img.width, img.height)
+        papers.forEachIndexed { row, pp ->
+            val src = PageSpec(paper = pp, template = Template.LINED)
+            val t = tm.forPage(pp, false, if (Paper.isDark(pp)) tm.LIGHT else tm.DARK)!!
+            for (col in 0..1) {
+                val tr = col == 1
+                val spec = if (tr) src.copy(paper = t.dstPaper, line = t.ink(src.line)) else src
+                val page = paper(spec, sc, w, h)
+                val g = g2(page); g.scale(sc.toDouble(), sc.toDouble())
+                val hp = sample(PenKind.HIGHLIGHTER, hl, 10f, 12f, 28f, 260f, 99)
+                stroke(g, PenKind.HIGHLIGHTER, if (tr) t.highlighter(hl) else hl, 10f, hp, hp.size / 3)
+                inks.forEachIndexed { i, c0 ->
+                    val c = if (Paper.isDark(pp) && i == 0) 0xFFF2F2F2.toInt() else c0
+                    val pts = sample(PenKind.BALLPOINT, c, 1.4f, 12f, 30f + i * 30f, 300f, i)
+                    stroke(g, PenKind.BALLPOINT, if (tr) t.ink(c) else c, 1.4f, pts, pts.size / 3)
+                }
+                g.dispose()
+                sg.drawImage(page, 10 + col * (pw + 10), 10 + row * (ph + 10), null)
+            }
+        }
+        sg.dispose()
+        ImageIO.write(img, "png", File(dir, "theme.png"))
+    }
+
     @Test fun render() {
         val dir = System.getenv("MNOTES_PREVIEW_DIR") ?: return assumeTrue(false)
         System.setProperty("java.awt.headless", "true")
@@ -200,6 +233,7 @@ class PreviewHarness {
         glyphSheet(dir)
         toolSheet(dir)
         geoSheet(dir)
+        themeSheet(dir)
 
         // 1) Papier: wycinki 3 wzorów na białym/kremowym papierze, skala jak na tablecie (~2,7 px/pt).
         val tiles = listOf(

@@ -63,10 +63,21 @@ przekształcenia do ciemnego; symetrycznie do jasnego).
 
 - **Kafelki**: przekształcenie jest wypalane w kafelku przy rysowaniu (`PageRenderer.theme`), a nie filtrem na klatkę —
   zmiana trybu czyści pamięć kafelków. Kosztuje jedno przeliczenie strony; przewijanie jest potem tak samo szybkie jak zwykle.
-- **Kreska w trakcie**, przesuwane lassem obiekty, mini-mapa, miniatury w panelu stron i okładki — ten sam `Transform`.
+- **Kreska w trakcie**, przesuwane lassem obiekty, mini-mapa i miniatury w panelu stron — ten sam `Transform`.
+  Okładki w bibliotece zostają jak powstały (biblioteka pokazuje zeszyty, nie czytanie).
 - **Pipeta**: próbkuje kolor widoczny; na przekształconej stronie odwraca go przekształceniem w drugą stronę, więc
   narysowany nim atrament wygląda jak próbka.
-- **Eksport PDF i druk**: oryginał; opcja „Eksport PDF jak na ekranie” w Ustawieniach → Wygląd.
+- **Eksport PDF/PNG i druk**: oryginał; w oknie eksportu przełącznik „Kolory jak na ekranie” (pamiętany, ustawienie
+  `export.as_screen`; pokazuje się tylko, gdy ekran różni się od oryginału). SVG i Markdown zawsze w oryginale.
+
+## Gdzie się przełącza
+
+- „⋮” w edytorze → **Strony**: „Jak powstały” / „Jasne” / „Ciemne” (ustawienie `pages.theme`, wspólne dla zeszytów).
+- Ustawienia → Wygląd → „Strony zeszytów” (to samo) i „Odwracaj też zdjęcia i obrazy na stronach”.
+- „Styl strony” → „Odwróć kolory tej strony (F11)” — flaga jednej strony, działa w trybie „Jak powstały”.
+
+Podgląd (lewa kolumna oryginał, prawa po przekształceniu; biały, kremowy, ciemny papier): `docs/podglad/tryb-ciemny.png`,
+rysowany przez `PreviewHarness` tym samym `ThemeMap` co aplikacja.
 
 ## Czego świadomie nie robię
 

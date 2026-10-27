@@ -25,6 +25,7 @@ import androidx.compose.material3.RadioButton
 import androidx.compose.material3.RadioButtonDefaults
 import androidx.compose.runtime.produceState
 import androidx.compose.ui.text.style.TextOverflow
+import com.mdev.mnotes.core.color.ThemeMap
 import com.mdev.mnotes.core.nav.BookmarkSections
 import com.mdev.mnotes.core.nav.Mark
 import com.mdev.mnotes.core.nav.SectionEnd
@@ -123,6 +124,13 @@ fun ExportDialog(nb: String, currentPage: Int, prepare: () -> Unit, onDismiss: (
     val title = app.repo.meta(nb)?.title ?: "mNotes"
     val exporter = remember { Exporter(app.repo, app.assets, app.pdf) }
     var fmt by remember { mutableStateOf(ExportFormat.PDF) }
+    val set = app.settings
+    // Opcja ma sens tylko, gdy ekran pokazuje strony inaczej, niż powstały (tryb stron albo F11 na którejś stronie)
+    val themed = remember(nb) { set.pageTheme != ThemeMap.MIXED || app.repo.meta(nb)?.pages?.any { it.spec.inverted } == true }
+    var asScreen by remember { mutableStateOf(set.exportAsScreen) }
+    val raster = fmt == ExportFormat.PDF || fmt == ExportFormat.PNG
+    exporter.screenTheme = if (themed && asScreen && raster) set.pageTheme else null
+    exporter.screenPhotos = set.pageThemePhotos
     var scopeMode by remember { mutableStateOf(ExportScope.ALL) }
     var spanText by remember { mutableStateOf("${currentPage + 1}") }
     var busy by remember { mutableStateOf(false) }
@@ -320,6 +328,9 @@ fun ExportDialog(nb: String, currentPage: Int, prepare: () -> Unit, onDismiss: (
                         ToggleRow(T.t("Osobny plik dla każdej zakładki (ZIP, ${outParts.size} plików)", "Separate file per bookmark (ZIP, ${outParts.size} files)"), splitFiles) { if (!busy) splitFiles = it }
                     }
                 }
+            }
+            if (themed && raster) {
+                ToggleRow(T.t("Kolory jak na ekranie (tryb ciemny/jasny stron)", "Colours as on screen (dark/light pages)"), asScreen) { if (!busy) { asScreen = it; set.exportAsScreen = it } }
             }
             if (blank.isNotEmpty()) {
                 ToggleRow(T.t("Pomijaj puste strony (${blank.size} w zeszycie)", "Skip blank pages (${blank.size} in notebook)"), skipBlank) { if (!busy) skipBlank = it }

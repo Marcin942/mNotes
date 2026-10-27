@@ -134,6 +134,10 @@ class Settings(ctx: Context) {
     var mathIntegral by Pref("math.integral", false)
     var mathHinted by Pref("math.hinted", false)          // dymek „gdzie to wyłączyć” po pierwszej zamianie (A2-4) już był
     var stations by Pref("station.saved", "")            // 2b-A7: zapisane stanowiska (Workbench.encode)
+    // 2b-A9: tryb stron (ThemeMap.MIXED / LIGHT / DARK), odwracanie zdjęć, eksport PDF jak na ekranie (domyślnie oryginał)
+    var pageTheme by Pref("pages.theme", com.mdev.mnotes.core.color.ThemeMap.MIXED)
+    var pageThemePhotos by Pref("pages.theme_photos", false)
+    var exportAsScreen by Pref("export.as_screen", false)
     var mathText by Pref("text.math_unicode", true)      // L2: \alpha, x^2, a_1 → α, x², a₁ w polach tekstu
     var constructNames by Pref("construct.names", true)  // L1 (A2-9): konstrukcje podpisują punkty A, B, C, O, H…
     var paletteRecent by Pref("palette.recent", "")      // pomysł Fable 2: ostatnio użyte polecenia palety (id po przecinku)

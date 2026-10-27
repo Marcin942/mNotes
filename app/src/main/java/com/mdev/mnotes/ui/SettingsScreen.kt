@@ -299,6 +299,19 @@ private fun Appearance(set: com.mdev.mnotes.data.Settings) {
             }
             Text(Accents.list[set.accent.coerceIn(0, Accents.list.size - 1)].name, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 6.dp))
         }
+        // 2b-A9: motyw dotyczy interfejsu, a ten wybór — samych stron zeszytów (też w „⋮” edytora).
+        Opt(T.t("Strony zeszytów", "Notebook pages"), "tryb ciemny jasny strony papier tło odwróć kolory noc dark mode light pages invert night") {
+            Choice(pageThemeLabels().map { it.second }, set.pageTheme) { set.pageTheme = it }
+            Text(
+                T.t("„Jak powstały”: każda strona po swojemu (F11 w „Stylu strony” odwraca jedną). Pismo zachowuje odcień, zmienia tylko jasność.",
+                    "“As made”: each page as created (F11 in “Page style” inverts one). Ink keeps its hue and only changes lightness."),
+                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 6.dp),
+            )
+        }
+        ToggleRow(
+            T.t("Odwracaj też zdjęcia i obrazy na stronach", "Also invert photos and images on pages"),
+            set.pageThemePhotos, keys = "zdjęcia obrazy fotografie odwracanie tryb ciemny photos images invert dark",
+        ) { set.pageThemePhotos = it }
         ToggleRow(T.t("Zagęszczony interfejs (desktopowy)", "Compact interface (desktop-like)"), set.compact, keys = "compact gęsty kompaktowy desktop małe odstępy") { set.compact = it }
         ToggleRow(T.t("Delikatna wibracja przy dotknięciu przycisków", "Light vibration when tapping buttons"), set.haptics, keys = "haptyka drgania wibracje vibration haptic") { set.haptics = it }
         ToggleRow(T.t("Podpowiedź z nazwą przycisku (najechanie, przytrzymanie)", "Button name tooltip (hover, long press)"), set.tooltips, keys = "podpowiedź dymek napis nazwa tooltip hover") { set.tooltips = it }

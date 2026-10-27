@@ -15,6 +15,7 @@ import com.mdev.mnotes.core.geom.AxesSnap
 import com.mdev.mnotes.core.geom.AxesSpec
 import com.mdev.mnotes.core.geom.Bounds
 import com.mdev.mnotes.core.geom.ConstructOps
+import com.mdev.mnotes.core.geom.GeoTool
 import com.mdev.mnotes.core.pages.LecturePages
 import com.mdev.mnotes.core.model.DocEdit
 import com.mdev.mnotes.core.model.Element
@@ -61,7 +62,7 @@ import java.io.InputStream
 import kotlin.math.max
 import kotlin.math.min
 
-enum class Tool { PEN, ERASER, LASSO, TEXT, LASER, HAND, SPACE, TAPE, PAINTER, FILL, CURVE }
+enum class Tool { PEN, ERASER, LASSO, TEXT, LASER, HAND, SPACE, TAPE, PAINTER, FILL, CURVE, GEO }
 
 class Sel(val pageId: String, val ids: Set<Int>)
 
@@ -754,6 +755,40 @@ class Editor(val ctx: Context, val nbId: String) {
         if (els.isEmpty()) { say(T.t("Ta konstrukcja nie ma rozwiązania dla zaznaczonych kształtów", "This construction has no solution for the selected shapes")); return }
         exec(DocEdit.Elements(p.id, ElementsEdit.add(doc.content(p), els)))
         select(p.id, els.map { it.id }.toSet())
+    }
+
+    // — Narzędzie Geometria (2b-A8) —
+    /** Wybrana konstrukcja i wejścia wskazane dotąd (na jednej stronie [geoPage]). */
+    var geoKind by mutableStateOf(GeoTool.Kind.COMPASS)
+        private set
+    val geoInputs = androidx.compose.runtime.mutableStateListOf<GeoTool.Input>()
+    var geoPage: String? = null
+        private set
+
+    val geoHint: String get() = GeoTool.hint(geoKind, geoInputs.size, T.pl)
+
+    fun geoChoose(k: GeoTool.Kind) { geoKind = k; geoReset() }
+    fun geoReset() { geoInputs.clear(); geoPage = null; view?.invalidate() }
+
+    /**
+     * Dotknięcie strony [pageId] w ([x], [y]) narzędziem Geometria: następne wejście wybranej konstrukcji; po ostatnim —
+     * wynik w kolorze pióra (jedno cofnięcie). Wejścia z innej strony zaczynają konstrukcję od nowa.
+     */
+    fun geoTap(pageId: String, x: Float, y: Float, tol: Float) {
+        if (readOnly) return
+        val page = doc.page(pageId) ?: return
+        if (geoPage != null && geoPage != pageId) geoInputs.clear()
+        geoPage = pageId
+        val want = geoKind.inputs[geoInputs.size]
+        val input = GeoTool.pick(doc.content(page).elements, x, y, tol, want)
+        if (input == null) { say(geoHint); return }
+        geoInputs += input
+        if (geoInputs.size < geoKind.inputs.size) { view?.invalidate(); return }
+        val ink = (if (pen.kind == PenKind.HIGHLIGHTER) 0xFF37474F.toInt() else pen.color) or (0xFF shl 24)
+        val els = GeoTool.build(geoKind, geoInputs.toList(), ink, pen.width.coerceIn(0.6f, 3f), settings.constructNames, T.pl)
+        geoReset()
+        if (els.isEmpty()) { say(T.t("Ta konstrukcja nie ma rozwiązania dla wskazanych kształtów", "This construction has no solution for the picked shapes")); return }
+        exec(DocEdit.Elements(page.id, ElementsEdit.add(doc.content(page), els)))
     }
 
     /** Pomysł Fable 12: jedyny zaznaczony obraz staje się tłem strony — zablokowany i na spodzie, pod pismem. */

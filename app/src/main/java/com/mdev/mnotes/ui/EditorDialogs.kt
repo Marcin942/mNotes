@@ -173,6 +173,7 @@ fun commandList(
         "toolSpace" to ({ !ed.readOnly } to { pickTool(Tool.SPACE, null) }),
         "ruler" to ({ !ed.readOnly } to { ed.toggleRuler() }),
         "protractor" to ({ !ed.readOnly } to { ed.toggleProtractor() }),
+        "toolGeo" to ({ !ed.readOnly } to { pickTool(Tool.GEO, null) }),
         "toolTape" to ({ !ed.readOnly } to { pickTool(Tool.TAPE, Panel.TAPE) }),
         "tapesToggle" to ({ !ed.readOnly } to { ed.toggleAllTapes() }),
         "pipette" to ({ !ed.readOnly } to { ed.pipetteForCurrent() }),

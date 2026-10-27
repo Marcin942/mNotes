@@ -627,6 +627,7 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
         drawCrop(c)
         drawLasso(c)
         drawSelection(c)
+        drawGeoPicks(c)
         drawShapeLabel(c)
         drawAttachMark(c)
         drawRing(c)
@@ -1809,6 +1810,31 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
         }
     }
 
+    // ───────────────────────── Geometria (2b-A8): wskazane wejścia ─────────────────────────
+
+    private val geoPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE; strokeCap = Paint.Cap.ROUND; strokeJoin = Paint.Join.ROUND }
+
+    /** Wskazane już wejścia konstrukcji: obrys w kolorze akcentu (półprzezroczysty), żeby było widać, co zostało wybrane. */
+    private fun drawGeoPicks(c: Canvas) {
+        if (ed.tool != Tool.GEO || ed.geoInputs.isEmpty()) return
+        val pi = doc.indexOf(ed.geoPage ?: return)
+        if (pi !in 0 until layout.count) return
+        val ox = layout.left(pi); val oy = layout.top(pi)
+        fun sx(x: Float) = (ox + x) * zoom + tx
+        fun sy(y: Float) = (oy + y) * zoom + ty
+        geoPaint.color = rgbA(accent, 0x99); geoPaint.strokeWidth = 5f * dp
+        for (inp in ed.geoInputs) when (inp) {
+            is com.mdev.mnotes.core.geom.GeoTool.Input.Point -> { geoPaint.style = Paint.Style.FILL; c.drawCircle(sx(inp.p.x), sy(inp.p.y), 6f * dp, geoPaint); geoPaint.style = Paint.Style.STROKE }
+            is com.mdev.mnotes.core.geom.GeoTool.Input.Ln -> c.drawLine(sx(inp.l.a.x), sy(inp.l.a.y), sx(inp.l.b.x), sy(inp.l.b.y), geoPaint)
+            is com.mdev.mnotes.core.geom.GeoTool.Input.Circ -> c.drawCircle(sx(inp.c.c.x), sy(inp.c.c.y), inp.c.r * zoom, geoPaint)
+            is com.mdev.mnotes.core.geom.GeoTool.Input.Tri -> {
+                tmpPath.rewind(); tmpPath.moveTo(sx(inp.a.x), sy(inp.a.y)); tmpPath.lineTo(sx(inp.b.x), sy(inp.b.y)); tmpPath.lineTo(sx(inp.c.x), sy(inp.c.y)); tmpPath.close()
+                c.drawPath(tmpPath, geoPaint)
+            }
+            is com.mdev.mnotes.core.geom.GeoTool.Input.Obj -> { val b = inp.el.bounds; c.drawRect(sx(b.l), sy(b.t), sx(b.r), sy(b.b), geoPaint) }
+        }
+    }
+
     // ───────────────────────── kątomierz (FB4, A2-13) ─────────────────────────
 
     private val prot = Protractor(0f, 0f, 0f, 150f)
@@ -2280,7 +2306,7 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
             Tool.SPACE -> spaceDown()
             Tool.TAPE -> tapeDown()
             Tool.PAINTER -> paintDown()
-            Tool.FILL -> if (ed.readOnly || pageIdxAt(curX, curY) < 0) mode = Mode.IGNORE
+            Tool.FILL, Tool.GEO -> if (ed.readOnly || pageIdxAt(curX, curY) < 0) mode = Mode.IGNORE
             Tool.LASER -> { laser.begin(System.currentTimeMillis()); addLaser(curX, curY) }
             else -> {}
         }
@@ -2319,6 +2345,10 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
             Tool.TAPE -> tapeUp(cancel)
             Tool.PAINTER -> paintUp(cancel)
             Tool.FILL -> if (!cancel && !toolMoved) fillTap()
+            Tool.GEO -> if (!cancel && !toolMoved) {
+                val pi = pageIdxAt(curX, curY)
+                if (pi >= 0) ed.geoTap(doc.pages[pi].id, pgX(pi, curX), pgY(pi, curY), 14f * dp / zoom)
+            }
             Tool.TEXT -> if (!cancel && !toolMoved) textTap()
             Tool.LASER -> { laser.end(System.currentTimeMillis()); if (!cancel && !toolMoved && ToolReturn.shouldReturn(settings.returnToPen, true, false, true, false)) ed.returnToWriting() }
             else -> {}

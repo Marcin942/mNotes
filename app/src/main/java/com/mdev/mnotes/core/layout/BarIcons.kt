@@ -11,7 +11,7 @@ object BarIcons {
     enum class Kind { PEN, ERASER, LASSO, CURVE, PROTRACTOR, VECTOR }
 
     /** Pozycje z ikoną Material. */
-    val VECTOR_IDS = setOf("undo", "redo", "painter", "fill", "pipette", "text", "laser", "hand", "tape", "space", "ruler")
+    val VECTOR_IDS = setOf("undo", "redo", "painter", "fill", "pipette", "text", "laser", "hand", "tape", "space", "ruler", "geometry")
 
     fun kind(id: String): Kind? = when {
         PenKind.entries.any { it.name.lowercase() == id } -> Kind.PEN

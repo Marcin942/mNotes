@@ -543,3 +543,15 @@ Wygląd ikon sprawdzam rysunkiem Java2D z tej samej geometrii (`PreviewHarness`,
   przeciągnij do rzędu 3 → przenosi się (cofnięcie w obu); przytrzymaj zaznaczenie w rzędzie 2 → menu przy zaznaczeniu;
   panel stron po dotknięciu rzędu 2 pokazuje jego strony; „⋮” → „Stanowiska…” → zapisz „Wykład + zadania”, zamknij
   rzędy ✕, otwórz stanowisko z listy; pamięć i płynność przy trzech PDF-ach.
+- **Scalenie `noc/lab2`** (po 2b-A7): kreda 2b-B2, zdjęcie tablicy 2b-B3, zeszyty przez łącze 2b-B1 krok 4; bez konfliktów;
+  core 737, lab 791.
+- **2b-A8** narzędzie Geometria — `noc/f2b-geometria`; `GeoToolTest` (5 testów). Logika: `GeoTool.Kind` (wejścia każdej
+  konstrukcji), `pick` (wejście pod dotknięciem), `build` (wynik przez `ConstructOps.compose`, ten sam `Draw` co menu
+  „Konstrukcja ▸”, więc nazwy punktów i styl wyniku są wspólne). `Tool.GEO`: dotknięcie bez ruchu (rysik, mysz; palec, gdy
+  „palec rysuje”) → `Editor.geoTap`. **Decyzja:** obrót tylko o 90° (bez wyboru kąta) — kąt do wpisania to osobne okno;
+  do potwierdzenia. **Wygląd:** listwa jak przy piórze, glify w siatce 24 tą samą kreską co narzędzia, separatory między
+  grupami; nad płótnem kapsuła `FloatingCard` z nazwą konstrukcji w akcencie i krokiem szarym tekstem; wskazane wejścia
+  obrysem akcentu (60 % krycia, 5 dp). **Tablet:** pasek (albo „⋯”) → Geometria; „Przecięcie okręgów…”: narysuj dwa koła
+  z przytrzymaniem, dotknij jednego i drugiego → P, Q i prosta; „Prostopadła przez punkt”: dotknij odcinka, potem
+  dowolnego miejsca → przerywana prostopadła ze spodkiem F; „Okrąg: środek i punkt” — dwa dotknięcia jak cyrklem;
+  trójkąt → „Wysokości”; cofnij jednym ruchem.

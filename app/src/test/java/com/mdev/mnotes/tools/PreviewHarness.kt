@@ -180,12 +180,26 @@ class PreviewHarness {
         ImageIO.write(img, "png", File(dir, "tools.png"))
     }
 
+    /** 2b-A8: glify konstrukcji narzędzia Geometria, w dwóch rzędach, na jasnym tle. */
+    private fun geoSheet(dir: String) {
+        val kinds = com.mdev.mnotes.core.geom.GeoTool.Kind.entries
+        val cell = 72; val perRow = 9
+        val rows = (kinds.size + perRow - 1) / perRow
+        val img = BufferedImage(cell * perRow + 20, (cell + 8) * rows + 12, BufferedImage.TYPE_INT_ARGB)
+        val g = g2(img)
+        g.color = Color(0xFC, 0xFC, 0xFD); g.fillRect(0, 0, img.width, img.height)
+        kinds.forEachIndexed { i, k -> g.drawImage(glyph(com.mdev.mnotes.ui.GeoGlyphParts.parts(k), cell, Color(0x2A, 0x2B, 0x2E), Color.BLACK), 10 + (i % perRow) * cell, 6 + (i / perRow) * (cell + 8), null) }
+        g.dispose()
+        ImageIO.write(img, "png", File(dir, "geo.png"))
+    }
+
     @Test fun render() {
         val dir = System.getenv("MNOTES_PREVIEW_DIR") ?: return assumeTrue(false)
         System.setProperty("java.awt.headless", "true")
         File(dir).mkdirs()
         glyphSheet(dir)
         toolSheet(dir)
+        geoSheet(dir)
 
         // 1) Papier: wycinki 3 wzorów na białym/kremowym papierze, skala jak na tablecie (~2,7 px/pt).
         val tiles = listOf(

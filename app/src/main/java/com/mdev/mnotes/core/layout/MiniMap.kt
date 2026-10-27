@@ -10,6 +10,27 @@ object MiniMap {
     /** Od ilu razy „100 %” mini-mapa się pokazuje. */
     const val MIN_ZOOM_FACTOR = 2.5f
 
+    /**
+     * Jak pasek przewijania: mapa stoi [HOLD_MS] po ostatnim ruchu widoku i gaśnie przez [FADE_MS]. Na stałe zasłaniała
+     * róg, w którym przy dużym zoomie nie dało się pisać (przegląd Fable, A2-2).
+     */
+    const val HOLD_MS = 1200L
+    const val FADE_MS = 180L
+
+    /** Krycie mapy w chwili [now], gdy widok ruszył się ostatnio w [movedAt] (ms; 0 = jeszcze nie / schowana rysikiem). */
+    fun alpha(now: Long, movedAt: Long): Float {
+        if (movedAt <= 0L) return 0f
+        val t = now - movedAt
+        return when {
+            t <= HOLD_MS -> 1f
+            t >= HOLD_MS + FADE_MS -> 0f
+            else -> 1f - (t - HOLD_MS).toFloat() / FADE_MS
+        }
+    }
+
+    /** Dotknięcie w polu mapy przenosi widok tylko palcem i tylko gdy mapę widać; rysik zawsze pisze pod nią. */
+    fun takesTouch(finger: Boolean, alpha: Float, inBox: Boolean): Boolean = finger && inBox && alpha > 0f
+
     class Geometry(val box: Bounds, val scale: Float, val view: Bounds)
 
     /**

@@ -151,3 +151,13 @@ dziedziczy już proces z `start-A.sh`, więc `./gradlew` działa bez niego.
   znacznik na samym końcu tekstu (inaczej `x^10` wpisane na końcu i zatwierdzone zostałoby surowe). Przy okazji: `x^-1 `
   dawało x⁻1, teraz x⁻¹. Testy: core 659, lab 688, 0 błędów. **Tablet:** Tekst → wpisz `x^10 + a_12 = 10^-3` i „Gotowe” →
   `x¹⁰ + a₁₂ = 10⁻³`; `plik_2a.txt` zostaje bez zmian.
+- **A2-2** mini-mapa nie zjada rysika — `noc/f2-minimapa`; `MiniMapTest` (krycie w czasie, dotyk tylko palcem). Zrobione oba
+  warianty z planu naraz: mapa jest tylko chwilę po przewinięciu/zoomie (1,2 s + 180 ms wygaszania, jak pasek przewijania),
+  znika od razu przy dotknięciu rysikiem, a reaguje tylko na palec (nie na dłoń odrzuconą przez „Odrzucanie dłoni”).
+  Domyślnie wyłączona (`view.minimap = false`), dopóki Marcin nie sprawdzi na tablecie. **Wygląd:** jak dotąd prostokąt
+  strony ≤ 120×150 dp w prawym dolnym rogu, ale cień i włosowa ramka tymi samymi kolorami co kartki na płótnie (wcześniej
+  ostry ciemny prostokąt), widok jako półprzezroczysty prostokąt akcentu; pojawia się i gaśnie płynnie. Ustawienie
+  przeniesione z „Wejście” do „Wygląd” („Mini-mapa strony po przewinięciu przy dużym powiększeniu (przesuwana palcem)”).
+  **Tablet:** Ustawienia → Wygląd → włącz mini-mapę; przybliż ≥ 2,5× i przewiń palcem — mapa w rogu, po ~1 s gaśnie;
+  przewiń i od razu pisz rysikiem w prawym dolnym rogu — mapa znika, kreska się rysuje; przewiń i przeciągnij palcem po
+  mapie — widok jedzie.

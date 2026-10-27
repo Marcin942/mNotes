@@ -299,6 +299,10 @@ private fun Appearance(set: com.mdev.mnotes.data.Settings) {
         ToggleRow(T.t("Podpowiedź z nazwą przycisku (najechanie, przytrzymanie)", "Button name tooltip (hover, long press)"), set.tooltips, keys = "podpowiedź dymek napis nazwa tooltip hover") { set.tooltips = it }
         ToggleRow(T.t("Pokazuj dymki o narzędziach po ich wybraniu", "Show tool tips after picking a tool"), set.toolHints, keys = "dymki komunikaty napis wybrane narzędzie podpowiedź toast hint") { set.toolHints = it }
         ToggleRow(T.t("Listwa pokazuje opcje gumki, lassa i lasera", "Strip shows eraser, lasso and laser options"), set.toolStrip, keys = "listwa ikonki gumka lasso laser opcje strip eraser") { set.toolStrip = it }
+        ToggleRow(
+            T.t("Mini-mapa strony po przewinięciu przy dużym powiększeniu (przesuwana palcem)", "Page mini-map after scrolling when zoomed in (moved with a finger)"),
+            set.miniMap, keys = "mini mapa podgląd strony nawigacja powiększenie zoom róg minimap overview",
+        ) { set.miniMap = it }
         ToggleRow(T.t("Animacja zmiany kolejności stron", "Animate page reordering"), set.pageAnim, keys = "animacja strony kolejność przesuwanie przestawianie animation reorder pages") { set.pageAnim = it }
         if (set.pageAnim) Opt(T.t("Czas animacji stron: ${set.pageAnimMs} ms", "Page animation time: ${set.pageAnimMs} ms"), "animacja strony czas szybkość duration speed") {
             MSlider(set.pageAnimMs.toFloat(), 100f, 700f) { set.pageAnimMs = (it / 20).toInt() * 20 }
@@ -422,7 +426,6 @@ private fun InputPrefs(set: com.mdev.mnotes.data.Settings) {
         ToggleRow(T.t("Odciągnij za ostatnią stroną, aby dodać nową", "Pull past the last page to add a new one"), set.pullAddPage, keys = "nowa strona dodaj pull gest koniec zeszytu") { set.pullAddPage = it }
         ToggleRow(T.t("Nowa strona, gdy tekst wyjdzie za ostatnią", "New page when text runs past the last one"), set.autoTextPage, keys = "nowa strona tekst pole automatycznie koniec auto page text") { set.autoTextPage = it }
         ToggleRow(T.t("Wstawione zdjęcie wyrównuj do kratki", "Align inserted photos to the grid"), set.imageGridFit, keys = "zdjęcie obraz kratka siatka wyrównaj przyciągnij grid snap image") { set.imageGridFit = it }
-        ToggleRow(T.t("Mini-mapa strony przy dużym powiększeniu", "Page mini-map when zoomed in"), set.miniMap, keys = "mini mapa podgląd strony nawigacja powiększenie minimap overview") { set.miniMap = it }
         ToggleRow(T.t("Grecki i indeksy w tekście (\\alpha → α, x^2 → x², a_1 → a₁)", "Greek and indices in text (\\alpha → α, x^2 → x², a_1 → a₁)"), set.mathText, keys = "grecki litery indeks górny dolny potęga latex alfa unicode greek subscript superscript") { set.mathText = it }
         ToggleRow(T.t("Ponowne dotknięcie lasera, ręki lub lassa wraca do pisania", "Tapping laser, hand or lasso again returns to writing"), set.returnToPen, keys = "odznacz narzędzie powrót pióro pisanie laser ręka lasso pusty obszar return pen") { set.returnToPen = it }
         Text(T.t("Także dotknięcie pustego miejsca tym narzędziem (bez zaznaczenia).", "Also a tap on an empty spot with that tool (with nothing selected)."), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(bottom = 6.dp))

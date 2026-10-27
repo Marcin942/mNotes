@@ -337,6 +337,7 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
             ed.zoomPct = (zoom / baseZoom() * 100f).roundToInt()
         }
         ed.viewTick++
+        if (settings.miniMap) { miniMovedAt = SystemClock.uptimeMillis(); removeCallbacks(miniFade); postDelayed(miniFade, MiniMap.HOLD_MS) }
         invalidate()
     }
 
@@ -494,7 +495,7 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
     fun dispose() {
         if (disposed) return
         disposed = true
-        removeCallbacks(holdRunnable); removeCallbacks(longPress); cancelPendingDouble()
+        removeCallbacks(holdRunnable); removeCallbacks(longPress); removeCallbacks(miniFade); cancelPendingDouble()
         stopAnim()
         if (doc.listener === this) doc.listener = null
         if (ed.view === this) ed.view = null
@@ -625,6 +626,10 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
 
     private val miniPaint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
     private val miniRect = RectF()
+    private var miniMovedAt = 0L
+    private val miniFade = Runnable { invalidate() }
+
+    private fun miniAlpha() = MiniMap.alpha(SystemClock.uptimeMillis(), miniMovedAt)
 
     /** Mini-mapa bieżącej strony, gdy powiększenie jest duże (i nie ma okna powiększenia); inaczej null. */
     private fun miniGeom(): MiniMap.Geometry? {
@@ -638,21 +643,27 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
 
     private fun drawMiniMap(c: Canvas) {
         val g = miniGeom() ?: return
+        val a = miniAlpha()
+        if (a <= 0f) return
+        if (a < 1f) postInvalidateOnAnimation()
+        fun fade(color: Int) = (((color ushr 24) * a).toInt() shl 24) or (color and 0xFFFFFF)
         val pi = ed.pageIndex.coerceIn(0, layout.count - 1)
         val page = doc.pages[pi]
         val b = g.box
         miniRect.set(b.l, b.t, b.r, b.b)
-        miniPaint.style = Paint.Style.FILL; miniPaint.color = 0x33000000
-        c.drawRoundRect(miniRect.left - 1f * dp, miniRect.top - 1f * dp, miniRect.right + 2f * dp, miniRect.bottom + 2f * dp, 6f * dp, 6f * dp, miniPaint)
-        miniPaint.color = page.spec.paper
+        // Cień i ramka tymi samymi kolorami co strony (onDraw), żeby mapa wyglądała jak mała kartka, nie obcy panel.
+        val o = 2f * dp
+        miniPaint.style = Paint.Style.FILL; miniPaint.color = fade(shadowPaint.color)
+        c.drawRect(miniRect.left - 0.5f * o, miniRect.top, miniRect.right + 0.5f * o, miniRect.bottom + o, miniPaint)
+        miniPaint.color = fade(page.spec.paper)
         c.drawRect(miniRect, miniPaint)
-        cache.overview(page)?.let { c.drawBitmap(it, null, miniRect, miniPaint) }
-        miniPaint.style = Paint.Style.STROKE; miniPaint.strokeWidth = 1f * dp; miniPaint.color = if (darkUi) 0x55FFFFFF else 0x33000000
+        cache.overview(page)?.let { miniPaint.color = fade(-0x1); c.drawBitmap(it, null, miniRect, miniPaint) }
+        miniPaint.style = Paint.Style.STROKE; miniPaint.strokeWidth = 1f; miniPaint.color = fade(borderPaint.color)
         c.drawRect(miniRect, miniPaint)
         val v = g.view
-        miniPaint.style = Paint.Style.FILL; miniPaint.color = (accent and 0xFFFFFF) or (0x30 shl 24)
+        miniPaint.style = Paint.Style.FILL; miniPaint.color = fade((accent and 0xFFFFFF) or (0x30 shl 24))
         c.drawRect(v.l, v.t, v.r, v.b, miniPaint)
-        miniPaint.style = Paint.Style.STROKE; miniPaint.strokeWidth = 1.5f * dp; miniPaint.color = accent
+        miniPaint.style = Paint.Style.STROKE; miniPaint.strokeWidth = 1.5f * dp; miniPaint.color = fade(accent)
         c.drawRect(v.l, v.t, v.r, v.b, miniPaint)
     }
 
@@ -1261,7 +1272,11 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
         stopAnim()
         val t = ev.getToolType(0)
         palm.clear()
-        if (isStylus(t)) { stylusNear = true; lastStylusT = ev.eventTime }
+        if (isStylus(t)) {
+            stylusNear = true; lastStylusT = ev.eventTime
+            // A2-2: rysik w dół = piszemy, więc mapa znika od razu, zamiast zasłaniać róg przez resztę czasu.
+            if (miniMovedAt != 0L) { miniMovedAt = 0L; invalidate() }
+        }
         if (ed.pipette != null) {
             if (t == MotionEvent.TOOL_TYPE_MOUSE && ev.buttonState and MotionEvent.BUTTON_SECONDARY != 0) { ed.cancelPipette(); mode = Mode.IGNORE; return }
             mode = Mode.PICK; pickX = ev.x; pickY = ev.y; pickColor = sampleColor(ev.x, ev.y)
@@ -1269,8 +1284,9 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
         }
         if (ed.cut != null && cutDown(ev, t)) return
         if (ed.crop != null && cropDown(ev, t)) return
-        // Pomysł Fable 3: dotknięcie mini-mapy przenosi widok (pióro i palec), zamiast pisać pod nią.
-        if (miniGeom()?.box?.contains(ev.x, ev.y) == true) { mode = Mode.MINI; miniMove(ev.x, ev.y); return }
+        // Pomysł Fable 3 (A2-2): palec na widocznej mini-mapie przenosi widok; rysik zawsze pisze pod nią.
+        val finger = t == MotionEvent.TOOL_TYPE_FINGER && !palmTouch(ev, 0)
+        if (MiniMap.takesTouch(finger, miniAlpha(), miniGeom()?.box?.contains(ev.x, ev.y) == true)) { mode = Mode.MINI; miniMove(ev.x, ev.y); return }
         val rh = if (isStylus(t)) 0 else rulerHit(ev.x, ev.y)
         when {
             t == MotionEvent.TOOL_TYPE_MOUSE -> {

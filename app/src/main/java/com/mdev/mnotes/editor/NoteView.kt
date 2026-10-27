@@ -60,6 +60,8 @@ import com.mdev.mnotes.core.pen.LaserColors
 import com.mdev.mnotes.core.pen.PenSpec
 import com.mdev.mnotes.core.pen.StrokeBuilder
 import com.mdev.mnotes.core.shapes.Bezier
+import com.mdev.mnotes.core.shapes.MathGlyphs
+import com.mdev.mnotes.core.shapes.Shape
 import com.mdev.mnotes.core.shapes.ShapeBox
 import com.mdev.mnotes.core.shapes.ShapeFrame
 import com.mdev.mnotes.core.shapes.ShapeKind
@@ -2144,7 +2146,16 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
         val total = builder.rawCount
         if (total < 3) return
         val n = if (holdRaw >= 3) holdRaw.coerceAtMost(total) else total
-        val shape = ShapeRecognizer.recognize(builder.raw, n, ShapeRecognizer.minLineFor(builder.width, dp / zoom))
+        // F28: włączone kafelki „auto popraw” mają pierwszeństwo: odręczny √ / ∑ / ∫ staje się równym symbolem tej samej wielkości.
+        val glyph = MathGlyphs.recognize(builder.raw, n, settings.mathRoot, settings.mathSum, settings.mathIntegral)
+        if (glyph != null && glyph.curve) {
+            shapeCtrl = glyph.xy; shapePts = Bezier.sample(glyph.xy); shapePoly = false; shapeKind = ShapeKind.POLYLINE
+            shapeSnapped = true; predN = 0; shapeLabel = null
+            performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
+            invalidate()
+            return
+        }
+        val shape = if (glyph != null) Shape(ShapeKind.POLYLINE, glyph.xy) else ShapeRecognizer.recognize(builder.raw, n, ShapeRecognizer.minLineFor(builder.width, dp / zoom))
         if (shape == null) {
             // F18: nierozpoznana kreska — dalsze trzymanie przez osobny czas wygładza ją w krzywą Béziera.
             if (settings.holdToCurve) postDelayed(curveHold, settings.curveHoldMs.toLong())

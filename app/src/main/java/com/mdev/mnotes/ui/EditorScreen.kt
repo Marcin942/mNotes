@@ -1385,6 +1385,15 @@ private fun PenPanel(ed: Editor, set: com.mdev.mnotes.data.Settings, onColorSets
     }
     MSlider(set.smoothing, 0f, 2f) { set.smoothing = it }
     ToggleRow(T.t("Przytrzymaj, aby wyprostować kształt", "Hold to snap to shape"), set.holdToShape) { set.holdToShape = it }
+    if (set.holdToShape) {
+        // F28: kafelki „auto popraw” — każdy symbol włączany osobno (jak opcje lassa i gumki).
+        SectionLabel(T.t("Auto popraw po przytrzymaniu", "Auto-correct after holding"))
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            Chip(T.t("√ pierwiastek", "√ root"), set.mathRoot, { set.mathRoot = !set.mathRoot })
+            Chip(T.t("∑ suma", "∑ sum"), set.mathSum, { set.mathSum = !set.mathSum })
+            Chip(T.t("∫ całka", "∫ integral"), set.mathIntegral, { set.mathIntegral = !set.mathIntegral })
+        }
+    }
 }
 
 @Composable

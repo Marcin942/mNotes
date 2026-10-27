@@ -155,6 +155,7 @@ object CmdDefs {
         CmdDef("toolLaser", 5, "Narzędzie: laser", "Tool: laser", "O"),
         CmdDef("toolHand", 5, "Narzędzie: ręka", "Tool: hand", "H"),
         CmdDef("toolCurve", 5, "Narzędzie: krzywa Béziera", "Tool: Bézier curve", ""),
+        CmdDef("attach", 5, "Przyczep do figur", "Attach to shapes", ""),
         CmdDef("toolSpace", 5, "Wstaw / usuń odstęp", "Insert / remove space", "X"),
         CmdDef("ruler", 5, "Linijka", "Ruler", "R"),
         CmdDef("toolTape", 5, "Taśma (zakryj fragment)", "Tape (cover an area)", "K"),

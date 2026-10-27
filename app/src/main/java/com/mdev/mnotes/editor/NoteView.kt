@@ -31,6 +31,7 @@ import com.mdev.mnotes.core.edit.EraseSession
 import com.mdev.mnotes.core.edit.ImageCut
 import com.mdev.mnotes.core.edit.PipetteMath
 import com.mdev.mnotes.core.geom.Affine
+import com.mdev.mnotes.core.geom.Attach
 import com.mdev.mnotes.core.geom.Bounds
 import com.mdev.mnotes.core.geom.Ruler
 import com.mdev.mnotes.core.layout.DocLayout
@@ -575,6 +576,7 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
         drawLasso(c)
         drawSelection(c)
         drawShapeLabel(c)
+        drawAttachMark(c)
         drawRing(c)
         drawSearch(c)
         if (pullOff > 0f) { c.restore(); drawPullHint(c, pullOff) }
@@ -676,6 +678,30 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
     }
 
     /** Etykieta regulacji kształtu (długość i kąt / wymiary) przy piórze. */
+    /** Miejsce przyczepienia (strona, x, y w pt) pokazywane kółkiem w trakcie przeciągania (F22). */
+    private var attachMark: FloatArray? = null
+
+    /**
+     * F22: punkt (x, y) strony [pi] przyczepiony do innej figury (wierzchołek, środek, kreska) w zasięgu ok. 10 dp,
+     * gdy „Przyczep do figur” jest włączone; null = bez przyczepienia. Ustawia znacznik do narysowania.
+     */
+    private fun attachAt(pi: Int, x: Float, y: Float, skip: Set<Int>): FloatArray? {
+        attachMark = null
+        if (!settings.attach || pi !in doc.pages.indices) return null
+        val h = Attach.snap(x, y, doc.content(doc.pages[pi]).elements, ATTACH_DP * dp / zoom, skip) ?: return null
+        attachMark = floatArrayOf(pi.toFloat(), h.x, h.y)
+        return floatArrayOf(h.x, h.y)
+    }
+
+    private fun drawAttachMark(c: Canvas) {
+        val m = attachMark ?: return
+        if (!(liveActive && shapeSnapped) && !(lLifting && lm == LM.VERTEX)) { attachMark = null; return }
+        val pi = m[0].toInt(); if (pi !in 0 until layout.count) return
+        val sx = scrX(pi, m[1]); val sy = scrY(pi, m[2])
+        handleArm.color = (accent and 0xFFFFFF) or (0xFF shl 24)
+        c.drawCircle(sx, sy, 9f * dp, handleArm); c.drawCircle(sx, sy, 2.5f * dp, handleStroke)
+    }
+
     private fun drawShapeLabel(c: Canvas) {
         val label = shapeLabel ?: return
         if (!(liveActive && shapeSnapped) && !(lLifting && lm == LM.RESIZE)) return
@@ -2122,6 +2148,11 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
             if (settings.holdToCurve) postDelayed(curveHold, settings.curveHoldMs.toLong())
             return
         }
+        if (shape.kind == ShapeKind.LINE) {
+            // F22: oba końce prostej przyczepiają się do pobliskich figur.
+            attachAt(livePage, shape.xy[0], shape.xy[1], emptySet())?.let { shape.xy[0] = it[0]; shape.xy[1] = it[1] }
+            attachAt(livePage, shape.xy[2], shape.xy[3], emptySet())?.let { shape.xy[2] = it[0]; shape.xy[3] = it[1] }
+        }
         val m = shape.xy.size / 2
         shapePts = FloatArray(3 * m)
         for (i in 0 until m) { shapePts[3 * i] = shape.xy[2 * i]; shapePts[3 * i + 1] = shape.xy[2 * i + 1]; shapePts[3 * i + 2] = 1f }
@@ -2165,6 +2196,8 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
             if (onStep) { ang = snapped; x2 = x1 + cos(ang) * len; y2 = y1 + sin(ang) * len }
             if (onStep && shapeSnapAng != snapped) { performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK) }
             shapeSnapAng = if (onStep) snapped else Float.NaN
+            // F22: koniec prostej przyczepia się do wierzchołka, środka albo kreski innej figury.
+            attachAt(pi, x2, y2, emptySet())?.let { x2 = it[0]; y2 = it[1] }
             shapePts[3] = x2; shapePts[4] = y2
             val deg = ((Math.toDegrees((-ang).toDouble()) % 180.0) + 180.0) % 180.0
             shapeLabel = "${fmt(len)} · ${"%.0f".format(deg)}°"
@@ -2392,16 +2425,11 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
     private fun vertexDrag(px: Float, py: Float) {
         val b = vBase ?: return
         var x = px + vDx; var y = py + vDy
-        if (settings.snapGrid || ed.gridSnap) { val g = 14.17f; x = (x / g).roundToInt() * g; y = (y / g).roundToInt() * g }
-        if (vCtrl) {
-            // F17: kotwica ciągnie swoje uchwyty, uchwyt gładkiej kotwicy obraca przeciwny (bez załamania krzywej).
-            val c = b.ctrl ?: return
-            val cur = Bezier.withCtrl(b, Bezier.moved(c, vIdx, x, y))
-            lEls = listOf(cur); lBounds = cur.bounds
-            ed.viewTick++
-            return
-        }
-        else {
+        // F22: wierzchołek i kotwica przyczepiają się do innych figur (uchwyt krzywej nie — on tylko wygina).
+        val att = if (vCtrl && !Bezier.isAnchor(vIdx)) null else attachAt(lPage, x, y, setOf(b.id))
+        if (att != null) { x = att[0]; y = att[1] }
+        else if (settings.snapGrid || ed.gridSnap) { val g = 14.17f; x = (x / g).roundToInt() * g; y = (y / g).roundToInt() * g }
+        else if (!vCtrl) {
             val tol = 5f * dp / zoom
             var bx = tol; var by = tol
             var sx = x; var sy = y
@@ -2413,7 +2441,8 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
             }
             x = sx; y = sy
         }
-        val cur = b.withVertex(vIdx, x, y)
+        // F17: kotwica ciągnie swoje uchwyty, uchwyt gładkiej kotwicy obraca przeciwny (bez załamania krzywej).
+        val cur = if (vCtrl) Bezier.withCtrl(b, Bezier.moved(b.ctrl ?: return, vIdx, x, y)) else b.withVertex(vIdx, x, y)
         lEls = listOf(cur); lBounds = cur.bounds
         ed.viewTick++
     }
@@ -3145,6 +3174,8 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
         private val TAP_SLOPS_DP = floatArrayOf(8f, 14f, 22f)
         /** Zapas prostokąta zaznaczenia (dp ekranu): obiekt na samym brzegu ramki też jest w środku. */
         private const val RECT_SLACK_DP = 4f
+        /** Zasięg przyczepiania do figur (dp ekranu, F22). */
+        private const val ATTACH_DP = 10f
         /** Najdłuższa przerwa między dwoma dotknięciami zaznaczenia, które otwierają edycję punktów (F21). */
         private const val DOUBLE_TAP_MS = 350L
         /** Lasso „tylko zahacz”: pętla przechodząca tak blisko obiektu (dp ekranu) już go łapie. */

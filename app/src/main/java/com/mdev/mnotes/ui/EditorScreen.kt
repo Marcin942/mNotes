@@ -1765,6 +1765,7 @@ private fun MoreMenu(ed: Editor, set: com.mdev.mnotes.data.Settings, close: () -
             MenuRow(Icons.Rounded.Fullscreen, T.t("Ukryj paski (tryb skupienia)", "Hide bars (focus mode)"), "F11") { ed.chrome = false; close() }
             ToggleRow(T.t("Tylko do odczytu", "Read-only"), ed.readOnly) { ed.readOnly = it }
             ToggleRow(T.t("Okno powiększenia (pisz w powiększeniu)", "Zoom window (write magnified)"), ed.zoomWin) { ed.toggleZoomWin(); close() }
+            ToggleRow(T.t("Przyczep do figur (końce linii i punkty)", "Attach to shapes (line ends and points)"), ed.settings.attach) { ed.settings.attach = it }
             HorizontalDivider(Modifier.padding(vertical = 4.dp), color = m.line)
             MenuRow(Icons.Rounded.Search, T.t("Szukaj w zeszycie…", "Search in notebook…"), "Ctrl+F") { close(); ed.openSearch() }
             MenuRow(Icons.Rounded.IosShare, T.t("Eksport i udostępnianie…", "Export & share…"), "Ctrl+E") { close(); ed.exportOpen = true }

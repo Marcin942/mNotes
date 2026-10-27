@@ -162,6 +162,7 @@ fun commandList(
         "toolLaser" to ({ true } to { pickTool(Tool.LASER, null) }),
         "toolHand" to ({ true } to { pickTool(Tool.HAND, null) }),
         "toolCurve" to ({ !ed.readOnly } to { pickTool(Tool.CURVE, null) }),
+        "attach" to ({ true } to { set.attach = !set.attach; ed.say(if (set.attach) T.t("Przyczepianie do figur włączone", "Attach to shapes on") else T.t("Przyczepianie do figur wyłączone", "Attach to shapes off")) }),
         "toolSpace" to ({ !ed.readOnly } to { pickTool(Tool.SPACE, null) }),
         "ruler" to ({ !ed.readOnly } to { ed.toggleRuler() }),
         "toolTape" to ({ !ed.readOnly } to { pickTool(Tool.TAPE, Panel.TAPE) }),

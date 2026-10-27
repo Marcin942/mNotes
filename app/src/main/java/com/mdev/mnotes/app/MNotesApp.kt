@@ -33,7 +33,8 @@ class MNotesApp : Application() {
         thumbs = Thumbs(repo, assets, pdf)
         search = SearchIndex(repo)
         sync = SyncFolder(this, repo, settings, assets, pdf)
-        repo.load()
+        // F20: przy pierwszym uruchomieniu (pusta biblioteka) powstaje zeszyt-przewodnik.
+        repo.load { com.mdev.mnotes.data.GuideMaker.offerOnFirstRun(repo, settings) }
     }
 }
 

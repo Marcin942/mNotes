@@ -61,6 +61,7 @@ import androidx.compose.material.icons.rounded.DriveFileMove
 import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.ExpandMore
 import androidx.compose.material.icons.rounded.Folder
+import androidx.compose.material.icons.rounded.School
 import androidx.compose.material.icons.rounded.Home
 import androidx.compose.material.icons.rounded.History
 import androidx.compose.material.icons.rounded.Lock
@@ -738,6 +739,11 @@ private fun TopBar(st: LibState, wide: Boolean, ops: LibOps, openDrawer: () -> U
                     DropdownMenuItem(
                         text = { Text(T.t("Importuj cały folder…", "Import a whole folder…")) }, leadingIcon = { Icon(Icons.Rounded.Folder, null) },
                         onClick = { newMenu = false; doImportFolder() },
+                    )
+                    HorizontalDivider()
+                    DropdownMenuItem(
+                        text = { Text(T.t("Zeszyt-przewodnik (ćwiczenia z funkcji)", "Guide notebook (feature exercises)")) }, leadingIcon = { Icon(Icons.Rounded.School, null) },
+                        onClick = { newMenu = false; com.mdev.mnotes.data.GuideMaker.create(ops.repo, st.folderId) { ops.onOpen(it.id) } },
                     )
                 }
             }

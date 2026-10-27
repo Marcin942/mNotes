@@ -1,17 +1,36 @@
 package com.mdev.mnotes.lab.nearby
 
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.Context
+import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.net.Uri
 import android.os.Build
+import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Bluetooth
+import androidx.compose.material.icons.rounded.BluetoothSearching
+import androidx.compose.material.icons.rounded.CheckCircle
+import androidx.compose.material.icons.rounded.Lock
+import androidx.compose.material.icons.rounded.PhoneAndroid
+import androidx.compose.material.icons.rounded.Warning
+import androidx.compose.material3.Icon
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -23,187 +42,255 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import com.mdev.mnotes.core.nearby.LinkMachine
+import com.mdev.mnotes.core.nearby.LinkMode
+import com.mdev.mnotes.core.nearby.LinkPermissions
+import com.mdev.mnotes.core.nearby.LinkState
 import com.mdev.mnotes.core.nearby.SyncMsg
 import com.mdev.mnotes.core.nearby.SyncRole
 import com.mdev.mnotes.editor.Editor
 import com.mdev.mnotes.editor.T
-import com.mdev.mnotes.ui.Choice
 import com.mdev.mnotes.ui.MDialog
 import com.mdev.mnotes.ui.mint
+import kotlinx.coroutines.delay
 import java.io.ByteArrayOutputStream
 
-/** Krótki opis stanu łącza w oknach Nearby (jedno zdanie, jak stany puste w mNotes). */
-@Composable
-private fun Status(text: String) = Text(text, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(vertical = 6.dp))
+/** Rola w parowaniu z ekranu: duży (≥ 600 dp) to tablet i się ogłasza, mniejszy to telefon i szuka (§3.2). */
+private fun defaultRole(ctx: Context) = if (ctx.resources.configuration.smallestScreenWidthDp >= 600) SyncRole.HOST else SyncRole.CLIENT
 
-/** Duże sześć cyfr do porównania z drugim ekranem. */
-@Composable
-private fun Digits(sas: String) = Text(sas, style = MaterialTheme.typography.displaySmall, color = mint.accentText, modifier = Modifier.padding(vertical = 10.dp))
+/** Nazwa urządzenia widoczna na drugim ekranie: nazwa z ustawień systemu, a bez niej producent i model. */
+private fun deviceName(ctx: Context): String =
+    runCatching { Settings.Global.getString(ctx.contentResolver, Settings.Global.DEVICE_NAME) }.getOrNull()?.takeIf { it.isNotBlank() }?.take(40)
+        ?: "${Build.MANUFACTURER} ${Build.MODEL}".trim().take(40)
 
-/**
- * Prosi o uprawnienia Nearby raz przy otwarciu okna; [ready] dostaje wynik. Lokalizacja przybliżona wystarcza (Android
- * 12+ pozwala odmówić dokładnej): gdyby Nearby jej nie przyjęło, zgłosi brak uprawnienia kodem błędu, a okno to pokaże.
- */
-@Composable
-private fun WithPermissions(ready: (Boolean) -> Unit) {
-    val ask = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { r -> ready(NearbyLink.granted(r)) }
-    LaunchedEffect(Unit) { ask.launch(NearbyLink.permissions(Build.VERSION.SDK_INT)) }
-}
+private fun missing(ctx: Context) = LinkPermissions.missing(Build.VERSION.SDK_INT) { LinkDiagnostics.has(ctx, it) }
 
-/** Zdanie dla pary, której nie da się odczytać (usunięta przez [PairStore.loadOrForget]). */
-private fun expiredText() = T.t(
-    "Para wygasła (np. po przywróceniu kopii zapasowej). Sparuj urządzenia jeszcze raz.",
-    "The pairing expired (e.g. after restoring a backup). Pair the devices again.",
-)
+/** Schodki kolejnych zdjęć z telefonu: przesunięcie w pt i po ilu zdjęciach od nowa. */
+private const val CASCADE_STEP = 24f
+private const val CASCADE = 6
 
 /**
- * Parowanie dwóch urządzeń: jedno jest tabletem (ogłasza się), drugie telefonem (szuka). Po połączeniu oba pokazują
- * te same sześć cyfr; dopiero „Zgadza się” zapisuje klucz pary.
+ * Jedno okno łącza telefon ↔ tablet po obu stronach (2b-B1, `docs/NEARBY-PRZEBUDOWA.md` §3.7): ikona i duże zdanie
+ * stanu, pod nim jedna rzecz zależna od stanu (lista znalezionych, sześć cyfr, postęp, lista „co sprawdzić”), na dole
+ * „Diagnostyka”. [start]: parowanie (oba), odbiór (tablet, [ed] = gdzie wstawiać), wysyłanie (telefon). Bez pary odbiór
+ * i wysyłanie najpierw parują w tym samym oknie. Logika w `core/nearby/LinkMachine`, tu tylko pokazywanie i uprawnienia.
  */
 @Composable
-fun PairDialog(startRole: SyncRole, close: () -> Unit) {
+fun PhoneLinkDialog(start: LinkMode, ed: Editor?, close: () -> Unit) {
     val ctx = LocalContext.current
     val store = remember { PairStore(ctx) }
-    var role by remember { mutableStateOf(startRole) }
-    var allowed by remember { mutableStateOf<Boolean?>(null) }
-    var code by remember { mutableStateOf<Triple<String, String, ByteArray>?>(null) }
-    var error by remember { mutableStateOf<String?>(null) }
-    val link = remember { NearbyLink(ctx, object : SyncListener {
-        override fun onPairCode(sas: String, peerName: String, pairKey: ByteArray) { code = Triple(sas, peerName, pairKey) }
-        override fun onError(code: Int, permission: Boolean) { error = errorText(code, permission) }
-    }) }
-    WithPermissions { allowed = it }
-    LaunchedEffect(allowed, role) { if (allowed == true) { code = null; link.pair(role, deviceName()) } }
-    DisposableEffect(Unit) { onDispose { link.stop() } }
-
-    MDialog(
-        title = T.t("Sparuj telefon z tabletem", "Pair phone and tablet"),
-        onDismiss = close,
-        confirm = if (code != null) T.t("Zgadza się", "They match") else null,
-        onConfirm = {
-            val c = code
-            if (c != null && !store.save(c.third, c.second)) error = T.t("Nie udało się zapisać pary w magazynie kluczy urządzenia.", "Could not store the pairing in the device keystore.")
-            else close()
-        },
-    ) {
-        Choice(listOf(T.t("To jest tablet (odbiera)", "This is the tablet (receives)"), T.t("To jest telefon (wysyła)", "This is the phone (sends)")), if (role == SyncRole.HOST) 0 else 1) {
-            role = if (it == 0) SyncRole.HOST else SyncRole.CLIENT
-        }
-        val c = code
-        when {
-            allowed == false -> Status(T.t("Bez uprawnień do Bluetooth i Wi-Fi w pobliżu łącze nie zadziała. Zezwól w ustawieniach systemu.", "Without Bluetooth and nearby Wi-Fi permissions the link cannot work. Allow them in system settings."))
-            error != null -> Status(error!!)
-            c == null -> Status(T.t("Otwórz to samo okno na drugim urządzeniu i wybierz drugą rolę. Szukam…", "Open this window on the other device and choose the other role. Searching…"))
-            else -> Column {
-                Status(T.t("Połączono z „${c.second}”. Sprawdź, czy na obu ekranach są te same cyfry:", "Connected to “${c.second}”. Check that both screens show the same digits:"))
-                Digits(c.first)
-                Status(T.t("Inne cyfry? Zamknij okno: ktoś mógł się wtrącić.", "Different digits? Close the window: someone may be interfering."))
-            }
-        }
-    }
-}
-
-/** Tablet: czeka na zdjęcia z telefonu i wstawia je na bieżącą stronę (każde zaznaczone, jak zwykły obraz). */
-@Composable
-fun ReceivePhotosDialog(ed: Editor, close: () -> Unit) {
-    val ctx = LocalContext.current
-    val store = remember { PairStore(ctx) }
-    var allowed by remember { mutableStateOf<Boolean?>(null) }
-    var up by remember { mutableStateOf(false) }
+    val me = remember { deviceName(ctx) }
+    var key by remember { mutableStateOf(if (start == LinkMode.PAIR) null else store.loadOrForget()) }
+    val expired = remember { start != LinkMode.PAIR && key == null && store.peerName.isNotEmpty() }
+    var mode by remember { mutableStateOf(if (start != LinkMode.PAIR && key == null) LinkMode.PAIR else start) }
+    var role by remember(mode) { mutableStateOf(when (mode) { LinkMode.PAIR -> defaultRole(ctx); LinkMode.RECEIVE -> SyncRole.HOST; LinkMode.SEND -> SyncRole.CLIENT }) }
+    var allowed by remember { mutableStateOf(missing(ctx).isEmpty()) }
+    var refused by remember { mutableStateOf(false) }
+    var generation by remember { mutableIntStateOf(0) }
+    var state by remember { mutableStateOf<LinkState>(LinkState.Idle) }
     var received by remember { mutableIntStateOf(0) }
-    var error by remember { mutableStateOf<String?>(null) }
-    var pairing by remember { mutableStateOf(!store.paired) }
-    var expired by remember { mutableStateOf(false) }
-    lateinit var link: NearbyLink
-    link = remember { NearbyLink(ctx, object : SyncListener {
-        override fun onUp() { up = true; error = null }
-        override fun onDown() { up = false }
-        override fun onError(code: Int, permission: Boolean) { error = errorText(code, permission) }
-        override fun onMessage(msg: SyncMsg) {
-            if (msg is SyncMsg.Photo) {
-                // Kolejne zdjęcia schodkami (co 24 pt, po 6 od nowa), żeby nie leżały jedno na drugim na środku widoku.
-                val k = received % CASCADE
-                ed.insertImage(msg.bytes.inputStream(), if ("png" in msg.mime) "png" else "jpg") { if (k > 0) ed.nudgeSel(k * CASCADE_STEP, k * CASCADE_STEP) }
-                received++
-                link.send(SyncMsg.Note(T.t("Wstawiono do notatki", "Inserted into the note")))
-            }
-        }
-    }) }
-    if (pairing) { PairDialog(SyncRole.HOST) { pairing = false; expired = false; if (!store.paired) close() }; return }
-    WithPermissions { allowed = it }
-    LaunchedEffect(allowed, pairing) {
-        if (allowed == true && !pairing) {
-            val key = store.loadOrForget()
-            if (key == null) expired = true else link.connect(SyncRole.HOST, key)
+    var picked by remember { mutableStateOf(false) }
+    var note by remember { mutableStateOf<String?>(null) }
+    var diagnostics by remember { mutableStateOf(false) }
+    val waiting = remember { ArrayList<SyncMsg.Photo>() }
+
+    val ask = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
+        allowed = missing(ctx).isEmpty()
+        refused = !allowed
+    }
+    val ready = allowed && (mode == LinkMode.PAIR || key != null) && (mode != LinkMode.SEND || picked)
+    val link = remember(mode, role, generation, ready, key?.contentHashCode()) {
+        if (!ready) null else {
+            val t = NearbyTransport(ctx)
+            val m = LinkMachine(t, mode, role, me, if (mode == LinkMode.PAIR) null else key, store.peerName, listener = object : LinkMachine.Listener {
+                override fun changed(s: LinkState) { state = s }
+                override fun photo(p: SyncMsg.Photo) {
+                    val e = ed ?: return
+                    val k = received % CASCADE
+                    e.insertImage(p.bytes.inputStream(), if ("png" in p.mime) "png" else "jpg") { if (k > 0) e.nudgeSel(k * CASCADE_STEP, k * CASCADE_STEP) }
+                    received++
+                }
+            })
+            t.machine = m
+            m to t
         }
     }
-    DisposableEffect(Unit) { onDispose { link.stop() } }
+    DisposableEffect(link) {
+        link?.first?.let { m ->
+            m.start()
+            for (p in waiting) m.sendPhoto(p.name, p.mime, p.bytes)
+            waiting.clear()
+        }
+        onDispose { link?.let { (m, t) -> m.stop(); t.close() } }
+    }
+    LaunchedEffect(link) {
+        val m = link?.first ?: return@LaunchedEffect
+        while (true) { delay(1_000); m.tick() }
+    }
 
-    MDialog(title = T.t("Zdjęcie z telefonu", "Photo from phone"), onDismiss = close, dismissText = T.t("Zamknij", "Close")) {
-        Status(
+    val pick = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
+        if (uri == null) { if (!picked) close(); return@rememberLauncherForActivityResult }
+        val photo = readPhoto(ctx, uri)
+        if (photo == null) { note = T.t("Nie udało się wczytać zdjęcia.", "Could not read the photo."); return@rememberLauncherForActivityResult }
+        note = null
+        picked = true
+        link?.first?.sendPhoto(photo.name, photo.mime, photo.bytes) ?: waiting.add(photo)
+    }
+    fun pickPhoto() = pick.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+    LaunchedEffect(mode, allowed) { if (mode == LinkMode.SEND && allowed && !picked) pickPhoto() }
+
+    val title = when (start) {
+        LinkMode.PAIR -> T.t("Połącz telefon z tabletem", "Connect phone and tablet")
+        LinkMode.RECEIVE -> T.t("Zdjęcie z telefonu", "Photo from phone")
+        LinkMode.SEND -> T.t("Wyślij zdjęcie na tablet", "Send photo to tablet")
+    }
+    val digits = state as? LinkState.ConfirmDigits
+    val sentSome = ((state as? LinkState.Ready)?.sent ?: 0) > 0
+    MDialog(
+        title, onDismiss = close,
+        confirm = when {
+            digits != null -> T.t("Zgadza się", "They match")
+            mode == LinkMode.SEND && picked && (state is LinkState.Ready || state is LinkState.Sending) -> T.t("Następne zdjęcie", "Next photo")
+            else -> null
+        },
+        onConfirm = {
+            val result = link?.first?.pairResult
+            if (digits != null && result != null) {
+                when {
+                    !store.save(result.pairKey, result.peerName) -> note = T.t("Nie udało się zapisać pary w magazynie kluczy urządzenia.", "Could not store the pairing in the device keystore.")
+                    start == LinkMode.PAIR -> close()
+                    else -> { key = result.pairKey; mode = start; note = null }
+                }
+            } else pickPhoto()
+        },
+        dismissText = if (received > 0 || sentSome) T.t("Gotowe", "Done") else T.t("Zamknij", "Close"),
+    ) {
+        Column(Modifier.heightIn(max = 520.dp).verticalScroll(rememberScrollState())) {
+            if (!allowed) PermissionsPart(ctx, refused) { ask.launch(LinkPermissions.required(Build.VERSION.SDK_INT).toTypedArray()) }
+            else {
+                if (expired && mode == LinkMode.PAIR) Line(T.t("Para wygasła (np. po przywróceniu kopii zapasowej): połącz urządzenia jeszcze raz.", "The pairing expired (e.g. after restoring a backup): connect the devices again."))
+                else if (mode == LinkMode.PAIR && start != LinkMode.PAIR) Line(T.t("Najpierw połącz telefon z tabletem (raz).", "First connect the phone and the tablet (once)."))
+                StatePart(state, mode, role, me, store.peerName, received, link?.first)
+                if (mode == LinkMode.PAIR && digits == null) {
+                    TextButton(onClick = { role = if (role == SyncRole.HOST) SyncRole.CLIENT else SyncRole.HOST }) {
+                        Text(if (role == SyncRole.HOST) T.t("To urządzenie: tablet (odbiera) · zmień", "This device: tablet (receives) · change") else T.t("To urządzenie: telefon (wysyła) · zmień", "This device: phone (sends) · change"))
+                    }
+                }
+                if (digits != null) TextButton(onClick = { generation++ }) { Text(T.t("Inne cyfry? Połącz od nowa", "Different digits? Start over")) }
+            }
+            note?.let { Line(it) }
+            TextButton(onClick = { diagnostics = true }) { Text(T.t("Diagnostyka", "Diagnostics")) }
+        }
+    }
+    if (diagnostics) DiagnosticsDialog(link?.first) { diagnostics = false }
+}
+
+/** Ekran „Dlaczego” przed prośbą systemową; po odmowie droga do ustawień aplikacji. */
+@Composable
+private fun PermissionsPart(ctx: Context, refused: Boolean, ask: () -> Unit) {
+    Status(Icons.Rounded.Lock, if (refused) T.t("Bez tych zgód urządzenia się nie znajdą.", "Without these permissions the devices cannot find each other.") else T.t("Łącze potrzebuje zgód Androida:", "The link needs Android permissions:"))
+    for (w in missing(ctx).map { LinkDiagnostics.why(it) }.distinct()) Line("• $w")
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        TextButton(onClick = ask) { Text(T.t("Pozwól", "Allow")) }
+        if (refused) TextButton(onClick = {
+            runCatching { ctx.startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", ctx.packageName, null)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
+        }) { Text(T.t("Ustawienia aplikacji", "App settings")) }
+    }
+}
+
+/** Zdanie stanu z ikoną i jedna rzecz pod nim. */
+@Composable
+private fun StatePart(state: LinkState, mode: LinkMode, role: SyncRole, me: String, peer: String, received: Int, machine: LinkMachine?) {
+    val host = role == SyncRole.HOST
+    when (state) {
+        LinkState.Idle -> Status(Icons.Rounded.Bluetooth, T.t("Przygotowuję łącze…", "Preparing the link…"))
+        is LinkState.Searching -> {
+            val text = when {
+                host && mode == LinkMode.PAIR -> T.t("Widać mnie jako „$me”. Na telefonie otwórz „Połącz telefon z tabletem”.", "Visible as “$me”. On the phone open “Connect phone and tablet”.")
+                host -> T.t("Czekam na telefon „$peer”. Na telefonie: Ustawienia → Laboratorium → „Wyślij zdjęcie na tablet”.", "Waiting for the phone “$peer”. On the phone: Settings → Lab → “Send photo to tablet”.")
+                state.found.isNotEmpty() -> T.t("Znaleziono — stuknij tablet:", "Found — tap the tablet:")
+                mode == LinkMode.PAIR -> T.t("Szukam tabletu… Na tablecie otwórz „Połącz telefon z tabletem”.", "Looking for the tablet… On the tablet open “Connect phone and tablet”.")
+                else -> T.t("Szukam tabletu „$peer”… Na tablecie otwórz „Zdjęcie z telefonu”.", "Looking for the tablet “$peer”… On the tablet open “Photo from phone”.")
+            }
+            Status(Icons.Rounded.BluetoothSearching, text)
+            if (state.found.isNotEmpty()) FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                for (p in state.found) TextButton(onClick = { machine?.choose(p.id) }) { Text(p.name) }
+            }
+            if (state.slow) {
+                Line(T.t("Nie widać drugiego urządzenia. Sprawdź:", "The other device is not visible. Check:"))
+                Line(T.t("• na drugim urządzeniu otwarte to samo okno (tablet: „Zdjęcie z telefonu”),", "• the same window is open on the other device (tablet: “Photo from phone”),"))
+                Line(T.t("• Bluetooth i lokalizacja włączone na obu,", "• Bluetooth and location are on on both,"))
+                Line(T.t("• urządzenia blisko siebie (kilka metrów).", "• the devices are close (a few metres)."))
+            }
+        }
+        is LinkState.Connecting -> Status(Icons.Rounded.BluetoothSearching, T.t("Łączę z „${state.peer}”…", "Connecting to “${state.peer}”…"))
+        is LinkState.Securing -> Status(Icons.Rounded.Lock, T.t("Zabezpieczam połączenie…", "Securing the connection…"))
+        is LinkState.ConfirmDigits -> {
+            Status(Icons.Rounded.Lock, T.t("Czy na obu ekranach są te same cyfry?", "Do both screens show the same digits?"))
+            Text(state.sas, style = MaterialTheme.typography.displayMedium, color = mint.accentText, modifier = Modifier.padding(vertical = 10.dp))
+            Line(T.t("Połączono z „${state.peer}”. Inne cyfry znaczą, że ktoś mógł się wtrącić.", "Connected to “${state.peer}”. Different digits mean someone may be interfering."))
+        }
+        is LinkState.Ready -> Status(
+            Icons.Rounded.CheckCircle,
             when {
-                allowed == false -> T.t("Bez uprawnień do Bluetooth i Wi-Fi w pobliżu łącze nie zadziała.", "Without Bluetooth and nearby Wi-Fi permissions the link cannot work.")
-                expired -> expiredText()
-                error != null -> error!!
-                !up -> T.t("Czekam na „${store.peerName}”. Na telefonie: mNotes → Ustawienia → Laboratorium → Wyślij zdjęcie na tablet.", "Waiting for “${store.peerName}”. On the phone: mNotes → Settings → Lab → Send photo to tablet.")
-                received == 0 -> T.t("Telefon połączony. Zdjęcie trafi na tę stronę.", "Phone connected. The photo will land on this page.")
-                else -> T.t("Wstawiono zdjęć: $received. Możesz wysłać kolejne.", "Photos inserted: $received. You can send more.")
+                host && mode != LinkMode.PAIR -> if (received == 0) T.t("Połączono z „${state.peer}”. Zdjęcia trafią na tę stronę.", "Connected to “${state.peer}”. Photos will land on this page.")
+                else T.t("Wstawiono zdjęć: $received. Możesz wysłać kolejne.", "Photos inserted: $received. You can send more.")
+                state.sent > 0 -> T.t("Wstawiono na tablecie zdjęć: ${state.sent}.", "Photos inserted on the tablet: ${state.sent}.")
+                else -> T.t("Połączono z „${state.peer}”.", "Connected to “${state.peer}”.")
             },
         )
-        TextButton(onClick = { pairing = true }) { Text(if (expired) T.t("Sparuj telefon", "Pair a phone") else T.t("Sparuj inny telefon", "Pair another phone")) }
+        is LinkState.Sending -> {
+            val pct = (state.progress * 100).toInt()
+            val part = minOf(state.part + 1, state.parts)
+            Status(Icons.Rounded.PhoneAndroid, T.t("Wysyłam zdjęcie · część $part z ${state.parts} · $pct %", "Sending the photo · part $part of ${state.parts} · $pct %"))
+            LinearProgressIndicator(progress = { state.progress }, modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp), color = mint.accent)
+            if (state.queued > 0) Line(T.t("W kolejce: ${state.queued}", "Queued: ${state.queued}"))
+        }
+        is LinkState.Problem -> {
+            Status(Icons.Rounded.Warning, T.t(state.problem.pl, state.problem.en))
+            if (state.retrying) Line(T.t("Spróbuję ponownie za chwilę.", "I will retry in a moment."))
+            else TextButton(onClick = { machine?.retry() }) { Text(T.t("Spróbuj ponownie", "Try again")) }
+        }
     }
 }
 
-/** Telefon: wybierz zdjęcie z galerii i wyślij je na sparowany tablet. */
 @Composable
-fun SendPhotoDialog(close: () -> Unit) {
-    val ctx = LocalContext.current
-    val store = remember { PairStore(ctx) }
-    var photo by remember { mutableStateOf<SyncMsg.Photo?>(null) }
-    var allowed by remember { mutableStateOf<Boolean?>(null) }
-    var state by remember { mutableStateOf(T.t("Wybierz zdjęcie.", "Choose a photo.")) }
-    var sent by remember { mutableStateOf(false) }
-    var up by remember { mutableStateOf(false) }
-    // Uprawnienia i łącze zostają od pierwszego wybranego zdjęcia (kolejne nie pytają drugi raz).
-    var asked by remember { mutableStateOf(false) }
-    lateinit var link: NearbyLink
-    // Wysyła wybrane zdjęcie, gdy łącze już stoi; inaczej czeka na onUp. Dzięki temu „Następne zdjęcie” wysyła od razu
-    // (łącze jest już połączone, onUp drugi raz nie przyjdzie).
-    fun trySend() {
-        val p = photo ?: return
-        if (up && link.send(p)) { sent = true; photo = null; state = T.t("Wysłano, czekam na potwierdzenie…", "Sent, waiting for confirmation…") }
-    }
-    link = remember { NearbyLink(ctx, object : SyncListener {
-        override fun onUp() { up = true; trySend() }
-        override fun onDown() { up = false }
-        override fun onMessage(msg: SyncMsg) { if (msg is SyncMsg.Note) state = msg.text }
-        override fun onError(code: Int, permission: Boolean) { state = errorText(code, permission) }
-    }) }
-    val pick = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
-        if (uri == null) { if (!sent) close() } else {
-            asked = true
-            photo = readPhoto(ctx, uri)
-            state = if (photo == null) T.t("Nie udało się wczytać zdjęcia.", "Could not read the photo.") else T.t("Szukam tabletu „${store.peerName}”…", "Looking for the tablet “${store.peerName}”…")
-            trySend()
-        }
-    }
-    LaunchedEffect(Unit) { pick.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }
-    if (asked) WithPermissions { allowed = it }
-    LaunchedEffect(allowed) {
-        if (allowed == true) {
-            val key = store.loadOrForget()
-            if (key == null) state = expiredText() else link.connect(SyncRole.CLIENT, key)
-        }
-    }
-    DisposableEffect(Unit) { onDispose { link.stop() } }
+private fun Status(icon: ImageVector, text: String) = Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 8.dp)) {
+    Icon(icon, null, tint = mint.accentText, modifier = Modifier.size(28.dp))
+    Text(text, style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(start = 12.dp))
+}
 
-    MDialog(title = T.t("Wyślij zdjęcie na tablet", "Send photo to tablet"), onDismiss = close, dismissText = if (sent) T.t("Gotowe", "Done") else T.t("Anuluj", "Cancel")) {
-        Status(if (allowed == false) T.t("Bez uprawnień do Bluetooth i Wi-Fi w pobliżu łącze nie zadziała.", "Without Bluetooth and nearby Wi-Fi permissions the link cannot work.") else state)
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            if (sent && photo == null) TextButton(onClick = { pick.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }) { Text(T.t("Następne zdjęcie", "Next photo")) }
+@Composable
+private fun Line(text: String) = Text(text, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(vertical = 2.dp))
+
+/** „Diagnostyka”: sprawdzenia ✓/✗, ostatnie zdarzenia łącza (gdy okno łącza jest otwarte) i „Kopiuj raport”. */
+@Composable
+fun DiagnosticsDialog(machine: LinkMachine?, close: () -> Unit) {
+    val ctx = LocalContext.current
+    val checks = remember { LinkDiagnostics.checks(ctx) }
+    val log = machine?.log.orEmpty()
+    MDialog(
+        T.t("Diagnostyka łącza", "Link diagnostics"), close,
+        confirm = T.t("Kopiuj raport", "Copy report"),
+        onConfirm = {
+            val cm = ctx.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+            cm.setPrimaryClip(ClipData.newPlainText("mNotes Nearby", LinkDiagnostics.report(ctx, log)))
+            close()
+        },
+        dismissText = T.t("Zamknij", "Close"),
+    ) {
+        Column(Modifier.heightIn(max = 480.dp).verticalScroll(rememberScrollState())) {
+            Line("Android ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT}) · ${Build.MANUFACTURER} ${Build.MODEL}")
+            for (c in checks) Text("${LinkDiagnostics.mark(c.ok)}  ${c.label}", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(vertical = 2.dp))
+            if (log.isNotEmpty()) {
+                Text(T.t("Ostatnie zdarzenia", "Last events"), style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(top = 10.dp, bottom = 4.dp))
+                for (e in log.asReversed()) Line(LinkDiagnostics.event(e))
+            }
         }
     }
 }
@@ -225,13 +312,3 @@ private fun readPhoto(ctx: Context, uri: Uri): SyncMsg.Photo? = runCatching {
     bmp.recycle()
     SyncMsg.Photo((uri.lastPathSegment ?: "zdjecie") + ".jpg", "image/jpeg", out.toByteArray())
 }.getOrNull()
-
-private fun deviceName(): String = "${Build.MANUFACTURER} ${Build.MODEL}".trim().take(40)
-
-private fun errorText(code: Int, permission: Boolean): String =
-    if (permission) T.t("Brak uprawnienia albo wyłączony Bluetooth / Wi-Fi (kod $code).", "Missing permission or Bluetooth / Wi-Fi is off (code $code).")
-    else T.t("Nearby nie wystartowało (kod $code); próbuję dalej. Czy na urządzeniu są Usługi Google Play?", "Nearby did not start (code $code); retrying. Does the device have Google Play services?")
-
-/** Schodki kolejnych zdjęć z telefonu: przesunięcie w pt i po ilu zdjęciach od nowa. */
-private const val CASCADE_STEP = 24f
-private const val CASCADE = 6

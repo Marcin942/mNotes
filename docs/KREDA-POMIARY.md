@@ -12,7 +12,7 @@ długość kreski** w px wyniku, **fragmenty** = odsetek kresek krótszych niż 
 (laptop; tablet będzie wolniejszy). Uruchomienie:
 
 ```
-KREDA_DIR=/home/piotr/Projects/Marcin/kreda/blackboard KREDA_OUT=/tmp/kreda ./gradlew --offline \
+KREDA_DIR=/home/piotr/Projects/Marcin/materialy/kreda/blackboard KREDA_OUT=/tmp/kreda ./gradlew --offline \
   :app:testLabDebugUnitTest --tests '*KredaPomiaryTest*'
 ```
 

@@ -87,7 +87,7 @@ Rysunki z „Pomysły mNotes.pdf” odczytane własnym rasteryzatorem (Python, b
 
 ## Agent B (mNotes-lab, gałąź `noc/lab`), 27.10.2026
 
-Baza: `noc/obraz` agenta A (zawiera wszystkie jego `noc/*` z 02:15). Worktree `paczka-noc/mNotes-lab`. Testy JVM:
+Baza: `noc/obraz` agenta A (zawiera wszystkie jego `noc/*` z 02:15). Worktree `projekty/mNotes-lab`. Testy JVM:
 wariant core 594, wariant lab 623 (te same + 29 testów lab); `assembleCoreDebug` i `assembleLabDebug` przechodzą.
 `local.properties` nie skopiowany (ochrona plików w uprawnieniach nocy); `ANDROID_HOME` z `.toolchain/env.sh` wystarcza.
 
@@ -108,7 +108,7 @@ wariant core 594, wariant lab 623 (te same + 29 testów lab); `assembleCoreDebug
 - **K3 mediana** (`BoardStack`, `BoardPipeline.runMany`): zaznacz 2–6 zdjęć tej samej tablicy → ten sam przycisk
   („Połącz zdjęcia tablicy (bez osób)”) → nowy obraz bez wykładowcy; „różnica tablic” (`BoardStack.added`) tylko jako logika.
 - **K4** `lab/recognize/Recognizer.kt`: interfejs bez modeli (`NoRecognizer`) i `PageExport` (JSON `mnotes-strona` v1,
-  zgodny z mLabs). Opis integracji: `docs-noc/INTEGRACJA-MLABS.md`.
+  zgodny z mLabs). Opis integracji: `plan/INTEGRACJA-MLABS.md`.
 - **K5 Nearby**: logika w `core/nearby` (AES-256-GCM, ECDH P-256 + 6 cyfr, porcje do 24 MiB, sesja z licznikiem, wiadomości,
   plan synchronizacji stron; 15 testów, w tym wektor RFC 5869). Łącze `lab/nearby/NearbyLink.kt` na
   **`com.google.android.gms:play-services-nearby:19.3.0`** — jedyna nowa zależność nocy, **uzasadnienie**: Nearby to
@@ -137,7 +137,7 @@ wariant core 594, wariant lab 623 (te same + 29 testów lab); `assembleCoreDebug
 Nie testowane: nic z UI na urządzeniu (brak tabletu), wydajność kredy na zdjęciu 12 Mpx (praca na 2400 px), Nearby
 w ogóle (wymaga dwóch urządzeń).
 
-## Faza 2 — agent B (od 27.10, gałąź `noc/lab2` od `noc/wszystko`, lista B2-* w `docs-noc/PLAN-NOCY.md`)
+## Faza 2 — agent B (od 27.10, gałąź `noc/lab2` od `noc/wszystko`, lista B2-* w `plan/PLAN-NOCY.md`)
 
 Gradle tylko w worktree `mNotes-lab`; `source .toolchain/env.sh` jest w tej sesji zablokowane, więc te same zmienne
 podaję przez `env JAVA_HOME=… ANDROID_HOME=… GRADLE_USER_HOME=… ./gradlew …`. Testy:
@@ -185,7 +185,7 @@ Na starcie (`noc/wszystko` @ `471ed08`): lab 696 testów, 0 porażek.
     **94,5–99,6 % punktów kresek trafia w jasną kredę zdjęcia; dawne mapowanie 28–51 %** (asercja dokumentuje błąd K2).
     IoU z wynikami `kreda.py` pominięte: w `kreda/` nie ma PNG wyników dla tych zdjęć (tylko `example.png` 320×114).
     Uwaga: na dwóch zdjęciach auto-próg dochodzi do górnej granicy 0,50 (szum po wyrównaniu) — do sprawdzenia na tablecie,
-    czy słaba kreda nie ginie. Uruchomienie: `KREDA_DIR=/home/piotr/Projects/Marcin/kreda/blackboard ./gradlew --offline
+    czy słaba kreda nie ginie. Uruchomienie: `KREDA_DIR=/home/piotr/Projects/Marcin/materialy/kreda/blackboard ./gradlew --offline
     :app:testLabDebugUnitTest --tests '*RealPhotoTest*'`.
   - Test: lab 712, core 667, 0 porażek. **Tablet:** zdjęcie tablicy → różdżka → „Edytowalne kreski” → kreski na kredzie
     (także po przycięciu zdjęcia w zeszycie); litery O i krzyżyki jako 1–2 kreski; grube i cienkie linie różnej grubości.
@@ -196,7 +196,7 @@ Na starcie (`noc/wszystko` @ `471ed08`): lab 696 testów, 0 porażek.
   `photoWithoutABoardIsSkippedInsteadOfGhosting`, `failedLoadGivesNull`. **Tablet:** zaznacz 3 zdjęcia, w tym jedno ściany →
   „Połącz zdjęcia tablicy” → informacja o pominięciu, bez „duchów”.
 
-- **B2-8 K4 „Wyślij do mLabs”** (`0befd4c`): `docs/INTEGRACJA-MLABS.md` skopiowany do repo (i uaktualniony w `docs-noc/`),
+- **B2-8 K4 „Wyślij do mLabs”** (`0befd4c`): `docs/INTEGRACJA-MLABS.md` skopiowany do repo (i uaktualniony w `narzedzia/nadzor/`),
   `Recognizer.kt` odsyła do niego. Polecenie „Wyślij stronę do mLabs…” (menu Plik i paleta Ctrl+K, tylko lab): okno `MDialog`
   z jednym zdaniem, co pójdzie (strona N zeszytu „X” jako PNG i JSON w formacie mLabs, przykłady pytań), polem `MField`
   „Tekst strony (opcjonalnie)” i zdaniem, że rozpoznawania jeszcze nie ma; „Udostępnij…” renderuje bieżącą stronę do PNG
@@ -342,7 +342,7 @@ Instalacja: `labDebug` z `noc/lab2` (albo `noc/wszystko` po scaleniu przez A) na
 7. **Wyślij do mLabs:** Plik → „Wyślij stronę do mLabs…” → dwa pliki (PNG i JSON) w wybranej aplikacji.
 8. **Core:** `coreDebug` — brak różdżki, ikony telefonu, „Laboratorium” i polecenia „Wyślij do mLabs”.
 
-## Faza 2 — agent A (od 27.10, lista A2-* w `docs-noc/PLAN-NOCY.md`)
+## Faza 2 — agent A (od 27.10, lista A2-* w `plan/PLAN-NOCY.md`)
 
 Każdy punkt na własnej gałęzi `noc/f2-<temat>` od `noc/wszystko`, po zamknięciu scalony do `noc/wszystko`.
 Testy: `./gradlew --offline :app:testCoreDebugUnitTest :app:testLabDebugUnitTest :app:assembleCoreDebug :app:assembleLabDebug`.

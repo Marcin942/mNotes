@@ -92,6 +92,53 @@ class BoardDetectTest {
         }
     }
 
+    /**
+     * Tablica (60..330 × 50..230) z „pismem” (krótkie kreski) i ściana tego samego koloru pod nią aż do lewego i dolnego
+     * brzegu zdjęcia, jak na 20260525_*; z [wallWriting] także pismo na ścianie.
+     */
+    private fun boardWithWall(wallWriting: Boolean): Raster {
+        val w = 400; val h = 300
+        val rnd = java.util.Random(7)
+        val r = Raster(w, h)
+        for (y in 0 until h) for (x in 0 until w) {
+            val dark = (x in 60..330 && y in 50..230) || (x <= 330 && y > 230)
+            val v = (if (dark) 0.18f else 0.75f) + (rnd.nextGaussian() * 0.006).toFloat()
+            r[x, y] = Raster.rgbF(v, v, v)
+        }
+        fun letters(x0: Int, x1: Int, y0: Int, y1: Int, n: Int) = repeat(n) {
+            val cx = x0 + rnd.nextInt(x1 - x0); val cy = y0 + rnd.nextInt(y1 - y0)
+            val a = rnd.nextDouble() * Math.PI
+            for (t in -4..4) {
+                val x = (cx + t * kotlin.math.cos(a)).toInt(); val y = (cy + t * kotlin.math.sin(a)).toInt()
+                if (x in 0 until w && y in 0 until h) r[x, y] = Raster.rgbF(0.92f, 0.92f, 0.9f)
+            }
+        }
+        letters(80, 310, 70, 210, 160)
+        if (wallWriting) letters(80, 310, 245, 290, 80)
+        return r
+    }
+
+    @Test
+    fun wallOfTheBoardColourIsCutOffWhereTheMaskRunsOutOfTheFrame() {
+        val q = BoardGeometry.guessQuad(boardWithWall(wallWriting = false))
+        for (i in 2..3) assertTrue("narożnik $i: y ${q.y(i)}, a tablica kończy się na 230", q.y(i) < 245f)
+        for (i in listOf(0, 3)) assertTrue("narożnik $i: x ${q.x(i)}, a tablica zaczyna się na 60", q.x(i) > 45f)
+    }
+
+    @Test
+    fun writingBeyondTheCutKeepsTheSide() {
+        // Bezpiecznik: pod tablicą też jest pismo (≥ 3 % śladów), więc dół zostaje, nawet jeśli to „ściana”.
+        val q = BoardGeometry.guessQuad(boardWithWall(wallWriting = true))
+        assertTrue("dół ${q.y(2)}", q.y(2) > 280f)
+    }
+
+    @Test
+    fun boardInsideTheFrameIsNotClipped() {
+        val small = Synthetic.photo().fit(BoardGeometry.WORK)
+        val mask = BoardGeometry.boardMask(small, true)!!
+        assertEquals(null, BoardGeometry.clipEdges(small, mask, true))
+    }
+
     @Test
     fun noBoardFallsBackToWholeImage() {
         val q = BoardGeometry.guessQuad(Raster.filled(200, 100, Raster.rgbF(0.5f, 0.2f, 0.9f)))

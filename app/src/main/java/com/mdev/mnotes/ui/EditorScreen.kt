@@ -115,6 +115,7 @@ import androidx.compose.material.icons.rounded.Palette
 import androidx.compose.material.icons.rounded.PanTool
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.ShowChart
+import androidx.compose.material.icons.rounded.Interests
 import androidx.compose.material.icons.rounded.ExpandLess
 import androidx.compose.material.icons.rounded.ExpandMore
 import androidx.compose.material.icons.rounded.WbAuto
@@ -264,7 +265,7 @@ fun EditorScreen(ed: Editor, tabs: TabsCtl, onExit: () -> Unit, onSettings: () -
     var palette by remember { mutableStateOf(false) }
     var goTo by remember { mutableStateOf(false) }
     val focus = remember { FocusRequester() }
-    val dialogOpen = palette || goTo || ed.exportOpen || ed.axesOpen || ed.textReq != null
+    val dialogOpen = palette || goTo || ed.exportOpen || ed.axesOpen || ed.stickersOpen || ed.stickerSaveOpen || ed.textReq != null
     val searchTyping = ed.searchOpen && fieldFocused
     val widthDp = androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp
     val showMenu = ed.chrome && menuBarVisible(set.menuBar, widthDp)
@@ -403,6 +404,8 @@ fun EditorScreen(ed: Editor, tabs: TabsCtl, onExit: () -> Unit, onSettings: () -
         if (goTo) GoToDialog(ed) { goTo = false }
         if (ed.exportOpen) ExportDialog(ed.nbId, ed.pageIndex, { ed.doc.flush() }) { ed.exportOpen = false }
         if (ed.axesOpen) AxesDialog(ed) { ed.axesOpen = false }
+        if (ed.stickersOpen) StickersDialog(ed) { ed.stickersOpen = false }
+        if (ed.stickerSaveOpen) SaveStickerDialog(ed) { ed.stickerSaveOpen = false }
         if (palette) PaletteDialog(cmds) { palette = false }
     }
 }
@@ -1675,6 +1678,7 @@ private fun CtxMenuOverlay(ed: Editor, openStyle: () -> Unit) {
                     // F14: wycinek strony pod zaznaczeniem (z papierem i tłem) jako obraz.
                     Item(T.t("Wycinek jako obraz", "Snip as image"), enabled = !ed.readOnly) { ed.snipSel(false) }
                     Item(T.t("Kopiuj wycinek do schowka", "Copy snip to clipboard")) { ed.snipSel(true) }
+                    Item(T.t("Zapisz jako naklejkę…", "Save as sticker…")) { ed.stickerSaveOpen = true }
                 }
                 Item(T.t("Wklej", "Paste"), "Ctrl+V", ed.canPaste() && !ed.readOnly) { ed.paste(if (cm.pageIndex >= 0) Triple(cm.pageIndex, cm.lx, cm.ly) else null) }
                 if (cm.hasSel) {
@@ -1724,6 +1728,7 @@ private fun MoreMenu(ed: Editor, set: com.mdev.mnotes.data.Settings, close: () -
             MenuRow(Icons.Rounded.FitScreen, T.t("Dopasuj do szerokości", "Fit width"), "Ctrl+0") { ed.view?.fitWidth(); close() }
             MenuRow(Icons.Rounded.Palette, T.t("Styl strony…", "Page style…"), "") { openStyle() }
             if (!ed.readOnly) MenuRow(Icons.Rounded.ShowChart, T.t("Układ współrzędnych…", "Coordinate axes…"), "") { close(); ed.axesOpen = true }
+            if (!ed.readOnly) MenuRow(Icons.Rounded.Interests, T.t("Naklejki…", "Stickers…"), "") { close(); ed.stickersOpen = true }
             MenuRow(Icons.Rounded.Fullscreen, T.t("Ukryj paski (tryb skupienia)", "Hide bars (focus mode)"), "F11") { ed.chrome = false; close() }
             ToggleRow(T.t("Tylko do odczytu", "Read-only"), ed.readOnly) { ed.readOnly = it }
             ToggleRow(T.t("Okno powiększenia (pisz w powiększeniu)", "Zoom window (write magnified)"), ed.zoomWin) { ed.toggleZoomWin(); close() }

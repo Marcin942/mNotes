@@ -25,6 +25,7 @@ import com.mdev.mnotes.core.edit.CutLine
 import com.mdev.mnotes.core.edit.FloodFill
 import com.mdev.mnotes.core.edit.ImageCut
 import com.mdev.mnotes.core.edit.Snip
+import com.mdev.mnotes.core.edit.Sticker
 import com.mdev.mnotes.core.model.ImageEl
 import com.mdev.mnotes.core.model.ImageFx
 import com.mdev.mnotes.core.model.WhiteBalance
@@ -627,6 +628,44 @@ class Editor(val ctx: Context, val nbId: String) {
                 tool = Tool.LASSO
                 select(page.id, setOf(el.id))
                 onDone()
+            }
+        }
+    }
+
+    // — Naklejki (F19) —
+    val stickers by lazy { com.mdev.mnotes.data.StickerStore(repo.root) }
+    var stickersOpen by mutableStateOf(false)
+    /** Otwarte okno nazwy nowej naklejki (z bieżącego zaznaczenia). */
+    var stickerSaveOpen by mutableStateOf(false)
+    /** Rośnie po zapisie/usunięciu naklejki, żeby okno naklejek odświeżyło listę. */
+    var stickerTick by mutableIntStateOf(0)
+
+    fun saveSelAsSticker(name: String) {
+        val n = Sticker.normalize(selElements()) ?: return
+        repo.io.execute {
+            val ok = runCatching { stickers.save(name, n) { repo.assetFile(nbId, it) } }.isSuccess
+            view?.post { stickerTick++; say(if (ok) T.t("Zapisano naklejkę „$name”", "Sticker “$name” saved") else T.t("Nie udało się zapisać naklejki", "Could not save the sticker")) }
+        }
+    }
+
+    /** Wstawia naklejkę na środku widoku (obrazy kopiowane do zeszytu), zaznaczoną, żeby od razu dało się ją przesunąć. */
+    fun insertSticker(id: String) {
+        val (pi, cx, cy) = view?.viewCenterOnPage() ?: return
+        val pageId = doc.pages.getOrNull(pi)?.id ?: return
+        repo.io.execute {
+            val n = stickers.load(id)
+            val names = HashMap<String, String>()
+            if (n != null) for (a in Sticker.assets(n.elements)) {
+                val f = stickers.assetFile(id, a)
+                if (f.exists()) runCatching { f.inputStream().use { names[a] = repo.importAsset(nbId, it, a.substringAfterLast('.', "png")) } }
+            }
+            view?.post {
+                val page = doc.page(pageId) ?: return@post
+                if (n == null || n.elements.isEmpty()) { say(T.t("Nie udało się wczytać naklejki", "Could not load the sticker")); return@post }
+                val els = Sticker.place(n, cx, cy, Sticker.fitScale(n.w, n.h, page.spec.w, page.spec.h)) { names[it] ?: it }
+                exec(DocEdit.Elements(page.id, ElementsEdit.add(doc.content(page), els)))
+                tool = Tool.LASSO
+                select(page.id, els.map { it.id }.toSet())
             }
         }
     }

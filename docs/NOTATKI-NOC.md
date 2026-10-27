@@ -317,6 +317,9 @@ Na starcie (`noc/wszystko` @ `471ed08`): lab 696 testów, 0 porażek.
   `20260323_135040`). Zostaje: osoba przy prawym boku `20260525_144320`, głowy pod `20260324_154544` (tryb „Narożniki”).
   Testy: 3 nowe w `BoardDetectTest` (ściana odcięta, pismo za cięciem blokuje je, tablica w kadrze bez zmian); lab 789,
   core 732, 0 porażek. **Nauka:** zdjęcie tablicy z sali bez ręcznego poprawiania narożników.
+- **Koniec listy B (ok. 21:15):** `noc/wszystko` (A: 2b-A8…A11) scalona do `noc/lab2` bez konfliktów; na scalonym stanie lab 822,
+  core 765, 0 porażek (`KREDA_DIR` ustawione, więc testy na prawdziwych zdjęciach też szły), oba APK. A może scalić `noc/lab2`
+  z powrotem przewinięciem.
 
 ### Co Marcin ma sprawdzić na tablecie — wariant lab, po fazie 2 (kolejność)
 

@@ -7,6 +7,7 @@ import android.graphics.RectF
 import android.os.Handler
 import android.os.Looper
 import android.util.LruCache
+import com.mdev.mnotes.core.cache.Coalescer
 import com.mdev.mnotes.core.geom.Bounds
 import com.mdev.mnotes.core.layout.RenderProfile
 import com.mdev.mnotes.core.layout.TileGrid
@@ -693,20 +694,19 @@ class Thumbs(private val repo: Repository, assets: Assets, private val pdf: PdfP
     private val mem = object : LruCache<String, Bitmap>(28 * 1024 * 1024) {
         override fun sizeOf(key: String, value: Bitmap) = value.allocationByteCount
     }
-    private val pending = HashSet<String>()
+    private val pending = Coalescer<String, Bitmap?>()
 
     fun cached(key: String): Bitmap? = mem.get(key)
 
-    /** Uruchamia [work] w tle (jeśli nie ma wyniku w pamięci) i oddaje wynik na wątku UI. */
+    /** Uruchamia [work] w tle (jeśli nie ma wyniku w pamięci) i oddaje wynik na wątku UI — każdemu, kto o niego prosił. */
     fun async(key: String, work: () -> Bitmap?, done: (Bitmap?) -> Unit) {
         mem.get(key)?.let { done(it); return }
-        if (!pending.add(key)) return
+        if (!pending.join(key, done)) return
         exec.execute {
             val b = runCatching(work).getOrNull()
             main.post {
-                pending.remove(key)
                 if (b != null) mem.put(key, b)
-                done(b)
+                pending.finish(key, b)
             }
         }
     }

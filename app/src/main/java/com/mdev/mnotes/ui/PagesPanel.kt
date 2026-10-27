@@ -304,7 +304,7 @@ fun PagesPanel(ed: Editor, close: () -> Unit, @Suppress("UNUSED_PARAMETER") pick
                         else Modifier.animateItem(),
                     ) {
                         PageThumbItem(
-                            ed, p, i, ids.size, current = id == curId, lifted = lifted, menu = menuFor == id,
+                            ed, p, p.version, i, ids.size, current = id == curId, lifted = lifted, menu = menuFor == id,
                             openMenu = { menuFor = id }, closeMenu = { menuFor = null }, moveTo = { moveTo = id }, rename = { renaming = id },
                         )
                     }
@@ -364,19 +364,27 @@ private fun PanelBtn(icon: ImageVector, text: String, enabled: Boolean, modifier
 
 @Composable
 private fun PageThumbItem(
-    ed: Editor, page: PageState, index: Int, total: Int, current: Boolean, lifted: Boolean, menu: Boolean,
+    ed: Editor, page: PageState, version: Int, index: Int, total: Int, current: Boolean, lifted: Boolean, menu: Boolean,
     openMenu: () -> Unit, closeMenu: () -> Unit, moveTo: () -> Unit, rename: () -> Unit,
 ) {
     val m = mint
     val thumbs = LocalContext.current.app.thumbs
     val spec = page.spec
     val wPx = 360
-    val key = "p:${page.id}:${page.version}:$wPx"
-    var bmp by remember(key) { mutableStateOf<Bitmap?>(thumbs.cached(key)) }
-    if (bmp == null) {
-        // Zawartość czytamy na wątku UI (bezpieczne dla modelu), rysujemy w tle.
-        val content = remember(key) { ed.doc.content(page) }
-        LaunchedEffect(key) { thumbs.async(key, { thumbs.render(ed.nbId, spec, content, wPx) }) { bmp = it } }
+    // Wersja przychodzi parametrem (B2): czytana tutaj nie budziła pominiętego kafla, więc po edycji zostawała
+    // stara miniatura, np. pusta kartka świeżo dodanej strony, dopóki coś innego go nie przerysowało.
+    val key = "p:${page.id}:$version:$wPx"
+    // Do czasu nowej miniatury widać poprzednią, a nie pustą kartkę.
+    var bmp by remember(page.id) { mutableStateOf<Bitmap?>(null) }
+    var shownKey by remember(page.id) { mutableStateOf("") }
+    if (shownKey != key) {
+        val hit = thumbs.cached(key)
+        if (hit != null) { bmp = hit; shownKey = key }
+        else {
+            // Zawartość czytamy na wątku UI (bezpieczne dla modelu), rysujemy w tle.
+            val content = remember(key) { ed.doc.content(page) }
+            LaunchedEffect(key) { thumbs.async(key, { thumbs.render(ed.nbId, spec, content, wPx) }) { if (it != null) { bmp = it; shownKey = key } } }
+        }
     }
     val scale by animateFloatAsState(if (lifted) 1.05f else 1f, tween(120), label = "lift")
     val ro = ed.readOnly

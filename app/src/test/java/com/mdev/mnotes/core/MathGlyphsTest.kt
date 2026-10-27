@@ -7,6 +7,10 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import kotlin.math.PI
+import kotlin.math.abs
+import kotlin.math.cos
+import kotlin.math.sin
 import kotlin.random.Random
 
 /** F28: auto-korekta √, ∑ i ∫ z zachowaniem rozmiaru. */
@@ -66,5 +70,46 @@ class MathGlyphsTest {
         assertNull(all(hand(0f, 0f, 60f, 0f, 60f, 60f, 0f, 60f, 0f, 0f)))      // kwadrat
         // Wyłączone kafelki nic nie poprawiają.
         assertNull(MathGlyphs.recognize(hand(0f, 62f, 8f, 58f, 20f, 100f, 34f, 0f, 120f, 0f), root = false, sum = true, integral = true))
+    }
+
+    /** Łuk okręgu (środek, promień, kąty w stopniach, y w dół) jako punkty co ~2 pt. */
+    private fun arc(cx: Float, cy: Float, r: Float, a0: Float, a1: Float): FloatArray {
+        val n = (abs(a1 - a0) / 180f * PI.toFloat() * r / 2f).toInt().coerceAtLeast(4)
+        return FloatArray(2 * (n + 1)) { k -> val a = Math.toRadians((a0 + (a1 - a0) * (k / 2) / n).toDouble()); if (k % 2 == 0) cx + r * cos(a).toFloat() else cy + r * sin(a).toFloat() }
+    }
+
+    private fun jitter(xy: FloatArray, jit: Float, seed: Int): FloatArray {
+        val rnd = Random(seed)
+        return FloatArray(xy.size) { xy[it] + (rnd.nextFloat() - 0.5f) * jit }
+    }
+
+    /**
+     * A2-4 (przegląd Fable): pismo przytrzymane na końcu nie może dawać √, ∑ ani ∫. Kształty jednym pociągnięciem, jak
+     * pisze się je odręcznie, każdy w kilku wariantach drżenia.
+     */
+    @Test fun handwritingIsNeverCorrected() {
+        val shapes = mapOf(
+            "V" to hand(0f, 0f, 20f, 60f, 40f, 0f),
+            "v z łącznikiem" to hand(0f, 20f, 10f, 50f, 20f, 18f, 32f, 16f),
+            "Z" to hand(0f, 0f, 50f, 0f, 0f, 70f, 50f, 70f),
+            "E" to hand(50f, 0f, 0f, 0f, 0f, 45f, 35f, 45f, 0f, 45f, 0f, 90f, 50f, 90f),
+            "ε" to arc(30f, 25f, 25f, -45f, -270f) + arc(30f, 75f, 25f, -90f, -315f),
+            "2" to hand(2f, 18f, 12f, 3f, 28f, 0f, 42f, 10f, 40f, 30f, 0f, 90f, 45f, 90f),
+            "7" to hand(0f, 0f, 45f, 0f, 12f, 90f),
+            "(" to arc(60f, 50f, 55f, -115f, -245f),
+            ")" to arc(-20f, 50f, 55f, -65f, 65f),
+            "( pochylony" to hand(16f, 0f, 4f, 25f, 0f, 55f, 3f, 80f, 8f, 100f),
+            "J" to hand(30f, 0f, 30f, 85f, 22f, 98f, 10f, 100f, 2f, 90f),
+            "S" to arc(25f, 22f, 20f, -20f, -270f) + arc(25f, 62f, 20f, -90f, 160f),
+        )
+        val wrong = ArrayList<String>()
+        for ((name, xy) in shapes) for (seed in 0 until 5) all(jitter(xy, 0.8f, seed))?.let { wrong += "„$name” (seed $seed) → ${it.kind}" }
+        assertTrue(wrong.joinToString(), wrong.isEmpty())
+    }
+
+    /** A2-4: √ z krótką kreską (krótszą niż połowa szerokości) to raczej „v” z łącznikiem — zostaje pismem. */
+    @Test fun rootNeedsALongBar() {
+        assertNull(all(hand(0f, 62f, 8f, 58f, 20f, 100f, 34f, 0f, 55f, 0f)))
+        assertEquals(MathGlyphs.Kind.ROOT, all(hand(0f, 62f, 8f, 58f, 20f, 100f, 34f, 0f, 75f, 0f))?.kind)
     }
 }

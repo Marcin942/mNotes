@@ -47,7 +47,8 @@ object MathGlyphs {
         val w = r - l; val h = b - t
         val last = k - 2
         val barAng = deg(ang(v, last))
-        if (abs(barAng) > 18f || len(v, last) < 0.3f * w) return null
+        // Kreska co najmniej pół szerokości: krótsza to zwykle „v” z łącznikiem do następnej litery (A2-4).
+        if (abs(barAng) > 18f || len(v, last) < 0.5f * w) return null
         if (v[2 * last + 1] - t > 0.25f * h) return null                 // kreska u góry
         val rise = deg(ang(v, last - 1))
         if (rise > -35f || rise < -110f || len(v, last - 1) < 0.45f * h) return null   // stromo w górę (y maleje)
@@ -71,12 +72,14 @@ object MathGlyphs {
         val w = r - l; val h = b - t
         if (h < 0.5f * w || h > 3f * w) return null
         val a = FloatArray(4) { deg(ang(v, it)) }
-        val topOk = abs(abs(a[0]) - 180f) < 25f && len(v, 0) > 0.4f * w
-        val d1 = a[1] in 15f..80f
-        val d2 = a[2] in 100f..165f
-        val botOk = abs(a[3]) < 25f && len(v, 3) > 0.4f * w
+        // Węższe zakresy niż na początku (A2-4): pismo podobne do ∑ (ε, „3” od tyłu) ma ukosy bardziej strome albo płaskie.
+        val topOk = abs(abs(a[0]) - 180f) < 22f && len(v, 0) > 0.45f * w
+        val d1 = a[1] in 25f..70f
+        val d2 = a[2] in 110f..155f
+        val botOk = abs(a[3]) < 22f && len(v, 3) > 0.45f * w
         if (!(topOk && d1 && d2 && botOk)) return null
         if (v[1] - t > 0.2f * h || b - v[7] > 0.2f * h) return null
+        if (v[4] - l < 0.3f * w) return null                              // środkowy wierzchołek wyraźnie w prawo
         val out = floatArrayOf(r, t, l, t, l + 0.55f * w, (t + b) / 2f, l, b, r, b)
         return Glyph(Kind.SUM, out, false)
     }
@@ -97,6 +100,10 @@ object MathGlyphs {
         for (i in 0 until n) { if (xy[2 * i + 1] < xy[2 * top + 1]) top = i; if (xy[2 * i + 1] > xy[2 * bot + 1]) bot = i }
         val chordDev = maxDev(xy, n)
         if (chordDev < 0.05f * h) return null                             // prosta kreska — wariant z ✗
+        // ∫ przez całą drogę idzie w lewo (haczyki też); ε albo „3” od tyłu wracają w prawo do środka (A2-4).
+        var minX = sx; var rebound = 0f
+        for (i in 1 until n) { minX = min(minX, xy[2 * i]); rebound = max(rebound, xy[2 * i] - minX) }
+        if (rebound > max(0.2f * w, 2f)) return null
         val topHook = sx - xy[2 * top] > 0.15f * w || (top > 0 && sy - xy[2 * top + 1] > 0.02f * h)
         val botHook = xy[2 * bot] - ex > 0.15f * w || (bot < n - 1 && xy[2 * bot + 1] - ey > 0.02f * h)
         if (!topHook || !botHook) return null

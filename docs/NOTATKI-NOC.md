@@ -170,3 +170,13 @@ dziedziczy już proces z `start-A.sh`, więc `./gradlew` działa bez niego.
   **Tablet:** Ustawienia → Edytor i pióro → włącz „Trzymaj dalej, aby wygładzić w krzywą”; narysuj łuk i trzymaj ~1 s →
   gładka krzywa (bez paska zaznaczenia), dymek tylko za pierwszym razem; napisz „V” albo „Z” i trzymaj → zostaje pismem;
   zaznacz krzywą lassem → kotwice i uchwyty jak przy narzędziu Krzywa.
+- **A2-4** F28 fałszywe trafienia — `noc/f2-symbole`; `MathGlyphsTest` (`handwritingIsNeverCorrected`: 12 kształtów pisma
+  × 5 wariantów drżenia, `rootNeedsALongBar`). Test najpierw pokazał dwa realne błędy: „v” z łącznikiem do następnej litery
+  dawało √, a „ε” dawało ∫ (gdy ∫ włączona). Poprawki: kreska √ ≥ 0,5 szerokości (plan), kąty ukosów ∑ 25–70° i 110–155°
+  (było 15–80°/100–165°), poziome kreski ∑ ≥ 0,45 szerokości, środkowy wierzchołek ∑ ≥ 0,3 szerokości od lewej, ∫ bez
+  nawrotu w prawo (> 0,2 szerokości). Pozytywne testy (10 wariantów √ i ∑, ∫ z haczykami) bez zmian. Koszt: √ z bardzo krótką
+  kreską (np. tylko nad jedną cyfrą, kreska < połowy szerokości znaku) zostaje pismem. Dymek po pierwszej zamianie
+  „√ wyrównany — wyłączysz to w panelu pióra („Auto popraw”) albo w Ustawieniach” (raz, `math.hinted`). **Wygląd:** panel
+  pióra bez zmian poza dopiskiem „(każdy osobno)” w nagłówku; w Ustawienia → Edytor i pióro → Pióro trzy nowe `ToggleRow`
+  pod „Przytrzymaj, aby wyprostować kształt”. **Tablet:** √ z długą kreską i przytrzymaniem → wyrównany + dymek (tylko raz);
+  napisz „ve”, „vo” odręcznie z przytrzymaniem na końcu „v” → zostaje pismem; Ustawienia → szukaj „pierwiastek”.

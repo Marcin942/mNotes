@@ -1391,7 +1391,7 @@ private fun PenPanel(ed: Editor, set: com.mdev.mnotes.data.Settings, onColorSets
     ToggleRow(T.t("Przytrzymaj, aby wyprostować kształt", "Hold to snap to shape"), set.holdToShape) { set.holdToShape = it }
     if (set.holdToShape) {
         // F28: kafelki „auto popraw” — każdy symbol włączany osobno (jak opcje lassa i gumki).
-        SectionLabel(T.t("Auto popraw po przytrzymaniu", "Auto-correct after holding"))
+        SectionLabel(T.t("Auto popraw po przytrzymaniu (każdy osobno)", "Auto-correct after holding (each separately)"))
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             Chip(T.t("√ pierwiastek", "√ root"), set.mathRoot, { set.mathRoot = !set.mathRoot })
             Chip(T.t("∑ suma", "∑ sum"), set.mathSum, { set.mathSum = !set.mathSum })

@@ -2256,6 +2256,12 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
         val n = if (holdRaw >= 3) holdRaw.coerceAtMost(total) else total
         // F28: włączone kafelki „auto popraw” mają pierwszeństwo: odręczny √ / ∑ / ∫ staje się równym symbolem tej samej wielkości.
         val glyph = MathGlyphs.recognize(builder.raw, n, settings.mathRoot, settings.mathSum, settings.mathIntegral)
+        if (glyph != null && !settings.mathHinted) {
+            // A2-4: zamiana pisma w symbol bez zapowiedzi zaskakuje — raz mówimy, gdzie ją wyłączyć.
+            settings.mathHinted = true
+            val sym = when (glyph.kind) { MathGlyphs.Kind.ROOT -> "√"; MathGlyphs.Kind.SUM -> "∑"; MathGlyphs.Kind.INTEGRAL -> "∫" }
+            ed.say(T.t("$sym wyrównany — wyłączysz to w panelu pióra („Auto popraw”) albo w Ustawieniach", "$sym straightened — turn this off in the pen panel (“Auto-correct”) or in Settings"))
+        }
         if (glyph != null && glyph.curve) {
             shapeCtrl = glyph.xy; shapePts = Bezier.sample(glyph.xy); shapePoly = false; shapeKind = ShapeKind.POLYLINE
             shapeSnapped = true; predN = 0; shapeLabel = null

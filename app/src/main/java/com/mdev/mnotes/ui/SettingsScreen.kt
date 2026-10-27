@@ -362,6 +362,12 @@ private fun EditorPrefs(set: com.mdev.mnotes.data.Settings) {
         Opt(T.t("Wygładzanie: ${(set.smoothing * 100).toInt()}%", "Smoothing: ${(set.smoothing * 100).toInt()}%"), "gładkość stabilizacja drżenie pióro") { MSlider(set.smoothing, 0f, 2f) { set.smoothing = it } }
         ToggleRow(T.t("Przytrzymaj, aby wyprostować kształt", "Hold to snap to shape"), set.holdToShape, keys = "kształty prosta linia okrąg prostokąt prostowanie snap shape") { set.holdToShape = it }
         if (set.holdToShape) Opt(T.t("Czas przytrzymania: ${set.holdMs} ms", "Hold time: ${set.holdMs} ms"), "prostowanie kształt opóźnienie") { MSlider(set.holdMs.toFloat(), 250f, 1200f) { set.holdMs = (it / 50).toInt() * 50 } }
+        // F28 (A2-4): te same przełączniki co kafelki w panelu pióra, żeby wyszukiwarka ustawień je znajdowała.
+        if (set.holdToShape) {
+            ToggleRow(T.t("Auto popraw √ (pierwiastek) po przytrzymaniu", "Auto-correct √ (root) after holding"), set.mathRoot, keys = "pierwiastek symbol auto korekta popraw wyrównaj matematyka root sqrt") { set.mathRoot = it }
+            ToggleRow(T.t("Auto popraw ∑ (suma) po przytrzymaniu", "Auto-correct ∑ (sum) after holding"), set.mathSum, keys = "suma sigma symbol auto korekta popraw wyrównaj matematyka sum") { set.mathSum = it }
+            ToggleRow(T.t("Auto popraw ∫ (całka) po przytrzymaniu", "Auto-correct ∫ (integral) after holding"), set.mathIntegral, keys = "całka symbol auto korekta popraw wygładź matematyka integral") { set.mathIntegral = it }
+        }
         if (set.holdToShape) ToggleRow(T.t("Trzymaj dalej, aby wygładzić w krzywą", "Keep holding to smooth into a curve"), set.holdToCurve, keys = "krzywa bezier wygładź gładka curve smooth") { set.holdToCurve = it }
         if (set.holdToShape && set.holdToCurve) Opt(T.t("Dodatkowy czas dla krzywej: ${set.curveHoldMs} ms", "Extra time for a curve: ${set.curveHoldMs} ms"), "krzywa bezier czas opóźnienie curve") { MSlider(set.curveHoldMs.toFloat(), 0f, 1000f) { set.curveHoldMs = (it / 50).toInt() * 50 } }
     }

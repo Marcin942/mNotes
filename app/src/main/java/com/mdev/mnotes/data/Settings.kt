@@ -125,6 +125,7 @@ class Settings(ctx: Context) {
     var mathRoot by Pref("math.root", true)
     var mathSum by Pref("math.sum", true)
     var mathIntegral by Pref("math.integral", false)
+    var mathHinted by Pref("math.hinted", false)          // dymek „gdzie to wyłączyć” po pierwszej zamianie (A2-4) już był
     var dualFraction by Pref("dual.fraction", 0.5f)      // F4: część wysokości dla górnego zeszytu
     var dualSyncZoom by Pref("dual.sync_zoom", true)
     var mathText by Pref("text.math_unicode", true)

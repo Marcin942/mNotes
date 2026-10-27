@@ -150,6 +150,50 @@ object Chalk {
         return Raster(w, h, out)
     }
 
+    /**
+     * Usuwa drobinki (2b-B2): spójne (8-sąsiedztwo) plamki kryjące (krycie > 50 %) mniejsze niż [minArea] px razem z ich
+     * półprzezroczystą otoczką. To ziarno tablicy i pył kredy; kropka nad „i” albo przecinek dziesiętny są większe.
+     */
+    fun despeckle(img: Raster, minArea: Int): Raster {
+        val w = img.w; val h = img.h; val n = w * h
+        val solid = BooleanArray(n) { Raster.alpha(img.px[it]) > 128 }
+        val seen = BooleanArray(n)
+        val queue = IntArray(n)
+        val out = img.px.copyOf()
+        var changed = false
+        for (start in 0 until n) {
+            if (!solid[start] || seen[start]) continue
+            var head = 0; var tail = 0
+            queue[tail++] = start; seen[start] = true
+            while (head < tail) {
+                val p = queue[head++]
+                val x = p % w; val y = p / w
+                for (dy in -1..1) for (dx in -1..1) {
+                    val nx = x + dx; val ny = y + dy
+                    if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue
+                    val q = ny * w + nx
+                    if (solid[q] && !seen[q]) { seen[q] = true; queue[tail++] = q }
+                }
+            }
+            if (tail >= minArea) continue
+            changed = true
+            for (i in 0 until tail) {
+                val p = queue[i]; val x = p % w; val y = p / w
+                for (dy in -1..1) for (dx in -1..1) {
+                    val nx = x + dx; val ny = y + dy
+                    if (nx in 0 until w && ny in 0 until h && !solid[ny * w + nx]) out[ny * w + nx] = 0
+                }
+                out[p] = 0
+            }
+        }
+        return if (changed) Raster(w, h, out) else img
+    }
+
+    /** Najmniejsza plamka kredy przy szerokości wyniku [w]: 6 px przy 1600 px, skalowane z polem obrazu, co najmniej 3. */
+    fun speckArea(w: Int): Int = max(3, (SPECK_AREA * (w / 1600f) * (w / 1600f)).toInt())
+
+    const val SPECK_AREA = 6f
+
     /** Z [core] zostają tylko spójne kawałki (8-sąsiedztwo) o rozpiętości (szer. albo wys. ramki) co najmniej [minExtent]. */
     private fun longCores(core: BooleanArray, w: Int, h: Int, minExtent: Int): BooleanArray {
         val out = BooleanArray(core.size)
@@ -237,6 +281,8 @@ data class BoardOptions(
     val faint: Boolean = true,
     /** Usuń jasne pasy grubsze niż kreda: listwy, ramy, ścianę przy brzegu (2b-B2). */
     val frames: Boolean = true,
+    /** Usuń drobinki mniejsze niż kropka (ziarno tablicy, pył kredy) (2b-B2). */
+    val specks: Boolean = true,
 )
 
 /**
@@ -317,6 +363,7 @@ object BoardPipeline {
         val cut = if (opt.autoCut) src.autoCut else opt.cut
         var out = Chalk.toAlpha(src.image, src.black, cut, opt.solid, opt.tint, low = if (opt.faint) cut * Chalk.FAINT_FRACTION else null)
         if (opt.frames) out = Chalk.dropThick(out, Chalk.thickLimit(out.w))
+        if (opt.specks) out = Chalk.despeckle(out, Chalk.speckArea(out.w))
         if (erase.isNotEmpty()) out = Chalk.erase(out, erase)
         return BoardResult(out, src.quad, src.black, cut, src)
     }

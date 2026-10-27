@@ -246,6 +246,7 @@ object Lab : LabFeatures {
         ToggleRow(T.t("Wyostrz kredę", "Sharpen the chalk"), opt.sharpen) { change(opt.copy(sharpen = it)) }
         ToggleRow(T.t("Dociągaj bladą kredę do wyraźnej", "Keep faint chalk joined to clear chalk"), opt.faint) { change(opt.copy(faint = it)) }
         ToggleRow(T.t("Usuń listwy, ramy i ścianę", "Remove ledges, frames and wall"), opt.frames) { change(opt.copy(frames = it)) }
+        ToggleRow(T.t("Usuń drobinki (ziarno tablicy)", "Remove specks (board grain)"), opt.specks) { change(opt.copy(specks = it)) }
         ToggleRow(T.t("Próg tła automatycznie", "Automatic background cut"), opt.autoCut) { change(opt.copy(autoCut = it)) }
         if (!opt.autoCut) {
             SectionLabel(T.t("Próg tła: ${(opt.cut * 100).toInt()}%", "Background cut: ${(opt.cut * 100).toInt()}%"))
@@ -438,7 +439,7 @@ object Lab : LabFeatures {
             ToggleRow(T.t("Podpowiedź po wstawieniu zdjęcia tablicy", "Hint after inserting a board photo"), set.boardHint) { set.boardHint = it }
             Steps(set.options()) { o ->
                 set.straighten = o.straighten; set.crop = o.crop; set.flatten = o.flatten; set.sharpen = o.sharpen
-                set.faint = o.faint; set.frames = o.frames
+                set.faint = o.faint; set.frames = o.frames; set.specks = o.specks
                 set.autoCut = o.autoCut; set.cut = o.cut; set.solid = o.solid
                 set.tint = listOf(null, LabSettings.tintColor(1), LabSettings.tintColor(2)).indexOf(o.tint).coerceAtLeast(0)
             }

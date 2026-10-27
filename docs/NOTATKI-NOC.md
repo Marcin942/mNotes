@@ -196,6 +196,20 @@ Na starcie (`noc/wszystko` @ `471ed08`): lab 696 testów, 0 porażek.
   `photoWithoutABoardIsSkippedInsteadOfGhosting`, `failedLoadGivesNull`. **Tablet:** zaznacz 3 zdjęcia, w tym jedno ściany →
   „Połącz zdjęcia tablicy” → informacja o pominięciu, bez „duchów”.
 
+- **B2-8 K4 „Wyślij do mLabs”** (`0befd4c`): `docs/INTEGRACJA-MLABS.md` skopiowany do repo (i uaktualniony w `docs-noc/`),
+  `Recognizer.kt` odsyła do niego. Polecenie „Wyślij stronę do mLabs…” (menu Plik i paleta Ctrl+K, tylko lab): okno `MDialog`
+  z jednym zdaniem, co pójdzie (strona N zeszytu „X” jako PNG i JSON w formacie mLabs, przykłady pytań), polem `MField`
+  „Tekst strony (opcjonalnie)” i zdaniem, że rozpoznawania jeszcze nie ma; „Udostępnij…” renderuje bieżącą stronę do PNG
+  1600 px (papier, wzór, tło PDF, treść — jak wycinek F14) i JSON `mnotes-strona` v1 (`PageExport.userBlock`: tekst jako
+  jeden blok `silnik: uzytkownik`, pewność 1) do `cache/share/mlabs/` i otwiera wybór aplikacji (`ACTION_SEND_MULTIPLE`,
+  `FileProvider`, dodatek `com.mdev.mnotes.extra.PAGE`). **Odstępstwo:** pliki w `cache/share`, nie w `files/` — tylko ten
+  katalog udostępnia istniejący `FileProvider`, a nie chciałem zmieniać `file_paths.xml` w core. **Zmiana w `src/main`
+  (dla A):** `LabCommand` i dwie metody z pustą domyślną implementacją w `LabFeatures` (`commands`, `Overlay`), dopisanie
+  `Flavor.lab?.commands(ed)` w `commandList` (`EditorDialogs.kt`) i `Flavor.lab?.Overlay(ed)` obok panelu telefonu
+  (`EditorScreen.kt`). Test: `RecognizerTest.userTextBecomesOneSureBlockAndEmptyTextNone`; lab 713, core 667, 0 porażek,
+  oba APK. **Nauka:** strona z wykładu trafia do mLabs, które ją sprawdza albo układa pytania kontrolne. **Tablet:** Plik →
+  „Wyślij stronę do mLabs…” → wpisz `v = s/t` → „Udostępnij…” → np. Pliki → dwa pliki: PNG strony i JSON z blokiem.
+
 ## Faza 2 — agent A (od 27.10, lista A2-* w `docs-noc/PLAN-NOCY.md`)
 
 Każdy punkt na własnej gałęzi `noc/f2-<temat>` od `noc/wszystko`, po zamknięciu scalony do `noc/wszystko`.

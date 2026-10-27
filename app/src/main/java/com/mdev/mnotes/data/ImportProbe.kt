@@ -61,9 +61,12 @@ object ImportProbe {
 
     private fun zipNames(ctx: Context, uri: Uri): List<String> {
         val out = ArrayList<String>()
-        ctx.contentResolver.openInputStream(uri)?.use { s ->
-            ZipInputStream(s).use { z ->
-                while (out.size < MAX_ZIP_ENTRIES) { val e = z.nextEntry ?: break; out.add(e.name) }
+        // Wpis, którego strumień nie przeczyta (STORED z deskryptorem), nie może kasować nazw zebranych przed nim.
+        runCatching {
+            ctx.contentResolver.openInputStream(uri)?.use { s ->
+                ZipInputStream(s).use { z ->
+                    while (out.size < MAX_ZIP_ENTRIES) { val e = z.nextEntry ?: break; out.add(e.name) }
+                }
             }
         }
         return out

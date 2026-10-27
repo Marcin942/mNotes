@@ -16,6 +16,7 @@ import com.mdev.mnotes.core.model.Stroke
 import com.mdev.mnotes.core.model.Template
 import com.mdev.mnotes.core.model.TapeEl
 import com.mdev.mnotes.core.model.TextBox
+import com.mdev.mnotes.core.codec.MnotesArchive
 import com.mdev.mnotes.core.codec.PageCodec
 import com.mdev.mnotes.core.geom.FloatList
 import com.mdev.mnotes.core.pen.LineStyle
@@ -34,7 +35,6 @@ import java.io.InputStream
 import java.io.OutputStream
 import java.util.Locale
 import java.util.zip.ZipEntry
-import java.util.zip.ZipInputStream
 import java.util.zip.ZipOutputStream
 import kotlin.math.max
 import kotlin.math.min
@@ -452,34 +452,10 @@ class Importer(private val repo: Repository, private val pdf: PdfPool) {
     fun importMnotes(input: InputStream, folderId: String?): NotebookMeta? {
         val id = newId()
         val dst = repo.dir(id)
-        var meta: NotebookMeta? = null
-        var total = 0L
-        try {
-            ZipInputStream(input).use { z ->
-                while (true) {
-                    val e = z.nextEntry ?: break
-                    if (e.isDirectory) continue
-                    val name = e.name
-                    // Ochrona przed ścieżkami spoza katalogu zeszytu (zip-slip) i obcymi plikami.
-                    val ok = name == "meta.json" || ((name.startsWith("p/") || name.startsWith("assets/")) && !name.contains(".."))
-                    if (!ok) continue
-                    val f = File(dst, name)
-                    if (!f.canonicalPath.startsWith(dst.canonicalPath + File.separator)) continue
-                    f.parentFile?.mkdirs()
-                    FileOutputStream(f).use { o ->
-                        val buf = ByteArray(64 * 1024)
-                        while (true) {
-                            val r = z.read(buf); if (r < 0) break
-                            total += r
-                            if (total > MAX_IMPORT) throw IllegalStateException("too big")
-                            o.write(buf, 0, r)
-                        }
-                    }
-                }
-            }
-            val mf = File(dst, "meta.json")
-            if (mf.exists()) meta = NotebookMeta.fromJson(mf.readText())
-        } catch (_: Throwable) { meta = null }
+        // Ścieżki spoza katalogu zeszytu (zip-slip), obce pliki i warianty archiwum (folder na wierzchu, „\”) obsługuje MnotesArchive.
+        val meta: NotebookMeta? = try {
+            MnotesArchive.extract(input, dst, MAX_IMPORT)?.let { NotebookMeta.fromJson(it.metaJson) }
+        } catch (_: Throwable) { null }
         if (meta == null) { dst.deleteRecursively(); return null }
         val now = System.currentTimeMillis()
         return meta.copy(id = id, folderId = folderId, trashedAt = 0L, opened = now, modified = now)

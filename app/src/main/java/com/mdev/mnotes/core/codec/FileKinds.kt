@@ -43,7 +43,8 @@ object FileKinds {
             if (isZip(head)) {
                 val names = runCatching { zipNames() }.getOrDefault(emptyList())
                 return when {
-                    "meta.json" in names -> FileKind.MNOTES
+                    // Także przepakowane archiwum z folderem na wierzchu („Zeszyt/meta.json”).
+                    MnotesArchive.rootOf(names) != null -> FileKind.MNOTES
                     "note.note" in names -> FileKind.SDOCX
                     // Archiwum bez znanych wpisów: wierzymy nazwie (np. uszkodzony .mnotes ma dostać komunikat o błędzie, nie zniknąć).
                     byName == FileKind.MNOTES || byName == FileKind.SDOCX -> byName

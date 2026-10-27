@@ -56,6 +56,8 @@ object PageCodec {
      * rekordu (rekordy mają długość) i rysuje samą gęstą łamaną, która wygląda tak samo.
      */
     private const val FLAG_BEZIER = 64
+    /** Wypełnienie zamkniętej krzywej (2b-A10): i32 ARGB na samym końcu rekordu kreski; starsza wersja go pomija. */
+    private const val FLAG_STROKE_FILL = 128
     // Tryb rozmiaru pola tekstowego; brak obu bitów = TextBox.FIT_HEIGHT, czyli zapis sprzed trybów.
     private const val FLAG_TEXT_AUTO = 64
     private const val FLAG_TEXT_FIXED = 128
@@ -154,7 +156,7 @@ object PageCodec {
         w.i32(s.color)
         val line = when (s.line) { LineStyle.DASHED -> FLAG_DASHED; LineStyle.DOTTED -> FLAG_DOTTED; LineStyle.SOLID -> 0 }
         val ctrl = s.ctrl
-        w.varint((if (s.locked) FLAG_LOCKED else 0) or (if (s.poly) FLAG_POLY else 0) or (if (s.ellipse) FLAG_ELLIPSE else 0) or line or (if (ctrl != null) FLAG_BEZIER else 0))
+        w.varint((if (s.locked) FLAG_LOCKED else 0) or (if (s.poly) FLAG_POLY else 0) or (if (s.ellipse) FLAG_ELLIPSE else 0) or line or (if (ctrl != null) FLAG_BEZIER else 0) or (if (s.fill != 0) FLAG_STROKE_FILL else 0))
         w.varint((s.width * Q).roundToInt().coerceAtLeast(1))
         val n = s.count
         w.varint(n)
@@ -177,6 +179,7 @@ object PageCodec {
                 cx = x; cy = y
             }
         }
+        if (s.fill != 0) w.i32(s.fill)
     }
 
     private fun readStroke(r: ByteReader): Stroke {
@@ -205,7 +208,8 @@ object PageCodec {
             for (i in 0 until m) { cx += r.zigzag(); cy += r.zigzag(); c[2 * i] = cx / Q; c[2 * i + 1] = cy / Q }
             ctrl = c
         }
-        return Stroke(Ids.next(), pen, color, width, pts, flags and FLAG_LOCKED != 0, flags and FLAG_POLY != 0, flags and FLAG_ELLIPSE != 0, line, ctrl)
+        val fill = if (flags and FLAG_STROKE_FILL != 0 && r.remaining >= 4) r.i32() else 0
+        return Stroke(Ids.next(), pen, color, width, pts, flags and FLAG_LOCKED != 0, flags and FLAG_POLY != 0, flags and FLAG_ELLIPSE != 0, line, ctrl, fill)
     }
 
     private fun writeText(w: ByteWriter, t: TextBox) {

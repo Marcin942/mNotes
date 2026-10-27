@@ -48,7 +48,7 @@ import com.mdev.mnotes.core.layout.ZoomLimits
 import com.mdev.mnotes.core.layout.MiniMap
 import com.mdev.mnotes.core.layout.ToolReturn
 import com.mdev.mnotes.core.model.BoxElement
-import com.mdev.mnotes.core.model.ColorInvert
+import com.mdev.mnotes.core.color.ThemeMap
 import com.mdev.mnotes.core.model.DocEdit
 import com.mdev.mnotes.core.model.Element
 import com.mdev.mnotes.core.model.TapeEl
@@ -66,6 +66,9 @@ import com.mdev.mnotes.core.pen.LaserColors
 import com.mdev.mnotes.core.pen.PenSpec
 import com.mdev.mnotes.core.pen.StrokeBuilder
 import com.mdev.mnotes.core.shapes.Bezier
+import com.mdev.mnotes.core.shapes.CurveDraft
+import com.mdev.mnotes.core.shapes.CurveFit
+import com.mdev.mnotes.core.shapes.CurveMode
 import com.mdev.mnotes.core.shapes.MathGlyphs
 import com.mdev.mnotes.core.shapes.Shape
 import com.mdev.mnotes.core.shapes.ShapeBox
@@ -272,7 +275,7 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
         val s = ed.sel ?: return@Runnable
         val id = s.ids.singleOrNull() ?: return@Runnable
         performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
-        ed.pointMenu = Editor.PointMenu(downX, downY, s.pageId, id, vIdx, vCtrl)
+        ed.pointMenu = Editor.PointMenu(downX, downY + hostOffsetY, s.pageId, id, vIdx, vCtrl)
         lm = LM.NONE; mode = Mode.IGNORE
         invalidate()
     }
@@ -320,6 +323,8 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
 
     /** „100%”: dopasowanie do szerokości (pion), wysokości (poziom) lub całej strony (pojedyncza). */
     fun baseZoom(): Float {
+        // 2b-A7: w rzędzie stanowiska wysokość widoku wynika z powiększenia, więc „100 %” podaje pole, nie widok.
+        baseZoomOverride?.let { return it }
         if (width == 0 || layout.count == 0) return 1f
         return when (ed.layoutMode) {
             0 -> width / layout.docWidth
@@ -468,7 +473,8 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
         val pi = doc.indexOf(s.pageId); if (pi < 0) return null
         val b = (if (lLifting) lM.mapBounds(lBounds) else selBounds()) ?: return null
         val ox = layout.left(pi); val oy = layout.top(pi)
-        return RectF((ox + b.l) * zoom + tx, (oy + b.t) * zoom + ty, (ox + b.r) * zoom + tx, (oy + b.b) * zoom + ty)
+        val h = hostOffsetY
+        return RectF((ox + b.l) * zoom + tx, (oy + b.t) * zoom + ty + h, (ox + b.r) * zoom + tx, (oy + b.b) * zoom + ty + h)
     }
 
     /** Prostokąt (w pikselach widoku) opisany na ramce przycinania; do ustawiania panelu tak, by jej nie zasłaniał. */
@@ -570,7 +576,7 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
         if (!inited) {
             inited = true
             ed.pageIndex = doc.meta.lastPage.coerceIn(0, max(0, doc.pages.size - 1))
-            zoom = baseZoom()
+            zoom = startZoom ?: baseZoom()
             goToPage(ed.pageIndex, false)
         } else {
             val cx = docX(ow / 2f); val cy = docY(oh / 2f)
@@ -584,10 +590,13 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
         c.clipRect(0, 0, width, height)
         c.drawColor(viewBg)
         if (doc.pages.isEmpty() || layout.count == 0) return
-        val vb = Bounds(docX(0f), docY(0f), docX(width.toFloat()), docY(height.toFloat()))
+        syncTheme()
+        // 2b-A7: rząd stanowiska widać tylko w pasie [band]; reszty nie rysujemy i nie zamawiamy dla niej kafelków.
+        val bt = band?.get(0) ?: 0f; val bb = band?.get(1) ?: height.toFloat()
+        val vb = Bounds(docX(0f), docY(bt), docX(width.toFloat()), docY(bb))
         val range = layout.visibleRange(vb)
         // Kafelki przygotowujemy z zapasem poza ekranem (w kierunku przewijania), żeby brzeg nie był chwilowo miękki.
-        val mx = width * 0.3f / zoom; val my = height * 0.3f / zoom
+        val mx = width * 0.3f / zoom; val my = (bb - bt) * 0.3f / zoom
         val rvb = Bounds(vb.l - mx, vb.t - my, vb.r + mx, vb.b + my)
         val reqRange = if (mode == Mode.NAV) range else layout.visibleRange(rvb)
         cache.configure(settings.renderQuality)
@@ -622,6 +631,8 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
         drawCrop(c)
         drawLasso(c)
         drawSelection(c)
+        drawGeoPicks(c)
+        drawCurveDraft(c)
         drawShapeLabel(c)
         drawAttachMark(c)
         drawRing(c)
@@ -666,14 +677,12 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
         val o = 2f * dp
         miniPaint.style = Paint.Style.FILL; miniPaint.color = fade(shadowPaint.color)
         c.drawRect(miniRect.left - 0.5f * o, miniRect.top, miniRect.right + 0.5f * o, miniRect.bottom + o, miniPaint)
-        val inv = page.spec.inverted
-        miniPaint.color = fade(if (inv) ColorInvert.apply(page.spec.paper) else page.spec.paper)
+        // Baza strony ma przekształcenie trybu ciemnego/jasnego już wypalone (2b-A9); papier pod nią w tym samym kolorze.
+        miniPaint.color = fade(themeFor(page.spec)?.dstPaper ?: page.spec.paper)
         c.drawRect(miniRect, miniPaint)
-        // Odwrócona strona (F11) także na mapie: ta sama bazowa bitmapa z filtrem, jak kafelki na płótnie.
         cache.overview(page)?.let {
-            miniPaint.color = fade(-0x1); miniPaint.colorFilter = if (inv) invertPaint.colorFilter else null
+            miniPaint.color = fade(-0x1)
             c.drawBitmap(it, null, miniRect, miniPaint)
-            miniPaint.colorFilter = null
         }
         miniPaint.style = Paint.Style.STROKE; miniPaint.strokeWidth = 1f; miniPaint.color = fade(borderPaint.color)
         c.drawRect(miniRect, miniPaint)
@@ -724,22 +733,34 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
         c.clipRect(0f, 0f, spec.w, spec.h)
         val vis = Bounds(vb.l - r.l, vb.t - r.t, vb.r - r.l, vb.b - r.t)
         val req = Bounds(rvb.l - r.l, rvb.t - r.t, rvb.r - r.l, rvb.b - r.t)
-        // F11: kafelki zostają w oryginale, a odwraca je filtr w farbie (A2-6); warstwa tylko dla rzadkiego rysowania wektorowego.
-        if (!cache.draw(c, page, vis, req, r.l, r.t, zoom, spec.inverted)) {
-            if (spec.inverted) invertLayer(c, spec, vis)
+        // 2b-A9: tryb ciemny/jasny jest wypalony w kafelkach; rysowanie wektorowe (zanim powstaną) idzie przez to samo przekształcenie.
+        if (!cache.draw(c, page, vis, req, r.l, r.t, zoom)) {
+            renderer.theme = themeFor(spec); renderer.themePhotos = settings.pageThemePhotos
             renderer.drawPaper(c, spec, zoom, null)
             val content = page.content
             if (content != null) renderer.drawElements(c, doc.id, cache.visible(page.id, content), 0, vis, zoom, false, spec.darkPaper)
+            renderer.theme = null
         }
         c.restoreToCount(sc)
         c.drawRect(r.l, r.t, r.r, r.b, borderPaint)
     }
 
-    private val invertPaint = Paint().apply { colorFilter = ColorMatrixColorFilter(ColorMatrix(ColorInvert.MATRIX)) }
+    // ───────────────────────── tryb ciemny/jasny stron (2b-A9) ─────────────────────────
 
-    /** Warstwa z odwróconymi kolorami na widocznej części strony [vis] (w pt strony); zamyka ją restoreToCount wołającego. */
-    private fun invertLayer(c: Canvas, spec: com.mdev.mnotes.core.model.PageSpec, vis: Bounds) {
-        c.saveLayer(max(0f, vis.l), max(0f, vis.t), min(spec.w, vis.r), min(spec.h, vis.b), invertPaint)
+    private var themeKey = -1
+
+    /** Przekształcenie strony o stylu [spec] w bieżącym trybie (Ustawienia / „⋮”); null — strona jak powstała. */
+    private fun themeFor(spec: com.mdev.mnotes.core.model.PageSpec) = ThemeMap.forPage(spec.paper, spec.inverted, settings.pageTheme)
+
+    /** Po zmianie trybu kafelki (z wypalonym przekształceniem) liczą się od nowa. */
+    private fun syncTheme() {
+        val k = settings.pageTheme * 2 + (if (settings.pageThemePhotos) 1 else 0)
+        if (k == themeKey) return
+        val first = themeKey < 0
+        themeKey = k
+        cache.themeOf = { s -> themeFor(s) }
+        cache.themePhotos = settings.pageThemePhotos
+        if (!first) cache.invalidateAll()
     }
 
     private fun drawLive(c: Canvas) {
@@ -749,14 +770,11 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
             val s1 = c.save()
             c.translate(layout.left(livePage), layout.top(livePage))
             c.clipRect(0f, 0f, spec.w, spec.h)
-            // Na odwróconej stronie kreska w trakcie rysowania wygląda tak samo jak po zatwierdzeniu. Kryjący atrament od razu
-            // odwróconym kolorem (A2-6, bez warstwy na klatkę); zakreślacz i pióra półprzezroczyste mieszają się z tłem,
-            // więc tylko one dostają warstwę z filtrem.
-            val mixes = builder.penKind == PenKind.HIGHLIGHTER || PenSpec.of(builder.penKind).alpha < 1f
-            val ink = ColorInvert.liveInk(builder.penColor, spec.inverted, mixes)
-            if (ink == null) invertLayer(c, spec, vb.offset(-layout.left(livePage), -layout.top(livePage)))
-            val col = ink ?: builder.penColor
-            if (shapeSnapped) renderer.drawStrokeData(c, builder.penKind, col, builder.width, shapePts, shapePts.size / 3, zoom, spec.darkPaper, shapePoly, builder.line, true)
+            // Na przekształconej stronie (tryb ciemny/jasny, 2b-A9) kreska w trakcie ma ten sam kolor co po zatwierdzeniu.
+            val th = themeFor(spec)
+            val col = if (th == null) builder.penColor else if (builder.penKind == PenKind.HIGHLIGHTER) th.highlighter(builder.penColor) else th.ink(builder.penColor)
+            val dk = th?.toDark ?: spec.darkPaper
+            if (shapeSnapped) renderer.drawStrokeData(c, builder.penKind, col, builder.width, shapePts, shapePts.size / 3, zoom, dk, shapePoly, builder.line, true)
             else {
                 val n = builder.count
                 var total = n
@@ -772,8 +790,8 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
                         scratch[3 * (n + k) + 2] = pl
                     }
                     total = n + predN
-                    renderer.drawStrokeData(c, builder.penKind, col, builder.width, scratch, total, zoom, spec.darkPaper, line = builder.line)
-                } else renderer.drawStrokeData(c, builder.penKind, col, builder.width, builder.pts, total, zoom, spec.darkPaper, line = builder.line)
+                    renderer.drawStrokeData(c, builder.penKind, col, builder.width, scratch, total, zoom, dk, line = builder.line)
+                } else renderer.drawStrokeData(c, builder.penKind, col, builder.width, builder.pts, total, zoom, dk, line = builder.line)
             }
             c.restoreToCount(s1)
         }
@@ -783,11 +801,12 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
             val s2 = c.save()
             c.translate(layout.left(tgt), layout.top(tgt))
             c.clipRect(0f, 0f, spec.w, spec.h)
-            if (spec.inverted) invertLayer(c, spec, vb.offset(-layout.left(tgt), -layout.top(tgt)))
             c.translate(layout.left(lPage) - layout.left(tgt), layout.top(lPage) - layout.top(tgt))
             c.concat(matrixOf(lM))
             val z = zoom * lM.scaleFactor
+            renderer.theme = themeFor(spec); renderer.themePhotos = settings.pageThemePhotos
             for (el in lEls) renderer.drawElement(c, doc.id, el, z, false, spec.darkPaper)
+            renderer.theme = null
             c.restoreToCount(s2)
             lMShown = lM
         }
@@ -1173,7 +1192,47 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
 
     private fun isStylus(t: Int) = t == MotionEvent.TOOL_TYPE_STYLUS || t == MotionEvent.TOOL_TYPE_ERASER
 
+    // ───────────────────────── stanowisko (2b-A7): widok jako rząd wspólnego pola ─────────────────────────
+
+    /** Położenie widoku w polu stanowiska (px): menu i pasek zaznaczenia, rysowane w polu, przesuwają się o tyle. */
+    var hostOffsetY = 0f
+    /** „100 %” narzucone przez stanowisko; null — liczone z rozmiaru widoku jak zwykle. */
+    var baseZoomOverride: Float? = null
+    /** Powiększenie na start (pierwszy rozmiar widoku); null — „100 %”. */
+    var startZoom: Float? = null
+    /** Widoczny pas widoku (od, do) w jego współrzędnych; null — cały widok. */
+    var band: FloatArray? = null
+        set(v) { field = v; invalidate() }
+    /** Pionowy ruch palca przekazywany polu (rząd sam przesuwa się tylko w poziomie); null — zwykły widok. */
+    var onPanY: ((Float) -> Unit)? = null
+    var onFlingY: ((Float) -> Unit)? = null
+    /** Dotknięcie widoku (rząd staje się aktywny: jego zaznaczenie, panele, menu). */
+    var onTouched: (() -> Unit)? = null
+    /**
+     * Zaznaczenie przeciągnięte poza rząd: elementy w układzie strony po przesunięciu i środek w px widoku; true —
+     * przyjął je inny rząd, więc stąd znikają.
+     */
+    var onDropOutside: ((List<Element>, Float, Float) -> Boolean)? = null
+    /** Środek szczypnięcia (y w px widoku) — pole trzyma ten punkt w miejscu, gdy rzędy zmieniają wysokość. */
+    var zoomAnchorY = Float.NaN
+        private set
+
+    /** Koniec stanowiska: widok wraca do zwykłego płótna (cały widok, własne „100 %”, pionowy ruch u siebie). */
+    fun leaveStation() {
+        if (baseZoomOverride == null && onPanY == null && band == null && hostOffsetY == 0f) return
+        baseZoomOverride = null; startZoom = null; band = null; hostOffsetY = 0f
+        onPanY = null; onFlingY = null; onTouched = null; onDropOutside = null; onZoomChange = null
+    }
+
+    /** Przyjmuje elementy z innego rzędu (zeszytu [fromNb]) środkiem w punkcie widoku ([sx], [sy]). */
+    fun dropIn(els: List<Element>, fromNb: String, sx: Float, sy: Float) {
+        if (layout.count == 0 || ed.readOnly) return
+        val pi = layout.nearest(docX(sx), docY(sy)).coerceIn(0, layout.count - 1)
+        ed.pasteElements(els, fromNb, Triple(pi, pgX(pi, sx), pgY(pi, sy)))
+    }
+
     override fun onTouchEvent(raw: MotionEvent): Boolean {
+        if (raw.actionMasked == MotionEvent.ACTION_DOWN) onTouched?.invoke()
         if (ed.zoomWin) {
             val used = zwTouch(raw)
             if (used != null) return used
@@ -1442,6 +1501,7 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
         val cx = sx / n; val cy = sy / n
         var span = 0f
         if (n >= 2) { for (i in 0 until ev.pointerCount) if (isLive(ev, i, -1)) span += hypot(ev.getX(i) - cx, ev.getY(i) - cy); span /= n }
+        if (n >= 2) zoomAnchorY = cy
         if (n >= 2 && lastSpan > 0f && span > 0f) zoomAbout(cx, cy, span / lastSpan)
         if (n >= 2 && pull > 0f) endPull(false)
         panWithPull(cx - lastCx, cy - lastCy, pullEligible && n == 1 && navMax == 1)
@@ -1487,8 +1547,10 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
                     val cw = layout.docWidth * zoom; val ch = layout.docHeight * zoom
                     val minX = if (cw <= width) ((cw - width) / 2).toInt() else 0
                     val maxX = if (cw <= width) minX else (cw - width).toInt()
-                    val minY = if (ch <= height) ((ch - height) / 2).toInt() else 0
-                    val maxY = if (ch <= height) minY else (ch - height).toInt()
+                    var minY = if (ch <= height) ((ch - height) / 2).toInt() else 0
+                    var maxY = if (ch <= height) minY else (ch - height).toInt()
+                    // Rząd stanowiska: pionowy rzut przejmuje pole, rząd leci tylko w bok.
+                    onFlingY?.let { it(vy); minY = (-ty).toInt(); maxY = minY }
                     scroller.fling((-tx).toInt(), (-ty).toInt(), (-vx).toInt(), (-vy).toInt(), minX, maxX, minY, maxY)
                     postInvalidateOnAnimation()
                 } else snapIfNeeded()
@@ -1533,7 +1595,8 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
         if (pullOk && pull > 0f) {
             if (d > 0f) { val r = min(pull, d); pull -= r; d -= r } else { pull -= d; d = 0f }
         }
-        if (ax) { tx += d; ty += other } else { ty += d; tx += other }
+        val toHost = onPanY
+        if (ax) { tx += d; if (toHost != null) toHost(other) else ty += other } else { ty += d; tx += other }
         if (pullOk) {
             val lim = pullLimit()
             val cur = if (ax) tx else ty
@@ -1760,6 +1823,111 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
         }
     }
 
+    // ───────────────────────── Geometria (2b-A8): wskazane wejścia ─────────────────────────
+
+    private val geoPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE; strokeCap = Paint.Cap.ROUND; strokeJoin = Paint.Join.ROUND }
+
+    // ───────────────────────── krzywa krok po kroku (2b-A10) ─────────────────────────
+
+    /** Bieżący dotyk należy do szkicu krzywej (tryby przez punkty, kontur, piórko), a nie do zwykłej kreski. */
+    private var curveStep = false
+    private var curveTap = CurveDraft.Tap.ADD
+
+    private fun curveDown() {
+        curveStep = true
+        val pi = pageIdxAt(curX, curY)
+        if (pi < 0 || ed.readOnly) { curveStep = false; mode = Mode.IGNORE; return }
+        val d = ed.curveDraftFor(doc.pages[pi].id)
+        if (d.isEmpty && ed.sel != null) ed.clearSel()
+        val x = pgX(pi, curX); val y = pgY(pi, curY)
+        curveTap = d.tapKind(x, y, 14f * dp / zoom)
+        if (curveTap == CurveDraft.Tap.ADD) d.press(x, y)
+        ed.curveTick++
+    }
+
+    private fun curveMove() {
+        val d = ed.curveDraft ?: return
+        val pi = doc.indexOf(ed.curvePage ?: return)
+        if (pi < 0) return
+        // Przeciągnięcie z pierwszego/ostatniego punktu to jednak nowy węzeł (np. uchwyt piórka), nie zakończenie.
+        if (curveTap != CurveDraft.Tap.ADD && toolMoved) { curveTap = CurveDraft.Tap.ADD; d.press(pgX(pi, downX), pgY(pi, downY)) }
+        if (curveTap == CurveDraft.Tap.ADD) d.drag(pgX(pi, curX), pgY(pi, curY))
+    }
+
+    private fun curveUp(cancel: Boolean) {
+        curveStep = false
+        val d = ed.curveDraft ?: return
+        when {
+            cancel -> if (curveTap == CurveDraft.Tap.ADD) d.dropLast()
+            curveTap == CurveDraft.Tap.CLOSE -> ed.curveCommit(close = true)
+            curveTap == CurveDraft.Tap.FINISH -> ed.curveCommit()
+            else -> d.release()
+        }
+        ed.curveTick++
+    }
+
+    private val curvePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { strokeCap = Paint.Cap.ROUND; strokeJoin = Paint.Join.ROUND }
+
+    /** Szkic krzywej: sama krzywa piórem (z wypełnieniem, gdy będzie), węzły i uchwyty piórka w akcencie. */
+    private fun drawCurveDraft(c: Canvas) {
+        val d = ed.curveDraft ?: return
+        if (ed.tool != Tool.CURVE || d.isEmpty) return
+        val pi = doc.indexOf(ed.curvePage ?: return)
+        if (pi !in 0 until layout.count) return
+        val ox = layout.left(pi); val oy = layout.top(pi)
+        fun sx(x: Float) = (ox + x) * zoom + tx
+        fun sy(y: Float) = (oy + y) * zoom + ty
+        val p = ed.pen
+        val th = themeFor(doc.pages[pi].spec)
+        val ink = th?.ink(p.color) ?: p.color
+        d.ctrl()?.let { cc ->
+            val s = Bezier.sample(cc, 2f / zoom)
+            tmpPath.rewind(); tmpPath.moveTo(sx(s[0]), sy(s[1]))
+            for (k in 1 until s.size / 3) tmpPath.lineTo(sx(s[3 * k]), sy(s[3 * k + 1]))
+            if (CurveFit.closed(cc) && settings.curveFill) {
+                curvePaint.style = Paint.Style.FILL; curvePaint.color = rgbA(ink, 0x48)
+                c.drawPath(tmpPath, curvePaint)
+            }
+            curvePaint.style = Paint.Style.STROKE; curvePaint.color = ink; curvePaint.strokeWidth = max(p.width * zoom, 1.2f * dp)
+            c.drawPath(tmpPath, curvePaint)
+        }
+        geoPaint.color = rgbA(accent, 0xCC); geoPaint.strokeWidth = 1.5f * dp
+        for (i in 0 until d.count) {
+            val x = sx(d.x(i)); val y = sy(d.y(i))
+            if (d.mode == CurveMode.PEN && d.hasHandle(i)) {
+                val hx = sx(d.hx(i)); val hy = sy(d.hy(i))
+                c.drawLine(2f * x - hx, 2f * y - hy, hx, hy, geoPaint)
+                geoPaint.style = Paint.Style.FILL; c.drawCircle(hx, hy, 3.5f * dp, geoPaint); c.drawCircle(2f * x - hx, 2f * y - hy, 3.5f * dp, geoPaint); geoPaint.style = Paint.Style.STROKE
+            }
+            // Pierwszy punkt większy, gdy można w niego stuknąć, żeby domknąć.
+            val r = if (i == 0 && d.count >= 3) 9f * dp else 5f * dp
+            geoPaint.style = Paint.Style.FILL; geoPaint.color = rgbA(accent, if (i == d.count - 1) 0xFF else 0xAA)
+            c.drawCircle(x, y, r, geoPaint)
+            geoPaint.style = Paint.Style.STROKE; geoPaint.color = rgbA(accent, 0xCC)
+        }
+    }
+
+    /** Wskazane już wejścia konstrukcji: obrys w kolorze akcentu (półprzezroczysty), żeby było widać, co zostało wybrane. */
+    private fun drawGeoPicks(c: Canvas) {
+        if (ed.tool != Tool.GEO || ed.geoInputs.isEmpty()) return
+        val pi = doc.indexOf(ed.geoPage ?: return)
+        if (pi !in 0 until layout.count) return
+        val ox = layout.left(pi); val oy = layout.top(pi)
+        fun sx(x: Float) = (ox + x) * zoom + tx
+        fun sy(y: Float) = (oy + y) * zoom + ty
+        geoPaint.color = rgbA(accent, 0x99); geoPaint.strokeWidth = 5f * dp
+        for (inp in ed.geoInputs) when (inp) {
+            is com.mdev.mnotes.core.geom.GeoTool.Input.Point -> { geoPaint.style = Paint.Style.FILL; c.drawCircle(sx(inp.p.x), sy(inp.p.y), 6f * dp, geoPaint); geoPaint.style = Paint.Style.STROKE }
+            is com.mdev.mnotes.core.geom.GeoTool.Input.Ln -> c.drawLine(sx(inp.l.a.x), sy(inp.l.a.y), sx(inp.l.b.x), sy(inp.l.b.y), geoPaint)
+            is com.mdev.mnotes.core.geom.GeoTool.Input.Circ -> c.drawCircle(sx(inp.c.c.x), sy(inp.c.c.y), inp.c.r * zoom, geoPaint)
+            is com.mdev.mnotes.core.geom.GeoTool.Input.Tri -> {
+                tmpPath.rewind(); tmpPath.moveTo(sx(inp.a.x), sy(inp.a.y)); tmpPath.lineTo(sx(inp.b.x), sy(inp.b.y)); tmpPath.lineTo(sx(inp.c.x), sy(inp.c.y)); tmpPath.close()
+                c.drawPath(tmpPath, geoPaint)
+            }
+            is com.mdev.mnotes.core.geom.GeoTool.Input.Obj -> { val b = inp.el.bounds; c.drawRect(sx(b.l), sy(b.t), sx(b.r), sy(b.b), geoPaint) }
+        }
+    }
+
     // ───────────────────────── kątomierz (FB4, A2-13) ─────────────────────────
 
     private val prot = Protractor(0f, 0f, 0f, 150f)
@@ -1853,7 +2021,9 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
         val col = cache.pixel(page, pgX(pi, sx), pgY(pi, sy))
         if (col == 0) return 0
         if (settings.pipetteOriginal) originalColorAt(page, pgX(pi, sx), pgY(pi, sy))?.let { return it }
-        return col or 0xFF000000.toInt()
+        // 2b-A9: na przekształconej stronie widać kolor po przekształceniu — atrament, który tak wygląda, to odwrotność.
+        val shown = col or 0xFF000000.toInt()
+        return themeFor(spec)?.reverse()?.ink(shown) ?: shown
     }
 
     /** Pierwotny kolor kreski albo wypełnienia pod punktem strony (zakreślacz ma pierwszeństwo przed pismem, bez rozjaśnienia przez przezroczystość); null, gdy nic tam nie ma. */
@@ -2225,13 +2395,13 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
             invalidate(); return
         }
         when (tool) {
-            Tool.PEN, Tool.CURVE -> penDown(ev, idx)
+            Tool.PEN, Tool.CURVE -> if (tool == Tool.CURVE && ed.curveMode.stepwise) curveDown() else penDown(ev, idx)
             Tool.ERASER -> eraseDown()
             Tool.LASSO -> { lassoDown(); if (mode == Mode.TOOL) postDelayed(holdRunnable, 520L) }
             Tool.SPACE -> spaceDown()
             Tool.TAPE -> tapeDown()
             Tool.PAINTER -> paintDown()
-            Tool.FILL -> if (ed.readOnly || pageIdxAt(curX, curY) < 0) mode = Mode.IGNORE
+            Tool.FILL, Tool.GEO -> if (ed.readOnly || pageIdxAt(curX, curY) < 0) mode = Mode.IGNORE
             Tool.LASER -> { laser.begin(System.currentTimeMillis()); addLaser(curX, curY) }
             else -> {}
         }
@@ -2242,7 +2412,7 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
         curX = ev.getX(idx); curY = ev.getY(idx)
         if (!toolMoved && hypot(curX - downX, curY - downY) > slop) toolMoved = true
         when (activeTool) {
-            Tool.PEN, Tool.CURVE -> penMove(ev, idx)
+            Tool.PEN, Tool.CURVE -> if (curveStep) curveMove() else penMove(ev, idx)
             Tool.ERASER -> {
                 for (h in 0 until ev.historySize) eraseTo(ev.getHistoricalX(idx, h), ev.getHistoricalY(idx, h))
                 eraseTo(curX, curY)
@@ -2263,13 +2433,17 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
     private fun finishTool(ev: MotionEvent, idx: Int, cancel: Boolean) {
         removeCallbacks(holdRunnable); removeCallbacks(curveHold); removeCallbacks(pointHold)
         when (activeTool) {
-            Tool.PEN, Tool.CURVE -> penUp(cancel)
+            Tool.PEN, Tool.CURVE -> if (curveStep) curveUp(cancel) else penUp(cancel)
             Tool.ERASER -> eraseUp(cancel)
             Tool.LASSO -> lassoUp(cancel)
             Tool.SPACE -> spaceUp(cancel)
             Tool.TAPE -> tapeUp(cancel)
             Tool.PAINTER -> paintUp(cancel)
             Tool.FILL -> if (!cancel && !toolMoved) fillTap()
+            Tool.GEO -> if (!cancel && !toolMoved) {
+                val pi = pageIdxAt(curX, curY)
+                if (pi >= 0) ed.geoTap(doc.pages[pi].id, pgX(pi, curX), pgY(pi, curY), 14f * dp / zoom)
+            }
             Tool.TEXT -> if (!cancel && !toolMoved) textTap()
             Tool.LASER -> { laser.end(System.currentTimeMillis()); if (!cancel && !toolMoved && ToolReturn.shouldReturn(settings.returnToPen, true, false, true, false)) ed.returnToWriting() }
             else -> {}
@@ -2499,7 +2673,8 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
         var snapped = shapeSnapped
         val sc = shapeCtrl
         // F17: narzędzie Krzywa zamienia każdą kreskę na gładką krzywą Béziera z uchwytami.
-        val curve = if (!cancel && !snapped && activeTool == Tool.CURVE) Bezier.fit(builder.raw.copyOf(2 * builder.rawCount), max(0.8f, 2f * dp / zoom)) else null
+        // 2b-A10: luźniejsza tolerancja — mało węzłów, wygodna edycja uchwytami.
+        val curve = if (!cancel && !snapped && activeTool == Tool.CURVE) Bezier.fit(builder.raw.copyOf(2 * builder.rawCount), CurveFit.freehandTol(dp / zoom)) else null
         val stroke = when {
             cancel -> null
             sc != null -> Stroke(Ids.next(), builder.penKind, builder.penColor, builder.width, Bezier.sample(sc), line = builder.line, ctrl = sc)
@@ -3212,7 +3387,7 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
         val b = s.bounds
         val f = AxesSnap.frames(doc.content(doc.pages[pi]).elements).firstOrNull { it.area.contains(b.cx, b.cy) } ?: return s
         val pts = AxesSnap.followGrid(s.pts, f, settings.axesSnapDp * dp / zoom) ?: return s
-        return Stroke(s.id, s.pen, s.color, s.width, pts, s.locked, s.poly, s.ellipse, s.line, s.ctrl)
+        return Stroke(s.id, s.pen, s.color, s.width, pts, s.locked, s.poly, s.ellipse, s.line, s.ctrl, s.fill)
     }
 
     /** Początek układu współrzędnych w przesuwanym zaznaczeniu ([lEls]) — liczony raz na podniesienie (2b-A6). */
@@ -3325,12 +3500,29 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
         // Puszczenie palca nie przesuwa już obiektu: ruch z ostatniej, nienarysowanej paczki zdarzeń (drgnięcie przy
         // odrywaniu palca) pomijamy, więc obiekt zostaje dokładnie tam, gdzie był widoczny.
         if (!cancel && (lm == LM.MOVE || lm == LM.SCALE || lm == LM.ROTATE)) lMShown?.let { lM = it }
+        val wasMove = lm == LM.MOVE
         val tgt = if (cancel) lPage else dropPage()
         lLifting = false
         lm = LM.NONE; ln = 0
         vBase = null; rFrame = null; tBase = null; shapeLabel = null
         if (page == null || orig == null || lifted == null) return
         val m = lM
+        // 2b-A7: zaznaczenie upuszczone poza rzędem stanowiska przechodzi do dokumentu pod palcem.
+        val outside = onDropOutside
+        if (!cancel && wasMove && outside != null && (curY < 0f || curY > height) && lEls.isNotEmpty()) {
+            val moved = lEls.map { it.transformed(m) }
+            var b = Bounds.EMPTY
+            for (e in moved) b = b.union(e.bounds)
+            val cx = (layout.left(lPage) + b.cx) * zoom + tx; val cy = (layout.top(lPage) + b.cy) * zoom + ty
+            if (outside(moved, cx, cy)) {
+                // Na stronie stan „podniesiony” to już oryginał bez tych elementów — zapisujemy tylko krok cofania.
+                ed.record(DocEdit.Elements(page.id, ElementsEdit.remove(orig, lIds)))
+                ed.clearSel()
+                lOrig = null; lLifted = null; lEls = emptyList(); lM = Affine.IDENTITY
+                ed.selTick++
+                return
+            }
+        }
         if (cancel || (m.isIdentity && !vertex)) {
             doc.applyElements(page.id, ElementsEdit.diff(lifted, orig))
         } else if (tgt != lPage) {
@@ -3457,7 +3649,7 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
             val s = ed.sel
             if (hit != null && (s == null || hit.id !in s.ids)) { ed.tool = Tool.LASSO; ed.select(page.id, setOf(hit.id)); hasSel = true }
         }
-        ed.ctxMenu = Editor.CtxMenu(sx, sy, pi, hasSel, px, py)
+        ed.ctxMenu = Editor.CtxMenu(sx, sy + hostOffsetY, pi, hasSel, px, py)
         invalidate()
     }
 

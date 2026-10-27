@@ -94,6 +94,7 @@ import androidx.compose.material.icons.rounded.Bookmark
 import androidx.compose.material.icons.rounded.BookmarkBorder
 import androidx.compose.material.icons.rounded.Brush
 import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.Architecture
 import androidx.compose.material.icons.rounded.ContentCopy
 import androidx.compose.material.icons.rounded.ContentCut
 import androidx.compose.material.icons.rounded.ContentPaste
@@ -123,6 +124,7 @@ import androidx.compose.material.icons.rounded.FormatAlignRight
 import androidx.compose.material.icons.rounded.FormatAlignJustify
 import androidx.compose.material.icons.rounded.Interests
 import androidx.compose.material.icons.rounded.ViewAgenda
+import androidx.compose.material.icons.rounded.Dashboard
 import androidx.compose.material.icons.rounded.PhotoCamera
 import androidx.compose.material.icons.rounded.ExpandLess
 import androidx.compose.material.icons.rounded.ExpandMore
@@ -152,6 +154,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -233,6 +236,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import com.mdev.mnotes.editor.CropRatio
 import com.mdev.mnotes.editor.Editor
 import com.mdev.mnotes.editor.NoteView
+import com.mdev.mnotes.editor.Station
 import com.mdev.mnotes.editor.T
 import com.mdev.mnotes.editor.Tool
 import kotlin.math.roundToInt
@@ -271,15 +275,19 @@ fun penName(k: PenKind) = when (k) {
  * (także górnego), a panele i okna kontekstowe kotwiczą się do krawędzi strony.
  */
 @Composable
-fun EditorScreen(ed: Editor, tabs: TabsCtl, onExit: () -> Unit, onSettings: () -> Unit, onShortcuts: () -> Unit, onColorSets: () -> Unit) {
+fun EditorScreen(main: Editor, tabs: TabsCtl, onExit: () -> Unit, onSettings: () -> Unit, onShortcuts: () -> Unit, onColorSets: () -> Unit) {
     val ctx = LocalContext.current
+    // 2b-A7: stanowisko — otwarty zeszyt i dokumenty dołożone pod nim; paski, panele i menu działają na aktywnym rzędzie.
+    val st = remember(main) { main.station ?: Station(ctx, main) }
+    DisposableEffect(st) { onDispose { st.closeAll() } }
+    val ed = st.active
     val set = ed.settings
     val m = mint
     var panel by remember { mutableStateOf<Panel?>(null) }
     var palette by remember { mutableStateOf(false) }
     var goTo by remember { mutableStateOf(false) }
     val focus = remember { FocusRequester() }
-    val dialogOpen = palette || goTo || ed.exportOpen || ed.axesOpen || ed.stickersOpen || ed.stickerSaveOpen || ed.dualPick || ed.textReq != null
+    val dialogOpen = palette || goTo || ed.exportOpen || ed.axesOpen || ed.stickersOpen || ed.stickerSaveOpen || st.picking || st.listing || ed.textReq != null
     val searchTyping = ed.searchOpen && fieldFocused
     val widthDp = androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp
     val showMenu = ed.chrome && menuBarVisible(set.menuBar, widthDp)
@@ -296,7 +304,7 @@ fun EditorScreen(ed: Editor, tabs: TabsCtl, onExit: () -> Unit, onSettings: () -
 
     fun toggle(p: Panel) { if (p == Panel.PAGES && dock) set.dockPages = false else panel = if (panel == p) null else p }
     // Pipeta chowa panele, żeby strona była widoczna.
-    LaunchedEffect(ed.tool) { if (ed.tool != Tool.PAINTER) { ed.formatPick = false; ed.quickFormat = false } }
+    LaunchedEffect(ed.tool) { if (ed.tool != Tool.PAINTER) { ed.formatPick = false; ed.quickFormat = false }; if (ed.tool != Tool.GEO) ed.geoReset() }
     // Szybki przycisk „Pobierz format” gaśnie sam po czasie z ustawień; w trakcie pobierania formatu czas stoi.
     LaunchedEffect(ed.quickFormat, ed.formatPick) {
         if (ed.quickFormat && !ed.formatPick && set.painterQuickSec > 0) { delay(set.painterQuickSec * 1000L); ed.quickFormat = false }
@@ -331,7 +339,7 @@ fun EditorScreen(ed: Editor, tabs: TabsCtl, onExit: () -> Unit, onSettings: () -
         else -> set.optionsPos
     }
 
-    val cmds = remember(set.keyMap, tabs.on) {
+    val cmds = remember(set.keyMap, tabs.on, ed) {
         commandList(ed, set, ::pickTool, { panel = it }, ::pickImage, { goTo = true }, ::applyLayout, onSettings, onShortcuts, { palette = true }, onExit, tabs)
     }
 
@@ -368,8 +376,8 @@ fun EditorScreen(ed: Editor, tabs: TabsCtl, onExit: () -> Unit, onSettings: () -
                 if (strip == 0) PenStrip(ed, set, 0, pos, panel, onColorSets) { toggle(it) }
                 Box(Modifier.weight(1f).fillMaxHeight()) {
                     // Pierwsze dotknięcie strony (pióro lub palec) zamyka otwarty panel, więc nigdy nie zasłania pisania.
-                    // F4: płótno z jednym zeszytem albo dwoma rzędami (drugi zeszyt poniżej).
-                    EditorCanvas(ed) { panel = null }
+                    // 2b-A7: płótno z jednym zeszytem albo stanowisko (dokumenty jeden pod drugim na wspólnym polu).
+                    EditorCanvas(st) { panel = null }
                     // Panele i okienka kotwiczą się do krawędzi strony, tuż przy pasku, z którego wyszły.
                     Box(Modifier.fillMaxSize().imePadding()) {
                         // Pod panelami: otwarty panel zasłania kapsułę, a pierwsze dotknięcie strony go zamyka.
@@ -401,6 +409,8 @@ fun EditorScreen(ed: Editor, tabs: TabsCtl, onExit: () -> Unit, onSettings: () -
                         }
                         SelectionBar(ed, panel, { toggle(it) }, { textReq(ed) })
                         LectureControls(ed)
+                        if (ed.tool == Tool.GEO && !ed.readOnly) GeoHint(ed)
+                        if (ed.tool == Tool.CURVE && !ed.readOnly && ed.curveMode.stepwise) CurveHint(ed)
                         // A2-8: kapsuła wykładu, pasek szukania i dymek jedno nad drugim.
                         val stack = BottomStack.bottoms(ed.lectureMode, ed.searchOpen)
                         if (ed.searchOpen) SearchBar(ed, extraBottom = (stack[0] - BottomStack.SEARCH_BOTTOM).dp)
@@ -421,7 +431,8 @@ fun EditorScreen(ed: Editor, tabs: TabsCtl, onExit: () -> Unit, onSettings: () -
         if (ed.exportOpen) ExportDialog(ed.nbId, ed.pageIndex, { ed.doc.flush() }) { ed.exportOpen = false }
         if (ed.axesOpen) AxesDialog(ed) { ed.axesOpen = false }
         if (ed.stickersOpen) StickersDialog(ed) { ed.stickersOpen = false }
-        if (ed.dualPick) DualPickDialog(ed) { ed.dualPick = false }
+        if (st.picking) StationPickDialog(st) { st.picking = false }
+        if (st.listing) StationsDialog(st, tabs.open) { st.listing = false }
         if (ed.stickerSaveOpen) SaveStickerDialog(ed) { ed.stickerSaveOpen = false }
         if (panel == Panel.PHONE) Flavor.lab?.PhonePanel(ed) { panel = null }
         Flavor.lab?.Overlay(ed)
@@ -681,6 +692,10 @@ private fun ToolBar(ed: Editor, set: com.mdev.mnotes.data.Settings, vertical: Bo
     tool("tape", 15, Icons.Rounded.VisibilityOff, T.t("Taśma — zakryj fragment (do nauki)", "Tape — cover an area (for study)"), "K", Tool.TAPE, Panel.TAPE)
     tool("space", 16, Icons.Rounded.UnfoldMore, T.t("Wstaw / usuń odstęp", "Insert / remove space"), "X", Tool.SPACE, null)
     icon("ruler", 2, 13, Icons.Rounded.Straighten, T.t("Linijka", "Ruler"), "R", !ro, ed.ruler, pin = false) { ed.toggleRuler() }
+    // 2b-A8: Geometria — osobne narzędzie z listwą konstrukcji; niski priorytet (na wąskim pasku pod „⋯”).
+    items += BarItem("geometry", 2, 20, T.t("Geometria — konstrukcje jak cyrklem", "Geometry — compass-and-ruler constructions"), null, !ro, ed.tool == Tool.GEO, ed.tool == Tool.GEO, { pickTool(Tool.GEO, null) }) { c, s ->
+        Icon(Icons.Rounded.Architecture, null, Modifier.size(s), tint = c)
+    }
     // A2-13: kątomierz obok linijki; niski priorytet, więc na wąskim pasku trafia pod „⋯”.
     items += BarItem("protractor", 2, 19, T.t("Kątomierz — kreska ze środka idzie po promieniu", "Protractor — a stroke from the centre follows a ray"), null, !ro, ed.protractor, false, { ed.toggleProtractor() }) { c, s ->
         ProtractorGlyph(c, Modifier.size(s))
@@ -817,6 +832,8 @@ private fun PenStrip(ed: Editor, set: com.mdev.mnotes.data.Settings, side: Int, 
 private fun PenStripItems(ed: Editor, set: com.mdev.mnotes.data.Settings, vertical: Boolean, panel: Panel?, onColorSets: () -> Unit, toggle: (Panel) -> Unit) {
     val sz = barSize(set)
     val isz = barIcon(set)
+    // 2b-A8: Geometria ma własną listwę — konstrukcje do wyboru.
+    if (ed.tool == Tool.GEO) { GeoStripItems(ed, set, vertical); return }
     // F7/2b-A2: w trybie „opcje narzędzia” z gumką, lassem albo laserem w ręku listwa pokazuje ich opcje i przycisk powrotu
     // do pisania; w trybie domyślnym zostaje przy pisaniu, a opcje wyskakują przy ikonie narzędzia ([HelperMenu]).
     val helper = helperOf(ed.tool)
@@ -836,6 +853,16 @@ private fun PenStripItems(ed: Editor, set: com.mdev.mnotes.data.Settings, vertic
     val scroll = rememberScrollState()
     var menuFor by remember { mutableStateOf<Int?>(null) }
     Lin(vertical, Modifier.padding(4.dp).then(if (vertical) Modifier.verticalScroll(scroll) else Modifier.horizontalScroll(scroll)).graphicsLayer { alpha = if (live) 1f else 0.55f }) {
+        // 2b-A10: z Krzywą w ręku listwa zaczyna się od jej trybów (i wypełnienia konturu), dalej pióro jak zwykle.
+        if (ed.tool == Tool.CURVE) {
+            for (cm in com.mdev.mnotes.core.shapes.CurveMode.entries) {
+                ToolBtn(T.t(cm.pl, cm.en), { ed.curveChoose(cm) }, selected = ed.curveMode == cm, size = sz) { c -> GlyphCanvas(CurveGlyphParts.parts(cm), c, c, Modifier.size(isz + 2.dp)) }
+            }
+            if (ed.curveMode.stepwise) ToolBtn(
+                T.t("Wypełniaj zamknięte krzywe kolorem pisma", "Fill closed curves with the ink colour"), { set.curveFill = !set.curveFill; ed.view?.invalidate() }, selected = set.curveFill, size = sz,
+            ) { c -> Icon(Icons.Rounded.FormatColorFill, null, Modifier.size(isz), tint = c) }
+            BarSep(vertical)
+        }
         for (i in 0 until PenKit.WIDTHS) {
             val on = i == slot.widthIndex
             ToolBtn(
@@ -871,6 +898,52 @@ private fun PenStripItems(ed: Editor, set: com.mdev.mnotes.data.Settings, vertic
 
 /** Rozmiary gumki na listwie (pt); ponowne dotknięcie wybranego otwiera panel z suwakiem. */
 private val ERASER_SIZES = floatArrayOf(4f, 14f, 32f)
+
+/** Listwa narzędzia Geometria (2b-A8): glify wszystkich konstrukcji; wybrana w akcencie, podpowiedź z nazwą. */
+@Composable
+private fun GeoStripItems(ed: Editor, set: com.mdev.mnotes.data.Settings, vertical: Boolean) {
+    val sz = barSize(set); val isz = barIcon(set)
+    val scroll = rememberScrollState()
+    Lin(vertical, Modifier.padding(4.dp).then(if (vertical) Modifier.verticalScroll(scroll) else Modifier.horizontalScroll(scroll))) {
+        com.mdev.mnotes.core.geom.GeoTool.Kind.entries.forEachIndexed { i, k ->
+            // Grupy: okręgi i punkty, proste i kąty, przecięcia, trójkąt, przekształcenia.
+            if (i == 3 || i == 8 || i == 11 || i == 15) BarSep(vertical)
+            ToolBtn(T.t(k.pl, k.en), { ed.geoChoose(k) }, selected = ed.geoKind == k, size = sz) { c -> GlyphCanvas(GeoGlyphParts.parts(k), c, c, Modifier.size(isz + 2.dp)) }
+        }
+    }
+}
+
+/** Podpowiedź narzędzia Geometria u góry płótna: konstrukcja i następny krok; ✕ zaczyna wskazywanie od nowa. */
+@Composable
+private fun androidx.compose.foundation.layout.BoxScope.GeoHint(ed: Editor) {
+    val m = mint
+    FloatingCard(Modifier.align(Alignment.TopCenter).padding(top = 10.dp).panelEnter()) {
+        Row(Modifier.padding(start = 14.dp, end = 4.dp, top = 6.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(T.t(ed.geoKind.pl, ed.geoKind.en), style = MaterialTheme.typography.labelLarge, color = m.accentText)
+            Text("·  " + ed.geoHint, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            if (ed.geoInputs.isNotEmpty()) IconBtn(Icons.Rounded.Close, T.t("Zacznij wskazywanie od nowa", "Start picking again"), { ed.geoReset() }, size = 30.dp, iconSize = 16.dp)
+            else Spacer(Modifier.width(10.dp))
+        }
+    }
+}
+
+/** Podpowiedź Krzywej krok po kroku (2b-A10): tryb i następny ruch; ✓ kończy krzywą, ✕ ją porzuca. */
+@Composable
+private fun androidx.compose.foundation.layout.BoxScope.CurveHint(ed: Editor) {
+    val m = mint
+    ed.curveTick
+    val started = (ed.curveDraft?.count ?: 0) > 0
+    FloatingCard(Modifier.align(Alignment.TopCenter).padding(top = 10.dp).panelEnter()) {
+        Row(Modifier.padding(start = 14.dp, end = 4.dp, top = 6.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(T.t(ed.curveMode.pl, ed.curveMode.en), style = MaterialTheme.typography.labelLarge, color = m.accentText)
+            Text("·  " + ed.curveHint, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            if (started) {
+                if ((ed.curveDraft?.count ?: 0) >= 2) IconBtn(Icons.Rounded.Check, T.t("Zakończ krzywą", "Finish curve"), { ed.curveCommit() }, size = 30.dp, iconSize = 16.dp)
+                IconBtn(Icons.Rounded.Close, T.t("Porzuć krzywą", "Discard curve"), { ed.curveCancel() }, size = 30.dp, iconSize = 16.dp)
+            } else Spacer(Modifier.width(10.dp))
+        }
+    }
+}
 
 /** Pozycje paska, przy których wyskakuje menu opcji narzędzia pomocniczego (2b-A2). */
 private val HELPER_IDS = mapOf("eraser" to HelperStrip.Helper.ERASER, "lasso" to HelperStrip.Helper.LASSO, "laser" to HelperStrip.Helper.LASER)
@@ -1924,14 +1997,23 @@ private fun MoreMenu(ed: Editor, set: com.mdev.mnotes.data.Settings, close: () -
                 Chip(T.t("Poziomo", "Horizontal"), ed.layoutMode == 1, { applyLayout(1) })
                 Chip(T.t("Pojedyncza", "Single"), ed.layoutMode == 2, { applyLayout(2) })
             }
+            // 2b-A9: tryb stron dla wszystkich zeszytów (F11 w „Stylu strony” zostaje przełącznikiem jednej strony).
+            SectionLabel(T.t("Strony", "Pages"))
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                for ((mode, label) in pageThemeLabels()) Chip(label, set.pageTheme == mode, {
+                    set.pageTheme = mode
+                    (ed.station?.rows ?: listOf(ed)).forEach { it.view?.invalidate() }
+                })
+            }
             HorizontalDivider(Modifier.padding(vertical = 4.dp), color = m.line)
             MenuRow(Icons.Rounded.FitScreen, T.t("Dopasuj do szerokości", "Fit width"), "Ctrl+0") { ed.view?.fitWidth(); close() }
             MenuRow(Icons.Rounded.Palette, T.t("Styl strony…", "Page style…"), "") { openStyle() }
             if (!ed.readOnly) MenuRow(Icons.Rounded.ShowChart, T.t("Układ współrzędnych…", "Coordinate axes…"), "") { close(); ed.axesOpen = true }
             if (!ed.readOnly) MenuRow(Icons.Rounded.Interests, T.t("Naklejki…", "Stickers…"), "") { close(); ed.stickersOpen = true }
             if (!ed.readOnly) MenuRow(Icons.Rounded.PhotoCamera, T.t("Tryb wykładu…", "Lecture mode…"), "") { close(); ed.lectureMode = true; ed.lectureShootTick++ }
-            if (ed.dualId == null) MenuRow(Icons.Rounded.ViewAgenda, T.t("Drugi zeszyt poniżej…", "Second notebook below…"), "") { close(); ed.dualPick = true }
-            else MenuRow(Icons.Rounded.ViewAgenda, T.t("Zamknij drugi zeszyt", "Close the second notebook"), "") { close(); ed.dualId = null }
+            // 2b-A7: stanowisko — kolejne dokumenty pod spodem i zapisane układy (przełączane jak karty).
+            MenuRow(Icons.Rounded.ViewAgenda, T.t("Dołóż zeszyt poniżej…", "Add notebook below…"), "") { close(); ed.station?.picking = true }
+            MenuRow(Icons.Rounded.Dashboard, T.t("Stanowiska…", "Workspaces…"), "") { close(); ed.station?.listing = true }
             MenuRow(Icons.Rounded.Fullscreen, T.t("Ukryj paski (tryb skupienia)", "Hide bars (focus mode)"), "F11") { ed.chrome = false; close() }
             ToggleRow(T.t("Tylko do odczytu", "Read-only"), ed.readOnly) { ed.readOnly = it }
             ToggleRow(T.t("Okno powiększenia (pisz w powiększeniu)", "Zoom window (write magnified)"), ed.zoomWin) { ed.toggleZoomWin(); close() }
@@ -1944,6 +2026,12 @@ private fun MoreMenu(ed: Editor, set: com.mdev.mnotes.data.Settings, close: () -
         }
     }
 }
+
+fun pageThemeLabels() = listOf(
+    com.mdev.mnotes.core.color.ThemeMap.MIXED to T.t("Jak powstały", "As made"),
+    com.mdev.mnotes.core.color.ThemeMap.LIGHT to T.t("Jasne", "Light"),
+    com.mdev.mnotes.core.color.ThemeMap.DARK to T.t("Ciemne", "Dark"),
+)
 
 @Composable
 fun MenuRow(icon: ImageVector, text: String, hint: String, onClick: () -> Unit) {
@@ -2011,10 +2099,18 @@ private fun StylePanel(ed: Editor, close: () -> Unit) {
             }
             ToggleRow(T.t("Zastosuj do całego zeszytu", "Apply to whole notebook"), all) { all = it }
             // F11: ciemny tryb dokumentu także dla stron PDF (w przeciwieństwie do wzoru i papieru).
-            ToggleRow(T.t("Odwróć kolory (ciemny tryb)", "Invert colours (dark mode)"), spec.inverted) { on ->
+            ToggleRow(T.t("Odwróć kolory tej strony (F11)", "Invert this page's colours (F11)"), spec.inverted) { on ->
                 if (all) ed.restyleAll { it.withInverted(on) } else ed.setSpec(idx, spec.withInverted(on))
             }
-            if (spec.inverted) Text(T.t("Jasność odwrócona, odcienie zostają. Tylko na ekranie: eksport i druk są w oryginale.", "Brightness inverted, hues kept. Screen only: export and print stay original."), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            if (ed.settings.pageTheme != com.mdev.mnotes.core.color.ThemeMap.MIXED) Text(
+                T.t("Teraz wszystkie strony są w trybie z „⋮” → Strony; ten przełącznik zadziała po wybraniu tam „Jak powstały”.",
+                    "All pages now follow “⋮” → Pages; this switch works again after choosing “As made” there."),
+                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+            ) else if (spec.inverted) Text(
+                T.t("Jasne tło staje się ciemne i odwrotnie; kolory pisma zostają rozpoznawalne. Tylko na ekranie: eksport jest w oryginale, chyba że w oknie eksportu włączysz „Kolory jak na ekranie”.",
+                    "Light background becomes dark and vice versa; ink colours stay recognisable. Screen only: export stays original unless you turn on “Colours as on screen” in the export window."),
+                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
             if (isPdf) Text(T.t("Strona PDF — wzór i papier pochodzą z dokumentu.", "PDF page — template and paper come from the document."), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             else {
                 SectionLabel(T.t("Wzór", "Template"))
@@ -2061,8 +2157,10 @@ private fun editorKey(e: androidx.compose.ui.input.key.KeyEvent, ed: Editor, cmd
     } else if (!fieldFocused) {
         when (k) {
             Key.Backspace -> if (ed.sel != null && !ed.readOnly && ed.cut == null && ed.crop == null) { ed.deleteSel(); return true }
+            // 2b-A10: Enter kończy krzywą stawianą punktami, Esc ją porzuca.
+            Key.Enter -> if (ed.curveDraft?.isEmpty == false) { ed.curveCommit(); return true }
             Key.Escape -> {
-                if (ed.pipette != null) ed.cancelPipette() else if (ed.cut != null) ed.cancelCut() else if (ed.crop != null) ed.cancelCrop() else if (ed.searchOpen) ed.closeSearch() else if (ed.sel != null) ed.clearSel() else if (!ed.chrome) ed.chrome = true else return false
+                if (ed.curveDraft?.isEmpty == false) ed.curveCancel() else if (ed.pipette != null) ed.cancelPipette() else if (ed.cut != null) ed.cancelCut() else if (ed.crop != null) ed.cancelCrop() else if (ed.searchOpen) ed.closeSearch() else if (ed.sel != null) ed.clearSel() else if (!ed.chrome) ed.chrome = true else return false
                 return true
             }
             Key.DirectionLeft, Key.DirectionRight, Key.DirectionUp, Key.DirectionDown -> if (ed.sel != null && !ed.readOnly) {

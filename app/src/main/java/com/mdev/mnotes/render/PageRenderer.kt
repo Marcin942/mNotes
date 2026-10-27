@@ -14,6 +14,7 @@ import android.graphics.Typeface
 import android.text.Layout
 import android.text.StaticLayout
 import android.text.TextPaint
+import com.mdev.mnotes.core.color.ThemeMap
 import com.mdev.mnotes.core.geom.Bounds
 import com.mdev.mnotes.core.geom.FloatList
 import com.mdev.mnotes.core.model.Element
@@ -75,23 +76,42 @@ class PageRenderer(private val assets: Assets?) {
         return geoms.getOrPut(spec) { TemplateGeometry.build(spec) }
     }
 
+    /**
+     * 2b-A9: przekształcenie trybu ciemnego/jasnego strony rysowanej teraz (null — kolory jak w pliku). Ustawia je ten,
+     * kto rysuje (kafelki, miniatury, eksport „jak na ekranie”); [themePhotos] — odwracać też wstawione zdjęcia.
+     */
+    var theme: ThemeMap.Transform? = null
+    var themePhotos = false
+    private var themeFilterFor: ThemeMap.Transform? = null
+    private var themeFilter: android.graphics.ColorMatrixColorFilter? = null
+
+    /** Filtr tła PDF (i zdjęć z [themePhotos]) dla bieżącego [theme]: odwrócenie jasności z odcieniem, biel → nowy papier. */
+    fun themeImageFilter(): android.graphics.ColorMatrixColorFilter? {
+        val t = theme ?: return null
+        if (themeFilterFor !== t) { themeFilter = android.graphics.ColorMatrixColorFilter(android.graphics.ColorMatrix(t.imageMatrix)); themeFilterFor = t }
+        return themeFilter
+    }
+
     /** Papier + wzór (lub tło PDF z [pdfBg], jeśli podane). [scale] = px na pt, służy do minimalnej grubości linii. */
     fun drawPaper(c: Canvas, spec: PageSpec, scale: Float, pdfBg: Bitmap? = null) {
+        val t = theme
         paint.reset(); paint.isAntiAlias = true
         paint.style = Paint.Style.FILL
-        paint.color = spec.paper
+        paint.color = t?.dstPaper ?: spec.paper
         c.drawRect(0f, 0f, spec.w, spec.h, paint)
         if (spec.pdf != null) {
             if (pdfBg != null) {
                 rect.set(0f, 0f, spec.w, spec.h)
+                bmpPaint.colorFilter = themeImageFilter()
                 c.drawBitmap(pdfBg, null, rect, bmpPaint)
+                bmpPaint.colorFilter = null
             }
             return
         }
         val g = geom(spec)
         if (g.isEmpty) return
         val lw = max(spec.lineWidth, 0.9f / scale)
-        paint.color = spec.line
+        paint.color = t?.ink(spec.line) ?: spec.line
         paint.style = Paint.Style.STROKE
         paint.strokeCap = Paint.Cap.BUTT
         if (g.lines.isNotEmpty()) { paint.strokeWidth = lw; c.drawLines(g.lines, paint) }
@@ -118,12 +138,19 @@ class PageRenderer(private val assets: Assets?) {
     }
 
     fun drawElement(c: Canvas, nb: String, e: Element, scale: Float, decodeImages: Boolean, dark: Boolean = false) {
+        val t = theme
+        // Na przekształconej stronie papier ma jasność docelową, więc zakreślacz miesza się jak na niej.
+        val dk = t?.toDark ?: dark
         when (e) {
-            is Stroke -> drawStrokeData(c, e.pen, e.color, e.width, e.pts, e.count, scale, dark, e.poly, e.line, e.poly || e.ellipse)
-            is TextBox -> drawText(c, e)
+            is Stroke -> {
+                if (e.fill != 0 && e.count >= 3) drawStrokeFill(c, e.pts, e.count, if (t == null) e.fill else t.highlighter(e.fill), dk)
+                val col = if (t == null) e.color else if (e.pen == PenKind.HIGHLIGHTER) t.highlighter(e.color) else t.ink(e.color)
+                drawStrokeData(c, e.pen, col, e.width, e.pts, e.count, scale, dk, e.poly, e.line, e.poly || e.ellipse)
+            }
+            is TextBox -> drawText(c, if (t == null) e else e.copy(color = t.ink(e.color), fill = if (e.fill == 0) 0 else t.ink(e.fill)))
             is ImageEl -> drawImage(c, nb, e, decodeImages)
             is TapeEl -> drawTape(c, e)
-            is FillEl -> drawFill(c, e, dark)
+            is FillEl -> drawFill(c, if (t == null) e else e.copy(color = if (e.hl) t.highlighter(e.color) else t.ink(e.color)), dk)
         }
     }
 
@@ -142,6 +169,21 @@ class PageRenderer(private val assets: Assets?) {
         paint.color = if (t.hidden) darken(rgb) else rgb or (0xB0 shl 24)
         c.drawRoundRect(t.cx - t.w / 2, t.cy - t.h / 2, t.cx + t.w / 2, t.cy + t.h / 2, rad, rad, paint)
         c.restore()
+    }
+
+    /** Wypełnienie zamkniętej krzywej (2b-A10): wnętrze łamanej [pts] jak słaby zakreślacz, pod kreską. */
+    fun drawStrokeFill(c: Canvas, pts: FloatArray, n: Int, color: Int, dark: Boolean) {
+        paint.reset(); paint.isAntiAlias = true
+        paint.style = Paint.Style.FILL
+        styleHighlighter(color, FILL_ALPHA, dark)
+        path.rewind()
+        path.fillType = Path.FillType.EVEN_ODD
+        path.moveTo(pts[0], pts[1])
+        for (i in 1 until n) path.lineTo(pts[3 * i], pts[3 * i + 1])
+        path.close()
+        c.drawPath(path, paint)
+        path.rewind()
+        path.fillType = Path.FillType.WINDING
     }
 
     /** Wypełnienie z wiaderka: kontury parzysto-nieparzyście, jako zakreślacz albo kolor jednolity. */
@@ -332,6 +374,12 @@ class PageRenderer(private val assets: Assets?) {
     private var fxFilterCached: android.graphics.ColorMatrixColorFilter? = null
 
     private fun fxFilter(fx: com.mdev.mnotes.core.model.ImageFx): android.graphics.ColorMatrixColorFilter? {
+        // 2b-A9: zdjęcia odwracamy tylko na życzenie (domyślnie zostają jak w aparacie).
+        val t = theme
+        if (t != null && themePhotos) {
+            if (fx.isNone) return themeImageFilter()
+            return android.graphics.ColorMatrixColorFilter(android.graphics.ColorMatrix(fx.matrix()).apply { postConcat(android.graphics.ColorMatrix(t.imageMatrix)) })
+        }
         if (fx.isNone) return null
         if (fx != fxCached) {
             fxFilterCached = android.graphics.ColorMatrixColorFilter(android.graphics.ColorMatrix(fx.matrix()))
@@ -396,5 +444,7 @@ class PageRenderer(private val assets: Assets?) {
     private companion object {
         /** Gęstość kopii przyciętego obrazu w eksporcie (px na pt): ok. 290 dpi, więcej niż potrzeba do druku. */
         const val BAKE_PX_PER_PT = 4f
+        /** Krycie wypełnienia krzywej: ok. ⅓ zakreślacza — kolor widać, pismo pod spodem też. */
+        const val FILL_ALPHA = 0.28f
     }
 }

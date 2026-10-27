@@ -93,6 +93,8 @@ class Settings(ctx: Context) {
     var holdToCurve by Pref("input.hold_curve", false)   // F18: nierozpoznana kreska trzymana dalej staje się gładką krzywą; domyślnie wył. (A2-3: pismo)
     var holdCurveHinted by Pref("input.hold_curve_hinted", false)  // dymek „wyłączysz to w Ustawieniach” pokazany już raz
     var curveHoldMs by Pref("input.hold_curve_ms", 350)  // ile dłużej trzymać (ms) po nieudanym rozpoznaniu kształtu
+    var curveMode by Pref("curve.mode", 0)               // 2b-A10: tryb narzędzia Krzywa (core/shapes/CurveMode)
+    var curveFill by Pref("curve.fill", false)           // 2b-A10: zamknięta krzywa dostaje wypełnienie w kolorze pisma
     var twoFingerUndo by Pref("input.two_finger_undo", true)
     var pullAddPage by Pref("input.pull_add_page", true)
     var autoTextPage by Pref("pages.auto_text", true)  // nowa strona, gdy tekst wyjdzie za ostatnią albo zacznie się za nią (F10)
@@ -133,8 +135,11 @@ class Settings(ctx: Context) {
     var mathSum by Pref("math.sum", true)
     var mathIntegral by Pref("math.integral", false)
     var mathHinted by Pref("math.hinted", false)          // dymek „gdzie to wyłączyć” po pierwszej zamianie (A2-4) już był
-    var dualFraction by Pref("dual.fraction", 0.5f)      // F4: część wysokości dla górnego zeszytu
-    var dualSyncZoom by Pref("dual.sync_zoom", true)     // F4: wspólne powiększenie obu rzędów
+    var stations by Pref("station.saved", "")            // 2b-A7: zapisane stanowiska (Workbench.encode)
+    // 2b-A9: tryb stron (ThemeMap.MIXED / LIGHT / DARK), odwracanie zdjęć, eksport PDF jak na ekranie (domyślnie oryginał)
+    var pageTheme by Pref("pages.theme", com.mdev.mnotes.core.color.ThemeMap.MIXED)
+    var pageThemePhotos by Pref("pages.theme_photos", false)
+    var exportAsScreen by Pref("export.as_screen", false)
     var mathText by Pref("text.math_unicode", true)      // L2: \alpha, x^2, a_1 → α, x², a₁ w polach tekstu
     var constructNames by Pref("construct.names", true)  // L1 (A2-9): konstrukcje podpisują punkty A, B, C, O, H…
     var paletteRecent by Pref("palette.recent", "")      // pomysł Fable 2: ostatnio użyte polecenia palety (id po przecinku)

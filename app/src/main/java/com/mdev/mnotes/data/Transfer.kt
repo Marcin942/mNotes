@@ -17,6 +17,7 @@ import com.mdev.mnotes.core.model.Template
 import com.mdev.mnotes.core.model.TapeEl
 import com.mdev.mnotes.core.model.TextBox
 import com.mdev.mnotes.core.codec.MnotesArchive
+import com.mdev.mnotes.core.color.ThemeMap
 import com.mdev.mnotes.core.codec.PageCodec
 import com.mdev.mnotes.core.geom.FloatList
 import com.mdev.mnotes.core.pen.LineStyle
@@ -51,6 +52,10 @@ enum class ExportFormat(val ext: String, val mime: String, val multi: Boolean) {
 /** Eksport zeszytu do otwartych formatów. Wywoływać poza wątkiem UI (po `doc.flush()` i barierze zapisu repo.io). */
 class Exporter(private val repo: Repository, private val assets: Assets, private val pdf: PdfPool) {
     private val renderer = PageRenderer(assets)
+
+    /** „Jak na ekranie” (PDF i PNG): tryb stron z [ThemeMap]; null — strony w oryginale, jak powstały. */
+    var screenTheme: Int? = null
+    var screenPhotos = false
 
     /** Czeka, aż wszystkie zaplanowane zapisy stron trafią na dysk. */
     fun awaitWrites() { runCatching { repo.io.submit {}.get() } }
@@ -143,8 +148,13 @@ class Exporter(private val repo: Repository, private val assets: Assets, private
     private fun drawPage(c: Canvas, nb: String, p: PageMeta, scale: Float, bgScale: Float) {
         val spec = p.spec
         val bg = spec.pdf?.let { pdf.render(nb, it.asset, it.page, (spec.w * bgScale).roundToInt(), (spec.h * bgScale).roundToInt()) }
-        renderer.drawPaper(c, spec, scale, bg)
-        renderer.drawElements(c, nb, repo.readPage(nb, p.id), 0, null, scale, true, spec.darkPaper)
+        val t = screenTheme?.let { ThemeMap.forPage(spec.paper, spec.inverted, it) }
+        renderer.theme = t
+        renderer.themePhotos = screenPhotos
+        try {
+            renderer.drawPaper(c, spec, scale, bg)
+            renderer.drawElements(c, nb, repo.readPage(nb, p.id), 0, null, scale, true, t?.toDark ?: spec.darkPaper)
+        } finally { renderer.theme = null }
     }
 
     // — PNG i SVG: jedna strona = jeden plik; więcej stron = archiwum ZIP —
@@ -280,6 +290,12 @@ class Exporter(private val repo: Repository, private val assets: Assets, private
         val n = s.count
         if (n <= 0) return
         val pts = s.pts
+        if (s.fill != 0 && n >= 3) {
+            // Jak PageRenderer.drawStrokeFill: słabe wypełnienie mnożone z papierem (na ciemnym — rozświetlane).
+            sb.append("<path fill=\"${hex(s.fill)}\" fill-rule=\"evenodd\" opacity=\"${f(0.28f * (if (dark) 0.84f else 1f))}\" style=\"mix-blend-mode:${if (dark) "screen" else "multiply"}\" d=\"M${f(pts[0])} ${f(pts[1])}")
+            for (i in 1 until n) sb.append("L${f(pts[3 * i])} ${f(pts[3 * i + 1])}")
+            sb.append("Z\"/>\n")
+        }
         val hl = s.pen == PenKind.HIGHLIGHTER
         val alpha = PenSpec.of(s.pen).alpha * (if (hl && dark) 0.84f else 1f)
         val common = (if (alpha < 0.999f) " opacity=\"${f(alpha)}\"" else "") + (if (hl) " style=\"mix-blend-mode:${if (dark) "screen" else "multiply"}\"" else "")

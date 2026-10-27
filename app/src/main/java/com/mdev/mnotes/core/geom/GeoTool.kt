@@ -1,0 +1,196 @@
+package com.mdev.mnotes.core.geom
+
+import com.mdev.mnotes.core.edit.EraseMath
+import com.mdev.mnotes.core.geom.Construct.Circle
+import com.mdev.mnotes.core.geom.Construct.Line
+import com.mdev.mnotes.core.geom.Construct.P
+import com.mdev.mnotes.core.model.BoxElement
+import com.mdev.mnotes.core.model.Element
+import com.mdev.mnotes.core.model.Ids
+import com.mdev.mnotes.core.model.Stroke
+import com.mdev.mnotes.core.shapes.ShapeBox
+import kotlin.math.PI
+import kotlin.math.abs
+import kotlin.math.hypot
+import kotlin.math.max
+
+/**
+ * Narzędzie „Geometria” (2b-A8): konstrukcje jak cyrklem i linijką. Wybiera się konstrukcję, potem wskazuje na stronie jej
+ * wejścia po kolei (okrąg, odcinek, punkt…) z podpowiedzią „wskaż drugi okrąg”. Wynik to zwykłe elementy (pomocnicze
+ * przerywane, nazwy punktów jak w A2-9) z tego samego kodu co menu „Konstrukcja ▸” ([ConstructOps]).
+ */
+object GeoTool {
+    enum class In { POINT, LINE, CIRCLE, TRIANGLE, OBJECT }
+
+    enum class Kind(val inputs: List<In>, val pl: String, val en: String) {
+        COMPASS(listOf(In.POINT, In.POINT), "Okrąg: środek i punkt na nim", "Circle: centre and a point on it"),
+        CIRCLE3(listOf(In.POINT, In.POINT, In.POINT), "Okrąg przez 3 punkty", "Circle through 3 points"),
+        CENTER(listOf(In.CIRCLE), "Środek okręgu", "Circle centre"),
+        BISECTOR(listOf(In.LINE), "Symetralna odcinka", "Perpendicular bisector"),
+        PERP(listOf(In.LINE, In.POINT), "Prostopadła przez punkt", "Perpendicular through a point"),
+        PARALLEL(listOf(In.LINE, In.POINT), "Równoległa przez punkt", "Parallel through a point"),
+        ANGLE(listOf(In.LINE, In.LINE), "Kąt: łuk i miara", "Angle: arc and value"),
+        ANGLE_BISECTOR(listOf(In.LINE, In.LINE), "Dwusieczna kąta", "Angle bisector"),
+        XLL(listOf(In.LINE, In.LINE), "Przecięcie prostych", "Intersection of lines"),
+        XLC(listOf(In.LINE, In.CIRCLE), "Przecięcie prostej i okręgu", "Line–circle intersection"),
+        XCC(listOf(In.CIRCLE, In.CIRCLE), "Przecięcie okręgów i prosta przez punkty", "Circle intersection and the line through it"),
+        CIRCUM(listOf(In.TRIANGLE), "Okrąg opisany", "Circumcircle"),
+        INCIRCLE(listOf(In.TRIANGLE), "Okrąg wpisany", "Incircle"),
+        ORTHO(listOf(In.TRIANGLE), "Wysokości i ortocentrum", "Altitudes and orthocentre"),
+        CENTROID(listOf(In.TRIANGLE), "Środkowe i środek ciężkości", "Medians and centroid"),
+        REFLECT(listOf(In.LINE, In.OBJECT), "Odbicie względem prostej", "Reflection across a line"),
+        ROTATE(listOf(In.POINT, In.OBJECT), "Obrót o 90° wokół punktu", "Rotation by 90° about a point"),
+    }
+
+    /** Wskazane wejście: punkt (istniejący albo dowolne miejsce), prosta, okrąg, trójkąt albo obiekt do przekształcenia. */
+    sealed class Input {
+        class Point(val p: P) : Input()
+        class Ln(val l: Line) : Input()
+        class Circ(val c: Circle) : Input()
+        class Tri(val a: P, val b: P, val c: P) : Input()
+        class Obj(val el: Element) : Input()
+    }
+
+    /** Podpowiedź do kroku [step] konstrukcji [k] („Wskaż drugi okrąg”). */
+    fun hint(k: Kind, step: Int, pl: Boolean = true): String {
+        val want = k.inputs.getOrNull(step) ?: return if (pl) "Gotowe" else "Done"
+        val nth = k.inputs.take(step).count { it == want }
+        val ord = if (pl) listOf("", "drugi ", "trzeci ") else listOf("", "second ", "third ")
+        val o = ord.getOrElse(nth) { "" }
+        return when (want) {
+            In.POINT -> if (pl) "Wskaż ${o}punkt (albo dotknij miejsca)" else "Pick the ${o}point (or tap a spot)"
+            In.LINE -> if (pl) "Wskaż ${if (nth == 0) "" else o}odcinek albo prostą" else "Pick the ${o}segment or line"
+            In.CIRCLE -> if (pl) "Wskaż ${o}okrąg" else "Pick the ${o}circle"
+            In.TRIANGLE -> if (pl) "Wskaż trójkąt" else "Pick the triangle"
+            In.OBJECT -> if (pl) "Wskaż obiekt do przekształcenia" else "Pick the object to transform"
+        }.replace("  ", " ")
+    }
+
+    private fun circleOf(e: Stroke): Circle? {
+        if (!e.ellipse) return null
+        val f = ShapeBox.frameOf(e) ?: return null
+        return if (abs(f.hw - f.hh) < 0.08f * max(f.hw, f.hh)) Circle(P(f.cx, f.cy), (f.hw + f.hh) / 2f) else null
+    }
+
+    private fun isDot(e: Stroke) = e.count >= 1 && e.bounds.w < 6f + e.width && e.bounds.h < 6f + e.width
+
+    private fun segDist(p: P, a: P, b: P) = kotlin.math.sqrt(GeomMath.distSqPointSegment(p.x, p.y, a.x, a.y, b.x, b.y))
+
+    /**
+     * Wejście typu [want] pod dotknięciem ([x], [y]) w tolerancji [tol] (pt) wśród elementów strony [els] (najwyżej leżące
+     * pierwsze). Punkt: kropka albo wierzchołek w zasięgu, inaczej samo miejsce dotknięcia; null — nic pasującego.
+     */
+    fun pick(els: List<Element>, x: Float, y: Float, tol: Float, want: In): Input? {
+        val t = P(x, y)
+        val strokes = els.asReversed().filterIsInstance<Stroke>()
+        when (want) {
+            In.POINT -> {
+                var best: P? = null; var bd = tol
+                for (s in strokes) {
+                    if (isDot(s)) { val c = P(s.bounds.cx, s.bounds.cy); val d = c.dist(t); if (d <= bd) { bd = d; best = c } }
+                    else if (s.poly) for (i in 0 until s.count) { val v = P(s.pts[3 * i], s.pts[3 * i + 1]); val d = v.dist(t); if (d <= bd) { bd = d; best = v } }
+                }
+                return Input.Point(best ?: t)
+            }
+            In.LINE -> {
+                var best: Line? = null; var bd = tol
+                for (s in strokes) if (s.poly && !s.ellipse && s.count >= 2) for (i in 0 until s.count - 1) {
+                    val a = P(s.pts[3 * i], s.pts[3 * i + 1]); val b = P(s.pts[3 * i + 3], s.pts[3 * i + 4])
+                    if (a.dist(b) < 1f) continue
+                    val d = segDist(t, a, b)
+                    if (d <= bd) { bd = d; best = Line(a, b) }
+                }
+                return best?.let { Input.Ln(it) }
+            }
+            In.CIRCLE -> {
+                var best: Circle? = null; var bd = tol
+                for (s in strokes) { val c = circleOf(s) ?: continue; val d = abs(c.c.dist(t) - c.r); if (d <= bd) { bd = d; best = c } }
+                // Dotknięcie w środku okręgu też go wskazuje (najmniejszy, który zawiera punkt).
+                if (best == null) best = strokes.mapNotNull { circleOf(it) }.filter { it.c.dist(t) < it.r }.minByOrNull { it.r }
+                return best?.let { Input.Circ(it) }
+            }
+            In.TRIANGLE -> {
+                for (s in strokes) {
+                    if (!s.poly || s.ellipse || s.vertexCount != 3 || !s.closed) continue
+                    val a = P(s.pts[0], s.pts[1]); val b = P(s.pts[3], s.pts[4]); val c = P(s.pts[6], s.pts[7])
+                    val near = segDist(t, a, b) <= tol || segDist(t, b, c) <= tol || segDist(t, c, a) <= tol
+                    if (near || inside(t, a, b, c)) return Input.Tri(a, b, c)
+                }
+                return null
+            }
+            In.OBJECT -> {
+                for (e in els.asReversed()) {
+                    if (e.locked || !e.bounds.inflate(tol).contains(x, y)) continue
+                    val hit = if (e is BoxElement) e.containsPoint(x, y, tol) else EraseMath.hitsElement(e, x, y, tol)
+                    if (hit) return Input.Obj(e)
+                }
+                return null
+            }
+        }
+    }
+
+    private fun inside(p: P, a: P, b: P, c: P): Boolean {
+        fun s(u: P, v: P) = (v.x - u.x) * (p.y - u.y) - (v.y - u.y) * (p.x - u.x)
+        val d1 = s(a, b); val d2 = s(b, c); val d3 = s(c, a)
+        return (d1 >= 0 && d2 >= 0 && d3 >= 0) || (d1 <= 0 && d2 <= 0 && d3 <= 0)
+    }
+
+    /** Wynik konstrukcji [k] z wejść [ins] w kolorze [col] i grubości [w]; pusta lista — konstrukcja nie ma rozwiązania. */
+    fun build(k: Kind, ins: List<Input>, col: Int, w: Float, names: Boolean = true, pl: Boolean = true): List<Element> {
+        fun pt(i: Int) = (ins[i] as Input.Point).p
+        fun ln(i: Int) = (ins[i] as Input.Ln).l
+        fun cir(i: Int) = (ins[i] as Input.Circ).c
+        fun tri() = ins[0] as Input.Tri
+        return when (k) {
+            Kind.COMPASS -> {
+                val c = pt(0); val r = c.dist(pt(1))
+                if (r < 1f) emptyList() else ConstructOps.compose(col, w, names) { circle(Circle(c, r)); dot(c, "O") }
+            }
+            Kind.CIRCLE3 -> Construct.circleThrough(pt(0), pt(1), pt(2))?.let { cc ->
+                ConstructOps.compose(col, w, names) { circle(cc); dot(cc.c, "O"); name(pt(0), "A", 4f); name(pt(1), "B", 4f); name(pt(2), "C", 4f) }
+            } ?: emptyList()
+            Kind.CENTER -> ConstructOps.compose(col, w, names) { around(cir(0)); dot(cir(0).c, "O") }
+            Kind.BISECTOR -> { val l = ln(0); ConstructOps.compose(col, w, names, listOf(l)) { dot(Construct.midpoint(l.a, l.b), "M"); line(Construct.bisector(l.a, l.b, l.a.dist(l.b)), true) } }
+            Kind.PERP -> {
+                val l = ln(0); val p = pt(1)
+                val f = Construct.project(p, l)
+                val d = l.b - l.a; val len = hypot(d.x, d.y).coerceAtLeast(1e-6f)
+                val n = P(-d.y / len, d.x / len)
+                val half = max(p.dist(f) * 1.2f, len * 0.5f)
+                ConstructOps.compose(col, w, names, listOf(l)) { line(Line(f - n * half, f + n * half), true); dot(f, "F") }
+            }
+            Kind.PARALLEL -> {
+                val l = ln(0); val p = pt(1)
+                val d = l.b - l.a
+                ConstructOps.compose(col, w, names, listOf(l)) { line(Line(p - d * 0.6f, p + d * 0.6f), true) }
+            }
+            Kind.ANGLE -> Construct.corner(ln(0), ln(1))?.let { ConstructOps.angleMark(it, col, w, pl) } ?: emptyList()
+            Kind.ANGLE_BISECTOR -> Construct.corner(ln(0), ln(1))?.let { cr ->
+                val len = max(cr.a.dist(cr.v), cr.b.dist(cr.v))
+                ConstructOps.compose(col, w, names, listOf(ln(0), ln(1))) { line(Construct.angleBisector(cr.a, cr.v, cr.b, len), true) } + ConstructOps.angleMark(cr, col, w, pl)
+            } ?: emptyList()
+            Kind.XLL -> Construct.intersect(ln(0), ln(1))?.let { p -> ConstructOps.compose(col, w, names, listOf(ln(0), ln(1))) { dot(p, "P") } } ?: emptyList()
+            Kind.XLC -> {
+                val ps = Construct.intersect(ln(0), cir(1))
+                if (ps.isEmpty()) emptyList() else ConstructOps.compose(col, w, names, listOf(ln(0))) { around(cir(1)); ps.forEachIndexed { i, p -> dot(p, listOf("P", "Q")[i]) } }
+            }
+            Kind.XCC -> {
+                val ps = Construct.intersect(cir(0), cir(1))
+                if (ps.isEmpty()) emptyList() else ConstructOps.compose(col, w, names) {
+                    around(cir(0)); around(cir(1))
+                    if (ps.size == 2) { val d = ps[1] - ps[0]; line(Line(ps[0] - d * 0.35f, ps[1] + d * 0.35f), false) }
+                    ps.forEachIndexed { i, p -> dot(p, listOf("P", "Q")[i]) }
+                }
+            }
+            Kind.CIRCUM, Kind.INCIRCLE, Kind.ORTHO, Kind.CENTROID -> {
+                val t = tri()
+                val id = when (k) { Kind.CIRCUM -> "circum"; Kind.INCIRCLE -> "in"; Kind.ORTHO -> "altitudes"; else -> "medians" }
+                val tr = com.mdev.mnotes.core.model.Stroke(Ids.next(), com.mdev.mnotes.core.model.PenKind.BALLPOINT, 0, 1f,
+                    floatArrayOf(t.a.x, t.a.y, 1f, t.b.x, t.b.y, 1f, t.c.x, t.c.y, 1f, t.a.x, t.a.y, 1f), poly = true)
+                ConstructOps.ops(listOf(tr), names, pl).firstOrNull { it.id == id }?.build?.invoke(col, w) ?: emptyList()
+            }
+            Kind.REFLECT -> listOf((ins[1] as Input.Obj).el.transformed(ConstructOps.reflection(ln(0))).withId(Ids.next()))
+            Kind.ROTATE -> { val c = pt(0); listOf((ins[1] as Input.Obj).el.transformed(Affine.rotation((PI / 2).toFloat(), c.x, c.y)).withId(Ids.next())) }
+        }
+    }
+}

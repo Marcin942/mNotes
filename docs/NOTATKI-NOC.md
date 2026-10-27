@@ -532,3 +532,80 @@ Wygląd ikon sprawdzam rysunkiem Java2D z tej samej geometrii (`PreviewHarness`,
   **Wygląd:** w Ustawieniach grupa „Układ współrzędnych” (przełącznik + suwak progu). **Tablet:** strona w kratkę → „⋮” →
   „Układ współrzędnych…” → Wstaw: osie i siatka układu leżą na liniach kratki; przesuń układ lassem — początek wskakuje
   w węzły; narysuj wykres v(t) ze stałym odcinkiem poziomym — odcinek równo na linii, ukośne fragmenty bez zmian.
+- **Scalenie `noc/lab2`** (po 2b-A6): kreda 2b-B2; bez konfliktów; core 729, lab 780.
+- **2b-A7** stanowiska (N dokumentów na jednym polu) — `noc/f2b-stanowiska`; `WorkbenchTest` (5), reszta UI.
+  **Decyzja projektowa:** zamiast przebudowy `NoteView` na wiele dokumentów (ok. 3,5 tys. linii z jednym `doc`/`layout`/`ed`)
+  każdy dokument ma własny `NoteView` w trybie rzędu, a pole (`ui/StationCanvas`) układa je jeden pod drugim we własnym
+  `Layout` z jednym przesunięciem pionowym. Haki w `NoteView`: pionowy ruch i rzut idą do pola (`onPanY/onFlingY`), rząd
+  przesuwa się tylko w bok; „100 %” narzuca pole (`baseZoomOverride`, inaczej wysokość rzędu ↔ powiększenie sprzęgały się);
+  widoczny pas (`band`) ogranicza rysowanie i kafelki; `hostOffsetY` przesuwa menu i pasek zaznaczenia rysowane w polu;
+  upuszczenie zaznaczenia poza rzędem (`onDropOutside` → `dropIn` → `Editor.pasteElements`) przenosi elementy. `EditorScreen`
+  pracuje na `Station.active` (dotknięty rząd). Dawne `DualCanvas.kt`, `Editor.dualId/dualPick` i ustawienia
+  `dual.fraction`/`dual.sync_zoom` usunięte (`DualRows` zostaje: wspólne powiększenie i lista kandydatów). **Ograniczenia:**
+  przeciągany obiekt znika z widoku, gdy wyjdzie poza swój rząd (widać go znów po upuszczeniu w docelowym); skróty klawiszowe
+  w `MainActivity` działają na zeszyt otwarty z biblioteki, nie na aktywny rząd; pasek wycinania/kadrowania obrazu nie
+  uwzględnia przesunięcia rzędu (tylko w pierwszym rzędzie jest na miejscu). **Wygląd:** rzędy jeden pod drugim z 10 dp
+  przerwy w kolorze płótna; nad każdym rzędem chip 10 dp zaokrąglenia: tytuł (aktywny — tło `accentSoft`, obwódka i tekst
+  w akcencie), ✕ przy dołożonych; okna `MDialog` „Dołóż zeszyt na stanowisko” (lista jak dawniej + „Nowy zeszyt”) i
+  „Stanowiska” (pole nazwy, lista z dokumentami w drugiej linii, kosz z potwierdzeniem). **Tablet:** „⋮” → „Dołóż zeszyt
+  poniżej…” dwa razy → trzy rzędy; przewiń pole palcem w pionie (też w przerwie między rzędami) i rzutem; każdy rząd w bok
+  osobno; szczypnij — rzędy rosną razem, palce zostają nad tym samym miejscem; zaznacz lassem fragment w rzędzie 1 i
+  przeciągnij do rzędu 3 → przenosi się (cofnięcie w obu); przytrzymaj zaznaczenie w rzędzie 2 → menu przy zaznaczeniu;
+  panel stron po dotknięciu rzędu 2 pokazuje jego strony; „⋮” → „Stanowiska…” → zapisz „Wykład + zadania”, zamknij
+  rzędy ✕, otwórz stanowisko z listy; pamięć i płynność przy trzech PDF-ach.
+- **Scalenie `noc/lab2`** (po 2b-A7): kreda 2b-B2, zdjęcie tablicy 2b-B3, zeszyty przez łącze 2b-B1 krok 4; bez konfliktów;
+  core 737, lab 791.
+- **2b-A8** narzędzie Geometria — `noc/f2b-geometria`; `GeoToolTest` (5 testów). Logika: `GeoTool.Kind` (wejścia każdej
+  konstrukcji), `pick` (wejście pod dotknięciem), `build` (wynik przez `ConstructOps.compose`, ten sam `Draw` co menu
+  „Konstrukcja ▸”, więc nazwy punktów i styl wyniku są wspólne). `Tool.GEO`: dotknięcie bez ruchu (rysik, mysz; palec, gdy
+  „palec rysuje”) → `Editor.geoTap`. **Decyzja:** obrót tylko o 90° (bez wyboru kąta) — kąt do wpisania to osobne okno;
+  do potwierdzenia. **Wygląd:** listwa jak przy piórze, glify w siatce 24 tą samą kreską co narzędzia, separatory między
+  grupami; nad płótnem kapsuła `FloatingCard` z nazwą konstrukcji w akcencie i krokiem szarym tekstem; wskazane wejścia
+  obrysem akcentu (60 % krycia, 5 dp). **Tablet:** pasek (albo „⋯”) → Geometria; „Przecięcie okręgów…”: narysuj dwa koła
+  z przytrzymaniem, dotknij jednego i drugiego → P, Q i prosta; „Prostopadła przez punkt”: dotknij odcinka, potem
+  dowolnego miejsca → przerywana prostopadła ze spodkiem F; „Okrąg: środek i punkt” — dwa dotknięcia jak cyrklem;
+  trójkąt → „Wysokości”; cofnij jednym ruchem.
+- **2b-A9** tryb ciemny/jasny stron — `noc/f2b-tryb-ciemny`; projekt `docs/TRYB-CIEMNY.md`; `ThemeMapTest` (9 testów),
+  core 751, lab 805, zielone. Logika: `core/color/ThemeMap` (OKLab; papier i szarości — odwrócona jasność w granicach
+  0,12…0,94; kolor — ten sam odcień, jasność przesunięta tylko do kontrastu ≥ wyjściowego; zakreślacz ≤ 0,6 na ciemnym,
+  ≥ 0,8 na jasnym; macierz dla PDF i zdjęć). Rysowanie: przekształcenie wypalane w kafelkach (`PageRenderer.theme`,
+  `PageCache.themeOf`), zmiana trybu czyści kafelki; kreska w trakcie, lasso, mini-mapa, miniatury panelu stron — ten
+  sam `Transform`; pipeta odwraca widoczny kolor. Stary filtr F11 usunięty (flaga w pliku bez zmian, stare zeszyty
+  otwierają się jak dawniej). **Decyzje:** okładki w bibliotece w oryginale; eksport SVG/MD zawsze w oryginale; zdjęcia
+  domyślnie nieodwracane. **Wygląd:** w „⋮” nowa sekcja „Strony” z trzema chipami pod „Układem stron”; w Ustawieniach →
+  Wygląd „Strony zeszytów” (chipy) i przełącznik zdjęć; w oknie eksportu przełącznik „Kolory jak na ekranie” tylko dla
+  PDF/PNG i tylko, gdy ekran różni się od oryginału. Podgląd kolorów: `docs/podglad/tryb-ciemny.png`. **Nie
+  sprawdzone:** płynność pierwszego przeliczenia kafelków przy długim PDF (na JVM nie da się zmierzyć). **Tablet:**
+  zeszyt z białymi stronami i pismem czarnym, czerwonym, granatowym i zakreślaczem → „⋮” → Strony → „Ciemne”: tło ciemne,
+  czerń jasna, czerwony dalej czerwony, zakreślacz nie świeci; pisz granatem — kreska w trakcie od razu w kolorze
+  końcowym; pipetą weź czerwony z kartki i narysuj obok — wygląda tak samo; otwórz PDF wykładu — tło ciemne, tekst jasny;
+  zdjęcie na stronie bez zmian (Ustawienia → Wygląd → „Odwracaj też zdjęcia” je odwraca); „Jak powstały” + „Styl strony”
+  → F11 na jednej stronie; Eksport → PDF → „Kolory jak na ekranie” wł./wył. i porównaj pliki.
+- **2b-A10** krzywe Béziera, cztery tryby — `noc/f2b-bezier`; `CurveDraftTest` (10 testów), core 761, lab 815, zielone.
+  Logika: `core/shapes/CurveDraft.kt` — `CurveMode` (kolejność listwy, ustawienie `curve.mode`), `CurveFit.through`
+  (dośrodkowy Catmull‑Rom → Bézier, otwarty z odbiciem na końcach, zamknięty z zawinięciem), `CurveFit.freehandTol`,
+  `CurveDraft` (węzły, uchwyt piórka, `tapKind`: dodaj / zakończ / domknij); `Bezier.moved`/`smooth` znają szew krzywej
+  zamkniętej. **Decyzje:** zamknięcie bez nowego pola (kotwica końcowa = początkowa, jak zamknięta łamana); wypełnienie jako
+  pole kreski (`Stroke.fill`, flaga 128 + i32 na końcu rekordu), a nie osobny element — po edycji uchwytów idzie za krzywą;
+  zmiana koloru kreski zmienia też wypełnienie; gumka pikselowa tnie krzywą na zwykłe kreski bez wypełnienia. Palec
+  stawia punkty tylko z „palec rysuje” (jak Geometria); bez tego palec przewija. **Wygląd:** z Krzywą w ręku listwa
+  zaczyna się od 4 glifów trybów (+ wiaderko „wypełniaj” w trybach krokowych), potem pióro jak zwykle; nad płótnem
+  kapsuła jak w Geometrii („Kontur zamknięty · Kolejny punkt; pierwszy albo ostatni stuknięty ponownie domyka”, ✓ i ✕);
+  szkic: krzywa piórem na żywo, węzły w akcencie, pierwszy powiększony, gdy można domknąć, uchwyty piórka jako odcinek
+  z kropkami. Podgląd: `docs/podglad/krzywe-tryby.png`. **Tablet:** pasek → Krzywa → glif „Przez wskazane punkty”:
+  stuknij rysikiem 4–5 punktów → krzywa idzie przez wszystkie; stuknij ostatni drugi raz → gotowa i zaznaczona, przeciągnij
+  kotwicę; „Kontur zamknięty” + wiaderko: 4 punkty → stuknij pierwszy → zamknięty, lekko wypełniony kształt, pismo pod nim
+  widać; „Piórko”: stuknij, przeciągnij (uchwyty jak w Inkscape), stuknij → łuk; ✕ porzuca; „Odręczna”: narysuj falę →
+  krzywa z kilkoma węzłami; otwórz zeszyt w starej wersji aplikacji (jeśli jest) — kontur bez wypełnienia.
+- **2b-A11** samouczek — `noc/f2b-samouczek`; `GuideTest` (8 testów), core 765, lab 819, zielone. Forma z [założenia]:
+  zeszyt-przewodnik z rozdziałami podstawy → zaawansowane, każda strona = krótkie zadanie piórem, na końcu „Sprawdź się”.
+  `core/guide/Guide.kt` przepisany: lekcje jako dane (`Lesson`: rozdział, tytuł, wstęp, polecenia, wskazówka,
+  ilustracja od y), układ liczony (`textBottom`/`artTop`, stopka od `FOOT`), wariant `lab` (GuideMaker podaje
+  `Flavor.lab != null`). **Decyzje:** stare przewodniki w bibliotekach zostają jak były (nowy powstaje z „Nowy →
+  Przewodnik”); szerokość znaku w szacowaniu 0,6 em (podgląd Java2D pokazał, że 0,54 bywa za mało); dużo miejsca pod
+  ilustracjami zostawione celowo na ćwiczenia. **Wygląd:** podgląd `docs/podglad/przewodnik-strony.png` (17 stron).
+  **Nie sprawdzone:** czcionka Roboto na tablecie jest węższa niż DejaVu z podglądu — akapity mogą mieć trochę więcej
+  powietrza niż na podglądzie. **Tablet:** Biblioteka → „Nowy” → Przewodnik; przewiń: okładka ze spisem treści,
+  stopka „n / 17”; strona 8 „Krzywe Béziera”: Krzywa → „Przez wskazane punkty”, stuknij A–E i E drugi raz; strona 9:
+  Geometria → „Przecięcie okręgów” na dwóch okręgach strony; strona 15: „⋮” → Strony → „Ciemne” i porównaj z ilustracją;
+  w wersji lab strona 14 mówi o kredzie, w core nie.

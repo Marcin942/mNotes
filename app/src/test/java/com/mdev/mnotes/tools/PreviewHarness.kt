@@ -180,12 +180,166 @@ class PreviewHarness {
         ImageIO.write(img, "png", File(dir, "tools.png"))
     }
 
+    /** 2b-A8: glify konstrukcji narzędzia Geometria, w dwóch rzędach, na jasnym tle. */
+    private fun geoSheet(dir: String) {
+        val kinds = com.mdev.mnotes.core.geom.GeoTool.Kind.entries
+        val cell = 72; val perRow = 9
+        val rows = (kinds.size + perRow - 1) / perRow
+        val img = BufferedImage(cell * perRow + 20, (cell + 8) * rows + 12, BufferedImage.TYPE_INT_ARGB)
+        val g = g2(img)
+        g.color = Color(0xFC, 0xFC, 0xFD); g.fillRect(0, 0, img.width, img.height)
+        kinds.forEachIndexed { i, k -> g.drawImage(glyph(com.mdev.mnotes.ui.GeoGlyphParts.parts(k), cell, Color(0x2A, 0x2B, 0x2E), Color.BLACK), 10 + (i % perRow) * cell, 6 + (i / perRow) * (cell + 8), null) }
+        g.dispose()
+        ImageIO.write(img, "png", File(dir, "geo.png"))
+    }
+
+    /** 2b-A9: ta sama notatka jak powstała (lewa kolumna) i po [com.mdev.mnotes.core.color.ThemeMap] (prawa), dla trzech papierów. */
+    private fun themeSheet(dir: String) {
+        val tm = com.mdev.mnotes.core.color.ThemeMap
+        val inks = listOf(0xFF1B1D21, 0xFF24407E, 0xFFC8433F, 0xFF3E8E5A, 0xFF8A4FB8, 0xFFE8A33D).map { it.toInt() }
+        val hl = 0xFFFFE066.toInt()
+        val papers = listOf(Paper.WHITE, Paper.IVORY, Paper.DARK)
+        val sc = 2.4f; val w = 250; val h = 30 * inks.size + 40
+        val pw = (w * sc).toInt(); val ph = (h * sc).toInt()
+        val img = BufferedImage(pw * 2 + 30, (ph + 10) * papers.size + 10, BufferedImage.TYPE_INT_ARGB)
+        val sg = g2(img); sg.color = Color(0x70, 0x70, 0x70); sg.fillRect(0, 0, img.width, img.height)
+        papers.forEachIndexed { row, pp ->
+            val src = PageSpec(paper = pp, template = Template.LINED)
+            val t = tm.forPage(pp, false, if (Paper.isDark(pp)) tm.LIGHT else tm.DARK)!!
+            for (col in 0..1) {
+                val tr = col == 1
+                val spec = if (tr) src.copy(paper = t.dstPaper, line = t.ink(src.line)) else src
+                val page = paper(spec, sc, w, h)
+                val g = g2(page); g.scale(sc.toDouble(), sc.toDouble())
+                val hp = sample(PenKind.HIGHLIGHTER, hl, 10f, 12f, 28f, 260f, 99)
+                stroke(g, PenKind.HIGHLIGHTER, if (tr) t.highlighter(hl) else hl, 10f, hp, hp.size / 3)
+                inks.forEachIndexed { i, c0 ->
+                    val c = if (Paper.isDark(pp) && i == 0) 0xFFF2F2F2.toInt() else c0
+                    val pts = sample(PenKind.BALLPOINT, c, 1.4f, 12f, 30f + i * 30f, 300f, i)
+                    stroke(g, PenKind.BALLPOINT, if (tr) t.ink(c) else c, 1.4f, pts, pts.size / 3)
+                }
+                g.dispose()
+                sg.drawImage(page, 10 + col * (pw + 10), 10 + row * (ph + 10), null)
+            }
+        }
+        sg.dispose()
+        ImageIO.write(img, "png", File(dir, "theme.png"))
+    }
+
+    /** 2b-A10: glify czterech trybów Krzywej i po jednym wyniku każdego trybu na kartce (kontur z wypełnieniem). */
+    private fun curveSheet(dir: String) {
+        val cell = 96
+        val modes = com.mdev.mnotes.core.shapes.CurveMode.entries
+        val sc = 2.4f; val w = 210f; val h = 120f
+        val img = BufferedImage(max(cell * modes.size, (w * sc).toInt()) + 20, cell + 20 + (h * sc).toInt() + 10, BufferedImage.TYPE_INT_ARGB)
+        val g = g2(img)
+        g.color = Color(0xFC, 0xFC, 0xFD); g.fillRect(0, 0, img.width, img.height)
+        modes.forEachIndexed { i, m -> g.drawImage(glyph(com.mdev.mnotes.ui.CurveGlyphParts.parts(m), cell, Color(0x2A, 0x2B, 0x2E), Color.BLACK), 10 + i * cell, 10, null) }
+        val page = paper(PageSpec(paper = Paper.WHITE, template = Template.GRID), sc, w.toInt(), h.toInt())
+        val pg = g2(page); pg.scale(sc.toDouble(), sc.toDouble())
+        val cf = com.mdev.mnotes.core.shapes.CurveFit
+        val wave = FloatArray(160) { k -> val i = k / 2; if (k % 2 == 0) 6f + i * 0.45f else 60f + 18f * sin(i / 9.0).toFloat() + ((i * 7919) % 13 - 6) * 0.12f }
+        val curves = listOf(
+            com.mdev.mnotes.core.shapes.Bezier.fit(wave, cf.freehandTol(1f))!! to 0xFF1B1D21.toInt(),
+            cf.through(floatArrayOf(48f, 90f, 62f, 40f, 80f, 75f, 95f, 30f), false)!! to 0xFF24407E.toInt(),
+            cf.through(floatArrayOf(108f, 60f, 125f, 25f, 150f, 50f, 135f, 95f), true)!! to 0xFFC8433F.toInt(),
+            com.mdev.mnotes.core.shapes.CurveDraft(com.mdev.mnotes.core.shapes.CurveMode.PEN).apply {
+                press(160f, 90f); release(); press(178f, 40f); drag(192f, 40f); release(); press(195f, 95f); release()
+            }.ctrl()!! to 0xFF3E8E5A.toInt(),
+        )
+        for ((c, col) in curves) {
+            val s = com.mdev.mnotes.core.shapes.Bezier.sample(c)
+            val path = Path2D.Float(); path.moveTo(s[0], s[1])
+            for (k in 1 until s.size / 3) path.lineTo(s[3 * k], s[3 * k + 1])
+            if (cf.closed(c)) { path.closePath(); pg.color = Color(col and 0xFFFFFF or (0x47 shl 24), true); pg.fill(path) }
+            pg.color = col(col); pg.stroke = BasicStroke(1.4f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND); pg.draw(path)
+            pg.color = Color(0x2E, 0x7D, 0x4F)
+            for (a in 0 until com.mdev.mnotes.core.shapes.Bezier.anchors(c)) pg.fill(Ellipse2D.Float(c[6 * a] - 1.6f, c[6 * a + 1] - 1.6f, 3.2f, 3.2f))
+        }
+        pg.dispose()
+        g.drawImage(page, 10, cell + 20, null)
+        g.dispose()
+        ImageIO.write(img, "png", File(dir, "curves.png"))
+    }
+
+    /** Akapit pola tekstu zawinięty do szerokości pola (czcionka bezszeryfowa Java2D zamiast Roboto); zwraca wysokość. */
+    private fun textBox(g: java.awt.Graphics2D, t: com.mdev.mnotes.core.model.TextBox): Float {
+        val font = java.awt.Font("SansSerif", if (t.style and com.mdev.mnotes.core.model.TextBox.STYLE_BOLD != 0) java.awt.Font.BOLD else java.awt.Font.PLAIN, 1).deriveFont(t.size)
+        g.font = font
+        val fm = g.getFontMetrics(font)
+        val left = t.cx - t.w / 2; val top = t.cy - t.h / 2
+        val lines = ArrayList<String>()
+        var cur = ""
+        for (word in t.text.split(' ')) {
+            val next = if (cur.isEmpty()) word else "$cur $word"
+            if (fm.getStringBounds(next, g).width > t.w && cur.isNotEmpty()) { lines.add(cur); cur = word } else cur = next
+        }
+        if (cur.isNotEmpty()) lines.add(cur)
+        val lh = t.size * 1.17f
+        if (t.fill != 0) { g.color = col(t.fill); g.fill(Rectangle2D.Float(left, top, t.w, t.h)) }
+        g.color = col(t.color)
+        lines.forEachIndexed { i, l ->
+            val x = if (t.align == com.mdev.mnotes.core.model.TextBox.ALIGN_END) left + t.w - fm.getStringBounds(l, g).width.toFloat() else left
+            g.drawString(l, x, top + t.size + i * lh)
+        }
+        return lines.size * lh
+    }
+
+    /** 2b-A11: strony przewodnika (tym samym `Guide` co aplikacja): arkusz miniatur i kilka stron w pełnym rozmiarze. */
+    private fun guideSheet(dir: String) {
+        val pages = com.mdev.mnotes.core.guide.Guide.pages(true)
+        val report = StringBuilder()
+        fun render(p: com.mdev.mnotes.core.guide.Guide.Page, s: Float): BufferedImage {
+            val img = paper(p.spec, s, p.spec.w.toInt(), p.spec.h.toInt())
+            val g = g2(img); g.scale(s.toDouble(), s.toDouble())
+            g.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON)
+            for (e in p.elements) when (e) {
+                is com.mdev.mnotes.core.model.FillEl -> {
+                    val path = Path2D.Float(Path2D.WIND_EVEN_ODD)
+                    for (r in e.rings) { path.moveTo(r[0], r[1]); var i = 2; while (i < r.size) { path.lineTo(r[i], r[i + 1]); i += 2 }; path.closePath() }
+                    g.color = if (e.hl) Color(e.color and 0xFFFFFF or (0x80 shl 24), true) else col(e.color); g.fill(path)
+                }
+                is com.mdev.mnotes.core.model.Stroke -> {
+                    if (e.count == 1) { g.color = col(e.color); g.fill(Ellipse2D.Float(e.pts[0] - e.width / 2, e.pts[1] - e.width / 2, e.width, e.width)) }
+                    else {
+                        val path = Path2D.Float(); path.moveTo(e.pts[0], e.pts[1])
+                        for (k in 1 until e.count) path.lineTo(e.pts[3 * k], e.pts[3 * k + 1])
+                        g.color = col(e.color)
+                        g.stroke = if (e.line == com.mdev.mnotes.core.pen.LineStyle.DASHED) BasicStroke(e.width, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND, 10f, floatArrayOf(5f, 4f), 0f) else BasicStroke(e.width, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND)
+                        g.draw(path)
+                    }
+                }
+                is com.mdev.mnotes.core.model.TextBox -> {
+                    val need = textBox(g, e)
+                    if (need > e.h + 1f) report.append("${p.title}: „${e.text.take(40)}” potrzebuje ${need.toInt()} pt, pole ${e.h.toInt()} pt\n")
+                }
+                else -> {}
+            }
+            g.dispose()
+            return img
+        }
+        val s = 0.62f
+        val pw = (595 * s).toInt(); val ph = (842 * s).toInt()
+        val cols = 4; val rows = (pages.size + cols - 1) / cols
+        val sheet = BufferedImage(cols * (pw + 10) + 10, rows * (ph + 10) + 10, BufferedImage.TYPE_INT_ARGB)
+        val sg = g2(sheet); sg.color = Color(0x70, 0x70, 0x70); sg.fillRect(0, 0, sheet.width, sheet.height)
+        pages.forEachIndexed { i, p -> sg.drawImage(render(p, s), 10 + (i % cols) * (pw + 10), 10 + (i / cols) * (ph + 10), null) }
+        sg.dispose()
+        ImageIO.write(sheet, "png", File(dir, "guide.png"))
+        for (i in listOf(0, 1, 7, 8, 14)) if (i < pages.size) ImageIO.write(render(pages[i], 1.3f), "png", File(dir, "guide_${i + 1}.png"))
+        File(dir, "guide-overflow.txt").writeText(report.toString())
+    }
+
     @Test fun render() {
         val dir = System.getenv("MNOTES_PREVIEW_DIR") ?: return assumeTrue(false)
         System.setProperty("java.awt.headless", "true")
         File(dir).mkdirs()
+        guideSheet(dir)
         glyphSheet(dir)
         toolSheet(dir)
+        geoSheet(dir)
+        themeSheet(dir)
+        curveSheet(dir)
 
         // 1) Papier: wycinki 3 wzorów na białym/kremowym papierze, skala jak na tablecie (~2,7 px/pt).
         val tiles = listOf(

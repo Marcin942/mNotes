@@ -23,6 +23,8 @@ class MNotesApp : Application() {
     @Volatile var pendingSearch: String? = null
     /** Zeszyty otwarte teraz w którymkolwiek oknie — jeden zeszyt nie może być edytowany w dwóch oknach naraz. */
     val openIds: MutableSet<String> = java.util.Collections.synchronizedSet(mutableSetOf())
+    /** Stanowisko do odtworzenia, gdy otworzy się jego pierwszy zeszyt (przełączanie stanowisk, 2b-A7). */
+    @Volatile var pendingStation: com.mdev.mnotes.core.layout.Workbench.Station? = null
 
     override fun onCreate() {
         super.onCreate()

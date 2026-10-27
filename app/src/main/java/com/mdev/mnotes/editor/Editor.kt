@@ -15,6 +15,7 @@ import com.mdev.mnotes.core.geom.AxesSnap
 import com.mdev.mnotes.core.geom.AxesSpec
 import com.mdev.mnotes.core.geom.Bounds
 import com.mdev.mnotes.core.geom.ConstructOps
+import com.mdev.mnotes.core.geom.GeoTool
 import com.mdev.mnotes.core.pages.LecturePages
 import com.mdev.mnotes.core.model.DocEdit
 import com.mdev.mnotes.core.model.Element
@@ -61,7 +62,7 @@ import java.io.InputStream
 import kotlin.math.max
 import kotlin.math.min
 
-enum class Tool { PEN, ERASER, LASSO, TEXT, LASER, HAND, SPACE, TAPE, PAINTER, FILL, CURVE }
+enum class Tool { PEN, ERASER, LASSO, TEXT, LASER, HAND, SPACE, TAPE, PAINTER, FILL, CURVE, GEO }
 
 class Sel(val pageId: String, val ids: Set<Int>)
 
@@ -124,16 +125,14 @@ class Editor(val ctx: Context, val nbId: String) {
     var layoutMode by mutableIntStateOf(doc.meta.let { ViewMode.resolve(it.viewMode, it.pdfDoc, settings.viewNotebook, settings.viewPdf) })
         private set
 
-    // — Dwa zeszyty w jednym obszarze (F4) —
-    /** Zeszyt w dolnym rzędzie albo null (jeden zeszyt jak zwykle). */
-    var dualId by mutableStateOf<String?>(null)
-    /** Otwarte okno wyboru zeszytu do dolnego rzędu. */
-    var dualPick by mutableStateOf(false)
+    // — Stanowisko (2b-A7, dawniej dwa zeszyty F4) —
+    /** Stanowisko, do którego należy ten edytor (główny zeszyt albo dołożony rząd); null poza edytorem. */
+    var station: Station? = null
     private var rowSaved: Int? = null
 
     /**
-     * Rząd stron: w trybie dwóch zeszytów strony leżą poziomo (każdy rząd przesuwa się w bok), ale wybór nie trafia
-     * do zeszytu — po zamknięciu drugiego wraca układ sprzed.
+     * Rząd stron: na stanowisku strony leżą poziomo (każdy rząd przesuwa się w bok), ale wybór nie trafia do zeszytu —
+     * po zamknięciu dołożonych rzędów wraca układ sprzed.
      */
     fun forceRowLayout(on: Boolean) {
         if (on) { if (rowSaved == null) rowSaved = layoutMode; layoutMode = 1 }
@@ -149,7 +148,11 @@ class Editor(val ctx: Context, val nbId: String) {
         view?.applyLayoutMode()
     }
 
-    var tool by mutableStateOf(Tool.PEN)
+    private var toolState by mutableStateOf(Tool.PEN)
+    var tool: Tool
+        get() = toolState
+        // 2b-A10: odejście od Krzywej zapisuje rozpoczętą krzywą (punkty postawione palcem się nie gubią).
+        set(v) { if (toolState == Tool.CURVE && v != Tool.CURVE) curveCommit(); toolState = v }
     var ruler by mutableStateOf(false)
     /** Okno powiększenia (EXT-003): pisanie w powiększonej ramce u dołu, zapis na stronie w skali 1:1. */
     var zoomWin by mutableStateOf(false)
@@ -329,16 +332,24 @@ class Editor(val ctx: Context, val nbId: String) {
     /** [at] = (indeks strony, x, y) miejsca wklejenia (np. punkt przytrzymania); domyślnie środek widoku. */
     fun paste(at: Triple<Int, Float, Float>? = null) {
         if (Clip.els.isEmpty()) { pasteSystem(at); return }
+        pasteElements(Clip.els, Clip.nb, at)
+    }
+
+    /**
+     * Wkleja [els] z zeszytu [fromNb] środkiem w [at] (indeks strony, x, y; domyślnie środek widoku), z kopiami obrazów
+     * i nowymi id; zaznacza wynik. Też przeniesienie zaznaczenia z innego rzędu stanowiska (2b-A7).
+     */
+    fun pasteElements(els: List<Element>, fromNb: String, at: Triple<Int, Float, Float>? = null) {
         val v = view ?: return
         val (pi, cx, cy) = at ?: v.viewCenterOnPage() ?: return
-        val page = doc.pages[pi]
+        val page = doc.pages.getOrNull(pi) ?: return
         var b = Bounds.EMPTY
-        for (e in Clip.els) b = b.union(e.bounds)
+        for (e in els) b = b.union(e.bounds)
         val dx = cx - b.cx; val dy = cy - b.cy
-        val copies = Clip.els.map { e ->
+        val copies = els.map { e ->
             var n = dup(e, dx, dy)
-            if (n is ImageEl && Clip.nb != nbId) {
-                val src = repo.assetFile(Clip.nb, n.asset)
+            if (n is ImageEl && fromNb != nbId) {
+                val src = repo.assetFile(fromNb, n.asset)
                 if (src.exists()) {
                     val name = newId() + "." + src.extension.ifEmpty { "jpg" }
                     runCatching { src.copyTo(repo.assetFile(nbId, name), true) }
@@ -748,6 +759,78 @@ class Editor(val ctx: Context, val nbId: String) {
         if (els.isEmpty()) { say(T.t("Ta konstrukcja nie ma rozwiązania dla zaznaczonych kształtów", "This construction has no solution for the selected shapes")); return }
         exec(DocEdit.Elements(p.id, ElementsEdit.add(doc.content(p), els)))
         select(p.id, els.map { it.id }.toSet())
+    }
+
+    // — Narzędzie Geometria (2b-A8) —
+    /** Wybrana konstrukcja i wejścia wskazane dotąd (na jednej stronie [geoPage]). */
+    var geoKind by mutableStateOf(GeoTool.Kind.COMPASS)
+        private set
+    val geoInputs = androidx.compose.runtime.mutableStateListOf<GeoTool.Input>()
+    var geoPage: String? = null
+        private set
+
+    val geoHint: String get() = GeoTool.hint(geoKind, geoInputs.size, T.pl)
+
+    fun geoChoose(k: GeoTool.Kind) { geoKind = k; geoReset() }
+    fun geoReset() { geoInputs.clear(); geoPage = null; view?.invalidate() }
+
+    /**
+     * Dotknięcie strony [pageId] w ([x], [y]) narzędziem Geometria: następne wejście wybranej konstrukcji; po ostatnim —
+     * wynik w kolorze pióra (jedno cofnięcie). Wejścia z innej strony zaczynają konstrukcję od nowa.
+     */
+    fun geoTap(pageId: String, x: Float, y: Float, tol: Float) {
+        if (readOnly) return
+        val page = doc.page(pageId) ?: return
+        if (geoPage != null && geoPage != pageId) geoInputs.clear()
+        geoPage = pageId
+        val want = geoKind.inputs[geoInputs.size]
+        val input = GeoTool.pick(doc.content(page).elements, x, y, tol, want)
+        if (input == null) { say(geoHint); return }
+        geoInputs += input
+        if (geoInputs.size < geoKind.inputs.size) { view?.invalidate(); return }
+        val ink = (if (pen.kind == PenKind.HIGHLIGHTER) 0xFF37474F.toInt() else pen.color) or (0xFF shl 24)
+        val els = GeoTool.build(geoKind, geoInputs.toList(), ink, pen.width.coerceIn(0.6f, 3f), settings.constructNames, T.pl)
+        geoReset()
+        if (els.isEmpty()) { say(T.t("Ta konstrukcja nie ma rozwiązania dla wskazanych kształtów", "This construction has no solution for the picked shapes")); return }
+        exec(DocEdit.Elements(page.id, ElementsEdit.add(doc.content(page), els)))
+    }
+
+    // — Krzywa krok po kroku (2b-A10): przez punkty, kontur, piórko —
+
+    val curveMode: com.mdev.mnotes.core.shapes.CurveMode get() = com.mdev.mnotes.core.shapes.CurveMode.of(settings.curveMode)
+    /** Rozpoczęta krzywa (na stronie [curvePage]); null, gdy nic nie postawiono. */
+    var curveDraft: com.mdev.mnotes.core.shapes.CurveDraft? = null
+        private set
+    var curvePage: String? = null
+    /** Zmienia się z każdym węzłem — podpowiedź nad płótnem się przelicza. */
+    var curveTick by mutableIntStateOf(0)
+    val curveHint: String get() { curveTick; return com.mdev.mnotes.core.shapes.CurveDraft.hint(curveMode, curveDraft?.count ?: 0, T.pl) }
+
+    /** Szkic dla bieżącego trybu; zmiana trybu zaczyna nowy (stary zapisany wcześniej przez [curveChoose]). */
+    fun curveDraftFor(pageId: String): com.mdev.mnotes.core.shapes.CurveDraft {
+        if (curvePage != null && curvePage != pageId) curveCommit()
+        val d = curveDraft?.takeIf { it.mode == curveMode } ?: com.mdev.mnotes.core.shapes.CurveDraft(curveMode).also { curveDraft = it }
+        curvePage = pageId
+        return d
+    }
+
+    fun curveChoose(m: com.mdev.mnotes.core.shapes.CurveMode) { curveCommit(); settings.curveMode = m.ordinal; curveTick++ }
+
+    fun curveCancel() { curveDraft = null; curvePage = null; curveTick++; view?.invalidate() }
+
+    /** Zapisuje rozpoczętą krzywą jako kreskę z uchwytami (zaznaczoną, jak po F17); [close] = domknij (kontur zawsze). */
+    fun curveCommit(close: Boolean = false) {
+        val d = curveDraft
+        val page = curvePage?.let { doc.page(it) }
+        curveDraft = null; curvePage = null; curveTick++
+        view?.invalidate()
+        if (d == null || page == null || readOnly) return
+        val c = d.ctrl(close || d.mode == com.mdev.mnotes.core.shapes.CurveMode.CLOSED) ?: return
+        val shut = com.mdev.mnotes.core.shapes.CurveFit.closed(c)
+        val p = pen
+        val s = Stroke(Ids.next(), p.kind, p.color, p.width, com.mdev.mnotes.core.shapes.Bezier.sample(c), line = p.style, ctrl = c, fill = if (shut && settings.curveFill) p.color or (0xFF shl 24) else 0)
+        exec(DocEdit.Elements(page.id, ElementsEdit.add(doc.content(page), listOf(s))))
+        select(page.id, setOf(s.id))
     }
 
     /** Pomysł Fable 12: jedyny zaznaczony obraz staje się tłem strony — zablokowany i na spodzie, pod pismem. */

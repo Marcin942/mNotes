@@ -11,7 +11,6 @@ import com.mdev.mnotes.core.cache.Coalescer
 import com.mdev.mnotes.core.geom.Bounds
 import com.mdev.mnotes.core.layout.RenderProfile
 import com.mdev.mnotes.core.layout.TileGrid
-import com.mdev.mnotes.core.model.ColorInvert
 import com.mdev.mnotes.core.model.ElementsEdit
 import com.mdev.mnotes.core.model.PageContent
 import com.mdev.mnotes.core.model.PageSpec
@@ -76,13 +75,23 @@ class PageCache(
     private val entries = HashMap<String, Entry>()
     private val main = Handler(Looper.getMainLooper())
     private val ui = PageRenderer(assets)
+    /**
+     * 2b-A9: przekształcenie trybu ciemnego/jasnego dla strony o danym stylu (null — jak w pliku) i odwracanie zdjęć;
+     * ustawia je widok z ustawień, a po zmianie czyści kafelki ([invalidateAll]) — przekształcenie jest w nich wypalone.
+     */
+    @Volatile var themeOf: (PageSpec) -> com.mdev.mnotes.core.color.ThemeMap.Transform? = { null }
+    @Volatile var themePhotos = false
+
+    private fun prep(r: PageRenderer, spec: PageSpec) { r.theme = themeOf(spec); r.themePhotos = themePhotos }
+
+    /** Farba tła PDF z filtrem przekształcenia (gdy jest), na bazie [base]. */
+    private fun bgPaint(r: PageRenderer, base: Paint?): Paint? {
+        val f = r.themeImageFilter() ?: return base
+        return Paint(base ?: Paint(Paint.FILTER_BITMAP_FLAG)).apply { colorFilter = f }
+    }
+
     private val tilePaint = Paint(Paint.FILTER_BITMAP_FLAG)
     private val basePaint = Paint(Paint.FILTER_BITMAP_FLAG)
-    // F11 (A2-6): odwrócona strona to te same kafelki rysowane z filtrem w farbie — bez warstwy na każdą klatkę i bez
-    // drugiej kopii bitmap; przełączenie jest dalej natychmiastowe, a pipeta i łatanie kafelków widzą oryginał.
-    private val invertFilter = android.graphics.ColorMatrixColorFilter(android.graphics.ColorMatrix(ColorInvert.MATRIX))
-    private val tilePaintInv = Paint(Paint.FILTER_BITMAP_FLAG).apply { colorFilter = invertFilter }
-    private val basePaintInv = Paint(Paint.FILTER_BITMAP_FLAG).apply { colorFilter = invertFilter }
     private val rect = RectF()
     private val layers = ArrayList<Level>(MAX_LEVELS)
     private val sorted = ArrayList<Level>(MAX_LEVELS)
@@ -202,11 +211,9 @@ class PageCache(
     /**
      * Rysuje stronę w jej układzie (canvas ma już początek w rogu strony, przycięty do strony): [vis] = widoczny
      * fragment strony (pt), [req] = fragment, dla którego przygotowujemy kafelki (z zapasem). Zwraca false, gdy nie
-     * ma jeszcze żadnej bitmapy — wtedy widok rysuje wektorowo. [inverted] = strona w odwróconych kolorach (F11).
+     * ma jeszcze żadnej bitmapy — wtedy widok rysuje wektorowo. Tryb ciemny/jasny jest już wypalony w kafelkach ([themeOf]).
      */
-    fun draw(c: Canvas, page: PageState, vis: Bounds, req: Bounds, left: Float, top: Float, zoom: Float, inverted: Boolean = false): Boolean {
-        val tilePaint = if (inverted) tilePaintInv else tilePaint
-        val basePaint = if (inverted) basePaintInv else basePaint
+    fun draw(c: Canvas, page: PageState, vis: Bounds, req: Bounds, left: Float, top: Float, zoom: Float): Boolean {
         val e = entry(page)
         want(page, e, vis, req, left, top)
         val spec = page.spec
@@ -381,6 +388,7 @@ class PageCache(
             if (page != null) runCatching {
                 val content = visible(page.id, doc.content(page))
                 val spec = page.spec
+                prep(r, spec)
                 if (t.level == null) {
                     val w = TileGrid.pixels(spec.w, baseSc); val h = TileGrid.pixels(spec.h, baseSc)
                     bg = spec.pdf?.let { pdf.render(doc.id, it.asset, it.page, w, h) }
@@ -397,7 +405,7 @@ class PageCache(
                     bg = spec.pdf?.let { pdf.renderTile(doc.id, it.asset, it.page, sc, oxPx, oyPx, w, h) }
                     val bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
                     val c = Canvas(bmp)
-                    if (bg != null) c.drawBitmap(bg!!, 0f, 0f, null)
+                    if (bg != null) c.drawBitmap(bg!!, 0f, 0f, bgPaint(r, null))
                     c.scale(sc, sc)
                     c.translate(-oxPx / sc, -oyPx / sc)
                     if (bg == null) r.drawPaper(c, spec, sc, null)
@@ -533,9 +541,10 @@ class PageCache(
                 val gx = ox + px0 / sx; val gy = oy + py0 / sy
                 c.translate(-gx, -gy)
                 val r = Bounds(gx, gy, gx + w / sx, gy + h / sy)
+                prep(patchRenderer, spec)
                 if (level != null && spec.pdf != null) {
                     patchRenderer.drawPaper(c, spec, sc, null)
-                    bg?.let { patchRect.set(ox, oy, ox + it.width / sx, oy + it.height / sy); c.drawBitmap(it, null, patchRect, patchPaint) }
+                    bg?.let { patchRect.set(ox, oy, ox + it.width / sx, oy + it.height / sy); c.drawBitmap(it, null, patchRect, bgPaint(patchRenderer, patchPaint)) }
                 } else patchRenderer.drawPaper(c, spec, sc, bg)
                 patchRenderer.drawElements(c, doc.id, content, 0, r, sc, false, spec.darkPaper)
                 pb
@@ -574,6 +583,7 @@ class PageCache(
         val c = Canvas(bmp)
         c.scale(sx, sy)
         c.translate(-ox, -oy)
+        prep(ui, spec)
         if (appended) {
             for (p in edit.added.sortedBy { it.index }) {
                 if (p.element.bounds.inflate(1.5f / sc).intersects(tb) && hidden != page.id to p.element.id) ui.drawElement(c, doc.id, p.element, sc, false, spec.darkPaper)
@@ -586,7 +596,7 @@ class PageCache(
             c.clipRect(r.l, r.t, r.r, r.b)
             if (t.level != null && spec.pdf != null) {
                 ui.drawPaper(c, spec, sc, null)
-                t.bg?.let { rect.set(ox, oy, ox + it.width / sx, oy + it.height / sy); c.drawBitmap(it, null, rect, basePaint) }
+                t.bg?.let { rect.set(ox, oy, ox + it.width / sx, oy + it.height / sy); c.drawBitmap(it, null, rect, bgPaint(ui, basePaint)) }
             } else ui.drawPaper(c, spec, sc, t.bg)
             ui.drawElements(c, doc.id, content, 0, r, sc, false, spec.darkPaper)
             c.restore()
@@ -729,21 +739,25 @@ class Thumbs(private val repo: Repository, assets: Assets, private val pdf: PdfP
 
     /** Renderuje stronę do bitmapy o szerokości [wPx]. Wywoływać poza wątkiem UI. */
     /** Miniatura strony; [paper] = false — same elementy na przezroczystym tle (podgląd naklejki, 2b-A5). */
-    fun render(nb: String, spec: PageSpec, content: PageContent, wPx: Int, paper: Boolean = true): Bitmap {
+    /**
+     * Miniatura strony; [paper] = false — same elementy na przezroczystym tle (podgląd naklejki, 2b-A5); [theme] —
+     * przekształcenie trybu ciemnego/jasnego (2b-A9), żeby miniatura wyglądała jak strona w edytorze.
+     */
+    fun render(nb: String, spec: PageSpec, content: PageContent, wPx: Int, paper: Boolean = true, theme: com.mdev.mnotes.core.color.ThemeMap.Transform? = null, photos: Boolean = false): Bitmap {
         val sc = wPx / spec.w
         val h = ceil(spec.h * sc).toInt().coerceAtLeast(1)
         val bg = if (paper) spec.pdf?.let { pdf.render(nb, it.asset, it.page, wPx, h) } else null
         val bmp = Bitmap.createBitmap(wPx, h, Bitmap.Config.ARGB_8888)
         val c = Canvas(bmp)
         c.scale(sc, h / spec.h)
-        if (paper) renderer.drawPaper(c, spec, sc, bg)
-        renderer.drawElements(c, nb, content, 0, null, sc, true, spec.darkPaper)
-        if (!spec.inverted) return bmp
-        // F11: miniatura (i okładka z pierwszej strony) w odwróconych kolorach, jak strona w edytorze.
-        val inv = Bitmap.createBitmap(wPx, h, Bitmap.Config.ARGB_8888)
-        Canvas(inv).drawBitmap(bmp, 0f, 0f, Paint().apply { colorFilter = android.graphics.ColorMatrixColorFilter(android.graphics.ColorMatrix(ColorInvert.MATRIX)) })
-        bmp.recycle()
-        return inv
+        synchronized(renderer) {
+            renderer.theme = theme; renderer.themePhotos = photos
+            try {
+                if (paper) renderer.drawPaper(c, spec, sc, bg)
+                renderer.drawElements(c, nb, content, 0, null, sc, true, spec.darkPaper)
+            } finally { renderer.theme = null; renderer.themePhotos = false }
+        }
+        return bmp
     }
 
     /** Okładka: miniatura pierwszej strony z pliku lub świeżo wyrenderowana (i zapisana). */

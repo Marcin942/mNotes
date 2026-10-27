@@ -33,14 +33,29 @@ object MiniMap {
 
     class Geometry(val box: Bounds, val scale: Float, val view: Bounds)
 
+    /** Narożniki widoku (2b-A3): prawy dolny (domyślny), lewy dolny, prawy górny, lewy górny. */
+    const val BOTTOM_RIGHT = 0
+    const val BOTTOM_LEFT = 1
+    const val TOP_RIGHT = 2
+    const val TOP_LEFT = 3
+
+    /** Rozmiar mapy w dp (szerokość pola; wysokość 1,25 × tyle) — suwak w Ustawieniach. */
+    const val MIN_SIZE_DP = 80f
+    const val MAX_SIZE_DP = 200f
+    const val DEFAULT_SIZE_DP = 120f
+
     /**
-     * Mini-mapa strony [pw]×[ph] pt wpisana w pole najwyżej [maxW]×[maxH] px w prawym dolnym rogu widoku
+     * Mini-mapa strony [pw]×[ph] pt wpisana w pole najwyżej [maxW]×[maxH] px w narożniku [corner] widoku
      * [vw]×[vh] px z marginesem [margin]; [visible] = widoczny fragment strony w pt.
      */
-    fun geometry(pw: Float, ph: Float, visible: Bounds, vw: Float, vh: Float, maxW: Float, maxH: Float, margin: Float): Geometry {
+    fun geometry(pw: Float, ph: Float, visible: Bounds, vw: Float, vh: Float, maxW: Float, maxH: Float, margin: Float, corner: Int = BOTTOM_RIGHT): Geometry {
         val s = minOf(maxW / pw, maxH / ph)
         val w = pw * s; val h = ph * s
-        val box = Bounds(vw - margin - w, vh - margin - h, vw - margin, vh - margin)
+        val left = corner == BOTTOM_LEFT || corner == TOP_LEFT
+        val top = corner == TOP_RIGHT || corner == TOP_LEFT
+        val l = if (left) margin else vw - margin - w
+        val t = if (top) margin else vh - margin - h
+        val box = Bounds(l, t, l + w, t + h)
         val v = Bounds(
             box.l + visible.l.coerceIn(0f, pw) * s, box.t + visible.t.coerceIn(0f, ph) * s,
             box.l + visible.r.coerceIn(0f, pw) * s, box.t + visible.b.coerceIn(0f, ph) * s,

@@ -647,7 +647,8 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
         val pi = ed.pageIndex.coerceIn(0, layout.count - 1)
         val spec = doc.pages[pi].spec
         val vis = Bounds(docX(0f) - layout.left(pi), docY(0f) - layout.top(pi), docX(width.toFloat()) - layout.left(pi), docY(height.toFloat()) - layout.top(pi))
-        return MiniMap.geometry(spec.w, spec.h, vis, width.toFloat(), height.toFloat(), 120f * dp, 150f * dp, 14f * dp)
+        val s = settings.miniMapSize.coerceIn(MiniMap.MIN_SIZE_DP, MiniMap.MAX_SIZE_DP) * dp
+        return MiniMap.geometry(spec.w, spec.h, vis, width.toFloat(), height.toFloat(), s, 1.25f * s, 14f * dp, settings.miniMapCorner)
     }
 
     private fun drawMiniMap(c: Canvas) {

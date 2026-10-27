@@ -28,6 +28,24 @@ class MiniMapTest {
         assertEquals(g2.box.l, g2.view.l, 1e-3f); assertEquals(g2.box.b, g2.view.b, 1e-3f)
     }
 
+    /** 2b-A3: mapa w wybranym narożniku i rozmiarze; widok i dotyk liczone względem jej pola. */
+    @Test fun cornerAndSizeAreConfigurable() {
+        val vis = Bounds(0f, 0f, 100f, 100f)
+        val tl = MiniMap.geometry(600f, 800f, vis, 1000f, 1200f, 160f, 200f, 10f, MiniMap.TOP_LEFT)
+        assertEquals(10f, tl.box.l, 1e-3f); assertEquals(10f, tl.box.t, 1e-3f)
+        val bl = MiniMap.geometry(600f, 800f, vis, 1000f, 1200f, 160f, 200f, 10f, MiniMap.BOTTOM_LEFT)
+        assertEquals(10f, bl.box.l, 1e-3f); assertEquals(1190f, bl.box.b, 1e-3f)
+        val tr = MiniMap.geometry(600f, 800f, vis, 1000f, 1200f, 160f, 200f, 10f, MiniMap.TOP_RIGHT)
+        assertEquals(990f, tr.box.r, 1e-3f); assertEquals(10f, tr.box.t, 1e-3f)
+        // Większe pole = większa mapa; punkt w środku mapy to dalej środek strony.
+        val small = MiniMap.geometry(600f, 800f, vis, 1000f, 1200f, 80f, 100f, 10f)
+        val big = MiniMap.geometry(600f, 800f, vis, 1000f, 1200f, 200f, 250f, 10f)
+        assertTrue(big.box.w > 2f * small.box.w)
+        val p = MiniMap.toPage(tl, tl.box.cx, tl.box.cy, 600f, 800f)
+        assertEquals(300f, p[0], 0.1f); assertEquals(400f, p[1], 0.1f)
+        assertEquals(tl.box.l, tl.view.l, 1e-3f)
+    }
+
     /** A2-2: mapa widoczna tylko chwilę po ruchu widoku, potem gaśnie (jak pasek przewijania). */
     @Test fun showsOnlyAfterMovingThenFades() {
         assertEquals(0f, MiniMap.alpha(5_000L, 0L), 0f)                 // bez ruchu nic nie zasłania

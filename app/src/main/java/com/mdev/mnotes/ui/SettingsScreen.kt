@@ -2,6 +2,8 @@ package com.mdev.mnotes.ui
 
 import com.mdev.mnotes.core.edit.AngleSnap
 import com.mdev.mnotes.core.layout.HelperStrip
+import com.mdev.mnotes.core.layout.MiniMap
+import kotlin.math.roundToInt
 import com.mdev.mnotes.core.layout.PageShift
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -306,6 +308,18 @@ private fun Appearance(set: com.mdev.mnotes.data.Settings) {
             T.t("Mini-mapa strony po przewinięciu przy dużym powiększeniu (przesuwana palcem)", "Page mini-map after scrolling when zoomed in (moved with a finger)"),
             set.miniMap, keys = "mini mapa podgląd strony nawigacja powiększenie zoom róg minimap overview",
         ) { set.miniMap = it }
+        // 2b-A3: rozmiar i narożnik mini-mapy.
+        if (set.miniMap) {
+            Opt(T.t("Rozmiar mini-mapy: ${set.miniMapSize.toInt()} dp", "Mini-map size: ${set.miniMapSize.toInt()} dp"), "mini mapa rozmiar wielkość duża mała size") {
+                MSlider(set.miniMapSize, MiniMap.MIN_SIZE_DP, MiniMap.MAX_SIZE_DP) { set.miniMapSize = (it / 10f).roundToInt() * 10f }
+            }
+            Opt(T.t("Narożnik mini-mapy", "Mini-map corner"), "mini mapa róg narożnik położenie lewy prawy górny dolny corner position") {
+                Choice(
+                    listOf(T.t("Prawy dolny", "Bottom right"), T.t("Lewy dolny", "Bottom left"), T.t("Prawy górny", "Top right"), T.t("Lewy górny", "Top left")),
+                    set.miniMapCorner,
+                ) { set.miniMapCorner = it }
+            }
+        }
         ToggleRow(T.t("Animacja zmiany kolejności stron", "Animate page reordering"), set.pageAnim, keys = "animacja strony kolejność przesuwanie przestawianie animation reorder pages") { set.pageAnim = it }
         if (set.pageAnim) Opt(T.t("Czas animacji stron: ${set.pageAnimMs} ms", "Page animation time: ${set.pageAnimMs} ms"), "animacja strony czas szybkość duration speed") {
             MSlider(set.pageAnimMs.toFloat(), PageShift.MIN_MS.toFloat(), PageShift.MAX_MS.toFloat()) { set.pageAnimMs = (it / 20).toInt() * 20 }

@@ -137,6 +137,8 @@ class Settings(ctx: Context) {
     var constructNames by Pref("construct.names", true)  // L1 (A2-9): konstrukcje podpisują punkty A, B, C, O, H…
     var paletteRecent by Pref("palette.recent", "")      // pomysł Fable 2: ostatnio użyte polecenia palety (id po przecinku)
     var miniMap by Pref("view.minimap", false)           // pomysł Fable 3: mini-mapa strony przy dużym powiększeniu; domyślnie wył. (A2-2)
+    var miniMapSize by Pref("view.minimap_size", com.mdev.mnotes.core.layout.MiniMap.DEFAULT_SIZE_DP)   // 2b-A3: szerokość pola w dp (80–200)
+    var miniMapCorner by Pref("view.minimap_corner", com.mdev.mnotes.core.layout.MiniMap.BOTTOM_RIGHT)  // 2b-A3: narożnik widoku
     var imageGridFit by Pref("images.grid_fit", false)   // pomysł Fable 11: wstawione zdjęcie wyrównane do kratki
     var dockPages by Pref("ui.dockpages", false)    // panel stron zadokowany z lewej na szerokim oknie (LNX-016)
     var samsungMode by Pref("import.samsung_mode", 0) // ostatni wybór w oknie importu Samsung Notes: 0 wygląd oryginału, 1 standard mNotes

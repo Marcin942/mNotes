@@ -392,3 +392,8 @@ Wygląd ikon sprawdzam rysunkiem Java2D z tej samej geometrii (`PreviewHarness`,
   ikonie gumki menu z trybami i rozmiarami; dotknij koloru na listwie → wraca pióro (albo Krzywa, jeśli to nią pisałeś);
   Ustawienia → Wygląd → „Opcje narzędzia + powrót” → opcje gumki na listwie, ostatni przycisk wraca do pisania; wyłącz
   „Menu przy laserze” → laser bez menu.
+- **Scalenie `noc/lab2`** (po 2b-A2): Nearby 2b-B1 kroki 1–2; bez konfliktów; core 718, lab 764.
+- **2b-A3** mini-mapa: rozmiar i narożnik — `noc/f2b-minimapa`; `MiniMapTest.cornerAndSizeAreConfigurable`. Razem z A2-2
+  (gaśnie po ruchu, tylko palec). **Wygląd:** pod przełącznikiem mini-mapy w Wygląd suwak „Rozmiar mini-mapy: 120 dp”
+  (krok 10) i chipy narożnika; mapa jak dotąd, tylko w wybranym miejscu i wielkości. **Tablet:** ustaw 200 dp i lewy górny
+  → przybliż ≥ 2,5× i przewiń — mapa w lewym górnym rogu, większa; przeciągnięcie palcem po niej przenosi widok.

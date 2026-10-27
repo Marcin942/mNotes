@@ -135,6 +135,62 @@ object EraseMath {
     }
 
     /**
+     * Gumka na łamanej z uchwytami (rozpoznany kształt, F3): kawałki zostają łamanymi z samych wierzchołków i punktów
+     * cięcia, więc po rozcięciu prostej wychodzą dwie proste z uchwytami na końcach (`o—o o—o`), a nie gęsta kreska.
+     * Zamknięta łamana rozcięta raz staje się jedną otwartą. Null = nietknięta.
+     */
+    fun erasePoly(s: Stroke, ax: Float, ay: Float, bx: Float, by: Float, r: Float): Erased? {
+        if (!hitsStrokeSwept(s, ax, ay, bx, by, r)) return null
+        val p = s.pts
+        val n = s.count
+        if (n < 2) return Erased(emptyList(), s.bounds)
+        val half = s.width * 0.5f
+        fun inside(x: Float, y: Float, pr: Float): Boolean {
+            val rad = r + 0.35f * half * pr
+            return GeomMath.distSqPointSegment(x, y, ax, ay, bx, by) <= rad * rad
+        }
+        // Odcinki dzielimy na części poza kapsułą; punkt cięcia doprecyzowuje bisekcja (odległość od kapsuły jest wypukła
+        // wzdłuż odcinka, więc część w środku to jeden przedział).
+        val pieces = ArrayList<FloatList>()
+        var cur: FloatList? = null
+        var removed = false
+        for (i in 0 until n - 1) {
+            val x0 = p[3 * i]; val y0 = p[3 * i + 1]; val p0 = p[3 * i + 2]
+            val x1 = p[3 * i + 3]; val y1 = p[3 * i + 4]; val p1 = p[3 * i + 5]
+            fun at(t: Float) = floatArrayOf(x0 + (x1 - x0) * t, y0 + (y1 - y0) * t, p0 + (p1 - p0) * t)
+            fun inAt(t: Float): Boolean { val q = at(t); return inside(q[0], q[1], q[2]) }
+            val len = hypot(x1 - x0, y1 - y0)
+            val k = (len / max(0.3f, r * 0.25f)).toInt().coerceIn(1, 2000)
+            var t0 = -1f; var t1 = -1f
+            for (j in 0..k) { val t = j.toFloat() / k; if (inAt(t)) { if (t0 < 0f) t0 = t; t1 = t } }
+            if (cur == null) cur = FloatList().also { pieces.add(it); val q = at(0f); it.add(q[0], q[1], q[2]) }
+            if (t0 < 0f) { val q = at(1f); cur.add(q[0], q[1], q[2]); continue }
+            removed = true
+            fun edge(outT: Float, inT: Float): Float {
+                var o = outT; var w = inT
+                repeat(24) { val m = (o + w) / 2f; if (inAt(m)) w = m else o = m }
+                return o
+            }
+            if (t0 > 0f) { val c = edge(t0 - 1f / k, t0); val q = at(c); cur.add(q[0], q[1], q[2]) } else if (cur.size == 3) pieces.removeAt(pieces.size - 1)
+            cur = null
+            if (t1 < 1f) {
+                val c = edge(t1 + 1f / k, t1)
+                cur = FloatList().also { pieces.add(it); val q = at(c); it.add(q[0], q[1], q[2]); val e = at(1f); it.add(e[0], e[1], e[2]) }
+            }
+        }
+        if (!removed) return null
+        var out = pieces.filter { it.size >= 6 }.map { it.toArray() }.filter { lengthXYP(it) > 0.5f }
+        // Zamknięta łamana: kawałek kończący się w punkcie startu i kawałek od niego zaczynający się to jedna łamana.
+        if (s.closed && out.size >= 2) {
+            val first = out.first(); val last = out.last()
+            if (first[0] == p[0] && first[1] == p[1] && last[last.size - 3] == p[0] && last[last.size - 2] == p[1]) {
+                out = listOf(last + first.copyOfRange(3, first.size)) + out.subList(1, out.size - 1)
+            }
+        }
+        return Erased(out, s.bounds)
+    }
+
+    /**
      * Obszar zmieniony przez starcie: odcinki w zasięgu gumki z dwoma sąsiadami po obu stronach (od nich zależą
      * wygładzenie krzywej i normalne obrysu), poszerzone o pół grubości.
      */
@@ -188,6 +244,13 @@ object EraseMath {
             if (y > b) b = y
         }
         return if (l > r) null else Bounds(l, t, r, b)
+    }
+
+    /** Długość łamanej zapisanej trójkami x, y, p. */
+    private fun lengthXYP(pts: FloatArray): Float {
+        var s = 0f
+        for (i in 1 until pts.size / 3) s += hypot(pts[3 * i] - pts[3 * i - 3], pts[3 * i + 1] - pts[3 * i - 2])
+        return s
     }
 
     private fun avgPressure(pts: FloatArray): Float {

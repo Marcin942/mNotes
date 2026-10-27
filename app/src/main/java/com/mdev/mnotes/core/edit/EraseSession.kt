@@ -85,9 +85,11 @@ class EraseSession(
         }
         return when (e) {
             is Stroke -> {
-                val res = EraseMath.eraseSwept(e, ax, ay, bx, by, r) ?: return null
+                // Łamana z uchwytami (bez elipsy, która jest gęstą krzywą) zostaje łamaną: kawałki mają własne uchwyty (F3).
+                val poly = e.poly && !e.ellipse
+                val res = (if (poly) EraseMath.erasePoly(e, ax, ay, bx, by, r) else EraseMath.eraseSwept(e, ax, ay, bx, by, r)) ?: return null
                 dirty = dirty.union(res.dirty)
-                res.pieces.map { Stroke(Ids.next(), e.pen, e.color, e.width, it, false, line = e.line) }
+                res.pieces.map { Stroke(Ids.next(), e.pen, e.color, e.width, it, false, poly = poly, line = e.line) }
             }
             is FillEl -> {
                 // Wypełnienia są rzadkie i mają własną, dokładną matematykę koła: ruch idzie krokami jak dawniej.

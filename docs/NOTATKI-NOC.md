@@ -21,3 +21,4 @@ Rysunki z „Pomysły mNotes.pdf” odczytane własnym rasteryzatorem (Python, b
 ### Funkcje
 - **F1** lasso „Zbalansowane / Tylko zahacz” — `noc/lasso`; `LassoSelectTest` (musnięcie kreski, róg obrazu w pętli). Tablet: panel lassa (przytrzymaj ikonę lassa / dotknij ponownie), obie opcje; Ustawienia → Gumka i lasso.
 - **F2** wyłączanie napisów: dwa przełączniki w Ustawienia → Wygląd (podpowiedzi nad przyciskami, dymki po wyborze narzędzia) — `noc/lasso`; tylko UI, bez testu JVM. Tablet: wyłącz oba, najedź rysikiem na pasek i wybierz Taśmę — nie powinno być żadnego napisu. To może też tłumaczyć B8 (dymek „Ręka (przewijanie)” przy najechaniu rysikiem).
+- **F3** rozcięcie prostej gumką pikselową daje dwie proste z uchwytami (`o—o o—o`) — `noc/lasso`; `PolyCutTest`. Tablet: narysuj prostą z przytrzymaniem, przetnij gumką pikselową, dotknij kawałka lassem — na końcach mają być niebieskie uchwyty.

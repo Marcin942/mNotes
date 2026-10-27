@@ -171,6 +171,7 @@ Wszystko poniżej: kod + testy JVM, **bez testu na tablecie**. Gałęzie `noc/*`
 - [x] NOC-B9 Krótkie proste: próg prostej z grubości pióra i powiększenia (3–18 pt, `ShapeRecognizer.minLineFor`), krótka kreska może być tylko prostą (`ShortLineTest`)
 - [x] NOC-B10 Kreska ukośna w ramce prostokąta: jak NOC-B3
 - [x] NOC-F2 Wyłączanie napisów o narzędziach: Ustawienia → Wygląd → „Podpowiedź z nazwą przycisku (najechanie, przytrzymanie)” (`ui.tooltips`; przy rysiku dymek pojawiał się przy każdym najechaniu na pasek) i „Pokazuj dymki o narzędziach po ich wybraniu” (`ui.tool_hints`: taśma, pędzel formatu, wiaderko, odstęp); oba domyślnie włączone jak dotąd. Tylko UI, bez testu JVM
+- [x] NOC-F3 Rozcięta prosta/łamana z uchwytami zostaje łamaną z uchwytami: kawałki to wierzchołki + dokładne punkty cięcia (bisekcja na brzegu gumki), zamknięty kształt rozcięty raz staje się jedną otwartą łamaną (`EraseMath.erasePoly`, `PolyCutTest`)
 - [x] NOC-F1 Lasso „Zbalansowane / Tylko zahacz” (gałąź `noc/lasso`): chipy w panelu lassa i Ustawienia → Gumka i lasso → „Co zaznacza lasso” (`lasso.touch`, domyślnie zbalansowane = dawne zachowanie). „Tylko zahacz”: kawałek obiektu w pętli albo pętla przechodzi w 3 dp od niego (`EraseMath.touchedByLasso`, `LassoSelectTest`)
 
 ## Poza zakresem (świadomie)

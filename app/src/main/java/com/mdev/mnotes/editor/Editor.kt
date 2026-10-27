@@ -8,6 +8,8 @@ import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import com.mdev.mnotes.app.MNotesApp
+import com.mdev.mnotes.core.geom.Axes
+import com.mdev.mnotes.core.geom.AxesSpec
 import com.mdev.mnotes.core.geom.Bounds
 import com.mdev.mnotes.core.model.DocEdit
 import com.mdev.mnotes.core.model.Element
@@ -524,6 +526,51 @@ class Editor(val ctx: Context, val nbId: String) {
                 onDone()
             }
         }
+    }
+
+    // — Układ współrzędnych (F8) —
+    var axesOpen by mutableStateOf(false)
+
+    /**
+     * Wstawia układ współrzędnych na środku widoku: siatka, osie ze strzałkami, podziałka i opisy jako zwykłe łamane
+     * i pola tekstu (bez nowego typu w pliku, więc działa też eksport i starsze wersje). Wszystko zostaje zaznaczone
+     * lassem, żeby od razu dało się przesunąć albo przeskalować; jedno cofnięcie usuwa całość.
+     */
+    fun insertAxes(spec: AxesSpec) {
+        val (pi, cx, cy) = view?.viewCenterOnPage() ?: return
+        val page = doc.pages.getOrNull(pi) ?: return
+        val s = spec.normalized()
+        val w = (s.xMax - s.xMin) * s.unit; val h = (s.yMax - s.yMin) * s.unit
+        val m = Axes.OVERHANG + Axes.ARROW + 12f
+        val left = (cx - w / 2f).coerceIn(m, maxOf(m, page.spec.w - w - m))
+        val top = (cy - h / 2f).coerceIn(m, maxOf(m, page.spec.h - h - m))
+        val d = Axes.build(s, left, top)
+        // Kolor aktywnego pióra (zakreślacz dałby blade osie, więc wtedy grafit); siatka to ten sam kolor, przygaszony.
+        val ink = (if (pen.kind == PenKind.HIGHLIGHTER) 0xFF37474F.toInt() else pen.color) or (0xFF shl 24)
+        val faint = (ink and 0xFFFFFF) or (0x48 shl 24)
+        fun line(xy: FloatArray, width: Float, color: Int): Stroke {
+            val pts = FloatArray(xy.size / 2 * 3)
+            for (i in 0 until xy.size / 2) { pts[3 * i] = xy[2 * i]; pts[3 * i + 1] = xy[2 * i + 1]; pts[3 * i + 2] = 1f }
+            return Stroke(Ids.next(), PenKind.BALLPOINT, color, width, pts, poly = true)
+        }
+        val els = ArrayList<Element>()
+        d.grid.forEach { els.add(line(it, 0.45f, faint)) }
+        d.axes.forEach { els.add(line(it, 1.1f, ink)) }
+        d.ticks.forEach { els.add(line(it, 0.9f, ink)) }
+        val fs = (s.unit * 0.42f).coerceIn(5.5f, 10f)
+        for (l in d.labels) {
+            val big = l.text == s.xName || l.text == s.yName
+            val size = if (big) fs * 1.25f else fs
+            val tw = l.text.length * size * 0.62f + 3f
+            val th = size * 1.3f
+            val bx = when (l.ax) { -1 -> l.x - tw / 2f; 1 -> l.x + tw / 2f; else -> l.x }
+            val by = when (l.ay) { -1 -> l.y - th / 2f; 1 -> l.y + th / 2f; else -> l.y }
+            val align = when (l.ax) { -1 -> TextBox.ALIGN_END; 1 -> TextBox.ALIGN_START; else -> TextBox.ALIGN_CENTER }
+            els.add(TextBox(Ids.next(), bx, by, tw, th, 0f, l.text, size, ink, style = if (big) TextBox.STYLE_ITALIC else 0, align = align))
+        }
+        exec(DocEdit.Elements(page.id, ElementsEdit.add(doc.content(page), els)))
+        tool = Tool.LASSO
+        select(page.id, els.map { it.id }.toSet())
     }
 
     // — Strony —

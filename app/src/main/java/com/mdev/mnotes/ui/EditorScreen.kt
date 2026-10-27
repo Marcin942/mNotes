@@ -114,6 +114,7 @@ import androidx.compose.material.icons.rounded.MoreVert
 import androidx.compose.material.icons.rounded.Palette
 import androidx.compose.material.icons.rounded.PanTool
 import androidx.compose.material.icons.rounded.Search
+import androidx.compose.material.icons.rounded.ShowChart
 import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material.icons.rounded.TextFields
 import androidx.compose.material.icons.rounded.TrackChanges
@@ -259,7 +260,7 @@ fun EditorScreen(ed: Editor, tabs: TabsCtl, onExit: () -> Unit, onSettings: () -
     var palette by remember { mutableStateOf(false) }
     var goTo by remember { mutableStateOf(false) }
     val focus = remember { FocusRequester() }
-    val dialogOpen = palette || goTo || ed.exportOpen || ed.textReq != null
+    val dialogOpen = palette || goTo || ed.exportOpen || ed.axesOpen || ed.textReq != null
     val searchTyping = ed.searchOpen && fieldFocused
     val widthDp = androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp
     val showMenu = ed.chrome && menuBarVisible(set.menuBar, widthDp)
@@ -397,6 +398,7 @@ fun EditorScreen(ed: Editor, tabs: TabsCtl, onExit: () -> Unit, onSettings: () -
         ed.textReq?.let { TextDialog(ed, it) }
         if (goTo) GoToDialog(ed) { goTo = false }
         if (ed.exportOpen) ExportDialog(ed.nbId, ed.pageIndex, { ed.doc.flush() }) { ed.exportOpen = false }
+        if (ed.axesOpen) AxesDialog(ed) { ed.axesOpen = false }
         if (palette) PaletteDialog(cmds) { palette = false }
     }
 }
@@ -1689,6 +1691,7 @@ private fun MoreMenu(ed: Editor, set: com.mdev.mnotes.data.Settings, close: () -
             HorizontalDivider(Modifier.padding(vertical = 4.dp), color = m.line)
             MenuRow(Icons.Rounded.FitScreen, T.t("Dopasuj do szerokości", "Fit width"), "Ctrl+0") { ed.view?.fitWidth(); close() }
             MenuRow(Icons.Rounded.Palette, T.t("Styl strony…", "Page style…"), "") { openStyle() }
+            if (!ed.readOnly) MenuRow(Icons.Rounded.ShowChart, T.t("Układ współrzędnych…", "Coordinate axes…"), "") { close(); ed.axesOpen = true }
             MenuRow(Icons.Rounded.Fullscreen, T.t("Ukryj paski (tryb skupienia)", "Hide bars (focus mode)"), "F11") { ed.chrome = false; close() }
             ToggleRow(T.t("Tylko do odczytu", "Read-only"), ed.readOnly) { ed.readOnly = it }
             ToggleRow(T.t("Okno powiększenia (pisz w powiększeniu)", "Zoom window (write magnified)"), ed.zoomWin) { ed.toggleZoomWin(); close() }

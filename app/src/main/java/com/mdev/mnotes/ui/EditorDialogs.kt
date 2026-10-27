@@ -134,6 +134,7 @@ fun commandList(
         "tbRight" to ({ true } to { set.toolbarPos = 3 }),
         "insertImage" to ({ !ed.readOnly } to { pickImage() }),
         "pageBackground" to ({ !ed.readOnly } to { ed.imageAsBackground = true; pickImage() }),
+        "insertAxes" to ({ !ed.readOnly } to { ed.axesOpen = true }),
         "addPage" to ({ !ed.readOnly } to { ed.addPage() }),
         "bookmark" to ({ true } to { ed.toggleBookmark() }),
         "copyPage" to ({ true } to { ed.copyPage() }),

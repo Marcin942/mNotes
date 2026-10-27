@@ -34,12 +34,13 @@ object LinkPermissions {
 enum class SyncRole { HOST, CLIENT; val opposite get() = if (this == HOST) CLIENT else HOST }
 
 /**
- * Nearby przyjmuje ładunek BYTES do ok. 32 KB, więc wiadomość idzie w porcjach po [CHUNK] bajtów z bajtem flagi
- * (1: ciąg dalszy, 0: ostatnia). Limit wiadomości podniesiony względem klawiatury (1 MiB) do [MAX_MESSAGE], bo zdjęcie
- * z telefonu ma kilka MB. Nearby zachowuje kolejność ładunków.
+ * Wiadomość w porcjach po [CHUNK] bajtów z bajtem flagi (1: ciąg dalszy, 0: ostatnia). Limit ładunku BYTES w
+ * `play-services-nearby:19.3.0` to `ConnectionsClient.MAX_BYTES_DATA_SIZE` = 1 047 552 B (odczytane z jara; materiał
+ * z mChochlika zakładał 32 KB), więc porcja to 900 000 B i część zdjęcia (256 KB, [PhotoSender]) idzie jedną ramką.
+ * Odbiornik skleja porcje dowolnej wielkości (stare 30 KB też). Nearby zachowuje kolejność ładunków.
  */
 object LinkChunks {
-    const val CHUNK = 30_000
+    const val CHUNK = 900_000
     const val MAX_MESSAGE = 24 shl 20
 
     fun split(data: ByteArray, chunk: Int = CHUNK): List<ByteArray> {

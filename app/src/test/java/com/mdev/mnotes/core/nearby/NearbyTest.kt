@@ -65,8 +65,9 @@ class LinkChunksTest {
     fun splitAndJoinLargePhoto() {
         val data = ByteArray(2_500_000) { (it * 31).toByte() }
         val parts = LinkChunks.split(data)
-        assertEquals(84, parts.size)
-        assertTrue(parts.all { it.size <= LinkChunks.CHUNK + 1 })
+        assertEquals(3, parts.size)
+        // każda porcja mieści się w ConnectionsClient.MAX_BYTES_DATA_SIZE z play-services-nearby 19.3.0
+        assertTrue(parts.all { it.size <= LinkChunks.CHUNK + 1 && it.size <= 1_047_552 })
         val j = ChunkJoiner()
         var out: ByteArray? = null
         for (p in parts) out = j.feed(p) ?: out

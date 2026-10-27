@@ -275,3 +275,18 @@ dziedziczy już proces z `start-A.sh`, więc `./gradlew` działa bez niego.
   trójkąt do przerysowania i dwa grafitowe okręgi (prawdziwe kształty, nie wzory). (2) B5: `MnotesArchive.extract(…, tmpDir)`
   z `repo.cache` (= `cacheDir`). (3) BACKLOG: naklejki poza eksportem — wpis F19 doprecyzowany. **Tablet:** Biblioteka →
   Nowy → „Zeszyt-przewodnik” → strona 7: zadania 1 i 2 wykonalne bez rysowania okręgów; import `.mnotes` jak w B5.
+- **Scalenie `noc/lab2`** (po A2-11): trzy commity B (B2-5–B2-7). Jedyny konflikt w `LabFeatures.kt` — obie strony dodały
+  metodę z pustą domyślną implementacją (`onLecturePhoto` A, `imageInserted` B), zostały obie. Testy po scaleniu: core 677,
+  lab 717, 0 błędów; oba APK.
+- **A2-12** B6 i B8 jeszcze raz — `noc/f2-wejscie`; `HoldGestureTest` (4 testy), B8 tylko UI. Przeczytana ścieżka: `onDown` →
+  `beginTool` → `penDown` (start licznika) → `penMove` (dryf) → `holdRunnable` → `trySnapShape` / `curveHold`; podpowiedzi:
+  `ToolBtn` → `TooltipBox`. **B6:** licznik przytrzymania startuje od nowa dopiero po dryfie > 20 dp (było 10 dp), a w chwili
+  odpalenia pióro musi stać (≤ 6 dp w ostatnich 100 ms; jeśli nie — sprawdzenie co 80 ms), bo większy promień sam w sobie
+  łapałby drobne pismo w miejscu. Logika w `core/pen/HoldGesture` (bufor ostatnich 64 próbek). **B8:** `TooltipBox(…,
+  enableUserInput = false)` i własny wyzwalacz: najechanie pokazuje podpowiedź tylko kursorowi myszy (po 600 ms), dotyk i
+  rysik — tylko po przytrzymaniu (czas systemowy long-press); zdarzenia nie są zużywane, kliknięcia bez zmian. Trzecia
+  hipoteza B8 do sprawdzenia: z klawiaturą (etui z klawiaturą) jednoliterowy skrót „H” przełącza na Rękę, gdy żadne pole
+  tekstu nie ma fokusu. **Tablet:** (B6) narysuj prostokąt i przytrzymaj lekko drżącą ręką — kształt w ~0,55 s, a nie po
+  1 s+; napisz drobne słowo bez odrywania (np. „mmm”) — nic się nie prostuje w trakcie; (B8) zaznacz coś lassem, prowadź
+  rysik nad paskiem bez dotykania — żadnych dymków; przytrzymaj przycisk Ręki rysikiem — dymek „Ręka (przewijanie)”; z myszą
+  (DeX) najechanie dalej pokazuje dymek. **Pytanie do Marcina bez zmian:** który uchwyt (B6) i kiedy dokładnie „ręka” (B8).

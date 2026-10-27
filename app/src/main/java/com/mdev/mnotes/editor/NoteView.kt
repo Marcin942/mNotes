@@ -58,6 +58,7 @@ import com.mdev.mnotes.core.model.PageSpace
 import com.mdev.mnotes.core.model.PenKind
 import com.mdev.mnotes.core.model.Stroke
 import com.mdev.mnotes.core.model.TextBox
+import com.mdev.mnotes.core.pen.HoldGesture
 import com.mdev.mnotes.core.pen.LaserColors
 import com.mdev.mnotes.core.pen.PenSpec
 import com.mdev.mnotes.core.pen.StrokeBuilder
@@ -170,8 +171,7 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
     private var shapePts = FloatArray(0)
     /** Punkty kontrolne wygładzonej krzywej po przytrzymaniu (F18); null = zwykły rozpoznany kształt. */
     private var shapeCtrl: FloatArray? = null
-    private var holdX = 0f; private var holdY = 0f
-    private var holdRaw = 0                         // ile surowych próbek miało powstać do chwili osiadnięcia pióra (reszta to dryf)
+    private var holdRaw = 0                        // ile surowych próbek miało powstać do chwili osiadnięcia pióra (reszta to dryf)
     private var shapeKind = ShapeKind.LINE
     private var shapePoly = false
     private var shapeBase = FloatArray(0)          // kształt tuż po rozpoznaniu (x, y …), baza regulacji
@@ -253,10 +253,16 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
     private val laser = LaserTrail()
     private var lsX = FloatArray(256); private var lsY = FloatArray(256); private var lsNx = FloatArray(256); private var lsNy = FloatArray(256)
 
-    private val holdRunnable = Runnable {
-        if (mode == Mode.TOOL && (activeTool == Tool.PEN || activeTool == Tool.CURVE) && liveActive && !shapeSnapped) trySnapShape()
-        else if (mode == Mode.TOOL && activeTool == Tool.LASSO) lassoHold()
+    private val holdRunnable: Runnable = object : Runnable {
+        override fun run() {
+            if (mode == Mode.TOOL && (activeTool == Tool.PEN || activeTool == Tool.CURVE) && liveActive && !shapeSnapped) {
+                // Pióro jeszcze się rusza (drobne pismo w promieniu dryfu) — to nie przytrzymanie, sprawdzimy za chwilę.
+                if (!hold.still(SystemClock.uptimeMillis())) { postDelayed(this, HoldGesture.RECHECK_MS); return }
+                trySnapShape()
+            } else if (mode == Mode.TOOL && activeTool == Tool.LASSO) lassoHold()
+        }
     }
+    private val hold by lazy { HoldGesture(dp) }
     /** F21: menu punktu po przytrzymaniu uchwytu wierzchołka albo punktu kontrolnego. */
     private val pointHold = Runnable {
         if (mode != Mode.TOOL || lm != LM.VERTEX || toolMoved || lLifting) return@Runnable
@@ -2184,7 +2190,7 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
         val sp = PenSpec.of(p.kind)
         builder.begin(p.kind, p.color, p.width, (sp.smoothing * settings.smoothing).coerceIn(0f, 1f), (0.5f / zoom).coerceIn(0.05f, 0.9f), p.style)
         liveActive = true; shapeSnapped = false; shapeCtrl = null; heldCurve = false; predN = 0
-        holdX = curX; holdY = curY; holdRaw = 0
+        hold.start(ev.eventTime, curX, curY); holdRaw = 0
         if (ed.sel != null) ed.clearSel()
         rulerSide = 0
         if (ed.ruler) {
@@ -2217,8 +2223,9 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
         if (!liveActive) return
         if (shapeSnapped) { adjustSnapped(); return }
         feedPen(ev, idx)
-        // Ślizgający się rysik dryfuje: licznik przytrzymania zeruje dopiero wyraźny ruch poza promieniem dryfu wokół punktu osiadnięcia.
-        if (hypot(curX - holdX, curY - holdY) > HOLD_DRIFT_DP * dp) { holdX = curX; holdY = curY; holdRaw = builder.rawCount; armHold() }
+        // Ślizgający się rysik dryfuje: licznik przytrzymania zeruje dopiero wyraźny ruch poza promieniem dryfu wokół punktu
+        // osiadnięcia (B6, A2-12: 20 dp zamiast 10; pismo w miejscu blokuje warunek „pióro stoi” w holdRunnable).
+        if (hold.move(ev.eventTime, curX, curY)) { holdRaw = builder.rawCount; armHold() }
         updatePrediction()
     }
 
@@ -3306,7 +3313,6 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
         private const val TAP_WINDOW = 320L     // najdłuższa przerwa między kolejnymi dotknięciami palcem (ms)
         private const val HOVER_STALE_MS = 1500L   // po tylu ms bez zdarzeń rysika uznajemy, że odjechał, nawet bez końca zawisu
         private const val TAP_NONE = 3          // „brak” na liście akcji dotknięcia
-        private const val HOLD_DRIFT_DP = 10f   // promień dryfu, w którym przytrzymanie nie jest zerowane
         private const val SNAP_EQ_DP = 6f       // przyciąganie boków prostokąta do równych (kwadrat)
         private const val SNAP_DEAD_DP = 6f     // martwa strefa regulacji kształtu po rozpoznaniu
         /** Uchwyt obrotu leży daleko nad ramką, a jego strefa dotyku (20 dp) nie sięga strefy przesuwania (ramka + 10 dp). */

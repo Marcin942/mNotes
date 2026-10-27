@@ -659,7 +659,10 @@ private fun ToolBar(ed: Editor, set: com.mdev.mnotes.data.Settings, vertical: Bo
             }
         }
     }
-    tool("eraser", 3, MIcons.Eraser, T.t("Gumka", "Eraser"), "E", Tool.ERASER, Panel.ERASER)
+    // 2b-A1: gumka na pasku tym samym glifem co na listwie (w bieżącym trybie), w stylu piór.
+    items += BarItem("eraser", 2, 3, T.t("Gumka", "Eraser"), "E", !ro, ed.tool == Tool.ERASER, ed.tool == Tool.ERASER, { pickTool(Tool.ERASER, Panel.ERASER) }) { c, s ->
+        EraserModeGlyph(set.eraserMode, c, Modifier.size(s + 2.dp))
+    }
     tool("painter", 11, Icons.Rounded.FormatPaint, T.t("Pędzel formatu — przenosi kolor i styl aktywnego pióra", "Format painter — applies the active pen's colour and style"), "B", Tool.PAINTER, Panel.PAINTER)
     tool("fill", 12, Icons.Rounded.FormatColorFill, T.t("Wypełnienie (wiaderko)", "Fill (paint bucket)"), "F", Tool.FILL, Panel.FILL, hold = true)
     icon("pipette", 2, 17, Icons.Rounded.Colorize, T.t("Pipeta — pobierz kolor ze strony", "Eyedropper — pick a colour from the page"), "I", !ro, ed.pipette != null, pin = false) { if (ed.pipette != null) ed.cancelPipette() else ed.pipetteForCurrent() }

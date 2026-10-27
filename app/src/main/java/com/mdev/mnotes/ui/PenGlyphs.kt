@@ -27,6 +27,15 @@ enum class GlyphRole {
 
     /** Wycięcie (szczelina stalówki) — wymazuje to, co pod spodem. */
     CUT,
+
+    /** Znak narzędzia (kreska, nożyczki) pełnym kolorem i grubością konturu korpusu (2b-A1). */
+    MARK,
+
+    /** Linia przerywana (pętla lassa) tą samą grubością co [MARK]. */
+    DASH,
+
+    /** Małe pełne wypełnienie kolorem narzędzia (okruchy gumki pikselowej). */
+    DOT,
 }
 
 /** Wielokąt w układzie 24×24 (pary x,y); [closed] = kontur zamknięty. */
@@ -132,12 +141,74 @@ object PenGlyphs {
 }
 
 /**
- * Glif narzędzia pióra: korpus w [tool] (kolor ikony), końcówka w [ink] (kolor aktualnego atramentu).
- * Kolor atramentu bez przezroczystości — zakreślacz ma w presecie półprzezroczysty, a w ikonie ma być czytelny.
+ * Ikony gumki i lassa w tym samym układzie co pióra (2b-A1: dawne ikony nie pasowały do glifów piór): gumka leży na tej
+ * samej przekątnej, z czubkiem w lewym dolnym rogu, tą samą grubością konturu i lekkim wypełnieniem korpusu. Cztery tryby
+ * gumki różnią się jednym znakiem w prawym dolnym rogu — cała kreska (obiektowa), okruchy (pikselowa), przerywana pętla
+ * (lasso gumki), nożyczki (wycinanie) — a reszta rysunku jest wspólna.
+ */
+object ToolGlyphParts {
+    private const val R = 0.70710678f
+    private fun x(u: Float, v: Float) = 2.5f + R * (u + v)
+    private fun y(u: Float, v: Float) = 21.5f + R * (v - u)
+    private fun uv(role: GlyphRole, vararg p: Float, closed: Boolean = true) =
+        GlyphPart(role, FloatArray(p.size) { i -> if (i % 2 == 0) x(p[i], p[i + 1]) else y(p[i - 1], p[i]) }, closed)
+    private fun xy(role: GlyphRole, vararg p: Float, closed: Boolean = true) = GlyphPart(role, p, closed)
+
+    /** Okrąg albo elipsa w siatce 24 jako wielokąt. */
+    private fun ring(role: GlyphRole, cx: Float, cy: Float, rx: Float, ry: Float = rx, n: Int = 18) =
+        GlyphPart(role, FloatArray(2 * n) { k -> val a = 2 * Math.PI * (k / 2) / n; if (k % 2 == 0) cx + rx * kotlin.math.cos(a).toFloat() else cy + ry * kotlin.math.sin(a).toFloat() })
+
+    /** Wspólna gumka: gumowa końcówka i oprawka, rozdzielone opaską; długość jak zakreślacz, żeby stała w rzędzie z piórami. */
+    val eraserBase: List<GlyphPart> = listOf(
+        uv(GlyphRole.BODY, 0.8f, -2.8f, 7.2f, -3.1f, 7.2f, 3.1f, 0.8f, 2.8f),
+        uv(GlyphRole.BODY, 7.2f, -3.1f, 19.5f, -3.1f, 19.5f, 3.1f, 7.2f, 3.1f),
+        uv(GlyphRole.DETAIL, 9.6f, -3.1f, 9.6f, 3.1f, closed = false),
+    )
+
+    /** Fala (cała kreska) w prawym dolnym rogu. */
+    private fun wave(): GlyphPart {
+        val n = 16
+        return GlyphPart(GlyphRole.MARK, FloatArray(2 * (n + 1)) { k -> val t = (k / 2) / n.toFloat(); if (k % 2 == 0) 13.6f + 8f * t else 18.8f - 1.9f * kotlin.math.sin(t * 2 * Math.PI).toFloat() }, closed = false)
+    }
+
+    /** Znak trybu gumki: 0 obiektowa (cała kreska), 1 pikselowa (okruchy), 2 lasso gumki (przerywana pętla), 3 wycinanie (nożyczki). */
+    fun eraserMark(mode: Int): List<GlyphPart> = when (mode) {
+        0 -> listOf(wave())
+        1 -> listOf(
+            xy(GlyphRole.DOT, 13.8f, 18.8f, 15.9f, 18.8f, 15.9f, 20.9f, 13.8f, 20.9f),
+            xy(GlyphRole.DOT, 17.1f, 15.6f, 19.2f, 15.6f, 19.2f, 17.7f, 17.1f, 17.7f),
+            xy(GlyphRole.DOT, 19.4f, 19.6f, 21.5f, 19.6f, 21.5f, 21.7f, 19.4f, 21.7f),
+        )
+        2 -> listOf(ring(GlyphRole.DASH, 17.7f, 18.6f, 4.0f, 3.2f, n = 24))
+        else -> listOf(
+            ring(GlyphRole.MARK, 15.5f, 20.6f, 1.5f, n = 12), ring(GlyphRole.MARK, 20.1f, 20.6f, 1.5f, n = 12),
+            xy(GlyphRole.MARK, 16.4f, 19.4f, 20.2f, 14.6f, closed = false),
+            xy(GlyphRole.MARK, 19.2f, 19.4f, 15.4f, 14.6f, closed = false),
+        )
+    }
+
+    fun eraser(mode: Int): List<GlyphPart> = eraserBase + eraserMark(mode)
+
+    /**
+     * Lasso: przerywana pętla z sznurem zwiniętym w supeł (kropka) — z prostym ogonkiem wyglądało jak dymek komiksu;
+     * prostokąt: przerywana ramka z pełnym uchwytem w rogu, jak zaznaczenie w programach graficznych.
+     */
+    fun lasso(rect: Boolean): List<GlyphPart> = if (rect) listOf(
+        xy(GlyphRole.DASH, 3.5f, 4.5f, 19f, 4.5f, 19f, 17f, 3.5f, 17f),
+        xy(GlyphRole.DOT, 17.4f, 15.4f, 21.2f, 15.4f, 21.2f, 19.2f, 17.4f, 19.2f),
+    ) else listOf(
+        ring(GlyphRole.DASH, 12.4f, 10.2f, 8.4f, 6.4f, n = 28),
+        xy(GlyphRole.MARK, 7.0f, 15.1f, 6.0f, 17.4f, 7.6f, 19.0f, 6.6f, 20.6f, closed = false),
+        ring(GlyphRole.DOT, 6.2f, 21.2f, 1.3f, n = 10),
+    )
+}
+
+/**
+ * Rysuje części glifu: [tool] = kolor ikony (korpus, znaki), [ink] = kolor atramentu (tylko [GlyphRole.INK]).
+ * Wspólne dla piór, gumki i lassa, więc grubości i wypełnienia są wszędzie te same.
  */
 @Composable
-fun PenGlyph(kind: PenKind, ink: Color, tool: Color, modifier: Modifier = Modifier) {
-    val parts = PenGlyphs.parts(kind)
+fun GlyphCanvas(parts: List<GlyphPart>, ink: Color, tool: Color, modifier: Modifier = Modifier) {
     val inkOpaque = ink.copy(alpha = 1f)
     Canvas(modifier.graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }) {
         val k = size.minDimension / 24f
@@ -171,7 +242,20 @@ fun PenGlyph(kind: PenKind, ink: Color, tool: Color, modifier: Modifier = Modifi
                     if (p.closed) drawPath(pa, Color.Black, style = Fill, blendMode = BlendMode.Clear)
                     else drawPath(pa, Color.Black, style = Stroke(0.85f * k, cap = StrokeCap.Round, join = StrokeJoin.Round), blendMode = BlendMode.Clear)
                 }
+                GlyphRole.MARK -> drawPath(pa, tool, style = Stroke(line, cap = StrokeCap.Round, join = StrokeJoin.Round))
+                GlyphRole.DASH -> drawPath(
+                    pa, tool,
+                    style = Stroke(line, cap = StrokeCap.Round, join = StrokeJoin.Round, pathEffect = androidx.compose.ui.graphics.PathEffect.dashPathEffect(floatArrayOf(2.6f * k, 2.2f * k))),
+                )
+                GlyphRole.DOT -> drawPath(pa, tool, style = Fill)
             }
         }
     }
 }
+
+/**
+ * Glif narzędzia pióra: korpus w [tool] (kolor ikony), końcówka w [ink] (kolor aktualnego atramentu).
+ * Kolor atramentu bez przezroczystości — zakreślacz ma w presecie półprzezroczysty, a w ikonie ma być czytelny.
+ */
+@Composable
+fun PenGlyph(kind: PenKind, ink: Color, tool: Color, modifier: Modifier = Modifier) = GlyphCanvas(PenGlyphs.parts(kind), ink, tool, modifier)

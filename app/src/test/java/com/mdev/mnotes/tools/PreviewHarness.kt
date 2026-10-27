@@ -9,8 +9,10 @@ import com.mdev.mnotes.core.model.TemplateGeometry
 import com.mdev.mnotes.core.pen.PenSpec
 import com.mdev.mnotes.core.pen.StrokeBuilder
 import com.mdev.mnotes.core.pen.StrokeOutline
+import com.mdev.mnotes.ui.GlyphPart
 import com.mdev.mnotes.ui.GlyphRole
 import com.mdev.mnotes.ui.PenGlyphs
+import com.mdev.mnotes.ui.ToolGlyphParts
 import org.junit.Assume.assumeTrue
 import org.junit.Test
 import java.awt.BasicStroke
@@ -124,34 +126,58 @@ class PreviewHarness {
             val tool = if (row == 0) Color(0x2A, 0x2B, 0x2E) else Color(0xE6, 0xE7, 0xE9)
             kinds.forEachIndexed { i, k ->
                 val ink = Color(inks[(i + row * 2) % inks.size], true)
-                val lay = BufferedImage(cell, cell, BufferedImage.TYPE_INT_ARGB)
-                val lg = g2(lay); lg.scale(scale, scale)
-                for (p in PenGlyphs.parts(k)) {
-                    val path = Path2D.Float()
-                    var j = 0
-                    while (j < p.pts.size) { if (j == 0) path.moveTo(p.pts[j], p.pts[j + 1]) else path.lineTo(p.pts[j], p.pts[j + 1]); j += 2 }
-                    if (p.closed) path.closePath()
-                    val st = BasicStroke(1.35f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND)
-                    when (p.role) {
-                        GlyphRole.BODY -> { lg.color = Color(tool.red, tool.green, tool.blue, 41); lg.fill(path); lg.color = tool; lg.stroke = st; lg.draw(path) }
-                        GlyphRole.INK -> {
-                            lg.color = ink; lg.fill(path); lg.stroke = BasicStroke(0.7f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND); lg.draw(path)
-                            lg.color = Color(tool.red, tool.green, tool.blue, 140); lg.stroke = BasicStroke(0.8f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND); lg.draw(path)
-                        }
-                        GlyphRole.DETAIL -> { lg.color = Color(tool.red, tool.green, tool.blue, 204); lg.stroke = BasicStroke(1.05f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND); lg.draw(path) }
-                        GlyphRole.CUT -> {
-                            lg.composite = java.awt.AlphaComposite.Clear
-                            if (p.closed) lg.fill(path) else { lg.stroke = BasicStroke(0.85f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND); lg.draw(path) }
-                            lg.composite = java.awt.AlphaComposite.SrcOver
-                        }
-                    }
-                }
-                lg.dispose()
-                g.drawImage(lay, 10 + i * cell, 10 + row * (cell + 10), null)
+                g.drawImage(glyph(PenGlyphs.parts(k), cell, tool, ink), 10 + i * cell, 10 + row * (cell + 10), null)
             }
         }
         g.dispose()
         ImageIO.write(img, "png", File(dir, "glyphs.png"))
+    }
+
+    /** Jeden glif (części w siatce 24) jako obraz [cell]×[cell], tak jak rysuje go `GlyphCanvas`. */
+    private fun glyph(parts: List<GlyphPart>, cell: Int, tool: Color, ink: Color): BufferedImage {
+        val lay = BufferedImage(cell, cell, BufferedImage.TYPE_INT_ARGB)
+        val lg = g2(lay); lg.scale(cell / 24.0, cell / 24.0)
+        for (p in parts) {
+            val path = Path2D.Float()
+            var j = 0
+            while (j < p.pts.size) { if (j == 0) path.moveTo(p.pts[j], p.pts[j + 1]) else path.lineTo(p.pts[j], p.pts[j + 1]); j += 2 }
+            if (p.closed) path.closePath()
+            val st = BasicStroke(1.35f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND)
+            when (p.role) {
+                GlyphRole.BODY -> { lg.color = Color(tool.red, tool.green, tool.blue, 41); lg.fill(path); lg.color = tool; lg.stroke = st; lg.draw(path) }
+                GlyphRole.INK -> {
+                    lg.color = ink; lg.fill(path); lg.stroke = BasicStroke(0.7f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND); lg.draw(path)
+                    lg.color = Color(tool.red, tool.green, tool.blue, 140); lg.stroke = BasicStroke(0.8f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND); lg.draw(path)
+                }
+                GlyphRole.DETAIL -> { lg.color = Color(tool.red, tool.green, tool.blue, 204); lg.stroke = BasicStroke(1.05f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND); lg.draw(path) }
+                GlyphRole.CUT -> {
+                    lg.composite = java.awt.AlphaComposite.Clear
+                    if (p.closed) lg.fill(path) else { lg.stroke = BasicStroke(0.85f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND); lg.draw(path) }
+                    lg.composite = java.awt.AlphaComposite.SrcOver
+                }
+                GlyphRole.MARK -> { lg.color = tool; lg.stroke = st; lg.draw(path) }
+                GlyphRole.DASH -> { lg.color = tool; lg.stroke = BasicStroke(1.35f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND, 10f, floatArrayOf(2.6f, 2.2f), 0f); lg.draw(path) }
+                GlyphRole.DOT -> { lg.color = tool; lg.fill(path) }
+            }
+        }
+        lg.dispose()
+        return lay
+    }
+
+    /** 2b-A1: gumka (4 tryby) i lasso (2) obok dwóch piór, w tej samej skali, na jasnym i ciemnym tle; aktywne w akcencie. */
+    private fun toolSheet(dir: String) {
+        val sets = listOf(PenGlyphs.parts(PenKind.BALLPOINT), PenGlyphs.parts(PenKind.HIGHLIGHTER)) +
+            (0..3).map { ToolGlyphParts.eraser(it) } + listOf(ToolGlyphParts.lasso(false), ToolGlyphParts.lasso(true))
+        val cell = 96
+        val img = BufferedImage(cell * sets.size + 20, (cell + 10) * 3 + 10, BufferedImage.TYPE_INT_ARGB)
+        val g = g2(img)
+        val rows = listOf(Color(0xFC, 0xFC, 0xFD) to Color(0x2A, 0x2B, 0x2E), Color(0x38, 0x3A, 0x3E) to Color(0xE6, 0xE7, 0xE9), Color(0xFC, 0xFC, 0xFD) to Color(0x2E, 0x7D, 0x4F))
+        rows.forEachIndexed { row, (bg, tool) ->
+            g.color = bg; g.fillRect(0, row * (cell + 10), img.width, cell + 10)
+            sets.forEachIndexed { i, parts -> g.drawImage(glyph(parts, cell, tool, Color(0xFF24407E.toInt(), true)), 10 + i * cell, 5 + row * (cell + 10), null) }
+        }
+        g.dispose()
+        ImageIO.write(img, "png", File(dir, "tools.png"))
     }
 
     @Test fun render() {
@@ -159,6 +185,7 @@ class PreviewHarness {
         System.setProperty("java.awt.headless", "true")
         File(dir).mkdirs()
         glyphSheet(dir)
+        toolSheet(dir)
 
         // 1) Papier: wycinki 3 wzorów na białym/kremowym papierze, skala jak na tablecie (~2,7 px/pt).
         val tiles = listOf(

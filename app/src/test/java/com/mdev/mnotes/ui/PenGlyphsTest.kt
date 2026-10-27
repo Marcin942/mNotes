@@ -1,8 +1,12 @@
 package com.mdev.mnotes.ui
 
+import com.mdev.mnotes.core.layout.BarConfig
+import com.mdev.mnotes.core.layout.BarIcons
 import com.mdev.mnotes.core.model.PenKind
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import kotlin.math.hypot
@@ -50,5 +54,44 @@ class PenGlyphsTest {
     @Test fun onlyFountainPenHasANibSlit() {
         for (k in PenKind.entries) assertEquals(k == PenKind.FOUNTAIN, PenGlyphs.parts(k).any { it.role == GlyphRole.CUT })
         assertFalse(PenGlyphs.parts(PenKind.PENCIL).any { it.role == GlyphRole.CUT })
+    }
+
+    private fun inGrid(parts: List<GlyphPart>, name: String) {
+        for (p in parts) {
+            assertEquals(0, p.pts.size % 2)
+            var i = 0
+            while (i < p.pts.size) {
+                assertTrue("$name x=${p.pts[i]}", p.pts[i] in 0.7f..23.3f)
+                assertTrue("$name y=${p.pts[i + 1]}", p.pts[i + 1] in 0.7f..23.3f)
+                i += 2
+            }
+        }
+    }
+
+    /** 2b-A1: cztery tryby gumki to ta sama gumka i jeden inny znak; wszystko w siatce 24 jak pióra. */
+    @Test fun eraserModesShareTheEraserAndDifferInOneMark() {
+        val sigs = HashSet<String>()
+        for (mode in 0..3) {
+            val parts = ToolGlyphParts.eraser(mode)
+            inGrid(parts, "gumka $mode")
+            assertEquals(ToolGlyphParts.eraserBase, parts.take(ToolGlyphParts.eraserBase.size))
+            val mark = ToolGlyphParts.eraserMark(mode)
+            assertTrue(mark.isNotEmpty())
+            assertTrue("znak gumki $mode nachodzi na korpus", mark.all { p -> (0 until p.pts.size / 2).all { p.pts[2 * it] >= 13f && p.pts[2 * it + 1] >= 13f } })
+            sigs += mark.joinToString("|") { p -> p.role.name + p.pts.joinToString(",") { "%.1f".format(it) } }
+        }
+        assertEquals(4, sigs.size)
+        // Korpus gumki leży na tej samej przekątnej co pióra (czubek w lewym dolnym rogu).
+        val tip = ToolGlyphParts.eraserBase.first().pts   // pierwsza i ostatnia para to płaska krawędź czubka
+        val n = tip.size
+        assertTrue(hypot((tip[0] + tip[n - 2]) / 2f - 2.5f, (tip[1] + tip[n - 1]) / 2f - 21.5f) < 1.5f)
+        inGrid(ToolGlyphParts.lasso(false), "lasso"); inGrid(ToolGlyphParts.lasso(true), "lasso prostokąt")
+        assertTrue(ToolGlyphParts.lasso(false).any { it.role == GlyphRole.DASH })
+    }
+
+    /** 2b-A1: każda pozycja paska narzędzi ma ikonę (glif albo ikona Material). */
+    @Test fun everyBarItemHasAnIcon() {
+        for (id in BarConfig.DEFAULT_ORDER) assertNotNull("brak ikony: $id", BarIcons.kind(id))
+        assertNull(BarIcons.kind("nieznane"))
     }
 }

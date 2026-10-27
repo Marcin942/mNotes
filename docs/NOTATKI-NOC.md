@@ -345,3 +345,19 @@ dziedziczy już proces z `start-A.sh`, więc `./gradlew` działa bez niego.
   przesuń go palcem, obróć dwoma palcami albo uchwytem; postaw rysik w krzyżyku i prowadź — prosta po promieniu, dymek
   „35°”; druga prosta z tego samego środka → zaznacz obie lassem → przytrzymaj → „Konstrukcja ›” → „Kąt między prostymi:
   …” (ta sama miara); trójkąt z przytrzymaniem → „Kąty: … · … · …” → łuki z miarami.
+- **Scalenie `noc/lab2`** (po A2-13): B2-8 („Wyślij stronę do mLabs”, `LabFeatures.commands/Overlay`); bez konfliktów;
+  core 686, lab 732, oba APK.
+
+### Faza 2b — agent A (uwagi Marcina z PDF „Do poprawy w mNotes pt2”, pierwszeństwo przed resztą fazy 2)
+
+PDF-u nie da się tu wyrenderować (brak `pdftoppm`, bez instalowania pakietów) — pracuję z opisu w `PLAN-NOCY.md`.
+Wygląd ikon sprawdzam rysunkiem Java2D z tej samej geometrii (`PreviewHarness`, `MNOTES_PREVIEW_DIR`).
+
+- **2b-A1** ikony gumki/lassa — `noc/f2b-ikony`; `PenGlyphsTest` (`eraserModesShareTheEraserAndDifferInOneMark`,
+  `everyBarItemHasAnIcon`). **Wygląd** (`docs/podglad/ikony-narzedzi.png`: jasny, ciemny i aktywny akcent): gumka jak
+  pióro na przekątnej (gumowa końcówka, opaska, oprawka, kontur 1,35, wypełnienie 16 %), długość zakreślacza; znak trybu
+  w prawym dolnym rogu: fala / trzy okruchy / przerywana pętla / nożyczki. Lasso: przerywana pętla + sznur z supłem
+  (pierwsza wersja z prostym ogonkiem wyglądała jak dymek komiksowy — poprawione po podglądzie); prostokąt: ramka
+  przerywana + pełny kwadratowy uchwyt w rogu. Stan aktywny jak u piór (kolor akcentu z `ToolBtn`). Gumka na pasku
+  pokazuje bieżący tryb (wcześniej ikona Material). **Tablet:** pasek i listwa gumki/lassa — czy ikony stoją w jednym
+  rzędzie z piórami i są czytelne w 36 dp; Ustawienia → Edytor i pióro → Układ paska — te same ikony.

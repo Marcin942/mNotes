@@ -63,6 +63,56 @@ class ChalkVectorTest {
         assertEquals(0, ChalkVector.vectorize(r).size)
     }
 
+    /** Gruba kreska od (x0, y0) do (x1, y1): wszystkie piksele bliżej osi niż [half]. */
+    private fun segment(r: Raster, x0: Float, y0: Float, x1: Float, y1: Float, half: Float) {
+        val dx = x1 - x0; val dy = y1 - y0; val len2 = dx * dx + dy * dy
+        for (y in 0 until r.h) for (x in 0 until r.w) {
+            val t = (((x - x0) * dx + (y - y0) * dy) / len2).coerceIn(0f, 1f)
+            if (Math.hypot((x - x0 - t * dx).toDouble(), (y - y0 - t * dy).toDouble()) <= half) r[x, y] = ink
+        }
+    }
+
+    @Test
+    fun diagonalLineIsNotChoppedByStaircaseJunctions() {
+        for (half in listOf(1.5f, 2.5f, 4f)) {
+            val r = canvas(90, 90)
+            segment(r, 10f, 12f, 78f, 80f, half)
+            val lines = ChalkVector.vectorize(r)
+            assertTrue("grubość ${2 * half}: ${lines.size} łamanych ${lines.map { it.length() }}", lines.size <= 2)
+            assertTrue(lines.sumOf { it.length().toDouble() } in 80.0..100.0)
+        }
+    }
+
+    @Test
+    fun ringIsAtMostTwoLines() {
+        val r = canvas(50, 50)
+        for (y in 0 until 50) for (x in 0 until 50) if (Math.hypot(x - 25.0, y - 25.0) in 13.0..16.0) r[x, y] = ink
+        val lines = ChalkVector.vectorize(r)
+        assertTrue("${lines.size} łamanych", lines.size in 1..2)
+    }
+
+    @Test
+    fun barsOfDifferentThicknessKeepTheirOwnWidth() {
+        val r = canvas(100, 60)
+        thick(r, 10, 15, 89, 15, 1)  // 3 px
+        thick(r, 10, 42, 89, 42, 5)  // 11 px
+        val lines = ChalkVector.vectorize(r).sortedBy { it.pts[1] }
+        assertEquals(2, lines.size)
+        assertTrue("cienki ${lines[0].width}", lines[0].width in 2f..4.5f)
+        assertTrue("gruby ${lines[1].width}", lines[1].width in 8.5f..13f)
+    }
+
+    @Test
+    fun crossKeepsStraightThroughLinesWhole() {
+        val r = canvas(80, 80)
+        segment(r, 10f, 40f, 70f, 40f, 2f)
+        segment(r, 40f, 10f, 40f, 70f, 2f)
+        val lines = ChalkVector.vectorize(r)
+        // dwie proste przez skrzyżowanie: po złączeniu w węźle po kącie dwie łamane, nie cztery ramiona
+        assertTrue("${lines.size} łamanych", lines.size <= 2)
+        assertTrue(lines.all { it.length() > 50f })
+    }
+
     @Test
     fun douglasPeuckerDropsNearlyCollinearPoints() {
         val pts = floatArrayOf(0f, 0f, 1f, 0.2f, 2f, -0.1f, 3f, 0f, 3f, 5f)

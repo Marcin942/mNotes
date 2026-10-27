@@ -401,7 +401,7 @@ object Lab : LabFeatures {
     override fun phoneButton(): Boolean = LabSettings.of(LocalContext.current).nearby
 
     @Composable
-    override fun PhonePanel(ed: Editor, close: () -> Unit) = com.mdev.mnotes.lab.nearby.ReceivePhotosDialog(ed, close)
+    override fun PhonePanel(ed: Editor, close: () -> Unit) = com.mdev.mnotes.lab.nearby.PhoneLinkDialog(com.mdev.mnotes.core.nearby.LinkMode.RECEIVE, ed, close)
 
     /** Po wstawieniu zdjęcia ciemnej tablicy raz podpowiada „Oczyść tablicę”; sprawdzenie na 320 px w tle. */
     override fun imageInserted(ed: Editor, el: ImageEl) {
@@ -449,11 +449,11 @@ object Lab : LabFeatures {
         val store = remember { com.mdev.mnotes.lab.nearby.PairStore(ctx) }
         var dialog by remember { mutableStateOf(0) }
         var tick by remember { mutableStateOf(0) }
-        Group(T.t("Telefon i tablet (Nearby)", "Phone and tablet (Nearby)"), keys = "nearby telefon tablet zdjęcie bluetooth parowanie wyślij phone pair send") {
+        Group(T.t("Telefon i tablet (Nearby)", "Phone and tablet (Nearby)"), keys = "nearby telefon tablet zdjęcie bluetooth parowanie połącz wyślij diagnostyka łącze phone pair connect send diagnostics link") {
             Text(
                 T.t(
-                    "Zdjęcie zrobione telefonem trafia od razu na stronę na tablecie, przez Bluetooth albo Wi-Fi Direct, bez internetu i bez wspólnej sieci. Wymaga Usług Google Play na obu urządzeniach; każda ramka jest szyfrowana kluczem pary. Android każe pytać o lokalizację, bo szukanie urządzeń przez Bluetooth mogłoby ją zdradzić; mNotes położenia nie odczytuje (wystarczy przybliżona).",
-                    "A photo taken with the phone lands right on the tablet page, over Bluetooth or Wi-Fi Direct, without internet or a shared network. Needs Google Play services on both devices; every frame is encrypted with the pair key. Android requires the location permission because scanning for Bluetooth devices could reveal it; mNotes never reads your location (approximate is enough).",
+                    "Zdjęcie zrobione telefonem trafia od razu na stronę na tablecie, przez Bluetooth albo Wi-Fi Direct, bez internetu i bez wspólnej sieci. Wymaga Usług Google Play na obu urządzeniach; każda ramka jest szyfrowana kluczem pary. Android każe pytać o lokalizację, bo szukanie urządzeń przez Bluetooth mogłoby ją zdradzić; mNotes położenia nie odczytuje.",
+                    "A photo taken with the phone lands right on the tablet page, over Bluetooth or Wi-Fi Direct, without internet or a shared network. Needs Google Play services on both devices; every frame is encrypted with the pair key. Android requires the location permission because scanning for Bluetooth devices could reveal it; mNotes never reads your location.",
                 ),
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(vertical = 6.dp),
             )
@@ -464,16 +464,18 @@ object Lab : LabFeatures {
                     if (store.paired) T.t("Sparowano z „${store.peerName}”.", "Paired with “${store.peerName}”.") else T.t("Brak sparowanego urządzenia.", "No paired device."),
                     style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(vertical = 4.dp),
                 )
-                TextButton(onClick = { dialog = 1 }) { Text(T.t("Sparuj z drugim urządzeniem", "Pair with the other device")) }
+                TextButton(onClick = { dialog = 1 }) { Text(T.t("Połącz telefon z tabletem", "Connect phone and tablet")) }
                 if (store.paired) {
                     TextButton(onClick = { dialog = 2 }) { Text(T.t("Wyślij zdjęcie na tablet (na telefonie)", "Send a photo to the tablet (on the phone)")) }
                     TextButton(onClick = { store.clear(); tick++ }) { Text(T.t("Usuń parę", "Forget the pair"), color = MaterialTheme.colorScheme.error) }
                 }
+                TextButton(onClick = { dialog = 3 }) { Text(T.t("Diagnostyka łącza", "Link diagnostics")) }
             }
         }
         when (dialog) {
-            1 -> com.mdev.mnotes.lab.nearby.PairDialog(com.mdev.mnotes.core.nearby.SyncRole.CLIENT) { dialog = 0; tick++ }
-            2 -> com.mdev.mnotes.lab.nearby.SendPhotoDialog { dialog = 0 }
+            1 -> com.mdev.mnotes.lab.nearby.PhoneLinkDialog(com.mdev.mnotes.core.nearby.LinkMode.PAIR, null) { dialog = 0; tick++ }
+            2 -> com.mdev.mnotes.lab.nearby.PhoneLinkDialog(com.mdev.mnotes.core.nearby.LinkMode.SEND, null) { dialog = 0; tick++ }
+            3 -> com.mdev.mnotes.lab.nearby.DiagnosticsDialog(null) { dialog = 0 }
         }
     }
 

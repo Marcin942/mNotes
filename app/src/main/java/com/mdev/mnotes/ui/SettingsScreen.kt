@@ -32,6 +32,7 @@ import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.ColorLens
+import androidx.compose.material.icons.rounded.Science
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.Keyboard
@@ -58,6 +59,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import com.mdev.mnotes.app.Flavor
 import com.mdev.mnotes.app.app
 import com.mdev.mnotes.core.model.PageFormat
 import com.mdev.mnotes.core.model.Paper
@@ -105,6 +107,8 @@ fun SettingsScreen(onBack: () -> Unit, startCat: Int = 0, startQuery: String = "
         Cat(Icons.Rounded.NoteAdd, T.t("Nowe notatki", "New notes")),
         Cat(Icons.Rounded.Lock, T.t("Prywatność i kopie", "Privacy & backup")),
         Cat(Icons.Rounded.Keyboard, T.t("Skróty klawiszowe", "Keyboard shortcuts")),
+    ) + listOfNotNull(
+        Flavor.lab?.let { Cat(Icons.Rounded.Science, T.t("Laboratorium", "Lab")) },
         Cat(Icons.Rounded.Info, T.t("O aplikacji", "About")),
     )
     fun open(i: Int) { query = ""; cat = i }
@@ -168,6 +172,7 @@ fun SettingsScreen(onBack: () -> Unit, startCat: Int = 0, startQuery: String = "
                                     4 -> NewNotePrefs(set)
                                     5 -> PrivacyPrefs(set)
                                     6 -> ShortcutsTable(set)
+                                    7 -> Flavor.lab?.SettingsSection() ?: About()
                                     else -> About()
                                 }
                             }

@@ -19,6 +19,15 @@ android {
         versionName = "0.1.0"
     }
 
+    // Dwa warianty z jednego kodu: `core` to otwarta aplikacja bez AI i bez przetwarzania zdjęć tablicy, `lab` dokłada
+    // kredę, rozpoznawanie i Nearby z własnego katalogu `src/lab/`. Ten sam applicationId: to jedna aplikacja w dwóch
+    // odmianach, nie dwie instalacje obok siebie.
+    flavorDimensions += "wariant"
+    productFlavors {
+        create("core") { dimension = "wariant" }
+        create("lab") { dimension = "wariant" }
+    }
+
     buildTypes {
         release {
             optimization {
@@ -58,6 +67,9 @@ dependencies {
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.androidx.profileinstaller)
     implementation(libs.kotlinx.coroutines.android)
+    // Jedyna nowa zależność nocy (uzgodniony wyjątek, powód w docs/NOTATKI-NOC.md): łącze Nearby tylko w wariancie lab,
+    // za przełącznikiem w ustawieniach; wariant core jej nie ma.
+    "labImplementation"(libs.play.services.nearby)
     testImplementation(libs.junit)
     testImplementation(libs.org.json)
     debugImplementation(libs.androidx.compose.ui.tooling)

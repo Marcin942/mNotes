@@ -303,7 +303,9 @@ fun PagesPanel(ed: Editor, close: () -> Unit, @Suppress("UNUSED_PARAMETER") pick
                     val lifted = drag.id == id
                     Box(
                         if (lifted) Modifier.zIndex(1f).graphicsLayer { translationY = drag.offset() }
-                        else Modifier.animateItem(),
+                        // Animację przestawiania można wyłączyć albo wydłużyć w Ustawieniach (F6).
+                        else if (ed.settings.pageAnim) Modifier.animateItem(placementSpec = tween(ed.settings.pageAnimMs.coerceAtLeast(1)))
+                        else Modifier,
                     ) {
                         PageThumbItem(
                             ed, p, p.version, i, ids.size, current = id == curId, lifted = lifted, menu = menuFor == id,

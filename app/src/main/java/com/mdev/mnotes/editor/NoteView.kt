@@ -33,6 +33,7 @@ import com.mdev.mnotes.core.geom.Ruler
 import com.mdev.mnotes.core.layout.DocLayout
 import com.mdev.mnotes.core.layout.LayoutMode
 import com.mdev.mnotes.core.layout.PageDrop
+import com.mdev.mnotes.core.layout.PageShift
 import com.mdev.mnotes.core.layout.ZoomRegion
 import com.mdev.mnotes.core.model.BoxElement
 import com.mdev.mnotes.core.model.DocEdit
@@ -222,6 +223,11 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
     private var tBase: TextBox? = null; private var tSide = TextFit.Side.RIGHT
     private var sbSel: Sel? = null; private var sbKey = -1; private var sbVal: Bounds? = null
 
+    /** Identyfikatory stron w kolejności bieżącego [layout] i trwająca animacja przestawienia (F6). */
+    private var shiftIds: List<String> = emptyList()
+    private var pageShift: PageShift? = null
+    private var shiftNow = 0L
+
     // laser
     private val laser = LaserTrail()
     private var lsX = FloatArray(256); private var lsY = FloatArray(256); private var lsNx = FloatArray(256); private var lsNy = FloatArray(256)
@@ -251,6 +257,8 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
     private fun rebuildLayout() {
         val mode = if (ed.layoutMode == 0) LayoutMode.VERTICAL else LayoutMode.HORIZONTAL
         layout = DocLayout.of(doc.pages.map { it.spec }, mode)
+        // Kolejność stron, dla której liczono układ: zmiana struktury przychodzi już po zmianie listy stron (F6).
+        shiftIds = doc.pages.map { it.id }
         ed.pageCount = doc.pages.size
     }
 
@@ -464,6 +472,20 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
     }
 
     override fun structureChanged() {
+        // F6: zapamiętujemy, gdzie na ekranie były widoczne strony, żeby po zmianie kolejności dojechały, a nie skoczyły.
+        pageShift = null
+        if (settings.pageAnim && settings.pageAnimMs > 0 && width > 0 && layout.count > 0) {
+            val vb = Bounds(docX(0f), docY(0f), docX(width.toFloat()), docY(height.toFloat()))
+            val r = layout.visibleRange(vb)
+            if (!r.isEmpty()) {
+                val from = HashMap<String, FloatArray>()
+                for (i in (r.first - 1).coerceAtLeast(0)..(r.last + 1).coerceAtMost(layout.count - 1)) {
+                    val id = shiftIds.getOrNull(i) ?: continue
+                    from[id] = floatArrayOf(layout.left(i) * zoom + tx, layout.top(i) * zoom + ty)
+                }
+                if (from.isNotEmpty()) pageShift = PageShift(from, settings.pageAnimMs.toLong())
+            }
+        }
         rebuildLayout()
         ed.structTick++
         if (ed.pageIndex >= layout.count) ed.pageIndex = max(0, layout.count - 1)
@@ -504,6 +526,11 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
         borderPaint.color = if (darkUi) 0x33FFFFFF else 0x14000000
         borderPaint.strokeWidth = 1f / zoom
 
+        pageShift?.let { sh ->
+            shiftNow = SystemClock.uptimeMillis()
+            if (!sh.started) sh.begin(shiftNow) { id -> doc.indexOf(id).takeIf { it in 0 until layout.count }?.let { floatArrayOf(layout.left(it) * zoom + tx, layout.top(it) * zoom + ty) } }
+            if (sh.active(shiftNow)) postInvalidateOnAnimation() else pageShift = null
+        }
         val pullOff = pullOffset()
         if (pullOff > 0f) { c.save(); if (ed.layoutMode == 1) c.translate(-pullOff, 0f) else c.translate(0f, -pullOff) }
         c.save()
@@ -537,6 +564,15 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
     }
 
     private fun drawPage(c: Canvas, i: Int, vb: Bounds, rvb: Bounds) {
+        val shift = pageShift?.offset(doc.pages[i].id, shiftNow)
+        if (shift != null) {
+            c.save(); c.translate(shift[0] / zoom, shift[1] / zoom)
+            drawPageAt(c, i, vb, rvb)
+            c.restore()
+        } else drawPageAt(c, i, vb, rvb)
+    }
+
+    private fun drawPageAt(c: Canvas, i: Int, vb: Bounds, rvb: Bounds) {
         val page = doc.pages[i]; val spec = page.spec; val r = layout.rect(i)
         val o = 2f * dp / zoom
         c.drawRect(r.l - 0.5f * o, r.t, r.r + 0.5f * o, r.b + o, shadowPaint)

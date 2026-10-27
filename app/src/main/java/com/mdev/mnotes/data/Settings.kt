@@ -55,6 +55,8 @@ class Settings(ctx: Context) {
     var compact by Pref("ui.compact", false)
     var haptics by Pref("ui.haptics", true)          // delikatne wibracje przy dotknięciu przycisków paska narzędzi
     var tooltips by Pref("ui.tooltips", true)        // podpowiedź z nazwą przycisku po najechaniu (mysz, rysik) albo przytrzymaniu
+    var pageAnim by Pref("anim.pages", true)          // strony dojeżdżają na nowe miejsce po zmianie kolejności (F6)
+    var pageAnimMs by Pref("anim.pages_ms", 260)      // czas tej animacji (ms)
     var toolHints by Pref("ui.tool_hints", true)     // dymek z opisem po wybraniu narzędzia (taśma, pędzel formatu, wiaderko, odstęp)
     var toolbarPos by Pref("toolbar.position", 0)    // 0 góra, 1 dół, 2 lewo, 3 prawo
     var toolbarSize by Pref("toolbar.size", 1)       // 0 mały, 1 normalny, 2 duży

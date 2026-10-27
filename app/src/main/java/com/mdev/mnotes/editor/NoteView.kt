@@ -3102,7 +3102,9 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
             LM.MOVE, LM.SCALE, LM.ROTATE, LM.VERTEX, LM.RESIZE, LM.NONE -> if (!toolMoved) {
                 // F21: drugie dotknięcie tego samego zaznaczenia w krótkim czasie = edycja punktów.
                 val now = SystemClock.uptimeMillis()
-                val again = lm != LM.NONE && now - selTapT < DOUBLE_TAP_MS && hypot(curX - selTapX, curY - selTapY) < 30f * dp
+                // Tylko kreska ma punkty; drugie dotknięcie pola tekstu nadal otwiera jego edycję (lassoTap).
+                val again = lm != LM.NONE && now - selTapT < DOUBLE_TAP_MS && hypot(curX - selTapX, curY - selTapY) < 30f * dp &&
+                    ed.selElements().singleOrNull() is Stroke
                 selTapT = now; selTapX = curX; selTapY = curY
                 if (again) { selTapT = 0L; ed.editPoints() } else lassoTap(page, pgX(pi, curX), pgY(pi, curY))
             }

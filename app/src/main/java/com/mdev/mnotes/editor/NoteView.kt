@@ -2172,7 +2172,7 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
         val p = ed.pen
         val sp = PenSpec.of(p.kind)
         builder.begin(p.kind, p.color, p.width, (sp.smoothing * settings.smoothing).coerceIn(0f, 1f), (0.5f / zoom).coerceIn(0.05f, 0.9f), p.style)
-        liveActive = true; shapeSnapped = false; shapeCtrl = null; predN = 0
+        liveActive = true; shapeSnapped = false; shapeCtrl = null; heldCurve = false; predN = 0
         holdX = curX; holdY = curY; holdRaw = 0
         if (ed.sel != null) ed.clearSel()
         rulerSide = 0
@@ -2228,12 +2228,21 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
         val total = builder.rawCount
         val n = if (holdRaw >= 3) holdRaw.coerceAtMost(total) else total
         if (n < 3) return@Runnable
+        // A2-3: kreski z ostrym narożnikiem (litery, kąty) zostają pismem — wygładzamy tylko łuki i fale.
+        if (Bezier.sharpCorner(builder.raw, n)) return@Runnable
         val c = Bezier.fit(builder.raw.copyOf(2 * n), max(1.2f, 3f * dp / zoom)) ?: return@Runnable
         shapeCtrl = c; shapePts = Bezier.sample(c); shapePoly = false; shapeKind = ShapeKind.POLYLINE
-        shapeSnapped = true; predN = 0; shapeLabel = null
+        shapeSnapped = true; predN = 0; shapeLabel = null; heldCurve = true
         performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
+        if (!settings.holdCurveHinted) {
+            settings.holdCurveHinted = true
+            ed.say(T.t("Kreska wygładzona w krzywą — wyłączysz to w Ustawieniach → Edytor i pióro", "Stroke smoothed into a curve — turn this off in Settings → Editor & pen"))
+        }
         invalidate()
     }
+
+    /** Wynik F18 przy zwykłym piórze nie jest zaznaczany: pasek zaznaczenia w środku pisania tylko przeszkadza. */
+    private var heldCurve = false
 
     private fun armHold() {
         removeCallbacks(holdRunnable); removeCallbacks(curveHold)
@@ -2351,12 +2360,13 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
             curve != null -> { snapped = true; Stroke(Ids.next(), builder.penKind, builder.penColor, builder.width, Bezier.sample(curve), line = builder.line, ctrl = curve) }
             else -> builder.finish(Ids.next())
         }
-        shapeSnapped = false; shapeLabel = null; shapeCtrl = null
+        val quiet = heldCurve && activeTool != Tool.CURVE
+        shapeSnapped = false; shapeLabel = null; shapeCtrl = null; heldCurve = false
         if (stroke == null || pi !in doc.pages.indices) return
         val page = doc.pages[pi]
         ed.exec(DocEdit.Elements(page.id, ElementsEdit.add(doc.content(page), listOf(stroke))))
         // Kształt (i krzywa) z uchwytami od razu zaznaczony — niebieskie punkty pozwalają go przekształcić.
-        if (snapped) ed.select(page.id, setOf(stroke.id))
+        if (snapped && !quiet) ed.select(page.id, setOf(stroke.id))
     }
 
     // ───────────────────────── uchwyty wierzchołków łamanej ─────────────────────────

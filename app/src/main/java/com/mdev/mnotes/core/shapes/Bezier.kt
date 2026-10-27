@@ -206,6 +206,39 @@ object Bezier {
         return u[0] * v[0] + u[1] * v[1] < -0.985f
     }
 
+    /**
+     * Czy kreska (pierwsze [n] par x, y w pt) ma ostry narożnik: na odcinku ±1/16 długości kierunek skręca o więcej niż
+     * [maxTurnDeg]. Łuk, okrąg i fala skręcają łagodnie (półokrąg ok. 22°), a litery i kąty łamanej ostro — F18 wygładza
+     * tylko te pierwsze, żeby trzymane dłużej pismo nie zamieniało się w krzywą (A2-3).
+     */
+    fun sharpCorner(xy: FloatArray, n: Int = xy.size / 2, maxTurnDeg: Float = 60f): Boolean {
+        val m = n.coerceAtMost(xy.size / 2)
+        if (m < 3) return false
+        var len = 0f
+        for (i in 1 until m) len += hypot(xy[2 * i] - xy[2 * i - 2], xy[2 * i + 1] - xy[2 * i - 1])
+        // Próbki co 1/32 długości (nie gęściej niż co 1,5 pt): drżenie rysika nie daje wtedy fałszywych kątów.
+        val step = max(len / 32f, 1.5f)
+        val r = FloatList(80)
+        r.add(xy[0], xy[1])
+        var carry = 0f
+        for (i in 1 until m) {
+            val x0 = xy[2 * i - 2]; val y0 = xy[2 * i - 1]; val x1 = xy[2 * i]; val y1 = xy[2 * i + 1]
+            val seg = hypot(x1 - x0, y1 - y0)
+            var d = step - carry
+            while (d <= seg) { val t = d / seg; r.add(x0 + (x1 - x0) * t, y0 + (y1 - y0) * t); d += step }
+            carry = seg - (d - step)
+        }
+        val p = r.toArray()
+        val k = 2
+        val cosMax = kotlin.math.cos(Math.toRadians(maxTurnDeg.toDouble())).toFloat()
+        for (i in k until p.size / 2 - k) {
+            val a = unit(p[2 * i] - p[2 * (i - k)], p[2 * i + 1] - p[2 * (i - k) + 1])
+            val b = unit(p[2 * (i + k)] - p[2 * i], p[2 * (i + k) + 1] - p[2 * i + 1])
+            if (a[0] * b[0] + a[1] * b[1] < cosMax) return true
+        }
+        return false
+    }
+
     /** Największa odległość punktów (x, y …) od krzywej [ctrl] (pomiar dopasowania, do testów). */
     fun maxDistance(xy: FloatArray, ctrl: FloatArray): Float {
         val s = sample(ctrl, 0.25f)

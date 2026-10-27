@@ -70,4 +70,35 @@ class BezierTest {
         val m2 = Bezier.moved(sharp, 2, 22f, 12f)
         assertEquals(40f, m2[8], 0f); assertEquals(10f, m2[9], 0f)
     }
+
+    /** Gęsta łamana przez [v] (próbki co ok. 1 pt, jak z rysika), z drżeniem [jit]. */
+    private fun dense(vararg v: Float, jit: Float = 0.3f): FloatArray {
+        val rnd = Random(7)
+        val out = ArrayList<Float>()
+        for (s in 0 until v.size / 2 - 1) {
+            val x0 = v[2 * s]; val y0 = v[2 * s + 1]; val x1 = v[2 * s + 2]; val y1 = v[2 * s + 3]
+            val n = kotlin.math.hypot(x1 - x0, y1 - y0).toInt().coerceAtLeast(1)
+            for (i in 0 until n) { val t = i.toFloat() / n; out += x0 + (x1 - x0) * t + (rnd.nextFloat() - 0.5f) * jit; out += y0 + (y1 - y0) * t + (rnd.nextFloat() - 0.5f) * jit }
+        }
+        out += v[v.size - 2]; out += v[v.size - 1]
+        return out.toFloatArray()
+    }
+
+    /** A2-3: F18 wygładza tylko kreski bez ostrych narożników — łamana z kątem 90° i litery zostają pismem. */
+    @Test fun sharpCornerBlocksHoldCurve() {
+        assertTrue(Bezier.sharpCorner(dense(0f, 0f, 60f, 0f, 60f, 60f)))                 // kąt prosty
+        assertTrue(Bezier.sharpCorner(dense(0f, 0f, 15f, 40f, 30f, 0f)))                 // „V”
+        assertTrue(Bezier.sharpCorner(dense(0f, 0f, 30f, 0f, 0f, 30f, 30f, 30f)))         // „Z”
+        assertTrue(Bezier.sharpCorner(dense(0f, 40f, 0f, 0f, 20f, 25f, 40f, 0f, 40f, 40f))) // „M”
+    }
+
+    @Test fun smoothStrokesAreCurveCandidates() {
+        assertFalse(Bezier.sharpCorner(arc(80, 60f, 0.0, PI, jit = 0.6f)))              // półokrąg
+        assertFalse(Bezier.sharpCorner(arc(60, 30f, 0.0, PI / 2, jit = 0.4f)))          // ćwiartka
+        val n = 160
+        val wave = FloatArray(2 * n) { k -> val i = k / 2; val x = i * 1.5f; if (k % 2 == 0) x else 25f * sin(x / 30f) }
+        assertFalse(Bezier.sharpCorner(wave))                                            // fala (wykres sinusa)
+        assertFalse(Bezier.sharpCorner(dense(0f, 0f, 80f, 0f)))                          // prosta
+        assertFalse(Bezier.sharpCorner(floatArrayOf(0f, 0f, 1f, 1f)))                    // za krótka, by mówić o narożniku
+    }
 }

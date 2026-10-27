@@ -41,7 +41,7 @@ object Guide {
             page(t("Kształty: narysuj i przytrzymaj", "Shapes: draw and hold"), listOf(
                 t("Narysuj kształt i nie odrywaj pióra przez pół sekundy — wyprostuje się. Trzymając dalej, zmieniasz jego rozmiar.", "Draw a shape and keep the pen down for half a second — it snaps. Keep holding to resize it."),
                 t("Spróbuj: prosta, koło, prostokąt, trójkąt, strzałka. Krótkie proste (minus, kreska ułamkowa) też się prostują.", "Try: line, circle, rectangle, triangle, arrow. Short lines (minus, fraction bar) snap too."),
-                t("Gładka linia, która nie jest kształtem, po dłuższym przytrzymaniu staje się krzywą z uchwytami. Narzędzie „Krzywa” na pasku robi to z każdą kreską.", "A smooth line that is not a shape turns into a curve with handles if you hold longer. The “Curve” tool on the toolbar does it for every stroke."),
+                t("Narzędzie „Krzywa” na pasku zamienia każdą kreskę w gładką krzywą z uchwytami. Wygładzanie łuków dłuższym przytrzymaniem pióra włączysz w Ustawieniach.", "The “Curve” tool on the toolbar turns every stroke into a smooth curve with handles. Smoothing arcs by holding the pen longer can be turned on in Settings."),
             ), dashed(listOf(circle(130f, 500f, 50f), rect(230f, 450f, 360f, 550f), listOf(400f, 550f, 470f, 450f, 540f, 550f, 400f, 550f)))),
             page(t("Gumka: cztery sposoby", "Eraser: four ways"), listOf(
                 t("Obiektowa usuwa całą kreskę, pikselowa ściera tylko to, nad czym przejdzie, lasso gumki usuwa obrysowane, a wycinanie tnie kreski dokładnie na obrysie.", "Object erases whole strokes, pixel erases only what it passes over, lasso eraser removes what you circle, cut-out cuts strokes exactly along the loop."),

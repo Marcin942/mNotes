@@ -161,3 +161,12 @@ dziedziczy już proces z `start-A.sh`, więc `./gradlew` działa bez niego.
   **Tablet:** Ustawienia → Wygląd → włącz mini-mapę; przybliż ≥ 2,5× i przewiń palcem — mapa w rogu, po ~1 s gaśnie;
   przewiń i od razu pisz rysikiem w prawym dolnym rogu — mapa znika, kreska się rysuje; przewiń i przeciągnij palcem po
   mapie — widok jedzie.
+- **A2-3** F18 „trzymaj dalej → krzywa” — `noc/f2-krzywa`; `BezierTest` (`sharpCornerBlocksHoldCurve`,
+  `smoothStrokesAreCurveCandidates`). Domyślnie wyłączone (`input.hold_curve = false`), czas 350 ms bez zmian (razem
+  ~0,9 s, a opcja i tak jest świadomie włączana). Nowe: kreska z narożnikiem ostrzejszym niż 60° (na odcinku 1/16 jej długości)
+  nie jest wygładzana; wynik przy piórze nie jest zaznaczany (Fable §3.2: pasek zaznaczenia wyskakiwał w środku pisania);
+  jednorazowy dymek „Kreska wygładzona w krzywą — wyłączysz to w Ustawieniach → Edytor i pióro” (plan pisał „Wejście”, ale
+  opcja od początku siedzi w „Edytor i pióro” → „Pióro”). Strona 2 przewodnika przeredagowana. **Wygląd:** bez nowego UI.
+  **Tablet:** Ustawienia → Edytor i pióro → włącz „Trzymaj dalej, aby wygładzić w krzywą”; narysuj łuk i trzymaj ~1 s →
+  gładka krzywa (bez paska zaznaczenia), dymek tylko za pierwszym razem; napisz „V” albo „Z” i trzymaj → zostaje pismem;
+  zaznacz krzywą lassem → kotwice i uchwyty jak przy narzędziu Krzywa.

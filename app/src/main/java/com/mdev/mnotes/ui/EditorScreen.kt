@@ -1668,6 +1668,9 @@ private fun CtxMenuOverlay(ed: Editor, openStyle: () -> Unit) {
                     Item(T.t("Wytnij", "Cut"), "Ctrl+X") { ed.cutSel() }
                     Item(T.t("Kopiuj", "Copy"), "Ctrl+C") { ed.copySel() }
                     Item(T.t("Duplikuj", "Duplicate"), "Ctrl+D") { ed.duplicateSel() }
+                    // F14: wycinek strony pod zaznaczeniem (z papierem i tłem) jako obraz.
+                    Item(T.t("Wycinek jako obraz", "Snip as image"), enabled = !ed.readOnly) { ed.snipSel(false) }
+                    Item(T.t("Kopiuj wycinek do schowka", "Copy snip to clipboard")) { ed.snipSel(true) }
                 }
                 Item(T.t("Wklej", "Paste"), "Ctrl+V", ed.canPaste() && !ed.readOnly) { ed.paste(if (cm.pageIndex >= 0) Triple(cm.pageIndex, cm.lx, cm.ly) else null) }
                 if (cm.hasSel) {

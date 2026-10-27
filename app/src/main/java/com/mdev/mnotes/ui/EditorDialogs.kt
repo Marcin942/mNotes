@@ -135,6 +135,8 @@ fun commandList(
         "insertImage" to ({ !ed.readOnly } to { pickImage() }),
         "pageBackground" to ({ !ed.readOnly } to { ed.imageAsBackground = true; pickImage() }),
         "insertAxes" to ({ !ed.readOnly } to { ed.axesOpen = true }),
+        "snipImage" to ({ ed.sel != null && !ed.readOnly } to { ed.snipSel(false) }),
+        "snipCopy" to ({ ed.sel != null } to { ed.snipSel(true) }),
         "addPage" to ({ !ed.readOnly } to { ed.addPage() }),
         "bookmark" to ({ true } to { ed.toggleBookmark() }),
         "copyPage" to ({ true } to { ed.copyPage() }),

@@ -24,6 +24,7 @@ import com.mdev.mnotes.core.edit.CropPlace
 import com.mdev.mnotes.core.edit.CutLine
 import com.mdev.mnotes.core.edit.FloodFill
 import com.mdev.mnotes.core.edit.ImageCut
+import com.mdev.mnotes.core.edit.Snip
 import com.mdev.mnotes.core.model.ImageEl
 import com.mdev.mnotes.core.model.ImageFx
 import com.mdev.mnotes.core.model.WhiteBalance
@@ -336,6 +337,59 @@ class Editor(val ctx: Context, val nbId: String) {
 
     /** Zmienia efekty kolorystyczne zaznaczonych obrazów; [f] dostaje bieżące efekty danego obrazu. */
     fun setSelImageFx(f: (ImageFx) -> ImageFx) = replaceSel { e -> if (e is ImageEl) e.copy(fx = f(e.fx)) else e }
+
+    /**
+     * F14: wycinek strony pod zaznaczeniem jako obraz — z papierem, wzorem, tłem PDF i wszystkim, co leży w ramce.
+     * [toClipboard] = PNG do schowka systemu (wklejanie w innych aplikacjach), inaczej nowy obraz obok zaznaczenia.
+     */
+    fun snipSel(toClipboard: Boolean) {
+        val p = selPage() ?: return
+        var b = Bounds.EMPTY
+        for (e in selElements()) b = b.union(e.bounds)
+        val plan = Snip.plan(b, p.spec.w, p.spec.h) ?: return
+        val spec = p.spec
+        val content = doc.content(p)
+        val pageId = p.id
+        repo.io.execute {
+            val png = runCatching {
+                val bmp = android.graphics.Bitmap.createBitmap(plan.wPx, plan.hPx, android.graphics.Bitmap.Config.ARGB_8888)
+                val c = android.graphics.Canvas(bmp)
+                val r = plan.rect; val sc = plan.scale
+                c.scale(sc, sc); c.translate(-r.l, -r.t)
+                val renderer = com.mdev.mnotes.render.PageRenderer(app.assets)
+                renderer.drawPaper(c, spec, sc, null)
+                spec.pdf?.let { pdf ->
+                    app.pdf.renderTile(nbId, pdf.asset, pdf.page, sc, Math.round(r.l * sc), Math.round(r.t * sc), plan.wPx, plan.hPx)?.let { bg ->
+                        c.drawBitmap(bg, null, android.graphics.RectF(r.l, r.t, r.l + plan.wPx / sc, r.t + plan.hPx / sc), null)
+                    }
+                }
+                renderer.drawElements(c, nbId, content, 0, r, sc, true, spec.darkPaper)
+                java.io.ByteArrayOutputStream().also { bmp.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it); bmp.recycle() }.toByteArray()
+            }.getOrNull()
+            if (png == null) { view?.post { say(T.t("Nie udało się utworzyć wycinka", "Could not create the snip")) }; return@execute }
+            if (toClipboard) {
+                val ok = runCatching {
+                    val dir = java.io.File(ctx.cacheDir, "share").apply { mkdirs() }
+                    val f = java.io.File(dir, "wycinek-${System.currentTimeMillis()}.png").apply { writeBytes(png) }
+                    val uri = androidx.core.content.FileProvider.getUriForFile(ctx, "${ctx.packageName}.files", f)
+                    val cm = ctx.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                    view?.post { cm.setPrimaryClip(android.content.ClipData.newUri(ctx.contentResolver, "mNotes", uri)) }
+                }.isSuccess
+                view?.post { say(if (ok) T.t("Wycinek skopiowany jako obraz", "Snip copied as an image") else T.t("Nie udało się skopiować wycinka", "Could not copy the snip")) }
+                return@execute
+            }
+            val name = runCatching { repo.importAsset(nbId, java.io.ByteArrayInputStream(png), "png") }.getOrNull()
+            view?.post {
+                val page = doc.page(pageId) ?: return@post
+                if (name == null) { say(T.t("Nie udało się zapisać wycinka", "Could not save the snip")); return@post }
+                val at = Snip.placement(plan.rect, page.spec.w, page.spec.h)
+                val el = ImageEl(Ids.next(), name, at[0], at[1], plan.rect.w, plan.rect.h)
+                exec(DocEdit.Elements(page.id, ElementsEdit.add(doc.content(page), listOf(el))))
+                tool = Tool.LASSO
+                select(page.id, setOf(el.id))
+            }
+        }
+    }
 
     /**
      * F15: autobalans bieli zaznaczonych obrazów — piksele pomniejszonego obrazu (najwyżej 256 px) liczone w tle,

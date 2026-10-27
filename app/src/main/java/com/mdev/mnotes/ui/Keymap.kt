@@ -126,6 +126,8 @@ object CmdDefs {
         CmdDef("insertImage", 3, "Wstaw obraz…", "Insert image…", "Ctrl+I"),
         CmdDef("pageBackground", 3, "Obraz jako tło strony…", "Image as page background…", ""),
         CmdDef("insertAxes", 3, "Układ współrzędnych…", "Coordinate axes…", ""),
+        CmdDef("snipImage", 3, "Wycinek zaznaczenia jako obraz", "Snip selection as image", ""),
+        CmdDef("snipCopy", 3, "Kopiuj wycinek zaznaczenia do schowka", "Copy selection snip to clipboard", ""),
         CmdDef("addPage", 3, "Dodaj stronę", "Add page", "Ctrl+Shift+N"),
         CmdDef("bookmark", 3, "Przełącz zakładkę strony", "Toggle page bookmark", "Ctrl+B"),
         CmdDef("copyPage", 3, "Kopiuj stronę", "Copy page", "Ctrl+Shift+C"),

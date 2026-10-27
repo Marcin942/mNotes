@@ -2007,9 +2007,9 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
     private fun trySnapShape() {
         // Rozpoznajemy z surowych próbek (wygładzony filtr zaokrągla rogi) i bez ogona dryfu po osiadnięciu pióra.
         val total = builder.rawCount
-        if (total < 8) return
-        val n = if (holdRaw >= 8) holdRaw.coerceAtMost(total) else total
-        val shape = ShapeRecognizer.recognize(builder.raw, n) ?: return
+        if (total < 3) return
+        val n = if (holdRaw >= 3) holdRaw.coerceAtMost(total) else total
+        val shape = ShapeRecognizer.recognize(builder.raw, n, ShapeRecognizer.minLineFor(builder.width, dp / zoom)) ?: return
         val m = shape.xy.size / 2
         shapePts = FloatArray(3 * m)
         for (i in 0 until m) { shapePts[3 * i] = shape.xy[2 * i]; shapePts[3 * i + 1] = shape.xy[2 * i + 1]; shapePts[3 * i + 2] = 1f }

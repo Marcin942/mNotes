@@ -28,23 +28,35 @@ class Shape(val kind: ShapeKind, val xy: FloatArray) {
  */
 object ShapeRecognizer {
 
-    fun recognize(xyIn: FloatArray, nIn: Int = xyIn.size / 2): Shape? {
-        // Gęste próbki rysika z drżeniem: wyrzucamy punkty bliższe niż 1 pt od poprzedniego.
+    /** Najkrótsza figura inna niż prosta (pt); krótsze kreski mogą być tylko prostą. */
+    const val MIN_SHAPE = 18f
+
+    /**
+     * @param minLine najkrótsza prosta (pt). Dawny stały próg 18 pt odrzucał krótkie odcinki (B9), np. kreskę ułamka
+     * przy dużym przybliżeniu; wołający dobiera go do grubości pióra i powiększenia ([minLineFor]).
+     */
+    fun recognize(xyIn: FloatArray, nIn: Int = xyIn.size / 2, minLine: Float = MIN_SHAPE): Shape? {
+        // Gęste próbki rysika z drżeniem: wyrzucamy punkty bliższe niż 1 pt od poprzedniego (przy krótkiej prostej mniej).
+        val near = min(1f, minLine / 12f)
         val xy = FloatArray(2 * nIn)
         var n = 0
         for (i in 0 until nIn) {
-            if (n > 0 && GeomMath.dist(xy[2 * n - 2], xy[2 * n - 1], xyIn[2 * i], xyIn[2 * i + 1]) < 1f) continue
+            if (n > 0 && GeomMath.dist(xy[2 * n - 2], xy[2 * n - 1], xyIn[2 * i], xyIn[2 * i + 1]) < near) continue
             xy[2 * n] = xyIn[2 * i]; xy[2 * n + 1] = xyIn[2 * i + 1]; n++
         }
-        if (n < 4) return null
+        if (n < 2) return null
         val len = GeomMath.polylineLength(xy, n)
-        if (len < 18f) return null
+        if (len < min(minLine, MIN_SHAPE)) return null
         var l = Float.MAX_VALUE; var t = Float.MAX_VALUE; var r = -Float.MAX_VALUE; var b = -Float.MAX_VALUE
         for (i in 0 until n) {
             l = min(l, xy[2 * i]); r = max(r, xy[2 * i]); t = min(t, xy[2 * i + 1]); b = max(b, xy[2 * i + 1])
         }
         val diag = hypot(r - l, b - t)
-        if (diag < 14f) return null
+        // Krótka kreska może być tylko prostą: na krótkich zawijasach inne figury dawałyby fałszywe trafienia.
+        if (len < MIN_SHAPE || diag < 14f || n < 4) {
+            val gap = GeomMath.dist(xy[0], xy[1], xy[2 * n - 2], xy[2 * n - 1])
+            return if (gap >= 0.7f * len) line(xy, n, len, diag) else null
+        }
         val gap = GeomMath.dist(xy[0], xy[1], xy[2 * n - 2], xy[2 * n - 1])
         val closed = gap < 0.22f * len && len > 2.2f * gap
 
@@ -59,9 +71,16 @@ object ShapeRecognizer {
         return ellipse(xy, n, l, t, r, b)
     }
 
+    /**
+     * Próg krótkiej prostej: co najmniej trzy grubości pióra (krótsza wygląda jak kropka) i ok. 10 dp na ekranie
+     * ([ptPerDp] = pt strony na 1 dp przy bieżącym powiększeniu), ale nigdy więcej niż dawne 18 pt.
+     */
+    fun minLineFor(penWidth: Float, ptPerDp: Float): Float = max(3f * penWidth, 10f * ptPerDp).coerceIn(3f, MIN_SHAPE)
+
     private fun line(xy: FloatArray, n: Int, len: Float, diag: Float): Shape? {
         if (len > 1.35f * diag) return null
-        val idx = GeomMath.simplify(xy, n, max(2.5f, 0.045f * len))
+        // Tolerancja drżenia rośnie z długością; przy krótkiej prostej stałe 2,5 pt połknęłoby każdy zawijas.
+        val idx = GeomMath.simplify(xy, n, max(min(2.5f, 0.12f * len), 0.045f * len))
         if (idx.size != 2) return null
         var x1 = xy[0]; var y1 = xy[1]; var x2 = xy[2 * n - 2]; var y2 = xy[2 * n - 1]
         // Przyciągnięcie do 0°, 45°, 90° w granicach 4°.

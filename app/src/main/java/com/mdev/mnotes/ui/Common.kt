@@ -147,11 +147,7 @@ fun ToolBtn(
         },
         tween(140), label = "toolTint",
     )
-    TooltipBox(
-        positionProvider = TooltipDefaults.rememberPlainTooltipPositionProvider(),
-        tooltip = { PlainTooltip { Text(if (shortcut != null) "$tip  ($shortcut)" else tip) } },
-        state = rememberTooltipState(),
-    ) {
+    val button = @Composable {
         Box(
             modifier.size(size).graphicsLayer { scaleX = scale; scaleY = scale }.clip(RoundedCornerShape(10.dp)).background(bg)
                 .then(
@@ -162,6 +158,13 @@ fun ToolBtn(
             contentAlignment = Alignment.Center,
         ) { content(c) }
     }
+    // Podpowiedź można wyłączyć w Ustawieniach (F2): przy rysiku pojawiała się przy każdym najechaniu na pasek.
+    if (!LocalTooltips.current) { button(); return }
+    TooltipBox(
+        positionProvider = TooltipDefaults.rememberPlainTooltipPositionProvider(),
+        tooltip = { PlainTooltip { Text(if (shortcut != null) "$tip  ($shortcut)" else tip) } },
+        state = rememberTooltipState(),
+    ) { button() }
 }
 
 /** Przycisk-ikona z podpowiedzią (tooltip pokazuje też skrót klawiszowy — wygodne przy myszy). */

@@ -54,6 +54,8 @@ class Settings(ctx: Context) {
     var accent by Pref("ui.accent", 0)               // indeks w Accents
     var compact by Pref("ui.compact", false)
     var haptics by Pref("ui.haptics", true)          // delikatne wibracje przy dotknięciu przycisków paska narzędzi
+    var tooltips by Pref("ui.tooltips", true)        // podpowiedź z nazwą przycisku po najechaniu (mysz, rysik) albo przytrzymaniu
+    var toolHints by Pref("ui.tool_hints", true)     // dymek z opisem po wybraniu narzędzia (taśma, pędzel formatu, wiaderko, odstęp)
     var toolbarPos by Pref("toolbar.position", 0)    // 0 góra, 1 dół, 2 lewo, 3 prawo
     var toolbarSize by Pref("toolbar.size", 1)       // 0 mały, 1 normalny, 2 duży
     var optionsPos by Pref("toolbar.options", 0)     // listwa grubości i kolorów: 0 z lewej, 1 z prawej, 2 przy pasku narzędzi

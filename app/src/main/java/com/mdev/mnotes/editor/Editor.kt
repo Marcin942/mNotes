@@ -870,6 +870,8 @@ class Editor(val ctx: Context, val nbId: String) {
     fun setToolKey(t: Tool) {
         tool = t; clearSelIfNotLasso()
         quickFormat = t == Tool.PAINTER && settings.painterQuick
+        // Dymki z opisem narzędzia można wyłączyć (F2): po kilku razach już tylko zasłaniają kartkę.
+        if (!settings.toolHints) return
         if (t == Tool.TAPE) toast = T.t("Przeciągnij, aby zakryć fragment · dotknij taśmy, aby odkryć", "Drag to cover an area · tap a tape to reveal it")
         if (t == Tool.PAINTER) toast = if (settings.painterMode == 1) T.t("Obrysuj obiekty — przejmą kolor i styl aktywnego pióra", "Circle objects to give them the active pen's colour and style")
             else T.t("Przeciągnij po obiektach — przejmą kolor i styl aktywnego pióra", "Swipe over objects to give them the active pen's colour and style")

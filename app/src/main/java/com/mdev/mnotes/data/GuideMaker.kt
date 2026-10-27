@@ -15,7 +15,7 @@ object GuideMaker {
         val pl = T.pl
         repo.io.execute {
             val id = newId()
-            val pages = Guide.pages(pl)
+            val pages = Guide.pages(pl, lab = com.mdev.mnotes.app.Flavor.lab != null)
             val metas = pages.map { PageMeta(newId(), it.spec) }
             for ((m, p) in metas.zip(pages)) repo.writePage(id, m.id, PageCodec.encode(PageContent.of(p.elements)))
             val now = System.currentTimeMillis()

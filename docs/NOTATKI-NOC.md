@@ -587,3 +587,15 @@ Wygląd ikon sprawdzam rysunkiem Java2D z tej samej geometrii (`PreviewHarness`,
   kotwicę; „Kontur zamknięty” + wiaderko: 4 punkty → stuknij pierwszy → zamknięty, lekko wypełniony kształt, pismo pod nim
   widać; „Piórko”: stuknij, przeciągnij (uchwyty jak w Inkscape), stuknij → łuk; ✕ porzuca; „Odręczna”: narysuj falę →
   krzywa z kilkoma węzłami; otwórz zeszyt w starej wersji aplikacji (jeśli jest) — kontur bez wypełnienia.
+- **2b-A11** samouczek — `noc/f2b-samouczek`; `GuideTest` (8 testów), core 765, lab 819, zielone. Forma z [założenia]:
+  zeszyt-przewodnik z rozdziałami podstawy → zaawansowane, każda strona = krótkie zadanie piórem, na końcu „Sprawdź się”.
+  `core/guide/Guide.kt` przepisany: lekcje jako dane (`Lesson`: rozdział, tytuł, wstęp, polecenia, wskazówka,
+  ilustracja od y), układ liczony (`textBottom`/`artTop`, stopka od `FOOT`), wariant `lab` (GuideMaker podaje
+  `Flavor.lab != null`). **Decyzje:** stare przewodniki w bibliotekach zostają jak były (nowy powstaje z „Nowy →
+  Przewodnik”); szerokość znaku w szacowaniu 0,6 em (podgląd Java2D pokazał, że 0,54 bywa za mało); dużo miejsca pod
+  ilustracjami zostawione celowo na ćwiczenia. **Wygląd:** podgląd `docs/podglad/przewodnik-strony.png` (17 stron).
+  **Nie sprawdzone:** czcionka Roboto na tablecie jest węższa niż DejaVu z podglądu — akapity mogą mieć trochę więcej
+  powietrza niż na podglądzie. **Tablet:** Biblioteka → „Nowy” → Przewodnik; przewiń: okładka ze spisem treści,
+  stopka „n / 17”; strona 8 „Krzywe Béziera”: Krzywa → „Przez wskazane punkty”, stuknij A–E i E drugi raz; strona 9:
+  Geometria → „Przecięcie okręgów” na dwóch okręgach strony; strona 15: „⋮” → Strony → „Ciemne” i porównaj z ilustracją;
+  w wersji lab strona 14 mówi o kredzie, w core nie.

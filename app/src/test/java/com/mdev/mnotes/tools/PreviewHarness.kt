@@ -262,10 +262,79 @@ class PreviewHarness {
         ImageIO.write(img, "png", File(dir, "curves.png"))
     }
 
+    /** Akapit pola tekstu zawinięty do szerokości pola (czcionka bezszeryfowa Java2D zamiast Roboto); zwraca wysokość. */
+    private fun textBox(g: java.awt.Graphics2D, t: com.mdev.mnotes.core.model.TextBox): Float {
+        val font = java.awt.Font("SansSerif", if (t.style and com.mdev.mnotes.core.model.TextBox.STYLE_BOLD != 0) java.awt.Font.BOLD else java.awt.Font.PLAIN, 1).deriveFont(t.size)
+        g.font = font
+        val fm = g.getFontMetrics(font)
+        val left = t.cx - t.w / 2; val top = t.cy - t.h / 2
+        val lines = ArrayList<String>()
+        var cur = ""
+        for (word in t.text.split(' ')) {
+            val next = if (cur.isEmpty()) word else "$cur $word"
+            if (fm.getStringBounds(next, g).width > t.w && cur.isNotEmpty()) { lines.add(cur); cur = word } else cur = next
+        }
+        if (cur.isNotEmpty()) lines.add(cur)
+        val lh = t.size * 1.17f
+        if (t.fill != 0) { g.color = col(t.fill); g.fill(Rectangle2D.Float(left, top, t.w, t.h)) }
+        g.color = col(t.color)
+        lines.forEachIndexed { i, l ->
+            val x = if (t.align == com.mdev.mnotes.core.model.TextBox.ALIGN_END) left + t.w - fm.getStringBounds(l, g).width.toFloat() else left
+            g.drawString(l, x, top + t.size + i * lh)
+        }
+        return lines.size * lh
+    }
+
+    /** 2b-A11: strony przewodnika (tym samym `Guide` co aplikacja): arkusz miniatur i kilka stron w pełnym rozmiarze. */
+    private fun guideSheet(dir: String) {
+        val pages = com.mdev.mnotes.core.guide.Guide.pages(true)
+        val report = StringBuilder()
+        fun render(p: com.mdev.mnotes.core.guide.Guide.Page, s: Float): BufferedImage {
+            val img = paper(p.spec, s, p.spec.w.toInt(), p.spec.h.toInt())
+            val g = g2(img); g.scale(s.toDouble(), s.toDouble())
+            g.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON)
+            for (e in p.elements) when (e) {
+                is com.mdev.mnotes.core.model.FillEl -> {
+                    val path = Path2D.Float(Path2D.WIND_EVEN_ODD)
+                    for (r in e.rings) { path.moveTo(r[0], r[1]); var i = 2; while (i < r.size) { path.lineTo(r[i], r[i + 1]); i += 2 }; path.closePath() }
+                    g.color = if (e.hl) Color(e.color and 0xFFFFFF or (0x80 shl 24), true) else col(e.color); g.fill(path)
+                }
+                is com.mdev.mnotes.core.model.Stroke -> {
+                    if (e.count == 1) { g.color = col(e.color); g.fill(Ellipse2D.Float(e.pts[0] - e.width / 2, e.pts[1] - e.width / 2, e.width, e.width)) }
+                    else {
+                        val path = Path2D.Float(); path.moveTo(e.pts[0], e.pts[1])
+                        for (k in 1 until e.count) path.lineTo(e.pts[3 * k], e.pts[3 * k + 1])
+                        g.color = col(e.color)
+                        g.stroke = if (e.line == com.mdev.mnotes.core.pen.LineStyle.DASHED) BasicStroke(e.width, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND, 10f, floatArrayOf(5f, 4f), 0f) else BasicStroke(e.width, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND)
+                        g.draw(path)
+                    }
+                }
+                is com.mdev.mnotes.core.model.TextBox -> {
+                    val need = textBox(g, e)
+                    if (need > e.h + 1f) report.append("${p.title}: „${e.text.take(40)}” potrzebuje ${need.toInt()} pt, pole ${e.h.toInt()} pt\n")
+                }
+                else -> {}
+            }
+            g.dispose()
+            return img
+        }
+        val s = 0.62f
+        val pw = (595 * s).toInt(); val ph = (842 * s).toInt()
+        val cols = 4; val rows = (pages.size + cols - 1) / cols
+        val sheet = BufferedImage(cols * (pw + 10) + 10, rows * (ph + 10) + 10, BufferedImage.TYPE_INT_ARGB)
+        val sg = g2(sheet); sg.color = Color(0x70, 0x70, 0x70); sg.fillRect(0, 0, sheet.width, sheet.height)
+        pages.forEachIndexed { i, p -> sg.drawImage(render(p, s), 10 + (i % cols) * (pw + 10), 10 + (i / cols) * (ph + 10), null) }
+        sg.dispose()
+        ImageIO.write(sheet, "png", File(dir, "guide.png"))
+        for (i in listOf(0, 1, 7, 8, 14)) if (i < pages.size) ImageIO.write(render(pages[i], 1.3f), "png", File(dir, "guide_${i + 1}.png"))
+        File(dir, "guide-overflow.txt").writeText(report.toString())
+    }
+
     @Test fun render() {
         val dir = System.getenv("MNOTES_PREVIEW_DIR") ?: return assumeTrue(false)
         System.setProperty("java.awt.headless", "true")
         File(dir).mkdirs()
+        guideSheet(dir)
         glyphSheet(dir)
         toolSheet(dir)
         geoSheet(dir)

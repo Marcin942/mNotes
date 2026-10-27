@@ -38,6 +38,7 @@ class LabSettings(ctx: Context) {
     private val solidP = F("board.solid", 0.85f)
     private val tintP = I("board.tint", 0)
     private val nearbyP = B("nearby.enabled", false)
+    private val boardHintP = B("board.hint", true)
 
     /** Łącze Nearby (zdjęcie z telefonu); domyślnie wyłączone, bo wymaga Usług Google Play i uprawnień radia. */
     var nearby: Boolean get() = nearbyP.value; set(v) = nearbyP.set(v)
@@ -52,6 +53,9 @@ class LabSettings(ctx: Context) {
 
     /** 0 kolory z oryginału, 1 biała kreda, 2 grafit (na jasną stronę zeszytu). */
     var tint: Int get() = tintP.value; set(v) = tintP.set(v)
+
+    /** Podpowiedź „Wygląda jak tablica…” po wstawieniu zdjęcia ciemnej tablicy; gaśnie po pierwszym pokazaniu. */
+    var boardHint: Boolean get() = boardHintP.value; set(v) = boardHintP.set(v)
 
 
     fun options(): BoardOptions = BoardOptions(

@@ -27,4 +27,10 @@ interface LabFeatures {
     /** Kategoria „Laboratorium” w ustawieniach. */
     @Composable
     fun SettingsSection()
+
+    /**
+     * Zdjęcie [el] właśnie wstawione na stronę (wywołanie z wątku UI). Lab sprawdza w tle, czy to ciemna tablica,
+     * i raz podpowiada „Oczyść tablicę”; domyślnie nic, żeby inne implementacje nie musiały o tym wiedzieć.
+     */
+    fun imageInserted(ed: Editor, el: ImageEl) {}
 }

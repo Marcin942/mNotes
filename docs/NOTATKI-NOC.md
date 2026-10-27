@@ -380,3 +380,15 @@ Wygląd ikon sprawdzam rysunkiem Java2D z tej samej geometrii (`PreviewHarness`,
   przerywana + pełny kwadratowy uchwyt w rogu. Stan aktywny jak u piór (kolor akcentu z `ToolBtn`). Gumka na pasku
   pokazuje bieżący tryb (wcześniej ikona Material). **Tablet:** pasek i listwa gumki/lassa — czy ikony stoją w jednym
   rzędzie z piórami i są czytelne w 36 dp; Ustawienia → Edytor i pióro → Układ paska — te same ikony.
+- **Scalenie `noc/lab2`** (po 2b-A1): B2-9 (parowanie z zobowiązaniem) i projekt 2b-B1; bez konfliktów; core 694, lab 740.
+- **2b-A2** listwa przy narzędziach pomocniczych — `noc/f2b-listwa`; `HelperStripTest` (4 testy). Dwa tryby z planu
+  (a = domyślny, b) jako `Pref("toolbar.helper_strip")`, menu jako lista wyłączonych pozycji (`toolbar.helper_menu`, pusty =
+  wszystko). Stary przełącznik `toolbar.tool_strip` nie jest już czytany (kto miał opcje na listwie, dostaje domyślny tryb a).
+  `Editor.tunePen` i przycisk powrotu idą przez `returnToWriting()` → ostatnie narzędzie pisania (`LastOf`). **Wygląd:**
+  menu to ta sama karta co „Pobierz format” (`m.chrome`, obwódka `m.line`, cień 4 dp, zaokrąglenie 12 dp), w środku te
+  same przyciski co na listwie, ułożone wzdłuż paska; pojawia się 150 ms, gaśnie 180 ms; przycisk powrotu ma glif pióra
+  w jego kolorze (albo krzywej). W Ustawieniach: wybór trybu (chipy) z jednym zdaniem objaśnienia, trzy przełączniki „Menu
+  przy gumce/lassie/laserze” i pod każdym chipy grup. **Tablet:** wybierz gumkę → listwa zostaje przy kolorach, przy
+  ikonie gumki menu z trybami i rozmiarami; dotknij koloru na listwie → wraca pióro (albo Krzywa, jeśli to nią pisałeś);
+  Ustawienia → Wygląd → „Opcje narzędzia + powrót” → opcje gumki na listwie, ostatni przycisk wraca do pisania; wyłącz
+  „Menu przy laserze” → laser bez menu.

@@ -261,7 +261,8 @@ class Editor(val ctx: Context, val nbId: String) {
     /** Zmiana z listwy (grubość, kolor): gdy w ręku jest gumka albo lasso, wraca do pisania, bo po to się ją dotyka. */
     fun tunePen(f: (PenKit) -> PenKit) {
         editKit(f)
-        if (!penTool) { tool = Tool.PEN; clearSelIfNotLasso() }
+        // 2b-A2: wraca do ostatniego narzędzia pisania (także krzywej), a nie zawsze do pióra.
+        if (!penTool) returnToWriting()
     }
 
     fun say(msg: String) { toast = msg }
@@ -689,14 +690,15 @@ class Editor(val ctx: Context, val nbId: String) {
     /** F27: wyrównanie wszystkich zaznaczonych pól tekstu (jedno cofnięcie). */
     fun setSelTextAlign(a: Int) = replaceSel { e -> if (e is TextBox && !e.locked) e.copy(align = a) else e }
 
-    /** Ostatnie narzędzie piszące (pióro albo krzywa), do którego wraca [returnToWriting] (F26). */
-    private var lastWriteTool = Tool.PEN
+    /** Ostatnie narzędzie piszące (pióro albo krzywa), do którego wraca [returnToWriting] (F26) i listwa (2b-A2). */
+    private val writeMemory = com.mdev.mnotes.core.layout.LastOf(Tool.PEN) { it == Tool.PEN || it == Tool.CURVE }
+    val lastWriteTool: Tool get() = writeMemory.value
 
     /** F26: odznaczenie narzędzia chwilowego (laser, ręka, lasso) — wraca do ostatniego narzędzia piszącego. */
     fun returnToWriting() { tool = lastWriteTool; clearSelIfNotLasso() }
 
     /** Zapamiętuje narzędzie piszące; wołane przy każdej zmianie narzędzia. */
-    fun noteTool(t: Tool) { if (t == Tool.PEN || t == Tool.CURVE) lastWriteTool = t }
+    fun noteTool(t: Tool) = writeMemory.note(t)
 
     // — Tryb wykładu (pomysł Fable nr 1) —
     var lectureMode by mutableStateOf(false)

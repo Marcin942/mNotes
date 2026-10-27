@@ -217,6 +217,7 @@ import com.mdev.mnotes.core.layout.BarConfig
 import com.mdev.mnotes.core.layout.BarFit
 import com.mdev.mnotes.core.layout.BarMode
 import com.mdev.mnotes.core.layout.BottomStack
+import com.mdev.mnotes.core.layout.HelperStrip
 import com.mdev.mnotes.core.pen.ActivePen
 import com.mdev.mnotes.core.pen.ColorSet
 import com.mdev.mnotes.core.pen.InkColor
@@ -707,12 +708,14 @@ private fun ToolBar(ed: Editor, set: com.mdev.mnotes.data.Settings, vertical: Bo
                         ToolBtn(b.tip, b.onClick, enabled = b.enabled, selected = b.selected, size = sz, shortcut = b.shortcut, onLong = { b.onHold?.invoke() ?: run { menuFor = b.id } }) { c -> b.glyph(c, isz) }
                         if (menuFor == b.id) BarItemMenu(b.id, cfg, vertical, { set.barConfig = it }, { menuFor = null }, openSettings)
                         if (b.id == "painter") QuickFormat(ed, set, panel, sz, isz)
+                        HELPER_IDS[b.id]?.let { HelperMenu(ed, set, panel, it, holdTool) }
                     }
                 }
             }
             if (fit.hidden.isNotEmpty()) Box {
                 // Pędzel schowany pod „⋯” nie ma ikony na pasku, więc jego szybki przycisk wisi pod „⋯”.
                 if (fit.hidden.any { shown[it].id == "painter" }) QuickFormat(ed, set, panel, sz, isz)
+                for (i in fit.hidden) HELPER_IDS[shown[i].id]?.let { HelperMenu(ed, set, panel, it, holdTool) }
                 // Włączone narzędzie spod „⋯” (np. linijka) zaznacza sam przycisk, żeby było widać, że coś działa.
                 IconBtn(Icons.Rounded.MoreHoriz, T.t("Więcej narzędzi", "More tools"), { more = true }, selected = more || fit.hidden.any { shown[it].selected }, size = sz, iconSize = isz)
                 DropdownMenu(more, { more = false }) {
@@ -743,18 +746,7 @@ private fun QuickFormat(ed: Editor, set: com.mdev.mnotes.data.Settings, panel: P
     val state = remember { MutableTransitionState(false) }
     state.targetState = ed.tool == Tool.PAINTER && ed.quickFormat && panel != Panel.PAINTER && !ed.readOnly
     if (!state.currentState && !state.targetState) return
-    val pos = set.toolbarPos
-    val gap = with(LocalDensity.current) { 4.dp.roundToPx() }
-    val place = remember(pos, gap) {
-        object : PopupPositionProvider {
-            override fun calculatePosition(anchorBounds: IntRect, windowSize: IntSize, layoutDirection: LayoutDirection, popupContentSize: IntSize) = when (pos) {
-                1 -> IntOffset(anchorBounds.left, anchorBounds.top - gap - popupContentSize.height)
-                2 -> IntOffset(anchorBounds.right + gap, anchorBounds.top)
-                3 -> IntOffset(anchorBounds.left - gap - popupContentSize.width, anchorBounds.top)
-                else -> IntOffset(anchorBounds.left, anchorBounds.bottom + gap)
-            }
-        }
-    }
+    val place = rememberBarPopupPlace(set.toolbarPos)
     val shape = RoundedCornerShape(12.dp)
     Popup(popupPositionProvider = place) {
         AnimatedVisibility(visibleState = state, enter = fadeIn(tween(150)), exit = fadeOut(tween(350))) {
@@ -825,12 +817,14 @@ private fun PenStrip(ed: Editor, set: com.mdev.mnotes.data.Settings, side: Int, 
 private fun PenStripItems(ed: Editor, set: com.mdev.mnotes.data.Settings, vertical: Boolean, panel: Panel?, onColorSets: () -> Unit, toggle: (Panel) -> Unit) {
     val sz = barSize(set)
     val isz = barIcon(set)
-    // F7: z gumką, lassem albo laserem w ręku listwa pokazuje ich opcje (jak przy piórze); można to wyłączyć w Ustawieniach.
-    if (set.toolStrip) when (ed.tool) {
-        Tool.ERASER -> { EraserStripItems(ed, set, vertical, panel, toggle); return }
-        Tool.LASSO -> { LassoStripItems(ed, set, vertical, panel, toggle); return }
-        Tool.LASER -> { LaserStripItems(ed, set, vertical); return }
-        else -> {}
+    // F7/2b-A2: w trybie „opcje narzędzia” z gumką, lassem albo laserem w ręku listwa pokazuje ich opcje i przycisk powrotu
+    // do pisania; w trybie domyślnym zostaje przy pisaniu, a opcje wyskakują przy ikonie narzędzia ([HelperMenu]).
+    val helper = helperOf(ed.tool)
+    if (HelperStrip.stripShowsToolOptions(set.helperStrip, helper)) when (helper) {
+        HelperStrip.Helper.ERASER -> { EraserStripItems(ed, set, vertical, panel, toggle, back = true); return }
+        HelperStrip.Helper.LASSO -> { LassoStripItems(ed, set, vertical, panel, toggle, back = true); return }
+        HelperStrip.Helper.LASER -> { LaserStripItems(ed, set, vertical, back = true); return }
+        null -> {}
     }
     val kit = ed.kit
     val kind = kit.active
@@ -878,51 +872,142 @@ private fun PenStripItems(ed: Editor, set: com.mdev.mnotes.data.Settings, vertic
 /** Rozmiary gumki na listwie (pt); ponowne dotknięcie wybranego otwiera panel z suwakiem. */
 private val ERASER_SIZES = floatArrayOf(4f, 14f, 32f)
 
-/** Listwa gumki (F7): trzy tryby z ikonami, trzy rozmiary, „Nie ruszaj zakreślacza” i panel. */
+/** Pozycje paska, przy których wyskakuje menu opcji narzędzia pomocniczego (2b-A2). */
+private val HELPER_IDS = mapOf("eraser" to HelperStrip.Helper.ERASER, "lasso" to HelperStrip.Helper.LASSO, "laser" to HelperStrip.Helper.LASER)
+
+private fun helperOf(t: Tool): HelperStrip.Helper? = when (t) {
+    Tool.ERASER -> HelperStrip.Helper.ERASER
+    Tool.LASSO -> HelperStrip.Helper.LASSO
+    Tool.LASER -> HelperStrip.Helper.LASER
+    else -> null
+}
+
+private fun allItems(h: HelperStrip.Helper) = HelperStrip.Item.entries.filter { it.helper == h }
+
+/** 2b-A2: przycisk „wróć do pisania” — glif ostatniego narzędzia pisania (pióro w jego kolorze albo krzywa). */
 @Composable
-private fun EraserStripItems(ed: Editor, set: com.mdev.mnotes.data.Settings, vertical: Boolean, panel: Panel?, toggle: (Panel) -> Unit) {
+private fun WriteBackBtn(ed: Editor, set: com.mdev.mnotes.data.Settings) {
+    val sz = barSize(set); val isz = barIcon(set)
+    val k = ed.kit.active
+    ToolBtn(T.t("Wróć do pisania", "Back to writing"), { ed.returnToWriting() }, size = sz) { c ->
+        if (ed.lastWriteTool == Tool.CURVE) BezierGlyph(c, Modifier.size(isz + 2.dp))
+        else PenGlyph(k, Color(ed.kit.slot(k).color), c, Modifier.size(isz + 2.dp))
+    }
+}
+
+/**
+ * Opcje gumki (F7): tryby z ikonami, rozmiary, „Nie ruszaj zakreślacza” i panel. [items] = grupy do pokazania (w menu
+ * przy ikonie wybrane w Ustawieniach, na listwie wszystkie), [back] = przycisk powrotu do pisania na końcu (2b-A2).
+ */
+@Composable
+private fun EraserStripItems(
+    ed: Editor, set: com.mdev.mnotes.data.Settings, vertical: Boolean, panel: Panel?, toggle: (Panel) -> Unit,
+    items: List<HelperStrip.Item> = allItems(HelperStrip.Helper.ERASER), back: Boolean = false,
+) {
     val sz = barSize(set); val isz = barIcon(set)
     val scroll = rememberScrollState()
     Lin(vertical, Modifier.padding(4.dp).then(if (vertical) Modifier.verticalScroll(scroll) else Modifier.horizontalScroll(scroll))) {
-        val names = listOf(T.t("Gumka obiektowa — usuwa całe kreski", "Object eraser — removes whole strokes"), T.t("Gumka pikselowa — ściera tylko to, nad czym przejdzie", "Pixel eraser — erases only what it passes over"), T.t("Lasso gumki — usuwa to, co obrysujesz", "Lasso eraser — removes what you circle"), T.t("Wycinanie — tnie kreski dokładnie na obrysie", "Cut out — cuts strokes exactly along the loop"))
-        for (mode in 0..3) {
-            val on = set.eraserMode == mode
-            ToolBtn(names[mode], { if (on) toggle(Panel.ERASER) else set.eraserMode = mode }, selected = on, size = sz) { c -> EraserModeGlyph(mode, c, Modifier.size(isz + 2.dp)) }
-        }
-        if (set.eraserMode < 2) {
+        if (HelperStrip.Item.ERASER_MODES in items) {
+            val names = listOf(T.t("Gumka obiektowa — usuwa całe kreski", "Object eraser — removes whole strokes"), T.t("Gumka pikselowa — ściera tylko to, nad czym przejdzie", "Pixel eraser — erases only what it passes over"), T.t("Lasso gumki — usuwa to, co obrysujesz", "Lasso eraser — removes what you circle"), T.t("Wycinanie — tnie kreski dokładnie na obrysie", "Cut out — cuts strokes exactly along the loop"))
+            for (mode in 0..3) {
+                val on = set.eraserMode == mode
+                ToolBtn(names[mode], { if (on) toggle(Panel.ERASER) else set.eraserMode = mode }, selected = on, size = sz) { c -> EraserModeGlyph(mode, c, Modifier.size(isz + 2.dp)) }
+            }
             BarSep(vertical)
+        }
+        if (HelperStrip.Item.ERASER_SIZES in items && set.eraserMode < 2) {
             for (s in ERASER_SIZES) {
                 val on = kotlin.math.abs(set.eraserSize - s) < 0.5f
                 ToolBtn(T.t("Rozmiar gumki", "Eraser size") + String.format(" %.0f pt", s), { if (on) toggle(Panel.ERASER) else set.eraserSize = s }, selected = on, size = sz) { c -> EraserSizeGlyph(s, c, Modifier.size(isz + 2.dp)) }
             }
+            BarSep(vertical)
         }
-        BarSep(vertical)
-        IconBtn(Icons.Rounded.Highlight, T.t("Nie ruszaj zakreślacza", "Keep highlighter"), { set.eraserKeepHighlighter = !set.eraserKeepHighlighter }, selected = set.eraserKeepHighlighter, size = sz, iconSize = isz)
+        if (HelperStrip.Item.ERASER_HIGHLIGHTER in items) {
+            IconBtn(Icons.Rounded.Highlight, T.t("Gumka pomija zakreślacz", "Eraser ignores highlighter"), { set.eraserKeepHighlighter = !set.eraserKeepHighlighter }, selected = set.eraserKeepHighlighter, size = sz, iconSize = isz)
+        }
         IconBtn(Icons.Rounded.Tune, T.t("Ustawienia gumki", "Eraser settings"), { toggle(Panel.ERASER) }, selected = panel == Panel.ERASER, size = sz, iconSize = isz)
+        if (back) { BarSep(vertical); WriteBackBtn(ed, set) }
     }
 }
 
-/** Listwa lassa (F7): kształt pętli (ikony z przerywanej linii), tryb zaznaczania i panel. */
+/** Opcje lassa (F7): kształt pętli, co zaznacza lasso i panel; [items], [back] jak przy gumce. */
 @Composable
-private fun LassoStripItems(ed: Editor, set: com.mdev.mnotes.data.Settings, vertical: Boolean, panel: Panel?, toggle: (Panel) -> Unit) {
+private fun LassoStripItems(
+    ed: Editor, set: com.mdev.mnotes.data.Settings, vertical: Boolean, panel: Panel?, toggle: (Panel) -> Unit,
+    items: List<HelperStrip.Item> = allItems(HelperStrip.Helper.LASSO), back: Boolean = false,
+) {
     val sz = barSize(set); val isz = barIcon(set)
     Lin(vertical, Modifier.padding(4.dp)) {
-        ToolBtn(T.t("Lasso odręczne", "Freehand lasso"), { if (!set.lassoRect) toggle(Panel.LASSO) else set.lassoRect = false }, selected = !set.lassoRect, size = sz) { c -> LassoGlyph(false, c, Modifier.size(isz + 2.dp)) }
-        ToolBtn(T.t("Zaznaczanie prostokątem", "Rectangle selection"), { if (set.lassoRect) toggle(Panel.LASSO) else set.lassoRect = true }, selected = set.lassoRect, size = sz) { c -> LassoGlyph(true, c, Modifier.size(isz + 2.dp)) }
-        BarSep(vertical)
-        IconBtn(Icons.Rounded.SelectAll, T.t("Zbalansowane — połowa obiektu w pętli", "Balanced — half of the object in the loop"), { set.lassoTouch = false }, selected = !set.lassoTouch, size = sz, iconSize = isz)
-        IconBtn(Icons.Rounded.TouchApp, T.t("Tylko zahacz — wystarczy musnąć obiekt", "Just touch — brushing the object is enough"), { set.lassoTouch = true }, selected = set.lassoTouch, size = sz, iconSize = isz)
-        BarSep(vertical)
+        if (HelperStrip.Item.LASSO_SHAPE in items) {
+            ToolBtn(T.t("Lasso odręczne", "Freehand lasso"), { if (!set.lassoRect) toggle(Panel.LASSO) else set.lassoRect = false }, selected = !set.lassoRect, size = sz) { c -> LassoGlyph(false, c, Modifier.size(isz + 2.dp)) }
+            ToolBtn(T.t("Zaznaczanie prostokątem", "Rectangle selection"), { if (set.lassoRect) toggle(Panel.LASSO) else set.lassoRect = true }, selected = set.lassoRect, size = sz) { c -> LassoGlyph(true, c, Modifier.size(isz + 2.dp)) }
+            BarSep(vertical)
+        }
+        if (HelperStrip.Item.LASSO_MODE in items) {
+            IconBtn(Icons.Rounded.SelectAll, T.t("Połowa w pętli — zaznacza obiekt, gdy co najmniej połowa jest w pętli", "Half in the loop — selects an object when at least half is inside"), { set.lassoTouch = false }, selected = !set.lassoTouch, size = sz, iconSize = isz)
+            IconBtn(Icons.Rounded.TouchApp, T.t("Wystarczy dotknąć — wystarczy musnąć obiekt pętlą", "Just touch — brushing the object with the loop is enough"), { set.lassoTouch = true }, selected = set.lassoTouch, size = sz, iconSize = isz)
+            BarSep(vertical)
+        }
         IconBtn(Icons.Rounded.Tune, T.t("Ustawienia lassa", "Lasso settings"), { toggle(Panel.LASSO) }, selected = panel == Panel.LASSO, size = sz, iconSize = isz)
+        if (back) { BarSep(vertical); WriteBackBtn(ed, set) }
     }
 }
 
-/** Listwa lasera (F7): kolor śladu. */
+/** Opcje lasera (F7): kolor śladu; [back] jak przy gumce. */
 @Composable
-private fun LaserStripItems(ed: Editor, set: com.mdev.mnotes.data.Settings, vertical: Boolean) {
+private fun LaserStripItems(ed: Editor, set: com.mdev.mnotes.data.Settings, vertical: Boolean, back: Boolean = false) {
     val sz = barSize(set)
     Lin(vertical, Modifier.padding(4.dp)) {
         for (c in LaserColors.PALETTE) StripDot(Color(0xFF000000.toInt() or c), set.laserColor == c, sz) { set.laserColor = c }
+        if (back) { BarSep(vertical); WriteBackBtn(ed, set) }
+    }
+}
+
+/**
+ * 2b-A2: wyskakujące menu z opcjami gumki, lassa albo lasera przy ikonie narzędzia na pasku — jak „Pobierz format” przy
+ * pędzlu ([QuickFormat]). Pokazuje grupy wybrane w Ustawieniach; znika, gdy otwarty jest panel narzędzia.
+ */
+@Composable
+private fun HelperMenu(ed: Editor, set: com.mdev.mnotes.data.Settings, panel: Panel?, h: HelperStrip.Helper, holdTool: (Tool, Panel) -> Unit) {
+    val m = mint
+    val cfg = set.helperMenu
+    val ownPanel = when (h) { HelperStrip.Helper.ERASER -> Panel.ERASER; HelperStrip.Helper.LASSO -> Panel.LASSO; HelperStrip.Helper.LASER -> null }
+    val state = remember { MutableTransitionState(false) }
+    state.targetState = helperOf(ed.tool) == h && !ed.readOnly && HelperStrip.menuVisible(set.helperStrip, h, cfg, ownPanel != null && panel == ownPanel)
+    if (!state.currentState && !state.targetState) return
+    val pos = set.toolbarPos
+    val place = rememberBarPopupPlace(pos)
+    val open: (Panel) -> Unit = { p -> holdTool(if (h == HelperStrip.Helper.ERASER) Tool.ERASER else Tool.LASSO, p) }   // laser nie ma panelu
+    val shape = RoundedCornerShape(12.dp)
+    val items = HelperStrip.items(h, cfg)
+    // Menu leży wzdłuż paska: pod poziomym paskiem w rzędzie, przy pionowym w kolumnie.
+    val vertical = pos == 2 || pos == 3
+    Popup(popupPositionProvider = place) {
+        AnimatedVisibility(visibleState = state, enter = fadeIn(tween(150)), exit = fadeOut(tween(180))) {
+            Box(Modifier.shadow(4.dp, shape).clip(shape).background(m.chrome).border(1.dp, m.line, shape)) {
+                when (h) {
+                    HelperStrip.Helper.ERASER -> EraserStripItems(ed, set, vertical, panel, open, items)
+                    HelperStrip.Helper.LASSO -> LassoStripItems(ed, set, vertical, panel, open, items)
+                    HelperStrip.Helper.LASER -> LaserStripItems(ed, set, vertical)
+                }
+            }
+        }
+    }
+}
+
+/** Miejsce okienka przy przycisku paska: po stronie kartki, 4 dp od przycisku (wspólne dla [QuickFormat] i [HelperMenu]). */
+@Composable
+private fun rememberBarPopupPlace(pos: Int): PopupPositionProvider {
+    val gap = with(LocalDensity.current) { 4.dp.roundToPx() }
+    return remember(pos, gap) {
+        object : PopupPositionProvider {
+            override fun calculatePosition(anchorBounds: IntRect, windowSize: IntSize, layoutDirection: LayoutDirection, popupContentSize: IntSize) = when (pos) {
+                1 -> IntOffset(anchorBounds.left, anchorBounds.top - gap - popupContentSize.height)
+                2 -> IntOffset(anchorBounds.right + gap, anchorBounds.top)
+                3 -> IntOffset(anchorBounds.left - gap - popupContentSize.width, anchorBounds.top)
+                else -> IntOffset(anchorBounds.left, anchorBounds.bottom + gap)
+            }
+        }
     }
 }
 

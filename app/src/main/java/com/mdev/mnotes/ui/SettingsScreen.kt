@@ -1,6 +1,7 @@
 package com.mdev.mnotes.ui
 
 import com.mdev.mnotes.core.edit.AngleSnap
+import com.mdev.mnotes.core.layout.HelperStrip
 import com.mdev.mnotes.core.layout.PageShift
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -300,7 +301,7 @@ private fun Appearance(set: com.mdev.mnotes.data.Settings) {
         ToggleRow(T.t("Delikatna wibracja przy dotknięciu przycisków", "Light vibration when tapping buttons"), set.haptics, keys = "haptyka drgania wibracje vibration haptic") { set.haptics = it }
         ToggleRow(T.t("Podpowiedź z nazwą przycisku (najechanie, przytrzymanie)", "Button name tooltip (hover, long press)"), set.tooltips, keys = "podpowiedź dymek napis nazwa tooltip hover") { set.tooltips = it }
         ToggleRow(T.t("Pokazuj dymki o narzędziach po ich wybraniu", "Show tool tips after picking a tool"), set.toolHints, keys = "dymki komunikaty napis wybrane narzędzie podpowiedź toast hint") { set.toolHints = it }
-        ToggleRow(T.t("Listwa pokazuje opcje gumki, lassa i lasera", "Strip shows eraser, lasso and laser options"), set.toolStrip, keys = "listwa ikonki gumka lasso laser opcje strip eraser") { set.toolStrip = it }
+        HelperStripPrefs(set)
         ToggleRow(
             T.t("Mini-mapa strony po przewinięciu przy dużym powiększeniu (przesuwana palcem)", "Page mini-map after scrolling when zoomed in (moved with a finger)"),
             set.miniMap, keys = "mini mapa podgląd strony nawigacja powiększenie zoom róg minimap overview",
@@ -317,6 +318,50 @@ private fun Appearance(set: com.mdev.mnotes.data.Settings) {
         Opt(T.t("Język", "Language"), "language polski angielski english") { Choice(listOf(T.t("Systemowy", "System"), "Polski", "English"), set.lang) { set.lang = it } }
         Opt(T.t("Jednostki", "Units"), "units mm cale milimetry centymetry inches") { Choice(listOf(T.t("Milimetry", "Millimeters"), T.t("Cale", "Inches")), if (set.unitsMm) 0 else 1) { set.unitsMm = it == 0 } }
     }
+}
+
+/**
+ * 2b-A2: listwa przy gumce, lassie i laserze — tryb i zawartość wyskakującego menu (dla których narzędzi, które grupy).
+ * Wiersze są widoczne w wyszukiwarce osobno, więc „gumka menu rozmiary” trafia wprost w przełącznik.
+ */
+@Composable
+private fun HelperStripPrefs(set: com.mdev.mnotes.data.Settings) {
+    Opt(
+        T.t("Listwa przy gumce, lassie i laserze", "Strip with the eraser, lasso and laser"),
+        "listwa pasek boczny gumka lasso laser opcje menu wyskakujące powrót pisanie strip eraser popup back writing",
+    ) {
+        Choice(listOf(T.t("Pisanie + menu przy ikonie", "Writing + menu by the icon"), T.t("Opcje narzędzia + powrót", "Tool options + back")), set.helperStrip) { set.helperStrip = it }
+        Text(
+            if (set.helperStrip == HelperStrip.WRITE_AND_MENU) T.t("Listwa zostaje przy kolorach i grubościach — dotknięcie koloru wraca do pisania; opcje narzędzia wyskakują przy jego ikonie.", "The strip keeps colours and widths — tapping a colour goes back to writing; tool options pop up by its icon.")
+            else T.t("Listwa pokazuje opcje narzędzia, a ostatni przycisk wraca do ostatniego narzędzia pisania.", "The strip shows the tool's options; the last button goes back to the last writing tool."),
+            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 6.dp),
+        )
+    }
+    if (set.helperStrip != HelperStrip.WRITE_AND_MENU) return
+    val cfg = set.helperMenu
+    val groups = listOf(
+        Triple(HelperStrip.Helper.ERASER, T.t("Menu przy gumce", "Menu by the eraser"), "gumka mazanie ścieranie tryby rozmiar zakreślacz eraser"),
+        Triple(HelperStrip.Helper.LASSO, T.t("Menu przy lassie", "Menu by the lasso"), "lasso zaznaczanie kształt prostokąt pętla lasso shape"),
+        Triple(HelperStrip.Helper.LASER, T.t("Menu przy laserze", "Menu by the laser"), "laser wskaźnik kolor śladu pointer colour"),
+    )
+    for ((h, label, keys) in groups) {
+        ToggleRow(label, cfg.menuFor(h), keys = "menu wyskakujące $keys popup") { set.helperMenu = cfg.withMenu(h, it) }
+        if (cfg.menuFor(h)) {
+            val items = HelperStrip.Item.entries.filter { it.helper == h }
+            if (items.size > 1 && rowVisible(label, keys)) FlowRow(Modifier.padding(bottom = 6.dp), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                for (i in items) Chip(helperItemName(i), cfg.shows(i), { set.helperMenu = cfg.withItem(i, !cfg.shows(i)) })
+            }
+        }
+    }
+}
+
+private fun helperItemName(i: HelperStrip.Item) = when (i) {
+    HelperStrip.Item.ERASER_MODES -> T.t("Tryby", "Modes")
+    HelperStrip.Item.ERASER_SIZES -> T.t("Rozmiary", "Sizes")
+    HelperStrip.Item.ERASER_HIGHLIGHTER -> T.t("Pomijanie zakreślacza", "Skip highlighter")
+    HelperStrip.Item.LASSO_SHAPE -> T.t("Kształt pętli", "Loop shape")
+    HelperStrip.Item.LASSO_MODE -> T.t("Co zaznacza", "What it selects")
+    HelperStrip.Item.LASER_COLORS -> T.t("Kolory", "Colours")
 }
 
 @Composable

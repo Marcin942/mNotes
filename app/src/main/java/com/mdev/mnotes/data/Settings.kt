@@ -114,7 +114,12 @@ class Settings(ctx: Context) {
     var eraserKeepHighlighter by Pref("eraser.ignore_highlighter", false)
     var lassoRect by Pref("lasso.rect", false)
     var lassoTouch by Pref("lasso.touch", false)     // lasso „tylko zahacz”: wystarczy musnąć obiekt pętlą; domyślnie zbalansowane (połowa obiektu w pętli)
-    var toolStrip by Pref("toolbar.tool_strip", true)  // listwa obok strony pokazuje opcje gumki, lassa i lasera, gdy są w ręku (F7)
+    // 2b-A2 (zastępuje przełącznik F7 „toolbar.tool_strip”): HelperStrip.WRITE_AND_MENU albo TOOL_OPTIONS
+    var helperStrip by Pref("toolbar.helper_strip", com.mdev.mnotes.core.layout.HelperStrip.WRITE_AND_MENU)
+    private var helperMenuPref by Pref("toolbar.helper_menu", "")   // wyłączone pozycje menu (HelperStrip.Config)
+    var helperMenu: com.mdev.mnotes.core.layout.HelperStrip.Config
+        get() = com.mdev.mnotes.core.layout.HelperStrip.Config.parse(helperMenuPref)
+        set(v) { helperMenuPref = v.encode() }
     var laserColor by Pref("laser.color", 0xFF3B30)    // RGB śladu lasera (LaserColors.PALETTE)
     var axesLast by Pref("axes.last", "")            // ostatnio wstawiony układ współrzędnych (AxesSpec.encode), F8
     var guideOffered by Pref("guide.offered", false) // zeszyt-przewodnik był już proponowany (F20)

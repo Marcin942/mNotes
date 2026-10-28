@@ -23,7 +23,11 @@ mNotes jest udostępniony na licencji Mozilla Public License 2.0 (`LICENSE`). Bi
 
 - Ikona aplikacji i glify narzędzi (pióra, gumka, lasso, zdjęcie tablicy) to własne wektory rysowane w kodzie.
 - Ikony interfejsu pochodzą z Material Icons (Apache-2.0).
-- Aplikacja nie ma własnych plików czcionek, używa czcionek systemowych.
+- Czcionki w `app/src/main/assets/fonts/` są na licencji SIL Open Font License 1.1 (teksty licencji obok, w
+  `assets/fonts/licencje/`, trafiają do APK): Literata (The Literata Project Authors), Inter (The Inter Project
+  Authors), Atkinson Hyperlegible (Braille Institute of America), JetBrains Mono (The JetBrains Mono Project Authors),
+  Caveat (The Caveat Project Authors). Pliki bez zmian, tylko z prostszymi nazwami. Zeszyty z wcześniejszych wersji
+  używają dalej czcionek systemowych.
 - Obrazy w `docs/podglad/` to rendery z testów, nie zdjęcia.
 - Pliki w `app/src/test/resources/` są syntetyczne, bez prywatnych danych.
 

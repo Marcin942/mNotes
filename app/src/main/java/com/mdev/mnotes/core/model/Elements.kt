@@ -314,6 +314,35 @@ class TextBox(
         const val FAMILY_SERIF = 1
         const val FAMILY_MONO = 2
         const val FAMILY_HAND = 3
+        // 3c-A11: czcionki dołączone do aplikacji (render/AppFonts). Starsza wersja pokaże je bezszeryfową systemową.
+        const val FAMILY_LITERATA = 4
+        const val FAMILY_INTER = 5
+        const val FAMILY_ATKINSON = 6
+        const val FAMILY_JETBRAINS = 7
+        const val FAMILY_CAVEAT = 8
+
+        /** Rodzina nowych pól, gdy użytkownik jeszcze żadnej nie wybrał: szeryfowa Literata (czytelna na ekranie i w PDF). */
+        const val FAMILY_DEFAULT = FAMILY_LITERATA
+
+        /** Nazwa dołączonej czcionki (do SVG i do wyboru w panelu tekstu); null dla rodzin systemowych. */
+        fun fontName(family: Int): String? = when (family) {
+            FAMILY_LITERATA -> "Literata"
+            FAMILY_INTER -> "Inter"
+            FAMILY_ATKINSON -> "Atkinson Hyperlegible"
+            FAMILY_JETBRAINS -> "JetBrains Mono"
+            FAMILY_CAVEAT -> "Caveat"
+            else -> null
+        }
+
+        /** Ogólny rodzaj rodziny (do eksportu SVG i TikZ, gdzie czcionki nie ma): bezszeryfowa, szeryfowa, mono, ręczna. */
+        fun generic(family: Int): Int = when (family) {
+            FAMILY_LITERATA -> FAMILY_SERIF
+            FAMILY_INTER, FAMILY_ATKINSON -> FAMILY_SANS
+            FAMILY_JETBRAINS -> FAMILY_MONO
+            FAMILY_CAVEAT -> FAMILY_HAND
+            FAMILY_SERIF, FAMILY_MONO, FAMILY_HAND -> family
+            else -> FAMILY_SANS
+        }
 
         const val STYLE_BOLD = 1
         const val STYLE_ITALIC = 2

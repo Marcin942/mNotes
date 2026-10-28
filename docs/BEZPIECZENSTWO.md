@@ -24,6 +24,12 @@ Cele atakującego: odczyt notatek, podrzucenie treści, awaria aplikacji albo ut
 | S-10 | niskie | `app/MainActivity.kt` (`EXTRA_NOTEBOOK`) | Wyeksportowana aktywność główna przyjmowała identyfikator zeszytu od każdej aplikacji (otwarcie bez wiedzy użytkownika; identyfikator trudny do zgadnięcia). Przy okazji: przy blokadzie nowe okno gubiło zeszyt. | naprawione `dc614b1` (tylko własne okno; czeka na odblokowanie) |
 | S-11 | średnie | `app/MainActivity.kt` | Przy włączonej blokadzie aplikacji podgląd w „ostatnich” pokazywał otwartą stronę (zrzut przed `onStop`): kto weźmie odblokowany telefon, czyta notatkę bez odblokowania mNotes. | naprawione `9cc9f46` na Androidzie 13+; starsze — do decyzji (tylko `FLAG_SECURE`) |
 | S-02 | niskie | manifest wersji debug (`PreviewActivity` z narzędzi Compose) | Wyeksportowana aktywność podglądu Compose w wersji debug: inna aplikacja może ją uruchomić z nazwą funkcji `@Composable`, która wykona się w procesie mNotes poza blokadą. | naprawione `9cc9f46` (`app/src/debug/AndroidManifest.xml`, `tools:node="remove"`) |
+| S-12 | niskie | `core/nearby/LinkJournal.kt` (`LinkScrub`), „Kopiuj raport” w oknie łącza | Raport diagnostyki łącza, który użytkownik wkleja komuś do pomocy, zawierał nazwy urządzeń i adresy MAC; czyszczenie dziennika przepuszczało ścieżki ze spacją, MAC zamaskowany przez Androida, adresy IP i nazwy Wi-Fi Direct. | naprawione `1917384` (test `LinkJournalTest`, `LinkMachineTest.copiedReport…`) |
+| S-13 | niskie | `core/nearby/SyncLink.kt` (`SyncMsg.decode`), `LinkPhoto.kt` (`PhotoReceiver`) | Połączone urządzenie: 9 bajtów deklarujących 24 MB wymuszało przydział 24 MB na wiadomość; duża pierwsza część zdjęcia i ostatnia o wysokim numerze dawały zapis pod przesunięciem ~2 GB (rzadki plik w cache tabletu). | naprawione `b773338` (test `LinkPhotoTest`) |
+| S-14 | niskie | `gms/.../NearbyTransport.kt`, `core/nearby/Rfcomm.kt` | Łącze Nearby używa tylko ładunków BYTES, a ładunek plik/strumień od połączonego urządzenia (jeszcze przed `hello`) był przyjmowany przez Nearby bez limitu; adres pary zapisywany z ostatniego gniazda przychodzącego, także odrzuconego (wąskie okno przed zamknięciem nasłuchu). | naprawione `c8db69f` (ładunki inne niż BYTES anulowane; adres z przyjętego połączenia; bez testu JVM dla Nearby) |
+| S-15 | niskie | `core/goodnotes/PdfDocument.kt` (`obj`), `core/codec/ByteIO.kt` (`ByteReader.need`) | PDF z łańcuchem 50 000 odwołań `/Length` przepełniał stos (`StackOverflowError` omija `catch (Exception)`); ujemna długość w kodeku cofała odczyt. | naprawione `92732ec` (testy `PdfHostileTest`, `HostileInputTest`) |
+| S-16 | niskie | `core/model/PageSpec.kt` (`fromJson`) | Strona z `"w": "NaN"` we wrogim `.mnotes`: `coerceIn` przepuszcza NaN, bitmapa 0×0 i wyjątek przy każdym rysowaniu strony. | naprawione `b28c8c1` (test pilnuje wyniku; na JVM `org.json` czyta „NaN” inaczej niż Android) |
+| S-17 | informacyjne | `editor/Editor.kt` (schowek) | Przy blokadzie aplikacji Android 13+ pokazywał skopiowany kod TikZ/obraz w podglądzie schowka; obrazy ze schowka zostawały w `cache/share` do następnego eksportu. | naprawione `a0bab67`, `8f171d2` (`EXTRA_IS_SENSITIVE`, PNG starsze niż doba usuwane) |
 
 ## Sprawdzone bez problemów
 
@@ -36,17 +42,19 @@ Cele atakującego: odczyt notatek, podrzucenie treści, awaria aplikacji albo ut
   od wymiarów z nagłówka; wyjątki i brak pamięci łapane (`runCatching`). „Wyślij do mLabs” udostępnia tylko PNG strony
   i JSON (tytuł, numer strony, data, tekst wpisany ręcznie) przez systemowy wybór aplikacji — bez wskazanego pakietu;
   nazwa pliku z tytułu zeszytu przechodzi przez `fileStem` (tylko `a-z0-9-`), więc tytuł nie wyjdzie poza katalog.
+- Łącze: ECDH P-256 z kodem 6 cyfr (zobowiązanie przed odsłonięciem), AES-256-GCM z kluczem pary, klucz pary w
+  magazynie kluczy urządzenia; obce urządzenie bez klucza nie przejdzie `hello`; rozmiar przed uwierzytelnieniem ograniczony (S-05).
+- Kod: brak WebView, `ObjectInputStream`, `PendingIntent`, `Log.*`; `Class.forName` tylko ze stałą; brak wyrażeń
+  regularnych z danych użytkownika; `SecureRandom` w łączu; archiwum `.mnotes` chronione przed wyjściem poza katalog (zip slip).
 
 ## Stan
 
-- 29.10: szkielet raportu; manifesty obu wariantów i kreda przejrzane; przegląd plików z zewnątrz, łącza i danych
-  w spoczynku skończony. Naprawione: S-03, S-04, S-05.
-- Kolejka (do weryfikacji i poprawki, od najpoważniejszych): PDF `/W [0 0 0]` w strumieniu xref (pętla ~2³¹);
-  kopiowanie strumienia bez limitu + pozostałości katalogu po nieudanym imporcie; `file://`/własny FileProvider
-  przyjmowane jako import; podgląd w ostatnich aplikacjach przy blokadzie (API 33+); `lock` z importowanego pliku;
-  `EXTRA_NOTEBOOK` tylko dla okna wewnętrznego; `PreviewActivity` usunąć z manifestu debug; łącze: czyszczenie raportu
-  diagnostyki i luki `LinkScrub`, ładunki FILE/STREAM Nearby, `lastPeer`, długości w `SyncMsg`/`LinkPhoto`;
-  PDF: predyktor/ASCII85/krzywe bez limitu, głębokość `obj()`; `ByteReader.need` przepełnienie; NaN w rozmiarze strony;
-  limit liczby wpisów `.mnotes`; folder wymiany nadpisuje cudzy plik o tej samej nazwie; schowek bez „poufne”.
-- Do decyzji: wersja debug (S-01), FLAG_SECURE <API 33, `dataExtractionRules` (przenoszenie na nowy telefon),
-  blokada pojedynczych zeszytów (pół-funkcja), EXIF/GPS w zdjęciach z telefonu, wyłączanie blokady bez blokady ekranu.
+- 29.10: przegląd skończony (manifesty, pliki z zewnątrz, łącze, dane w spoczynku, kod, kreda). Naprawione S-02…S-17;
+  testy foss i gms bez porażek.
+- Świadomie bez zmian (ryzyko przyjęte): sparowane urządzenie może wysłać zeszyt w oknie zdjęć (jest uwierzytelnione);
+  stałe identyfikatory usługi łącza; odbiornik Bluetooth `RECEIVER_EXPORTED` dla chronionego `ACTION_FOUND`; kopiowanie
+  przy wklejaniu/przeciąganiu na wątku zapisu (zaczyna je użytkownik).
+- Do decyzji (odbierają coś użytkownikowi albo wymagają klucza wydania): wersja debug (S-01); `FLAG_SECURE` dla Androida
+  < 13; `dataExtractionRules` (przenoszenie danych na nowy telefon kopiuje zeszyty i dane pary); blokada pojedynczych
+  zeszytów (pół-funkcja); EXIF/GPS w zdjęciach wysyłanych z telefonu; blokada wyłączana, gdy urządzenie nie ma blokady
+  ekranu; `BIOMETRIC_WEAK`; folder wymiany nadpisuje plik o tej samej nazwie, którego mNotes nie zapisało.

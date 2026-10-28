@@ -1256,10 +1256,10 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
     fun releaseTiles() = cache.releaseTiles()
 
     /** Przyjmuje elementy z innego dokumentu stanowiska (zeszytu [fromNb]) środkiem w punkcie ekranu ([sx], [sy]). */
-    fun dropIn(els: List<Element>, fromNb: String, sx: Float, sy: Float) {
-        if (layout.count == 0 || ed.readOnly) return
+    fun dropIn(els: List<Element>, fromNb: String, sx: Float, sy: Float): DocEdit? {
+        if (layout.count == 0 || ed.readOnly) return null
         val pi = layout.nearest(docX(sx), docY(sy)).coerceIn(0, layout.count - 1)
-        ed.pasteElements(els, fromNb, Triple(pi, pgX(pi, sx), pgY(pi, sy)))
+        return ed.pasteElements(els, fromNb, Triple(pi, pgX(pi, sx), pgY(pi, sy)))
     }
 
     override fun onTouchEvent(raw: MotionEvent): Boolean {
@@ -3559,9 +3559,8 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
             var b = Bounds.EMPTY
             for (e in moved) b = b.union(e.bounds)
             val cx = (layout.left(lPage) + b.cx) * zoom + tx; val cy = (layout.top(lPage) + b.cy) * zoom + ty
-            if (lh.dropOutside(this, moved, cx, cy)) {
-                // Na stronie stan „podniesiony” to już oryginał bez tych elementów — zapisujemy tylko krok cofania.
-                ed.record(DocEdit.Elements(page.id, ElementsEdit.remove(orig, lIds)))
+            // Na stronie stan „podniesiony” to już oryginał bez tych elementów — zostaje tylko krok cofania.
+            if (lh.dropOutside(this, moved, cx, cy, DocEdit.Elements(page.id, ElementsEdit.remove(orig, lIds)))) {
                 ed.clearSel()
                 lOrig = null; lLifted = null; lEls = emptyList(); lM = Affine.IDENTITY
                 ed.selTick++

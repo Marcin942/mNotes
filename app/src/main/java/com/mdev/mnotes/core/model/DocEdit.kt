@@ -105,6 +105,12 @@ class UndoStack(private val limit: Int = 500) {
     val canUndo: Boolean get() = undoList.isNotEmpty()
     val canRedo: Boolean get() = redoList.isNotEmpty()
 
+    /** Krok, który cofnie najbliższe [undo]. */
+    val top: DocEdit? get() = undoList.lastOrNull()
+
+    /** Krok, który ponowi najbliższe [redo]. */
+    val nextRedo: DocEdit? get() = redoList.lastOrNull()
+
     fun push(edit: DocEdit) {
         undoList.add(edit)
         if (undoList.size > limit) undoList.removeAt(0)

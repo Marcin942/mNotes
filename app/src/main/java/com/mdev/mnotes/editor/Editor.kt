@@ -301,8 +301,11 @@ class Editor(val ctx: Context, val nbId: String) {
 
     // — Cofanie —
     // 2c-A1: cofnięcie wzrostu tablicy przesuwa treść z powrotem, więc widok idzie za nią (bez skoku na ekranie)
-    fun undo() { commitSelPreview(); cancelCut(); cancelCrop(); clearSel(); val e = doc.doUndo(); undoTick++; e?.let { DocEdit.shiftOf(it) }?.let { (dx, dy) -> view?.boardShifted(-dx, -dy) }; e?.pageIds?.firstOrNull()?.let { view?.ensureVisible(it) } }
-    fun redo() { commitSelPreview(); cancelCut(); cancelCrop(); clearSel(); val e = doc.doRedo(); undoTick++; e?.let { DocEdit.shiftOf(it) }?.let { (dx, dy) -> view?.boardShifted(dx, dy) }; e?.pageIds?.firstOrNull()?.let { view?.ensureVisible(it) } }
+    /** Cofnięcie; przeniesienie między dokumentami stanowiska cofa się w obu naraz (2c-A5). */
+    fun undo() { val st = station; if (st == null) undoHere() else st.linked.undo(this, st::stackOf) { it.undoHere() } }
+    fun redo() { val st = station; if (st == null) redoHere() else st.linked.redo(this, st::stackOf) { it.redoHere() } }
+    private fun undoHere() { commitSelPreview(); cancelCut(); cancelCrop(); clearSel(); val e = doc.doUndo(); undoTick++; e?.let { DocEdit.shiftOf(it) }?.let { (dx, dy) -> view?.boardShifted(-dx, -dy) }; e?.pageIds?.firstOrNull()?.let { view?.ensureVisible(it) } }
+    private fun redoHere() { commitSelPreview(); cancelCut(); cancelCrop(); clearSel(); val e = doc.doRedo(); undoTick++; e?.let { DocEdit.shiftOf(it) }?.let { (dx, dy) -> view?.boardShifted(dx, dy) }; e?.pageIds?.firstOrNull()?.let { view?.ensureVisible(it) } }
 
     /** Wykonanie z zapisem na stosie cofania. */
     fun exec(edit: DocEdit) {
@@ -404,10 +407,10 @@ class Editor(val ctx: Context, val nbId: String) {
      * Wkleja [els] z zeszytu [fromNb] środkiem w [at] (indeks strony, x, y; domyślnie środek widoku), z kopiami obrazów
      * i nowymi id; zaznacza wynik. Też przeniesienie zaznaczenia z innego rzędu stanowiska (2b-A7).
      */
-    fun pasteElements(els: List<Element>, fromNb: String, at: Triple<Int, Float, Float>? = null) {
-        val v = view ?: return
-        val (pi, cx, cy) = at ?: v.viewCenterOnPage() ?: return
-        val page = doc.pages.getOrNull(pi) ?: return
+    fun pasteElements(els: List<Element>, fromNb: String, at: Triple<Int, Float, Float>? = null): DocEdit? {
+        val v = view ?: return null
+        val (pi, cx, cy) = at ?: v.viewCenterOnPage() ?: return null
+        val page = doc.pages.getOrNull(pi) ?: return null
         var b = Bounds.EMPTY
         for (e in els) b = b.union(e.bounds)
         val dx = cx - b.cx; val dy = cy - b.cy
@@ -425,6 +428,8 @@ class Editor(val ctx: Context, val nbId: String) {
         }
         exec(DocEdit.Elements(page.id, ElementsEdit.add(doc.content(page), copies)))
         select(page.id, copies.map { it.id }.toSet())
+        // Na stosie leży krok po ewentualnym dołożeniu płótna tablicy, nie sam „add”.
+        return doc.undo.top
     }
 
     private fun dup(e: Element, dx: Float, dy: Float): Element =

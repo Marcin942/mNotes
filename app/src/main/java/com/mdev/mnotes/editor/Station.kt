@@ -6,6 +6,8 @@ import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import com.mdev.mnotes.core.layout.Workbench
+import com.mdev.mnotes.core.model.LinkedUndo
+import com.mdev.mnotes.core.model.UndoStack
 
 /**
  * Stanowisko (2b-A7, od 2d-A1 jeden model widoku): zeszyt otwarty w edytorze ([main]) i dokumenty dołożone obok — każdy
@@ -30,6 +32,12 @@ class Station(private val ctx: Context, val main: Editor) {
 
     val rows: List<Editor> get() = listOf(main) + extra
     val on: Boolean get() = extra.isNotEmpty()
+
+    /** Pary kroków cofania przeniesień między dokumentami (2c-A5). */
+    val linked = LinkedUndo<Editor>()
+
+    /** Stos cofania dokumentu, który nadal jest na stanowisku (zamknięty nie bierze udziału w cofaniu pary). */
+    fun stackOf(e: Editor): UndoStack? = if (e === main || e in extra) e.doc.undo else null
 
     init {
         main.station = this

@@ -14,6 +14,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.setValue
 import com.mdev.mnotes.core.layout.Fling
 import com.mdev.mnotes.core.layout.Workspace
+import com.mdev.mnotes.core.model.DocEdit
 import com.mdev.mnotes.core.model.Element
 
 /**
@@ -40,8 +41,11 @@ interface LaneHost {
     /** Pas dostał rozmiar ([first] — pierwszy raz). */
     fun ready(v: NoteView, first: Boolean)
     fun outside(v: NoteView, sx: Float, sy: Float): Boolean
-    /** Zaznaczenie upuszczone środkiem w punkcie ekranu ([cx], [cy]) poza swoim pasem; true — przyjął je inny dokument. */
-    fun dropOutside(v: NoteView, els: List<Element>, cx: Float, cy: Float): Boolean
+    /**
+     * Zaznaczenie upuszczone środkiem w punkcie ekranu ([cx], [cy]) poza swoim pasem; true — przyjął je inny dokument,
+     * a [removal] (usunięcie u źródła) trafił na stos źródła w parze z wstawieniem.
+     */
+    fun dropOutside(v: NoteView, els: List<Element>, cx: Float, cy: Float, removal: DocEdit): Boolean
 }
 
 /**
@@ -184,11 +188,14 @@ class WorkspaceView(ctx: Context, private val st: Station) : ViewGroup(ctx), Lan
         return w.laneAt(sx, sy) != lanes.indexOf(v)
     }
 
-    override fun dropOutside(v: NoteView, els: List<Element>, cx: Float, cy: Float): Boolean {
+    override fun dropOutside(v: NoteView, els: List<Element>, cx: Float, cy: Float, removal: DocEdit): Boolean {
         val w = ws ?: return false
         val t = lanes.getOrNull(w.laneAt(cx, cy)) ?: return false
         if (t === v || t.ed.readOnly) return false
-        t.dropIn(els, v.ed.nbId, cx, cy)
+        val added = t.dropIn(els, v.ed.nbId, cx, cy) ?: return false
+        // Usunięcie w źródle i wstawienie w celu: jeden krok cofania w obu dokumentach (2c-A5).
+        v.ed.record(removal)
+        st.linked.link(v.ed, removal, t.ed, added)
         st.activate(t.ed)
         invalidate()
         return true

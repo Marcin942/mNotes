@@ -123,13 +123,24 @@ class KredaKrzyweTest {
             FloatArray(402) { i -> val t = (i / 2) / 200.0; (if (i % 2 == 0) 175 + 90 * t else 65 + 25 * sin(2 * PI * 90 * t / 60)).toFloat() },
             dense(floatArrayOf(335f, 20f, 285f, 20f, 315f, 65f, 285f, 110f, 337f, 110f)),
         )
-        val chalk = Raster(w, h)
-        val rnd = java.util.Random(7)
         val ink = Raster.argb(255, 235, 235, 230)
-        for (y in 0 until h) for (x in 0 until w) {
-            val d = shapes.minOf { CurveMetrics.distToPolyline(x + 0.5f, y + 0.5f, it) }
-            if (d <= 2.5f + (rnd.nextFloat() - 0.5f) * 0.9f) chalk[x, y] = ink
+        fun draw(of: List<FloatArray>): Raster {
+            val chalk = Raster(w, h)
+            val rnd = java.util.Random(7)
+            for (y in 0 until h) for (x in 0 until w) {
+                val d = of.minOf { CurveMetrics.distToPolyline(x + 0.5f, y + 0.5f, it) }
+                if (d <= 2.5f + (rnd.nextFloat() - 0.5f) * 0.9f) chalk[x, y] = ink
+            }
+            return chalk
         }
+        // Wiersze tabeli w `docs/KREDA-POMIARY.md` dla każdego kształtu osobno (2c-B6).
+        for ((name, shape) in listOf("okrąg", "sinusoida", "S", "∑").zip(shapes)) {
+            val s = both(draw(listOf(shape)))
+            println("| $name | ${s.lines.size} | ${"%.1f".format(s.old.nodesPer100)} → ${"%.1f".format(s.new.nodesPer100)} | " +
+                "${"%.1f".format(s.old.nodesPer100 / max(1e-9, s.new.nodesPer100))} | ${"%.2f".format(s.old.teethPer100)} → ${"%.2f".format(s.new.teethPer100)} | " +
+                "${"%.2f".format(s.old.meanErr)} → ${"%.2f".format(s.new.meanErr)} | ${"%.0f".format(s.new.maxSmooth)} |")
+        }
+        val chalk = draw(shapes)
         val b = both(chalk)
         render(File(outDir(), "syntetyczne.png"), chalk, b, intArrayOf(0, 0, w, h), zoom = 3)
         println("syntetyczne: kresek ${b.lines.size}, węzły/100 px ${b.old.nodesPer100} → ${b.new.nodesPer100}, zęby/100 px ${b.old.teethPer100} → ${b.new.teethPer100}, błąd ${b.old.meanErr} → ${b.new.meanErr}")

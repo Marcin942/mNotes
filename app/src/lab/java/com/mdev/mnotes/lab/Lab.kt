@@ -48,10 +48,12 @@ import androidx.compose.ui.unit.dp
 import androidx.exifinterface.media.ExifInterface
 import com.mdev.mnotes.app.LabCommand
 import com.mdev.mnotes.app.LabFeatures
+import com.mdev.mnotes.core.image.BoardEdits
 import com.mdev.mnotes.core.image.BoardGeometry
 import com.mdev.mnotes.core.image.BoardOptions
 import com.mdev.mnotes.core.image.BoardPipeline
 import com.mdev.mnotes.core.image.BoardSource
+import com.mdev.mnotes.core.image.ChalkInk
 import com.mdev.mnotes.core.image.ChalkStrokes
 import com.mdev.mnotes.core.image.DecodePlan
 import com.mdev.mnotes.core.image.Quad
@@ -103,13 +105,15 @@ object Lab : LabFeatures {
         val set = LabSettings.of(LocalContext.current)
         val files = remember(imgs.map { it.asset }) { imgs.map { ed.repo.assetFile(ed.nbId, it.asset) } }
         val many = imgs.size > 1
-        var opt by remember { mutableStateOf(set.options()) }
+        // 2c-B4: kolor kreski wg papieru strony, na której leży zdjęcie (biała kreda na białej kartce znikała)
+        var opt by remember { mutableStateOf(set.options().copy(paper = paperOf(ed, imgs[0]))) }
         var asStrokes by remember { mutableStateOf(false) }
         var mode by remember { mutableStateOf(SHOW_RESULT) }
-        // Narożniki ustawione ręcznie, w ułamkach zdjęcia (lewy górny, prawy górny, prawy dolny, lewy dolny); null = zgadnięte.
-        var corners by remember { mutableStateOf<FloatArray?>(null) }
-        // Wielokąty gumki w ułamkach wyniku: ten sam kształt na podglądzie i w pełnym rozmiarze.
-        var erase by remember { mutableStateOf(listOf<FloatArray>()) }
+        // Narożniki (ułamki zdjęcia, null = zgadnięte) i wielokąty gumki (ułamki wyniku: ten sam kształt na podglądzie i
+        // w pełnym rozmiarze). Zmiana narożników, prostowania albo kadru zeruje gumkę (2c-B5, [BoardEdits]).
+        var edits by remember { mutableStateOf(BoardEdits(opt.straighten, opt.crop)) }
+        val corners = edits.corners
+        val erase = edits.erase
         var prep by remember { mutableStateOf<BoardSource?>(null) }
         var preview by remember { mutableStateOf<Bitmap?>(null) }
         var info by remember { mutableStateOf("") }
@@ -170,8 +174,9 @@ object Lab : LabFeatures {
                     }
                     when {
                         strokes -> {
-                            val els = if (chosen.curves) ChalkStrokes.toCurves(res.image, src, imgs[src.ref], chosen.tint ?: GRAPHITE)
-                            else ChalkStrokes.toStrokes(res.image, src, imgs[src.ref], chosen.tint ?: GRAPHITE)
+                            val ink = strokeInk(chosen)
+                            val els = if (chosen.curves) ChalkStrokes.toCurves(res.image, src, imgs[src.ref], ink)
+                            else ChalkStrokes.toStrokes(res.image, src, imgs[src.ref], ink)
                             post {
                                 busy = false
                                 if (els.isEmpty()) ed.say(T.t("Nie znaleziono kredy do zamiany na kreski", "No chalk found to turn into strokes"))
@@ -201,8 +206,8 @@ object Lab : LabFeatures {
                 val auto = prep?.quad?.let { normOf(it, prep!!) }
                 when {
                     mode == SHOW_CORNERS && photo != null && !many && opt.straighten ->
-                        CornerBox(photo, corners ?: auto ?: FULL) { corners = it }
-                    else -> ResultBox(preview, if (mode == SHOW_ERASER) erase else null) { erase = erase + listOf(it) }
+                        CornerBox(photo, corners ?: auto ?: FULL) { edits = edits.withGeometry(it) }
+                    else -> ResultBox(preview, if (mode == SHOW_ERASER) erase else null) { edits = edits.withLoop(it) }
                 }
                 val hint = when (mode) {
                     SHOW_CORNERS -> when {
@@ -215,12 +220,12 @@ object Lab : LabFeatures {
                 }
                 Text(hint, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 6.dp, bottom = 4.dp))
                 if (mode == SHOW_CORNERS && corners != null) {
-                    TextButton(onClick = { corners = null }) { Text(T.t("Narożniki automatycznie", "Automatic corners")) }
+                    TextButton(onClick = { edits = edits.withGeometry(null) }) { Text(T.t("Narożniki automatycznie", "Automatic corners")) }
                 }
                 if (mode == SHOW_ERASER && erase.isNotEmpty()) {
                     Row {
-                        TextButton(onClick = { erase = erase.dropLast(1) }) { Text(T.t("Cofnij gumkę", "Undo eraser")) }
-                        TextButton(onClick = { erase = emptyList() }) { Text(T.t("Wyczyść gumkę (${erase.size})", "Clear eraser (${erase.size})")) }
+                        TextButton(onClick = { edits = edits.undoLoop() }) { Text(T.t("Cofnij gumkę", "Undo eraser")) }
+                        TextButton(onClick = { edits = edits.clearLoops() }) { Text(T.t("Wyczyść gumkę (${erase.size})", "Clear eraser (${erase.size})")) }
                     }
                 }
                 SectionLabel(T.t("Wynik", "Result"))
@@ -233,10 +238,17 @@ object Lab : LabFeatures {
                     },
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(vertical = 4.dp),
                 )
-                Steps(opt) { opt = it }
+                Steps(opt) { opt = it; edits = edits.withGeometry(edits.corners, it.straighten, it.crop) }
             }
         }
     }
+
+    /** Papier strony, na której leży [img] (do koloru kredy, 2c-B4); null, gdy obrazu nie ma na żadnej stronie. */
+    private fun paperOf(ed: Editor, img: ImageEl): Int? =
+        ed.doc.pages.firstOrNull { p -> ed.doc.content(p).elements.any { it.id == img.id } }?.spec?.paper
+
+    /** Kolor „Edytowalnych kresek”: wybrany albo grafit, z kontrastem ≥ 3:1 do papieru strony (grafit na ciemnej jaśnieje). */
+    private fun strokeInk(opt: BoardOptions): Int = (opt.tint ?: GRAPHITE).let { c -> opt.paper?.let { ChalkInk.fit(c, it) } ?: c }
 
     /** Przełączniki kroków i suwaki progu; te same kontrolki co w ustawieniach. */
     @Composable
@@ -390,6 +402,8 @@ object Lab : LabFeatures {
 
     /** Okno „Wyślij stronę do mLabs”: edytor i indeks strony z chwili wywołania polecenia; null = zamknięte. */
     private var sendPage by mutableStateOf<Pair<Editor, Int>?>(null)
+    /** „Oczyścić?” w podpowiedzi po wstawieniu zdjęcia tablicy: panel kredy dla tego zdjęcia (2c-B5). */
+    private var cleanAsk by mutableStateOf<Pair<Editor, ImageEl>?>(null)
 
     override fun commands(ed: Editor): List<LabCommand> = listOf(
         LabCommand("labSendMlabs", 0, "Wyślij stronę do mLabs…", "Send page to mLabs…", { ed.doc.pages.isNotEmpty() }) { sendPage = ed to ed.pageIndex },
@@ -397,6 +411,7 @@ object Lab : LabFeatures {
 
     @Composable
     override fun Overlay(ed: Editor) {
+        cleanAsk?.let { (owner, img) -> if (owner === ed) BoardPanel(ed, listOf(img)) { cleanAsk = null } }
         val (owner, index) = sendPage ?: return
         if (owner !== ed) return
         com.mdev.mnotes.lab.recognize.SendToMlabs.Dialog(ed, index, work) { sendPage = null }
@@ -417,7 +432,7 @@ object Lab : LabFeatures {
         val set = LabSettings.of(ed.view?.context ?: return)
         if (!set.lecture) return
         val file = ed.repo.assetFile(ed.nbId, image.asset)
-        val opt = set.options()
+        val opt = set.options().copy(paper = ed.doc.page(pageId)?.spec?.paper)
         work.launch {
             val photo = loadRaster(file, opt.maxSide) ?: return@launch
             if (!BoardGeometry.looksLikeDarkBoard(photo)) return@launch
@@ -433,13 +448,33 @@ object Lab : LabFeatures {
                     if (el.asset != image.asset) return@post
                     val clean = el.copy(asset = name, h = el.w * out.h / out.w, crop = com.mdev.mnotes.core.model.ImageCrop.FULL, fx = com.mdev.mnotes.core.model.ImageFx.NONE)
                     ed.exec(com.mdev.mnotes.core.model.DocEdit.Elements(page.id, com.mdev.mnotes.core.model.ElementsEdit.replace(cur, mapOf(el.id to clean))))
-                    ed.say(T.t("Tablica oczyszczona: sama kreda. Cofnij (↶), żeby wrócić do zdjęcia.", "Board cleaned: chalk only. Undo (↶) to get the photo back."))
+                    // 2c-B4: przycisk zamiast samego ↶ — działa także po innych zmianach (podmienia tylko to zdjęcie z powrotem)
+                    ed.say(
+                        T.t("Tablica oczyszczona: sama kreda.", "Board cleaned: chalk only."),
+                        listOf(T.t("Cofnij do oryginału", "Back to the original") to { restorePhoto(ed, pageId, el, name) }),
+                    )
                 }
             }
         }
     }
 
-    /** Po wstawieniu zdjęcia ciemnej tablicy raz podpowiada „Oczyść tablicę”; sprawdzenie na 320 px w tle. */
+    /**
+     * „Cofnij do oryginału” po oczyszczeniu: obraz [orig] wraca w miejscu i szerokości, które ma teraz (użytkownik mógł
+     * go przesunąć); nic się nie dzieje, gdy na stronie nie ma już oczyszczonej wersji [cleanAsset].
+     */
+    private fun restorePhoto(ed: Editor, pageId: String, orig: ImageEl, cleanAsset: String) {
+        val page = ed.doc.page(pageId) ?: return
+        val cur = ed.doc.content(page)
+        val now = cur.elements.firstOrNull { it.id == orig.id } as? ImageEl ?: return
+        if (now.asset != cleanAsset) return
+        val back = orig.copy(cx = now.cx, cy = now.cy, w = now.w, h = now.w * orig.h / orig.w, rot = now.rot)
+        ed.exec(com.mdev.mnotes.core.model.DocEdit.Elements(page.id, com.mdev.mnotes.core.model.ElementsEdit.replace(cur, mapOf(orig.id to back))))
+    }
+
+    /**
+     * Po wstawieniu zdjęcia ciemnej tablicy podpowiada „Oczyść tablicę” z przyciskami „Oczyścić?” (zaznacza zdjęcie
+     * i otwiera panel kredy) i „Nie pokazuj więcej” (2c-B5; wcześniej sam dymek, raz); sprawdzenie na 320 px w tle.
+     */
     override fun imageInserted(ed: Editor, el: ImageEl) {
         val set = LabSettings.of(ed.view?.context ?: return)
         if (!set.boardHint) return
@@ -448,13 +483,23 @@ object Lab : LabFeatures {
             val small = loadRaster(file, 320) ?: return@launch
             if (!BoardGeometry.looksLikeDarkBoard(small)) return@launch
             ed.view?.post {
-                set.boardHint = false
-                ed.say(T.t(
-                    "Wygląda jak tablica: różdżka „Oczyść tablicę” w menu zdjęcia zostawi samą kredę (podpowiedź raz; Ustawienia → Laboratorium)",
-                    "Looks like a blackboard: the “Clean up the board” wand in the photo menu keeps only the chalk (shown once; Settings → Lab)",
-                ))
+                ed.say(
+                    T.t("Wygląda jak tablica: zostawić samą kredę?", "Looks like a blackboard: keep only the chalk?"),
+                    listOf(
+                        T.t("Oczyścić?", "Clean up?") to { cleanPhoto(ed, el) },
+                        T.t("Nie pokazuj więcej", "Don't show again") to { set.boardHint = false },
+                    ),
+                )
             }
         }
+    }
+
+    /** Zaznacza zdjęcie [el] (jeśli wciąż jest na stronie) i otwiera dla niego panel kredy. */
+    private fun cleanPhoto(ed: Editor, el: ImageEl) {
+        val page = ed.doc.pages.firstOrNull { p -> ed.doc.content(p).elements.any { it.id == el.id } } ?: return
+        val now = ed.doc.content(page).elements.first { it.id == el.id } as? ImageEl ?: return
+        ed.select(page.id, setOf(now.id))
+        cleanAsk = ed to now
     }
 
     @Composable

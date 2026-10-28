@@ -10,7 +10,7 @@ import java.security.MessageDigest
 
 /**
  * Uprawnienia łącza na danej wersji Androida (`docs/NEARBY-PRZEBUDOWA.md` §3.6). Dokładna lokalizacja jest wymagana
- * wszędzie: notatka z działającej aplikacji (mChochlik) mówi, że szukanie bez niej zwraca 8034/8036 także na nowych
+ * wszędzie: notatka z innej działającej aplikacji Nearby mówi, że szukanie bez niej zwraca 8034/8036 także na nowych
  * Androidach (B2-9 przyjmował przybliżoną: to był błąd). Przybliżona jest na liście, bo Android 12+ pyta o obie naraz.
  */
 object LinkPermissions {
@@ -27,7 +27,26 @@ object LinkPermissions {
     fun granted(result: Map<String, Boolean>): Boolean = result.isNotEmpty() && result.all { (k, v) -> v || k == COARSE && result[FINE] == true }
 
     /** Których jeszcze brakuje (do ekranu „Dlaczego” i diagnostyki); [has] mówi, czy uprawnienie jest przyznane. */
-    fun missing(sdk: Int, has: (String) -> Boolean): List<String> = required(sdk).filter { !has(it) && it != COARSE }
+    fun missing(sdk: Int, has: (String) -> Boolean): List<String> = missing(required(sdk), has)
+
+    fun missing(required: List<String>, has: (String) -> Boolean): List<String> = required.filter { !has(it) && (it != COARSE || FINE !in required) }
+
+    /**
+     * Uprawnienia pytane w czasie działania dla Bluetooth RFCOMM (2e-B1, `plan/NEARBY-OPEN-SOURCE.md` §3.2). Do Androida
+     * 11 łączenie i nasłuch biorą `BLUETOOTH` z instalacji (bez pytania); lokalizacja tylko przy [discovery] („Szukaj w
+     * pobliżu”): przybliżona do 9, dokładna 10–11. Od 12 jedno „Urządzenia w pobliżu”: CONNECT, SCAN przy szukaniu
+     * (w manifeście `neverForLocation`, więc bez lokalizacji), ADVERTISE przy [visible] („Pokaż tablet na 2 min”).
+     */
+    fun rfcomm(sdk: Int, discovery: Boolean = false, visible: Boolean = false): List<String> = buildList {
+        if (sdk >= 31) {
+            add("android.permission.BLUETOOTH_CONNECT")
+            if (discovery) add("android.permission.BLUETOOTH_SCAN")
+            if (visible) add("android.permission.BLUETOOTH_ADVERTISE")
+        } else if (discovery) {
+            if (sdk >= 29) add(FINE)
+            add(COARSE)
+        }
+    }
 }
 
 /** Kto się ogłasza (tablet: [HOST]) i kto szuka (telefon: [CLIENT]); od roli zależy kolejność w identyfikatorze sesji. */
@@ -35,8 +54,8 @@ enum class SyncRole { HOST, CLIENT; val opposite get() = if (this == HOST) CLIEN
 
 /**
  * Wiadomość w porcjach po [CHUNK] bajtów z bajtem flagi (1: ciąg dalszy, 0: ostatnia). Limit ładunku BYTES w
- * `play-services-nearby:19.3.0` to `ConnectionsClient.MAX_BYTES_DATA_SIZE` = 1 047 552 B (odczytane z jara; materiał
- * z mChochlika zakładał 32 KB), więc porcja to 900 000 B i część zdjęcia (256 KB, [PhotoSender]) idzie jedną ramką.
+ * `play-services-nearby:19.3.0` to `ConnectionsClient.MAX_BYTES_DATA_SIZE` = 1 047 552 B (odczytane z jara; wcześniejszy
+ * materiał zakładał 32 KB), więc porcja to 900 000 B i część zdjęcia (256 KB, [PhotoSender]) idzie jedną ramką.
  * Odbiornik skleja porcje dowolnej wielkości (stare 30 KB też). Nearby zachowuje kolejność ładunków.
  */
 object LinkChunks {

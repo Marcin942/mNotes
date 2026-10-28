@@ -57,7 +57,7 @@ class NearbyTransport(context: Context) : LinkTransport {
             .addOnFailureListener { machine.onFailed(code(it)) }
     }
 
-    override fun discover() {
+    override fun discover(name: String) {
         client.startDiscovery(SERVICE_ID, discovery, DiscoveryOptions.Builder().setStrategy(STRATEGY).build())
             .addOnFailureListener { machine.onFailed(code(it)) }
     }

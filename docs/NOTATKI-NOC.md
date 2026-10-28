@@ -235,7 +235,7 @@ Na starcie (`noc/wszystko` @ `471ed08`): lab 696 testów, 0 porażek.
   (diagnoza z kodu i ze stałych odczytanych z jara 19.3.0, projekt, kolejność, jak sprawdzić). **Najważniejsze przyczyny
   „nie działa”:** (1) okno parowania z Ustawień startowało z rolą „telefon” **na obu** urządzeniach, więc oba szukały i
   nikt się nie ogłaszał; (2) kod 8025 (wyłączona *usługa* lokalizacji) był pokazywany jako „Nearby nie wystartowało…
-  Usługi Google Play?” i ponawiany w kółko; (3) przybliżona lokalizacja nie wystarcza (notatka z działającego mChochlika),
+  Usługi Google Play?” i ponawiany w kółko; (3) przybliżona lokalizacja nie wystarcza (notatka z innej działającej aplikacji Nearby),
   a B2-9 ją przepuszczał — wycofane; (4) brak limitów czasu i postępu, zdjęcie w 100+ porcjach po 30 KB, choć limit
   BYTES to 1 047 552 B.
   - `core/nearby/LinkMachine` (+ `LinkTransport`): cała logika łącza z testami na JVM (`FakeAir`: dwa końce w jednym
@@ -307,7 +307,10 @@ Na starcie (`noc/wszystko` @ `471ed08`): lab 696 testów, 0 porażek.
   różne grubości, przerwy); (3) IoU z wynikami `kreda.py` — **niewykonalne tutaj**: w `kreda/` nie ma PNG wyników dla
   zdjęć z `blackboard/`, a `kreda.py` wymaga OpenCV/numpy, których w tym środowisku nie ma (bez pip). Zamiast tego
   `KredaPomiaryTest` (24 zdjęcia, podglądy do oczu). Przegląd §3.5: K0 wyszukiwanie „Laboratorium” zrobił A (A2-10); K1–K5
-  — wszystkie pozycje „Co poprawić” zamknięte w B2-5…B2-9 i 2b-B1…B3 (poza scalaniem stron w synchronizacji).
+  — większość pozycji „Co poprawić” zamknięta w B2-5…B2-9 i 2b-B1…B3. *Poprawka 28.10 (2c-B5):* wtedy **nie** wszystkie:
+  zostały podpowiedź po wstawieniu zdjęcia bez przycisków (sam dymek), gumka niezerowana po zmianie narożników i
+  `busy = true` na zawsze w „Wyślij do mLabs” bez widoku; zamknięte w 2c-B5 (niżej). Otwarte dalej: scalanie stron w
+  synchronizacji.
 
 - **2b-B2 c.d., narożniki bez ściany** (`a7d983a`): `guessQuad` obejmował ścianę, ekran projektora i głowy, bo mają kolor
   tablicy i łączą się z nią w jedną plamę maski. `BoardGeometry.clipToContent`: mapa pisma (top-hat, bez listew i ram,
@@ -380,6 +383,34 @@ Na starcie (`noc/wszystko` @ `471ed08`): lab 696 testów, 0 porażek.
   odłożone ostatnie części, bufor sumy), nie ramek w Nearby ani szyfrowania.
   **Tablet:** „Wyślij zeszyt” z dużym zeszytem (z PDF-em, kilkadziesiąt MB) → na drugim urządzeniu nowy zeszyt, który
   się otwiera; w trakcie odbioru aplikacja nie zamyka się z braku pamięci.
+- **2c-B4** (`c4ac106`): `core/image/ChalkInk.kt` — kontrast WCAG 2 do papieru strony, na którą trafia wynik
+  (`BoardOptions.paper`); za słaby kolor ciemnieje z zachowaniem odcienia, na ciemnym papierze jaśnieje. Cel 4,5:1, nie
+  3:1 z planu: szary 3:1 na okładce był blady (podglądy `app/build/kreda-papier/okladka-wzor-{przed,po}.png`, „przed” to
+  biel na bieli). `looksLikeDarkBoard`: tło 0,42–0,62 liczy się jako tablica, gdy pismo jest jaśniejsze od mediany tła;
+  prawdziwe zdjęcia: rozpoznane dawniej 19, teraz 24 z 24; okładka PDF rozpoznana (wcześniej nie). Po oczyszczeniu w
+  trybie wykładu dymek ma przycisk „Cofnij do oryginału” (wspólny `Editor.say(msg, actions)`, dymek z przyciskiem wisi
+  8 s). `pdftoppm` nie ma offline — okładka to obraz wyciągnięty z PDF wcześniej (`build/kreda-wejscie/okladka-wzor.png`),
+  pomiar: `KREDA_EXTRA=… --tests '*ChalkPaperTest*'`.
+  **Ograniczenie (pytanie do Marcina):** kolor dobierany do papieru zapisanego w zeszycie. W „Strony: ciemne” zdjęcia
+  nie są odwracane (domyślnie wyłączone „odwracaj zdjęcia”), więc kreda przyciemniona pod białą kartkę będzie ciemna na
+  ciemno pokazanej stronie. Edytowalne kreski tego problemu nie mają (tryb stron przelicza je jak atrament). Czy obraz
+  kredy ma się odwracać razem ze stroną (osobna flaga obrazu w rysowaniu, kod wspólny — agent A)?
+  **Tablet:** tryb wykładu na białej stronie → zdjęcie tablicy → kreda ciemnoszara, czytelna; „Cofnij do oryginału”
+  w dymku wraca do zdjęcia (także po przesunięciu go); zdjęcie szarej tablicy → podpowiedź „Wygląda jak tablica”.
+
+- **2c-B5** (`303cfdf`): resztki K1. Podpowiedź po wstawieniu zdjęcia tablicy ma dwa przyciski: „Oczyścić?” zaznacza
+  zdjęcie i otwiera panel kredy (przez `Lab.Overlay`, wspólny ekran bez zmian), „Nie pokazuj więcej” wyłącza ją (ten sam
+  przełącznik co w Ustawieniach → Laboratorium). Do tej chwili podpowiedź pokazuje się przy każdym zdjęciu tablicy, nie
+  raz. Gumka: `core/image/BoardEdits` — zmiana narożników, „Narożniki automatycznie”, prostowania albo kadru zeruje pętle
+  (były w ułamkach wyniku, więc po zmianie trafiały w inną kredę); `BoardEditsTest` (4). „Wyślij do mLabs”: `busy` i
+  zamknięcie okna w `finally` przez główny wątek, nie przez `ed.view`. Poprawiona linia o K1–K5 wyżej. Lab 875, core 793.
+  **Tablet:** zdjęcie tablicy → dymek z „Oczyścić?” → panel kredy dla tego zdjęcia; drugi raz → „Nie pokazuj więcej” →
+  trzecie zdjęcie bez dymka. W panelu: gumka (2 pętle) → „Narożniki” → przesuń kółko → licznik „Wyczyść gumkę (0)”.
+
+- **2c-B6** (`bd8220d`): tabela przed/po (24 zdjęcia i okładka) i podglądy były już w 2b-B4 c.d.; dopisane wiersze dla
+  okręgu, sinusoidy, S i ∑ osobno (`docs/KREDA-POMIARY.md`): skręt < 25° na wszystkich, ≥ 3× mniej węzłów tylko okrąg.
+  PNG przed/po: `app/build/kreda-krzywe/{syntetyczne,okladka-wzor,20260318_154119,20260326_140000}.png` (plan podawał
+  `kreda-bezier/`, katalog z testu został). **Tablet:** jak 2b-B4 (zoom 4× na „Edytowalnych kreskach”).
 
 ### Co Marcin ma sprawdzić na tablecie — wariant lab, po fazie 2 (kolejność)
 

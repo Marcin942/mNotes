@@ -213,13 +213,26 @@ object LinkErrors {
     const val NO_BT_CONNECT = 8039
     const val IN_USE = 8050
 
+    // Kody łącza bez Nearby (2e-B1, Bluetooth RFCOMM). Zerwanie, odmowa i lokalizacja używają kodów wyżej, bo ich
+    // teksty nie mówią o Nearby (ENDPOINT_IO, REJECTED, LOCATION_OFF).
+    const val BT_OFF = 9001
+    const val NO_PERMISSION = 9002
+    /** Druga strona nie słucha (okno zamknięte albo inny klucz pary): zwykłe ponowienie po chwili. */
+    const val PEER_NOT_LISTENING = 9003
+    const val NO_BT_HARDWARE = 9004
+
     /** Kody, które znaczą „już robię to, o co prosisz”: nie są błędami. */
     val HARMLESS = setOf(ALREADY_ADVERTISING, ALREADY_DISCOVERING, ALREADY_CONNECTED)
 
     /** Brak uprawnienia albo wyłączone ustawienie: ponawianie nic nie da, trzeba coś włączyć. */
-    fun isSetup(code: Int): Boolean = code == LOCATION_OFF || code in 8029..8039 || code == RADIO_ERROR
+    fun isSetup(code: Int): Boolean =
+        code == LOCATION_OFF || code in 8029..8039 || code == RADIO_ERROR || code == BT_OFF || code == NO_PERMISSION || code == NO_BT_HARDWARE
 
     fun explain(code: Int): LinkProblem = when (code) {
+        BT_OFF -> p(code, "Bluetooth jest wyłączony: włącz go w szybkich ustawieniach na obu urządzeniach.", "Bluetooth is off: turn it on in quick settings on both devices.")
+        NO_PERMISSION -> p(code, "Pozwól na „Urządzenia w pobliżu” (Ustawienia aplikacji → Uprawnienia). mNotes łączy się tylko z Twoim telefonem albo tabletem.", "Allow “Nearby devices” (App settings → Permissions). mNotes connects only to your own phone or tablet.")
+        NO_BT_HARDWARE -> p(code, "To urządzenie nie ma Bluetooth. Przełącz łącze na Nearby w Ustawieniach.", "This device has no Bluetooth. Switch the link to Nearby in Settings.")
+        PEER_NOT_LISTENING -> p(code, "Tablet nie odpowiada. Otwórz na nim „Zdjęcie z telefonu” i trzymaj urządzenia blisko.", "The tablet does not answer. Open “Photo from phone” on it and keep the devices close.", setup = false)
         LOCATION_OFF -> p(code, "Włącz lokalizację w szybkich ustawieniach: Android wymaga jej do szukania urządzeń przez Bluetooth.", "Turn on location in quick settings: Android needs it to look for devices over Bluetooth.")
         NO_FINE_LOCATION, NO_COARSE_LOCATION -> p(code, "Pozwól na dokładną lokalizację (Ustawienia aplikacji → Uprawnienia). mNotes nie odczytuje położenia.", "Allow precise location (App settings → Permissions). mNotes never reads your location.")
         NO_BT_SCAN, NO_BT_ADVERTISE, NO_BT_CONNECT, NO_BLUETOOTH, NO_BLUETOOTH_ADMIN -> p(code, "Pozwól na „Urządzenia w pobliżu” (Ustawienia aplikacji → Uprawnienia).", "Allow “Nearby devices” (App settings → Permissions).")

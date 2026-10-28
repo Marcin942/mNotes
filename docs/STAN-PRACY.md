@@ -20,9 +20,9 @@ Wyniki testów: `app/build/test-results/testDebugUnitTest/*.xml`. Stan: **493 te
 
 ## ⚠ Tablet użytkownika (adb `<tablet>`, Galaxy Tab S10+) jest REALNIE używany
 Nie jest sprzętem testowym. Przed `install -r` / `am start` / `input …`:
-1. `adb shell dumpsys activity activities | grep topResumedActivity` (pierwotnie com.mdev.mchochlik),
+1. `adb shell dumpsys activity activities | grep topResumedActivity` (zapamiętaj, co było na pierwszym planie),
 2. `adb shell run-as com.mdev.mnotes cat files/library/nb/*/meta.json` → znaczniki `mod`/`op` vs `date +%s`×1000.
-Jeśli nie-testowy zeszyt zmieniono w ostatnich ~10 min — **nie ruszać urządzenia** (pracować nad kodem/testami albo zapytać). Testować tylko w zeszycie „Test wyszukiwania” (id `82cc47a90804`); nie modyfikować zeszytów użytkownika. Po testach przywrócić pierwszy plan do com.mdev.mchochlik.
+Jeśli nie-testowy zeszyt zmieniono w ostatnich ~10 min — **nie ruszać urządzenia** (pracować nad kodem/testami albo zapytać). Testować tylko w zeszycie „Test wyszukiwania” (id `82cc47a90804`); nie modyfikować zeszytów użytkownika. Po testach przywrócić na pierwszy plan zapamiętaną aplikację.
 Uczciwa informacja do raportu: ok. 01:54 (2026-10-03) zrobiłem `adb install -r` + `input tap` w trakcie używania tabletu (aplikacja się zrestartowała) — użytkownik jeszcze o tym nie został poinformowany. Późniejsze testy (15:00–15:35) były wykonane za jawną zgodą użytkownika.
 
 ## Architektura (skrót)

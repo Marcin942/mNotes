@@ -179,7 +179,15 @@ kreski w pełnej grubości, jak w zeszycie): `mNotes-lab/app/build/kreda-krzywe/
 | 20260525_144320 | 2033×1143 | 872 | 11.7 → 8.4 | 3.07 → 0.54 | 0.31 → 0.35 | 84 |
 | okładka PDF (wzór Φ) | 2399×754 | 79 | 7.5 → 3.9 | 2.58 → 0.13 | 0.32 → 0.42 | 37 |
 | **razem (25)** | | 484 śr. | **10.2 → 6.9** | **2.95 → 0.30** | 0.31 → 0.37 | 89 |
-| syntetyczne (okrąg, sinusoida, S, ∑) | 360×130 | 4 | 6.0 → 2.7 | 2.01 → **0** | 0.33 → 0.37 | — |
+| syntetyczne (okrąg, sinusoida, S, ∑) | 360×130 | 4 | 6.0 → 2.7 | 2.01 → **0** | 0.33 → 0.37 | 8 |
+| — okrąg r=40 | | 1 | 6.3 → 1.7 (3,6×) | 0.70 → 0 | 0.31 → 0.37 | 3 |
+| — sinusoida | | 1 | 6.7 → 3.0 (2,3×) | 2.96 → 0 | 0.35 → 0.33 | 5 |
+| — „S” | | 1 | 7.8 → 3.4 (2,3×) | 5.34 → 0 | 0.35 → 0.35 | 8 |
+| — „∑” (proste odcinki) | | 1 | 3.7 → 3.2 (1,1×) | 0 → 0 | 0.34 → 0.43 | 8 |
+
+Kształty osobno (2c-B6, `KredaKrzyweTest.syntheticPreview`, każdy na własnym rastrze z chropowatym brzegiem): skręt
+< 25° spełniony na wszystkich czterech; „≥ 3× mniej węzłów” tylko na okręgu. Sinusoida z chropowatym brzegiem ma 2,3×
+(sinusoida w `ChalkCurvesTest` ma ≥ 3×, ale to inny kształt i rozmiar; przyczyny różnicy nie badałem).
 
 Etapy (średnie z 25): łamana 11,1 węzła i 2,94 zęba na 100 px → krzywe bez zamykania dziur 7,4 i 1,06 (najgorszy skręt
 178°, na `20260326_140000` zębów więcej niż na łamanej: 3,98 → 5,89) → krzywe z zamykaniem dziur 6,9 i 0,30 (najgorszy 89°).

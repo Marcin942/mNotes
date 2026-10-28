@@ -13,6 +13,15 @@ object HelperStrip {
     const val WRITE_AND_MENU = 0
     const val TOOL_OPTIONS = 1
 
+    /** Klucz dawnego przełącznika F7 (wersje testowe): opcje gumki, lassa i lasera na listwie. */
+    const val OLD_TOOL_STRIP = "toolbar.tool_strip"
+
+    /**
+     * 2c-A15: tryb listwy z dawnego [OLD_TOOL_STRIP]: włączony — [TOOL_OPTIONS], wyłączony — [WRITE_AND_MENU]. Null: nie
+     * ma czego przenosić albo nowe ustawienie już jest zapisane (wygrywa).
+     */
+    fun fromToolStrip(old: Boolean?, hasNew: Boolean): Int? = if (old == null || hasNew) null else if (old) TOOL_OPTIONS else WRITE_AND_MENU
+
     enum class Helper { ERASER, LASSO, LASER }
 
     /** Grupy opcji w menu (i na listwie w trybie [TOOL_OPTIONS] — tam zawsze wszystkie). */

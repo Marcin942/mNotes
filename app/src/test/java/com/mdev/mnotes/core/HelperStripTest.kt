@@ -46,6 +46,22 @@ class HelperStripTest {
         assertEquals(Config.DEFAULT.encode(), Config.parse("").encode())
     }
 
+    /** 2c-A15: dawny przełącznik F7 „toolbar.tool_strip” przechodzi na tryb listwy; zapisany nowy tryb wygrywa. */
+    @Test fun oldToolStripSwitchMigrates() {
+        val prefs = mutableMapOf<String, Any>(HelperStrip.OLD_TOOL_STRIP to true)
+        fun migrate() {
+            val old = prefs.remove(HelperStrip.OLD_TOOL_STRIP) as Boolean?
+            HelperStrip.fromToolStrip(old, "toolbar.helper_strip" in prefs)?.let { prefs["toolbar.helper_strip"] = it }
+        }
+        migrate()
+        assertEquals(mapOf<String, Any>("toolbar.helper_strip" to HelperStrip.TOOL_OPTIONS), prefs)
+        migrate()   // drugie uruchomienie: nic się nie zmienia
+        assertEquals(mapOf<String, Any>("toolbar.helper_strip" to HelperStrip.TOOL_OPTIONS), prefs)
+        assertEquals(HelperStrip.WRITE_AND_MENU, HelperStrip.fromToolStrip(false, hasNew = false))
+        assertEquals(null, HelperStrip.fromToolStrip(true, hasNew = true))
+        assertEquals(null, HelperStrip.fromToolStrip(null, hasNew = false))
+    }
+
     @Test fun returnsToTheLastWritingTool() {
         val writing = setOf("PEN", "CURVE")
         val last = LastOf("PEN") { it in writing }

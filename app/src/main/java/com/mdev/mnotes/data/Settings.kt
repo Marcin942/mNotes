@@ -133,6 +133,15 @@ class Settings(ctx: Context) {
     var eraserKeepHighlighter by Pref("eraser.ignore_highlighter", false)
     var lassoRect by Pref("lasso.rect", false)
     var lassoTouch by Pref("lasso.touch", false)     // lasso „tylko zahacz”: wystarczy musnąć obiekt pętlą; domyślnie zbalansowane (połowa obiektu w pętli)
+    // 2c-A15: dawny „toolbar.tool_strip” przechodzi na listwę przy pierwszym uruchomieniu — przed odczytem helperStrip.
+    init {
+        val old = com.mdev.mnotes.core.layout.HelperStrip.OLD_TOOL_STRIP
+        if (sp.contains(old)) {
+            val e = sp.edit()
+            com.mdev.mnotes.core.layout.HelperStrip.fromToolStrip(sp.getBoolean(old, true), sp.contains("toolbar.helper_strip"))?.let { e.putInt("toolbar.helper_strip", it) }
+            e.remove(old).apply()
+        }
+    }
     // 2b-A2 (zastępuje przełącznik F7 „toolbar.tool_strip”): HelperStrip.WRITE_AND_MENU albo TOOL_OPTIONS
     var helperStrip by Pref("toolbar.helper_strip", com.mdev.mnotes.core.layout.HelperStrip.WRITE_AND_MENU)
     private var helperMenuPref by Pref("toolbar.helper_menu", "")   // wyłączone pozycje menu (HelperStrip.Config)

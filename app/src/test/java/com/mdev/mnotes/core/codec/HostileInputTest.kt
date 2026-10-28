@@ -120,6 +120,7 @@ class HostileInputTest {
 
     @Test
     fun pageSpecFromAForeignFileIsAlwaysFinite() {
+        // Android czyta napis "NaN" jako NaN; org.json z testów JVM daje wartość domyślną, więc tu test pilnuje tylko wyniku
         val p = com.mdev.mnotes.core.model.PageSpec.fromJson("""{"w":"NaN","h":"Infinity","s":"NaN","lw":"-Infinity","t":1}""")
         assertTrue(p.toString(), p.w.isFinite() && p.h.isFinite() && p.spacing.isFinite() && p.lineWidth.isFinite())
         assertTrue(p.w >= com.mdev.mnotes.core.model.PageSpec.MIN_SIZE)

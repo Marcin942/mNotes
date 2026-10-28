@@ -1597,7 +1597,7 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
     private val pullRing = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE; strokeCap = Paint.Cap.ROUND }
     private val pullText = Paint(Paint.ANTI_ALIAS_FLAG).apply { typeface = Typeface.DEFAULT_BOLD }
 
-    private fun pullEnabled() = settings.pullAddPage && !ed.readOnly && layout.count > 0 && !boardDoc
+    private fun pullEnabled() = settings.pullAddPage && !ed.readOnly && layout.count > 0 && ed.canAddPage
     private fun pullThreshold() = 120f * dp
     private fun pullLimit(): Float =
         if (ed.layoutMode == 1) clampX(Float.NEGATIVE_INFINITY, zoom) else clampY(Float.NEGATIVE_INFINITY, zoom)
@@ -3651,7 +3651,7 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
         if (pi < 0) {
             // F10: dotknięcie tuż za ostatnią stroną zaczyna tekst na nowej stronie.
             val x = docX(curX); val y = docY(curY)
-            if (settings.autoTextPage && !ed.readOnly && PageOverflow.beyondEnd(layout, x, y)) ed.newTextAfterEnd(x, y, layout)
+            if (settings.autoTextPage && !ed.readOnly && ed.canAddPage && PageOverflow.beyondEnd(layout, x, y)) ed.newTextAfterEnd(x, y, layout)
             return
         }
         val page = doc.pages[pi]

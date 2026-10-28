@@ -9,6 +9,8 @@ class PageSnapshot(val id: String, val spec: PageSpec, val content: PageContent)
  */
 interface DocHost {
     fun applyElements(pageId: String, edit: ElementsEdit)
+    /** Przesuwa całą treść strony o (dx, dy) pt (wzrost tablicy w lewo/w górę). */
+    fun shiftElements(pageId: String, dx: Float, dy: Float)
     fun spec(pageId: String): PageSpec
     fun setSpec(pageId: String, spec: PageSpec)
     fun insertPages(entries: List<Pair<Int, PageSnapshot>>)
@@ -29,6 +31,16 @@ sealed class DocEdit {
         override val pageIds: List<String> get() = listOf(pageId)
         override fun apply(host: DocHost) = host.applyElements(pageId, edit)
         override fun revert(host: DocHost) = host.applyElements(pageId, edit.inverse())
+    }
+
+    /**
+     * Przesunięcie całej treści strony (2c-A1, wzrost tablicy w lewo/w górę): w historii cofania tylko dwie liczby
+     * zamiast kopii wszystkich elementów, a cofnięcie przesuwa z powrotem.
+     */
+    class Shift(val pageId: String, val dx: Float, val dy: Float) : DocEdit() {
+        override val pageIds: List<String> get() = listOf(pageId)
+        override fun apply(host: DocHost) = host.shiftElements(pageId, dx, dy)
+        override fun revert(host: DocHost) = host.shiftElements(pageId, -dx, -dy)
     }
 
     class Spec(val pageId: String, val before: PageSpec, val after: PageSpec) : DocEdit() {
@@ -62,6 +74,22 @@ sealed class DocEdit {
         override val pageIds: List<String> get() = edits.flatMap { it.pageIds }.distinct()
         override fun apply(host: DocHost) { for (e in edits) e.apply(host) }
         override fun revert(host: DocHost) { for (i in edits.indices.reversed()) edits[i].revert(host) }
+    }
+
+    companion object {
+        /** Suma przesunięć [Shift] w [e] (także w grupach); null — bez przesunięcia. Widok idzie za treścią przy cofaniu. */
+        fun shiftOf(e: DocEdit): Pair<Float, Float>? {
+            var dx = 0f; var dy = 0f; var any = false
+            fun walk(x: DocEdit) {
+                when (x) {
+                    is Shift -> { dx += x.dx; dy += x.dy; any = true }
+                    is Group -> x.edits.forEach(::walk)
+                    else -> {}
+                }
+            }
+            walk(e)
+            return if (any) dx to dy else null
+        }
     }
 }
 

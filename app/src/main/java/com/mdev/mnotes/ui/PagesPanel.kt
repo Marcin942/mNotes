@@ -337,7 +337,7 @@ private fun PageActions(ed: Editor, cur: Int, total: Int, ro: Boolean) {
     Column(Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(T.t("Strona ${cur + 1} z $total", "Page ${cur + 1} of $total"), Modifier.weight(1f), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            IconBtn(Icons.Rounded.FileCopy, T.t("Duplikuj stronę", "Duplicate page"), { ed.duplicatePage(cur) }, enabled = !ro, size = 32.dp, iconSize = 18.dp)
+            IconBtn(Icons.Rounded.FileCopy, T.t("Duplikuj stronę", "Duplicate page"), { ed.duplicatePage(cur) }, enabled = !ro && ed.canAddPage, size = 32.dp, iconSize = 18.dp)
             IconBtn(Icons.Rounded.Delete, T.t("Usuń stronę", "Delete page"), { deleteWithNote(ed, cur) }, enabled = !ro && total > 1, size = 32.dp, iconSize = 18.dp)
         }
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -345,10 +345,11 @@ private fun PageActions(ed: Editor, cur: Int, total: Int, ro: Boolean) {
             PanelBtn(Icons.Rounded.ArrowDownward, T.t("Dalej", "Later"), !ro && cur < total - 1, Modifier.weight(1f)) { ed.movePage(cur, cur + 1) }
         }
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-            PanelBtn(Icons.Rounded.Add, T.t("Dodaj stronę", "Add page"), !ro, Modifier.weight(1f), accent = true) { ed.addPage(cur) }
+            // 2c-A1: tablica ma jedną stronę — przycisk wyszarzony (dymek „Tablica ma jedną stronę” dają skróty i menu)
+            PanelBtn(Icons.Rounded.Add, T.t("Dodaj stronę", "Add page"), !ro && ed.canAddPage, Modifier.weight(1f), accent = true) { ed.addPage(cur) }
             // Strona w drugiej orientacji (F5): zeszyt może mieszać strony pionowe i poziome.
             val spec = ed.doc.pages.getOrNull(cur)?.spec
-            if (spec != null && spec.w != spec.h) {
+            if (spec != null && spec.w != spec.h && ed.canAddPage) {
                 val land = !spec.landscape
                 IconBtn(
                     if (land) Icons.Rounded.CropLandscape else Icons.Rounded.CropPortrait,
@@ -431,9 +432,9 @@ private fun PageThumbItem(
                 val i = ed.doc.indexOf(page.id)
                 if (i >= 0) {
                     Text(T.t("Strona ${i + 1}", "Page ${i + 1}"), Modifier.padding(horizontal = 16.dp, vertical = 6.dp), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    It(T.t("Wstaw pustą stronę przed", "Insert blank page before"), Icons.Rounded.Add, !ro) { ed.addPage(i - 1, page.spec) }
-                    It(T.t("Wstaw pustą stronę po", "Insert blank page after"), Icons.Rounded.Add, !ro) { ed.addPage(i, page.spec) }
-                    It(T.t("Duplikuj", "Duplicate"), Icons.Rounded.FileCopy, !ro) { ed.duplicatePage(i) }
+                    It(T.t("Wstaw pustą stronę przed", "Insert blank page before"), Icons.Rounded.Add, !ro && ed.canAddPage) { ed.addPage(i - 1, page.spec) }
+                    It(T.t("Wstaw pustą stronę po", "Insert blank page after"), Icons.Rounded.Add, !ro && ed.canAddPage) { ed.addPage(i, page.spec) }
+                    It(T.t("Duplikuj", "Duplicate"), Icons.Rounded.FileCopy, !ro && ed.canAddPage) { ed.duplicatePage(i) }
                     HorizontalDivider(color = m.line)
                     It(T.t("Kopiuj stronę", "Copy page"), Icons.Rounded.ContentCopy) { ed.copyPage(i) }
                     It(T.t("Kopiuj stronę jako obraz", "Copy page as image"), Icons.Rounded.Image, !page.spec.board || !ed.doc.content(page).isEmpty) { ed.copyPageAsImage(i) }

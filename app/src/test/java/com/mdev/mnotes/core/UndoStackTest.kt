@@ -1,5 +1,6 @@
 package com.mdev.mnotes.core
 
+import com.mdev.mnotes.core.geom.Affine
 import com.mdev.mnotes.core.model.DocEdit
 import com.mdev.mnotes.core.model.DocHost
 import com.mdev.mnotes.core.model.ElementsEdit
@@ -14,7 +15,8 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-private class FakeHost : DocHost {
+/** Dokument w pamięci dla testów cofania (też [BoardTest]). */
+internal class FakeHost : DocHost {
     val order = ArrayList<String>()
     val contents = HashMap<String, PageContent>()
     val specs = HashMap<String, PageSpec>()
@@ -25,6 +27,11 @@ private class FakeHost : DocHost {
 
     override fun applyElements(pageId: String, edit: ElementsEdit) {
         contents[pageId] = contents.getValue(pageId).apply(edit)
+    }
+
+    override fun shiftElements(pageId: String, dx: Float, dy: Float) {
+        val m = Affine.translation(dx, dy)
+        contents[pageId] = PageContent.of(contents.getValue(pageId).elements.map { it.transformed(m) })
     }
 
     override fun spec(pageId: String) = specs.getValue(pageId)

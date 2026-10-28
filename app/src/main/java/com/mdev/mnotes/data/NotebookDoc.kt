@@ -9,6 +9,7 @@ import com.mdev.mnotes.core.model.ElementsEdit
 import com.mdev.mnotes.core.model.PageContent
 import com.mdev.mnotes.core.model.PageSnapshot
 import com.mdev.mnotes.core.model.PageSpec
+import com.mdev.mnotes.core.model.Placed
 import com.mdev.mnotes.core.model.UndoStack
 
 /** Strona w pamięci. Zawartość ładuje się leniwie, bo zeszyt może mieć setki stron. */
@@ -73,6 +74,20 @@ class NotebookDoc(val repo: Repository, val id: String) : DocHost {
         dirtyContent.add(pageId)
         scheduleSave()
         listener?.pageChanged(pageId, edit)
+    }
+
+    override fun shiftElements(pageId: String, dx: Float, dy: Float) {
+        val p = page(pageId) ?: return
+        val before = content(p)
+        val m = com.mdev.mnotes.core.geom.Affine.translation(dx, dy)
+        val after = PageContent.of(before.elements.map { it.transformed(m) })
+        p.content = after
+        p.version++
+        p.contentVersion = p.version
+        dirtyContent.add(pageId)
+        scheduleSave()
+        // edycja tylko dla kafelków (cała strona brudna); w historii cofania zostaje samo przesunięcie
+        listener?.pageChanged(pageId, ElementsEdit(before.elements.mapIndexed(::Placed), after.elements.mapIndexed(::Placed)))
     }
 
     override fun spec(pageId: String): PageSpec = page(pageId)?.spec ?: PageSpec()

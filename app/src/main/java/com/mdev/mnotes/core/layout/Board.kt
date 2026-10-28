@@ -1,6 +1,7 @@
 package com.mdev.mnotes.core.layout
 
 import com.mdev.mnotes.core.geom.Bounds
+import com.mdev.mnotes.core.model.DocEdit
 import com.mdev.mnotes.core.model.PageSpec
 import com.mdev.mnotes.core.model.Paper
 import com.mdev.mnotes.core.model.Template
@@ -27,6 +28,12 @@ object Board {
     /** Kadr eksportu: zapas wokół treści (pt). */
     const val FRAME_PAD = 24f
 
+    /**
+     * Czy do zeszytu o stronach [pages] wolno dodać stronę (2c-A1): tablica ma zawsze dokładnie jedną, bo widok tablicy
+     * (powiększenie, minimapa, kadr eksportu) działa tylko dla zeszytu z jedną stroną.
+     */
+    fun canAddPage(pages: List<PageSpec>): Boolean = pages.none { it.board }
+
     fun spec(paper: Int = Paper.WHITE): PageSpec =
         PageSpec(START, START, paper, Template.GRID, Paper.autoLineColor(paper), Template.GRID.defaultSpacing, opts = PageSpec.OPT_BOARD)
 
@@ -41,6 +48,16 @@ object Board {
         val (top, bottom) = fit(steps(MARGIN - b.t), steps(b.b - (h - MARGIN)), h)
         if (left + right + top + bottom == 0f) return null
         return Growth(w + left + right, h + top + bottom, left, top)
+    }
+
+    /**
+     * Edycje powiększające tablicę [pageId] o wyglądzie [spec] dla treści o obrysie [b]: rozmiar i ewentualnie
+     * przesunięcie całej treści (2c-A1: dwie liczby zamiast kopii elementów, więc wpis cofania nie rośnie z treścią).
+     */
+    fun growthEdits(pageId: String, spec: PageSpec, b: Bounds?): List<DocEdit>? {
+        val g = grow(spec.w, spec.h, b) ?: return null
+        val size = DocEdit.Spec(pageId, spec, spec.withSize(g.w, g.h))
+        return if (g.dx == 0f && g.dy == 0f) listOf(size) else listOf(size, DocEdit.Shift(pageId, g.dx, g.dy))
     }
 
     /** Przycina wzrost do [MAX]: najpierw część po stronie dalszej (prawo/dół), potem bliższej. */

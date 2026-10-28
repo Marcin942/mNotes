@@ -4,11 +4,13 @@ import com.mdev.mnotes.core.codec.PageCodec
 import com.mdev.mnotes.core.geom.Affine
 import com.mdev.mnotes.core.geom.Bounds
 import com.mdev.mnotes.core.layout.Board
+import com.mdev.mnotes.core.model.DocEdit
 import com.mdev.mnotes.core.model.PageContent
 import com.mdev.mnotes.core.model.PageSpec
 import com.mdev.mnotes.core.model.PenKind
 import com.mdev.mnotes.core.model.Stroke
 import com.mdev.mnotes.core.model.Template
+import com.mdev.mnotes.core.model.UndoStack
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
@@ -74,6 +76,47 @@ class BoardTest {
         // Treść tablicy zapisuje się jak każda strona.
         val back = PageCodec.decode(PageCodec.encode(PageContent.of(listOf(moved)))).elements.single() as Stroke
         assertEquals(moved.pts.toList(), back.pts.toList())
+    }
+
+    @Test fun boardHasExactlyOnePage() {
+        assertFalse(Board.canAddPage(listOf(Board.spec())))
+        assertTrue(Board.canAddPage(listOf(PageSpec(), PageSpec())))
+        assertTrue(Board.canAddPage(emptyList()))
+    }
+
+    @Test fun leftGrowthUndoesWithoutJump() {
+        val h = FakeHost().apply { addPage("b"); specs["b"] = Board.spec() }
+        val s = Stroke(1, PenKind.BALLPOINT, 0xFF000000.toInt(), 1.5f, floatArrayOf(-500f, 1200f, 1f, 300f, 1300f, 1f))
+        h.contents["b"] = PageContent.of(listOf(s))
+        val parts = Board.growthEdits("b", h.spec("b"), h.contents.getValue("b").bounds)!!
+        val undo = UndoStack()
+        val growth = DocEdit.Group(parts).also { it.apply(h); undo.push(it) }
+        val (dx, dy) = DocEdit.shiftOf(growth)!!
+        assertTrue(dx >= 1000f); assertEquals(0f, dy, 0f)
+        val moved = h.contents.getValue("b").elements.single() as Stroke
+        assertEquals(-500f + dx, moved.pts[0], 1e-3f)
+        assertEquals(Board.START + dx, h.spec("b").w, 0f)
+        // Cofnięcie: treść, rozmiar i przesunięcie (dla widoku) wracają.
+        val back = undo.undo(h)!!
+        assertEquals(dx to dy, DocEdit.shiftOf(back))
+        val again = h.contents.getValue("b").elements.single() as Stroke
+        assertEquals(-500f, again.pts[0], 1e-3f); assertEquals(1200f, again.pts[1], 1e-3f)
+        assertEquals(Board.START, h.spec("b").w, 0f)
+    }
+
+    @Test fun growthEditKeepsNoElementCopies() {
+        val many = (0 until 2000).map { i ->
+            Stroke(i, PenKind.BALLPOINT, 0xFF000000.toInt(), 1.5f, floatArrayOf(-200f + i, 900f, 1f, i.toFloat(), 950f, 1f))
+        }
+        val parts = Board.growthEdits("b", Board.spec(), PageContent.of(many).bounds)!!
+        // Wpis cofania wzrostu ma stały rozmiar: rozmiar strony i dwie liczby, bez elementów.
+        assertEquals(2, parts.size)
+        assertTrue(parts.none { it is DocEdit.Elements })
+        assertTrue(parts[1] is DocEdit.Shift)
+        assertEquals(DocEdit.shiftOf(DocEdit.Group(listOf(DocEdit.Group(parts), DocEdit.Shift("b", 1f, 2f)))),
+            (parts[1] as DocEdit.Shift).dx + 1f to 2f)
+        // Wzrost tylko w prawo — bez przesunięcia.
+        assertNull(DocEdit.shiftOf(DocEdit.Group(Board.growthEdits("b", Board.spec(), Bounds(1000f, 1000f, 2900f, 1100f))!!)))
     }
 
     @Test fun exportFrameHugsContent() {

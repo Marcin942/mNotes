@@ -288,8 +288,9 @@ class Editor(val ctx: Context, val nbId: String) {
     fun say(msg: String) { toast = msg }
 
     // — Cofanie —
-    fun undo() { commitSelPreview(); cancelCut(); cancelCrop(); clearSel(); val e = doc.doUndo(); undoTick++; e?.pageIds?.firstOrNull()?.let { view?.ensureVisible(it) } }
-    fun redo() { commitSelPreview(); cancelCut(); cancelCrop(); clearSel(); val e = doc.doRedo(); undoTick++; e?.pageIds?.firstOrNull()?.let { view?.ensureVisible(it) } }
+    // 2c-A1: cofnięcie wzrostu tablicy przesuwa treść z powrotem, więc widok idzie za nią (bez skoku na ekranie)
+    fun undo() { commitSelPreview(); cancelCut(); cancelCrop(); clearSel(); val e = doc.doUndo(); undoTick++; e?.let { DocEdit.shiftOf(it) }?.let { (dx, dy) -> view?.boardShifted(-dx, -dy) }; e?.pageIds?.firstOrNull()?.let { view?.ensureVisible(it) } }
+    fun redo() { commitSelPreview(); cancelCut(); cancelCrop(); clearSel(); val e = doc.doRedo(); undoTick++; e?.let { DocEdit.shiftOf(it) }?.let { (dx, dy) -> view?.boardShifted(dx, dy) }; e?.pageIds?.firstOrNull()?.let { view?.ensureVisible(it) } }
 
     /** Wykonanie z zapisem na stosie cofania. */
     fun exec(edit: DocEdit) {
@@ -312,13 +313,8 @@ class Editor(val ctx: Context, val nbId: String) {
 
     /** Edycje powiększające tablicę [page] dla treści [after] (rozmiar, ewentualnie przesunięcie całej treści). */
     private fun boardParts(page: com.mdev.mnotes.data.PageState, after: com.mdev.mnotes.core.model.PageContent): Pair<List<DocEdit>, Pair<Float, Float>?>? {
-        val spec = page.spec
-        val g = com.mdev.mnotes.core.layout.Board.grow(spec.w, spec.h, after.bounds) ?: return null
-        val size = DocEdit.Spec(page.id, spec, spec.withSize(g.w, g.h))
-        if (g.dx == 0f && g.dy == 0f) return listOf<DocEdit>(size) to null
-        val m = com.mdev.mnotes.core.geom.Affine.translation(g.dx, g.dy)
-        val move = DocEdit.Elements(page.id, ElementsEdit.replace(after, after.elements.associate { it.id to it.transformed(m) }))
-        return listOf(size, move) to (g.dx to g.dy)
+        val parts = com.mdev.mnotes.core.layout.Board.growthEdits(page.id, page.spec, after.bounds) ?: return null
+        return parts to DocEdit.shiftOf(DocEdit.Group(parts))
     }
 
     /** Edycja już wykonana (przeciąganie lassem, zapis przez [record]): tablica rośnie osobnym wpisem cofania. */
@@ -701,6 +697,7 @@ class Editor(val ctx: Context, val nbId: String) {
      */
     private fun withOverflowPage(p: PageState, t: TextBox, edit: DocEdit): DocEdit {
         val last = doc.pages.lastOrNull() ?: return edit
+        if (!canAddPage) return edit   // tablica rośnie sama, drugiej strony nie dostaje
         if (!settings.autoTextPage || !PageOverflow.textOverflows(last.id == p.id, t.bounds.b, p.spec.h)) return edit
         say(T.t("Tekst wychodzi poza ostatnią stronę — dodano nową", "Text runs past the last page — a new page was added"))
         val snap = PageSnapshot(newId(), p.spec.copy(pdf = null), PageContent.EMPTY)
@@ -709,6 +706,7 @@ class Editor(val ctx: Context, val nbId: String) {
 
     /** F10: dotknięcie narzędziem Tekst tuż za ostatnią stroną zakłada nową stronę i tam zaczyna pole tekstowe. */
     fun newTextAfterEnd(x: Float, y: Float, layout: DocLayout) {
+        if (refuseBoardPage()) return
         val last = doc.pages.lastOrNull() ?: return
         val spec = last.spec.copy(pdf = null)
         val at = PageOverflow.onNewPage(layout, x, y, spec.w, spec.h)
@@ -823,6 +821,7 @@ class Editor(val ctx: Context, val nbId: String) {
             val size = name?.let { com.mdev.mnotes.render.Assets.imageSize(repo.assetFile(nbId, it)) }
             view?.post {
                 if (name == null || size == null) { say(T.t("Nie udało się wczytać zdjęcia", "Could not load the photo")); return@post }
+                if (!canAddPage) return@post lectureOnBoard(name, size)
                 val spec = (doc.pages.getOrNull(after)?.spec ?: PageSpec()).copy(pdf = null)
                 val head = LecturePages.header(System.currentTimeMillis(), ++lectureN, T.pl)
                 val m = LecturePages.MARGIN
@@ -836,6 +835,19 @@ class Editor(val ctx: Context, val nbId: String) {
                 com.mdev.mnotes.app.Flavor.lab?.onLecturePhoto(this, pid, img)
             }
         }
+    }
+
+    /**
+     * 2c-A1: na tablicy zdjęcie z trybu wykładu trafia na tę samą stronę przy środku widoku (bez nowej strony); płótno
+     * rośnie zwykłym mechanizmem, gdy zdjęcie sięga brzegu. Szerokość jak na stronie A4 w trybie wykładu.
+     */
+    private fun lectureOnBoard(name: String, size: Pair<Int, Int>) {
+        val page = doc.pages.firstOrNull() ?: return
+        val (_, cx, cy) = view?.viewCenterOnPage() ?: Triple(0, page.spec.w / 2f, page.spec.h / 2f)
+        val r = LecturePages.photoRect(size.first, size.second, PageSpec().w, PageSpec().h)
+        val img = ImageEl(Ids.next(), name, cx, cy, r.w, r.h)
+        exec(DocEdit.Elements(page.id, ElementsEdit.add(doc.content(page), listOf(img))))
+        com.mdev.mnotes.app.Flavor.lab?.onLecturePhoto(this, page.id, img)
     }
 
     // — Konstrukcje geometryczne (L1) —
@@ -1087,7 +1099,17 @@ class Editor(val ctx: Context, val nbId: String) {
     // — Strony —
     private fun curIndex() = pageIndex.coerceIn(0, doc.pages.size - 1)
 
+    /** 2c-A1: tablica ma zawsze jedną stronę (panel stron wyszarza „Dodaj stronę”, reszta dostaje dymek). */
+    val canAddPage: Boolean get() = com.mdev.mnotes.core.layout.Board.canAddPage(doc.pages.map { it.spec })
+
+    private fun refuseBoardPage(): Boolean {
+        if (canAddPage) return false
+        say(T.t("Tablica ma jedną stronę", "A board has one page"))
+        return true
+    }
+
     fun addPage(after: Int = curIndex(), spec: PageSpec? = null) {
+        if (refuseBoardPage()) return
         val base = spec ?: doc.pages.getOrNull(after)?.spec ?: PageSpec()
         val snap = PageSnapshot(newId(), base.copy(pdf = null), PageContent.EMPTY)
         exec(DocEdit.InsertPages(listOf((after + 1) to snap)))
@@ -1095,6 +1117,7 @@ class Editor(val ctx: Context, val nbId: String) {
     }
 
     fun duplicatePage(i: Int = curIndex()) {
+        if (refuseBoardPage()) return
         val p = doc.pages.getOrNull(i) ?: return
         val snap = PageSnapshot(newId(), p.spec, doc.content(p))
         exec(DocEdit.InsertPages(listOf((i + 1) to snap)))

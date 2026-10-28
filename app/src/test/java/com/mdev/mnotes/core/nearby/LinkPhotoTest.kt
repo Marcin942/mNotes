@@ -196,6 +196,35 @@ class LinkPhotoTest {
     }
 
     @Test
+    fun lengthBeyondTheMessageAllocatesNothing() {
+        // audyt (docs/BEZPIECZENSTWO.md): 6 bajtów deklarujących 24 MB nie przydzielają 24 MB
+        val msg = byteArrayOf(1, 0, 0, 0, 0, 0x01, 0x70, 0, 0)
+        val mx = java.lang.management.ManagementFactory.getThreadMXBean() as com.sun.management.ThreadMXBean
+        val t = Thread.currentThread().id
+        val before = mx.getThreadAllocatedBytes(t)
+        assertNull(SyncMsg.decode(msg))
+        assertTrue(mx.getThreadAllocatedBytes(t) - before < 1_000_000)
+    }
+
+    @Test
+    fun hugeFirstPartCannotPushTheLastOneGigabytesAway() {
+        // audyt: część 0 duża (step), ostatnia nr count-1 pod index·step — rzadki plik wielu GB na dysku tabletu
+        var far = 0L
+        val files = LinkFiles { object : LinkFile {
+            override val length = 0L
+            override fun read(at: Long, size: Int) = ByteArray(0)
+            override fun write(at: Long, bytes: ByteArray) { far = maxOf(far, at + bytes.size) }
+            override fun input() = java.io.ByteArrayInputStream(ByteArray(0))
+        } }
+        val r = PhotoReceiver(files = files)
+        val count = LinkChunks.MAX_MESSAGE / PhotoSender.PART + 1
+        fun part(i: Int, n: Int) = SyncMsg.PhotoPart("w", i, count, ByteArray(32), "a.jpg", "image/jpeg", ByteArray(n))
+        r.accept(part(count - 1, 10))
+        r.accept(part(0, 8 shl 20))
+        assertTrue("zapis do $far", far <= LinkChunks.MAX_MESSAGE)
+    }
+
+    @Test
     fun newMessagesRoundTrip() {
         val ack = SyncMsg.decode(SyncMsg.encode(SyncMsg.PhotoAck("x", 4)))
         assertEquals(SyncMsg.PhotoAck("x", 4), ack)

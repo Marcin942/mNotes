@@ -16,7 +16,13 @@ import java.util.TimeZone
 object LinkScrub {
     const val DEVICE = "‹urządzenie›"
 
-    private val mac = Regex("""(?i)\b[0-9a-f]{2}(?:[:-][0-9a-f]{2}){5}\b""")
+    // „x” też: Android bez uprawnienia podaje adres zamaskowany (XX:XX:XX:XX:9C:FF), ostatnie bajty wciąż wskazują urządzenie
+    private val mac = Regex("""(?i)\b[0-9a-fx]{2}(?:[:-][0-9a-fx]{2}){5}\b""")
+    private val ipv4 = Regex("""\b(?:\d{1,3}\.){3}\d{1,3}\b""")
+    private val ipv6 = Regex("""(?i)(?<![\w:])(?:[0-9a-f]{0,4}:){2,7}[0-9a-f]{0,4}(?:%\w+)?""")
+    private val direct = Regex("""\bDIRECT-\S*""")
+    // ścieżka z katalogu urządzenia do końca członu, także ze spacjami (folder „Notatki Kowalskiego”), do „ (” albo „: ”
+    private val rootPath = Regex("""(?<![\w.])/(?:storage|sdcard|data|mnt)/[^\n]*?(?=\s*\(|: |$)""")
     private val uuid = Regex("""(?i)\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b""")
     private val uri = Regex("""(?i)\b(?:content|file|https?)://\S+""")
     private val path = Regex("""(?<![\w.])(?:/[^\s/:;,()]+){2,}/?""")
@@ -28,12 +34,18 @@ object LinkScrub {
     private val code = Regex("""(?i)(kod\w*|code|cyfr\w*|digits?|sas|pin|parowa\w*|pairing)([^0-9\n]{0,24})\b\d{3}[ -]?\d{3}\b""")
 
     fun clean(text: String, names: Collection<String> = emptyList()): String {
-        var s = text.replace('\n', ' ').replace('\r', ' ').replace('|', '/')
+        var s = text.replace('\n', ' ').replace('\r', ' ')
+        // nazwy przed zamianą „|”: nazwa urządzenia z „|” inaczej już by się nie zgadzała
         for (n in names.map { it.trim() }.filter { it.length >= 2 }.distinct().sortedByDescending { it.length }) {
             s = s.replace(n, DEVICE, ignoreCase = true)
         }
+        s = s.replace('|', '/')
         s = uri.replace(s, "‹adres›")
+        s = rootPath.replace(s, "‹ścieżka›")
         s = mac.replace(s, "‹MAC›")
+        s = direct.replace(s, "‹Wi-Fi›")
+        s = ipv4.replace(s, "‹IP›")
+        s = ipv6.replace(s) { m -> if ("::" in m.value || m.value.count { it == ':' } >= 4 || m.value.any { it.lowercaseChar() in 'a'..'f' }) "‹IP›" else m.value }
         s = uuid.replace(s, "‹uuid›")
         s = email.replace(s, "‹e-mail›")
         s = path.replace(s, "‹ścieżka›")

@@ -150,6 +150,61 @@ class ThemeMapTest {
         assertTrue(ThemeMap.contrastWcag(toLight.ink(0xFF000000.toInt()), toLight.dstPaper) >= 4.5)
     }
 
+    // — 3c-A1b: prawie biały i prawie czarny —
+
+    private val toLight = ThemeMap.transform(0xFF202124.toInt(), toDark = false)
+
+    @Test fun nearWhiteWrittenOnDarkIsStoredBlack() {
+        for (c in intArrayOf(0xFFFFFFFF.toInt(), 0xFFF2F2F2.toInt(), 0xFFFAFAF0.toInt())) {
+            val stored = toDark.native(c)
+            assertEquals("%08X".format(c), 0xFF000000.toInt(), stored)
+            // W jasnym (bez przekształcenia) i w eksporcie kreska jest czarna, w ciemnym — jasna jak zwykła czerń.
+            assertTrue(ThemeMap.contrastWcag(stored, white) >= 4.5)
+            assertTrue(ThemeMap.contrastWcag(toDark.ink(stored), toDark.dstPaper) >= 4.5)
+        }
+        assertEquals(0x80000000.toInt(), toDark.native(0x80FFFFFF.toInt()))   // krycie zostaje
+    }
+
+    @Test fun nearBlackWrittenOnLightIsStoredWhite() {
+        for (c in intArrayOf(0xFF000000.toInt(), 0xFF1A1A1A.toInt())) {
+            assertEquals("%08X".format(c), 0xFFFFFFFF.toInt(), toLight.native(c))
+            assertEquals(0xFFFFFFFF.toInt(), ThemeMap.transform(Paper.BLACK, false).native(c))
+        }
+        assertTrue(ThemeMap.contrastWcag(toLight.ink(toLight.native(0xFF1A1A1A.toInt())), toLight.dstPaper) >= 4.5)
+    }
+
+    @Test fun colouredAndOrdinaryInksAreStoredAsPicked() {
+        // Na jasnej stronie w ciemnym: czerń, szarości, kolory i pastele (wyraźnie barwne) bez zmian.
+        for (c in PEN + intArrayOf(0xFF1A1A1A.toInt(), 0xFF808080.toInt(), 0xFFC0C0C0.toInt(), 0xFFFFF59D.toInt(), 0xFFFFCDD2.toInt(), 0xFFBBDEFB.toInt()))
+            assertEquals("%08X".format(c), c, toDark.native(c))
+        // Na ciemnej w jasnym: biel i jasne kolory bez zmian.
+        for (c in intArrayOf(0xFFFFFFFF.toInt(), 0xFFF2F2F2.toInt(), 0xFF4D4D4D.toInt(), 0xFFE53935.toInt(), 0xFF1A237E.toInt()))
+            assertEquals("%08X".format(c), c, toLight.native(c))
+    }
+
+    @Test fun oldNearWhiteStrokesStayVisibleOnDark() {
+        // Stare zeszyty: #F2F2F2 zapisany na jasnej stronie w trybie ciemnym zlewał się z ciemnym papierem (L ≈ 0,26).
+        for (c in intArrayOf(0xFFF2F2F2.toInt(), 0xFFFAFAF0.toInt(), 0xFFFFFFFF.toInt()))
+            assertTrue("%08X".format(c), ThemeMap.contrastWcag(toDark.ink(c), toDark.dstPaper) >= 4.5)
+        assertTrue(ThemeMap.contrastWcag(toLight.ink(0xFF1A1A1A.toInt()), toLight.dstPaper) >= 4.5)
+    }
+
+    @Test fun elementsKeepHighlighterAndConvertTheRest() {
+        val pts = floatArrayOf(0f, 0f, 1f, 10f, 10f, 1f)
+        val wh = 0xFFF2F2F2.toInt(); val bk = 0xFF000000.toInt()
+        val pen = toDark.native(com.mdev.mnotes.core.model.Stroke(1, com.mdev.mnotes.core.model.PenKind.BALLPOINT, wh, 2f, pts, fill = wh)) as com.mdev.mnotes.core.model.Stroke
+        assertEquals(bk, pen.color); assertEquals(bk, pen.fill)
+        val hl = com.mdev.mnotes.core.model.Stroke(2, com.mdev.mnotes.core.model.PenKind.HIGHLIGHTER, wh, 8f, pts)
+        assertTrue(toDark.native(hl) === hl)
+        val red = com.mdev.mnotes.core.model.Stroke(3, com.mdev.mnotes.core.model.PenKind.BALLPOINT, 0xFFE53935.toInt(), 2f, pts)
+        assertTrue(toDark.native(red) === red)
+        val text = com.mdev.mnotes.core.model.TextBox(4, 0f, 0f, 50f, 20f, 0f, "a", 12f, wh, fill = wh)
+        val t = toDark.native(text) as com.mdev.mnotes.core.model.TextBox
+        assertEquals(bk, t.color); assertEquals(bk, t.fill); assertEquals("a", t.text)
+        val fill = com.mdev.mnotes.core.model.FillEl(5, wh, false, listOf(floatArrayOf(0f, 0f, 10f, 0f, 10f, 10f)))
+        assertEquals(bk, (toDark.native(fill) as com.mdev.mnotes.core.model.FillEl).color)
+    }
+
     private companion object {
         /** Typowe kolory pióra: czerń, granat, niebieski, czerwony, zielony, fiolet, pomarańcz, brąz. */
         val PEN = intArrayOf(0xFF000000.toInt(), 0xFF1A237E.toInt(), 0xFF1565C0.toInt(), 0xFFE53935.toInt(), 0xFF2E7D32.toInt(), 0xFF6A1B9A.toInt(), 0xFFEF6C00.toInt(), 0xFF5D4037.toInt())

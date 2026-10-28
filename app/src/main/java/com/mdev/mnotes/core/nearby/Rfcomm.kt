@@ -197,7 +197,6 @@ class RfcommTransport(
         val id = p.peer.address
         conns.remove(id)?.close()
         conns[id] = Conn(id, p)
-        lastPeer = p.peer
         machine.onInitiated(id, peerName(own, p.peer))
     }
 
@@ -245,7 +244,6 @@ class RfcommTransport(
                 dialing = null
                 conns.remove(endpoint)?.close()
                 conns[endpoint] = Conn(endpoint, p)
-                lastPeer = p.peer
                 machine.onInitiated(endpoint, peerName(name, p.peer))
             }
         }
@@ -254,6 +252,8 @@ class RfcommTransport(
     override fun accept(endpoint: String) {
         val c = conns[endpoint]
         if (c == null) { post { machine.onConnectFailed(endpoint, LinkErrors.ENDPOINT_IO) }; return }
+        // dopiero połączenie przyjęte przez maszynę: gniazdo odrzucone (przed zamknięciem nasłuchu) nie trafi jako adres pary
+        lastPeer = c.pipe.peer
         post { if (conns[endpoint] === c) machine.onConnected(endpoint) }
         c.start()
     }

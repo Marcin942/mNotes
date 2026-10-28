@@ -538,6 +538,15 @@ private fun EditorPrefs(set: com.mdev.mnotes.data.Settings) {
 private fun InputPrefs(set: com.mdev.mnotes.data.Settings) {
     ProfilesPrefs(set)
     Group {
+        Opt(
+            T.t("Piszę", "I write with"),
+            "ręka lewa prawa leworęczny praworęczny mańkut dłoń zasłania strona paska hand left right handed lefty",
+        ) { Choice(listOf(T.t("Prawą ręką", "Right hand"), T.t("Lewą ręką", "Left hand")), set.hand) { set.hand = it } }
+        Text(
+            T.t("Przestawia na drugą stronę pasek boczny, listwę pióra, kapsułę Cofnij i mini-mapę; lewą ręką — także zapas przewijania.",
+                "Moves the side toolbar, pen strip, undo capsule and mini-map to the other side; left hand also turns on extra scrolling."),
+            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(bottom = 4.dp),
+        )
         Opt(T.t("Palec", "Finger"), "finger dotyk przewijanie powiększanie rysowanie touch") { Choice(listOf(T.t("Przewija i powiększa", "Pans & zooms"), T.t("Rysuje", "Draws"), T.t("Ignorowany", "Ignored")), set.fingerMode) { set.fingerMode = it } }
         ToggleRow(T.t("Odrzucanie dłoni (rysik ma pierwszeństwo)", "Palm rejection (stylus wins)"), set.palmRejection, keys = "palm dłoń rysik stylus przypadkowe dotknięcia") { set.palmRejection = it }
         ToggleRow(T.t("Cofnij dotknięciem dwóch palców", "Two-finger tap to undo"), set.twoFingerUndo, keys = "undo cofanie gest dwa palce") { set.twoFingerUndo = it }

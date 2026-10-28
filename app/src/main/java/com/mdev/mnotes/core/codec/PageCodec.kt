@@ -348,7 +348,9 @@ object PageCodec {
     }
 
     private fun inflate(src: ByteArray, off: Int, len: Int, rawLen: Int): ByteArray {
-        if (rawLen < 0 || rawLen > (1 shl 28)) throw CodecException("Zła długość danych")
+        // deflate rozpakowuje najwyżej ~1032 razy więcej, niż ma na wejściu: większa obietnica to plik wrogi albo
+        // uszkodzony, a bufor poniżej przydzielamy z góry (bez tego 20 bajtów zajmowało 256 MB)
+        if (rawLen < 0 || rawLen > (1 shl 28) || rawLen > len.toLong() * 1032 + 1024) throw CodecException("Zła długość danych")
         val inf = Inflater()
         try {
             inf.setInput(src, off, len)

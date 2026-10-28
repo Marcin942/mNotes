@@ -53,7 +53,13 @@ object PhoneLink : LabFeatures {
                 ),
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(vertical = 6.dp),
             )
-            ToggleRow(T.t("Włącz łącze z telefonem", "Enable the phone link"), set.nearby) { set.nearby = it }
+            // D5 (3b-B5): w 0.1.0 łącze jest eksperymentalne, domyślnie wyłączone; ten sam klucz `nearby.enabled`, więc kto
+            // je włączył, zachowuje je po aktualizacji.
+            ToggleRow(T.t("Łącze z telefonem (eksperymentalne)", "Phone link (experimental)"), set.nearby) { set.nearby = it }
+            if (!set.nearby) Text(
+                T.t("Eksperymentalne: na części telefonów szukanie trwa długo. Gdy coś nie działa, „Dziennik łącza” → „Eksportuj” i wyślij plik.", "Experimental: on some phones finding the other device takes long. If it fails, “Link log” → “Export” and send the file."),
+                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(bottom = 4.dp),
+            )
             if (set.nearby) {
                 tick
                 // 2e-B1: Bluetooth RFCOMM obok Nearby; para (klucz) wspólna, zmiana nie wymaga parowania od nowa.

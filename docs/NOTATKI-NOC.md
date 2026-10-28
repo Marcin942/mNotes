@@ -806,3 +806,11 @@ cycle;`, `circle [radius=…]`, `{$\alpha$}`. Eksport → „TikZ” → zapisz 
 core 813, lab 884, 0 porażek (2 i 5 pominięte: podglądy i zdjęcia kredy bez zmiennych), oba APK. FAZY 2c wciąż nie ma;
 lista A wyczerpana poza FB5 (kafelek szybkiej notatki), więc **dalej FAZA 3a-1**: analiza open source → `docs/OPEN-SOURCE.md`
 (tylko dokument, nic nie publikuję, `main` nietknięty). Ok. 12:30 raport dnia w `dzienniki/RAPORT-NOCY.md`.
+
+**28.10, 12:00 (Agent A): FAZA 3a-1 gotowa** → `docs/OPEN-SOURCE.md` (df26e5e, `noc/f3a-oss` → `noc/wszystko`) i skrypt
+`tools/podobienstwo.py`. Najważniejsze: kreda wymaga zgody Piotrka; łącze Nearby (`SyncCrypto`, `SyncLink`,
+`NearbyTransport`) jest wzorowane na kodzie mChochlika z `docs/nearby/kod` (Marcin ma potwierdzić, że to jego kod);
+`play-services-nearby` niewolna → warianty `foss`/`gms`; licencjat czysty (0 skopiowanego kodu); rekomendacja: czysty
+start historii. 14 decyzji dla Marcina w §6.2. **Dalej 3a-2**: `oss/main` (warianty `foss`/`gms`, łącze w `src/gms`,
+kreda w `src/kreda` tylko na `oss/kreda`, ładowana przez `Class.forName`), potem raport dnia.
+

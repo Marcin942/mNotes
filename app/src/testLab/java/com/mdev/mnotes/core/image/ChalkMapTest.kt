@@ -199,6 +199,29 @@ class FaintAndFramesTest {
         assertEquals(0, Raster.alpha(linked[120, 5]))
     }
 
+    /** 2c-B9: osobna blada litera w spokojnym miejscu wraca z progiem lokalnym; w ziarnistym miejscu próg zostaje globalny. */
+    @Test
+    fun localCutBringsBackFaintLetterOnlyWhereTheBoardIsQuiet() {
+        val rnd = java.util.Random(1)
+        val r = Raster(400, 100, IntArray(40_000) { Raster.rgbF(0.02f, 0.02f, 0.02f) })
+        for (y in 0 until 100) for (x in 0..99) { val v = rnd.nextFloat() * 0.45f; r[x, y] = Raster.rgbF(v, v, v) }
+        for (y in 48..51) {
+            for (x in 120..160) r[x, y] = Raster.rgbF(0.9f, 0.9f, 0.9f)
+            for (x in 280..320) r[x, y] = Raster.rgbF(0.36f, 0.36f, 0.36f)
+        }
+        val cut = 0.45f
+        val map = Chalk.localCut(r, black = true, cut = cut)
+        assertTrue(map.all { it <= cut && it >= Chalk.LOCAL_FLOOR * cut - 1e-6f })
+        assertEquals("ziarno: próg globalny", cut, map[50 * 400 + 50], 1e-6f)
+        val low = cut * Chalk.FAINT_FRACTION
+        val plain = Chalk.toAlpha(r, black = true, cut = cut, solid = 0.85f, low = low)
+        val local = Chalk.toAlpha(r, black = true, cut = cut, solid = 0.85f, low = low, cutMap = map)
+        assertEquals(0, Raster.alpha(plain[300, 50]))
+        assertTrue("blada litera ${Raster.alpha(local[300, 50])}", Raster.alpha(local[300, 50]) > 20)
+        assertEquals(Raster.alpha(plain[140, 50]), Raster.alpha(local[140, 50]))
+        assertEquals(0, Raster.alpha(local[300, 10]))
+    }
+
     @Test
     fun specksGoDotsStay() {
         val r = Raster(60, 30)

@@ -40,6 +40,7 @@ class LabSettings(ctx: Context) {
     private val nearbyP = B("nearby.enabled", false)
     private val boardHintP = B("board.hint", true)
     private val faintP = B("board.faint", true)
+    private val localCutP = B("board.localCut", false)
     private val framesP = B("board.frames", true)
     private val specksP = B("board.specks", true)
     private val curvesP = B("board.curves", true)
@@ -61,6 +62,7 @@ class LabSettings(ctx: Context) {
     var flatten: Boolean get() = flattenP.value; set(v) = flattenP.set(v)
     var sharpen: Boolean get() = sharpenP.value; set(v) = sharpenP.set(v)
     var faint: Boolean get() = faintP.value; set(v) = faintP.set(v)
+    var localCut: Boolean get() = localCutP.value; set(v) = localCutP.set(v)
     var frames: Boolean get() = framesP.value; set(v) = framesP.set(v)
     var specks: Boolean get() = specksP.value; set(v) = specksP.set(v)
 
@@ -82,7 +84,7 @@ class LabSettings(ctx: Context) {
 
     fun options(): BoardOptions = BoardOptions(
         straighten = straighten, crop = crop, flatten = flatten, sharpen = sharpen, autoCut = autoCut,
-        cut = cut, solid = solid, tint = tintColor(tint), faint = faint, frames = frames, specks = specks,
+        cut = cut, solid = solid, tint = tintColor(tint), faint = faint, localCut = localCut, frames = frames, specks = specks,
         curves = curves,
     )
 

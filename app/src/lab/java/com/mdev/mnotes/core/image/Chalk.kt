@@ -89,17 +89,19 @@ object Chalk {
      * Kolor do alfy względem czarnego albo białego tła. Poniżej [cut] piksel znika, powyżej [solid] jest pełny;
      * kolor kredy odtwarzany jak w GIMP-ie (dzielenie przez krycie), a z [tint] wszystkie kreski dostają ten kolor.
      */
-    fun toAlpha(src: Raster, black: Boolean, cut: Float, solid: Float, tint: Int? = null, low: Float? = null): Raster {
-        val s = max(solid, cut + 1e-3f)
+    fun toAlpha(src: Raster, black: Boolean, cut: Float, solid: Float, tint: Int? = null, low: Float? = null, cutMap: FloatArray? = null): Raster {
         val out = IntArray(src.px.size)
         // Histereza (2b-B2): piksel jaśniejszy od [low], ale ciemniejszy od [cut], zostaje tylko w plamie, która ma
         // choć jeden piksel ≥ [cut]; w takiej plamie krycie liczy się od [low]. Blade fragmenty liter wracają,
-        // odosobnione smugi po gąbce nie.
-        val keep = if (low != null && low < cut) connectedToStrong(src, black, cut, low) else null
+        // odosobnione smugi po gąbce nie. Z [cutMap] (próg lokalny, 2c-B9) oba progi są na piksel, [low] w tej samej proporcji.
+        val lowFrac = if (low != null && low < cut) low / cut else null
+        val keep = if (lowFrac != null) connectedToStrong(src, black, cut, low!!, cutMap) else null
         for (i in out.indices) {
             val c = src.px[i]
             val a = strength(c, black)
-            val from = if (keep != null && keep[i]) low!! else cut
+            val ci = cutMap?.get(i) ?: cut
+            val s = max(solid, ci + 1e-3f)
+            val from = if (keep != null && keep[i]) ci * lowFrac!! else ci
             val alpha = ((a - from) / (s - from)).coerceIn(0f, 1f) * (Raster.alpha(c) / 255f)
             if (alpha <= 0f) { out[i] = 0; continue }
             out[i] = if (tint != null) (Raster.q(alpha) shl 24) or (tint and 0xFFFFFF) else {
@@ -111,14 +113,20 @@ object Chalk {
         return Raster(src.w, src.h, out)
     }
 
-    /** Piksele ≥ [low] połączone (8-sąsiedztwo) z jakimkolwiek pikselem ≥ [cut]; widoczne tylko te nieprzezroczyste. */
-    fun connectedToStrong(src: Raster, black: Boolean, cut: Float, low: Float): BooleanArray {
+    /**
+     * Piksele ≥ [low] połączone (8-sąsiedztwo) z jakimkolwiek pikselem ≥ [cut]; widoczne tylko te nieprzezroczyste.
+     * Z [cutMap] progi są na piksel: `cutMap[i]` i `cutMap[i] · low / cut`.
+     */
+    fun connectedToStrong(src: Raster, black: Boolean, cut: Float, low: Float, cutMap: FloatArray? = null): BooleanArray {
         val w = src.w; val h = src.h; val n = w * h
         val a = FloatArray(n) { if (Raster.alpha(src.px[it]) > 127) strength(src.px[it], black) else 0f }
+        val frac = low / cut
+        fun strongAt(i: Int) = cutMap?.get(i) ?: cut
+        fun lowAt(i: Int) = cutMap?.let { it[i] * frac } ?: low
         val keep = BooleanArray(n)
         val queue = IntArray(n)
         var head = 0; var tail = 0
-        for (i in 0 until n) if (a[i] >= cut) { keep[i] = true; queue[tail++] = i }
+        for (i in 0 until n) if (a[i] >= strongAt(i)) { keep[i] = true; queue[tail++] = i }
         while (head < tail) {
             val p = queue[head++]
             val x = p % w; val y = p / w
@@ -126,11 +134,31 @@ object Chalk {
                 val nx = x + dx; val ny = y + dy
                 if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue
                 val q = ny * w + nx
-                if (!keep[q] && a[q] >= low) { keep[q] = true; queue[tail++] = q }
+                if (!keep[q] && a[q] >= lowAt(q)) { keep[q] = true; queue[tail++] = q }
             }
         }
         return keep
     }
+
+    /**
+     * Próg lokalny (2c-B9): średnia + [LOCAL_K]·σ siły kredy w oknie [LOCAL_WINDOW] szerokości, przycięta do
+     * [LOCAL_FLOOR]·[cut] … [cut]. Tylko obniża globalny próg tam, gdzie tło w oknie jest równe i ciemne (blade litery na
+     * szarej tablicy); gdzie jest gęste pismo albo smugi, σ jest duże i zostaje [cut].
+     */
+    fun localCut(src: Raster, black: Boolean, cut: Float): FloatArray {
+        val w = src.w; val h = src.h
+        val a = FloatArray(w * h) { if (Raster.alpha(src.px[it]) > 127) strength(src.px[it], black) else 0f }
+        val r = max(2, (LOCAL_WINDOW * w / 2).toInt())
+        val mean = BoardFilters.boxBlur(a, w, h, r)
+        for (i in a.indices) a[i] *= a[i]
+        val sq = BoardFilters.boxBlur(a, w, h, r)
+        val lo = max(AUTO_CUT_MIN, LOCAL_FLOOR * cut)
+        return FloatArray(w * h) { i -> (mean[i] + LOCAL_K * kotlin.math.sqrt(max(0f, sq[i] - mean[i] * mean[i]))).coerceIn(lo, cut) }
+    }
+
+    const val LOCAL_WINDOW = 1f / 16f
+    const val LOCAL_K = 2f
+    const val LOCAL_FLOOR = 0.6f
 
     /**
      * Usuwa jasne pasy grubsze niż kreda (2b-B2): listwę między tablicami, ramę, kawałki ściany przy brzegu kadru.
@@ -279,6 +307,8 @@ data class BoardOptions(
     val maxSide: Int = 2400,
     /** Dociągaj bladą kredę połączoną z wyraźną (histereza, 2b-B2). */
     val faint: Boolean = true,
+    /** Próg lokalny: w spokojnych miejscach tablicy niższy niż globalny, do 0,6 × (2c-B9, [Chalk.localCut]). */
+    val localCut: Boolean = false,
     /** Usuń jasne pasy grubsze niż kreda: listwy, ramy, ścianę przy brzegu (2b-B2). */
     val frames: Boolean = true,
     /** Usuń drobinki mniejsze niż kropka (ziarno tablicy, pył kredy) (2b-B2). */
@@ -365,7 +395,8 @@ object BoardPipeline {
     /** Kolor do alfy i gumka na gotowym [src]: tanie, więc podgląd liczy to przy każdym ruchu suwaka. */
     fun finish(src: BoardSource, opt: BoardOptions = BoardOptions(), erase: List<FloatArray> = emptyList()): BoardResult {
         val cut = if (opt.autoCut) src.autoCut else opt.cut
-        var out = Chalk.toAlpha(src.image, src.black, cut, opt.solid, opt.tint, low = if (opt.faint) cut * Chalk.FAINT_FRACTION else null)
+        val map = if (opt.localCut) Chalk.localCut(src.image, src.black, cut) else null
+        var out = Chalk.toAlpha(src.image, src.black, cut, opt.solid, opt.tint, low = if (opt.faint) cut * Chalk.FAINT_FRACTION else null, cutMap = map)
         if (opt.frames) out = Chalk.dropThick(out, Chalk.thickLimit(out.w))
         if (opt.specks) out = Chalk.despeckle(out, Chalk.speckArea(out.w))
         if (erase.isNotEmpty()) out = Chalk.erase(out, erase)

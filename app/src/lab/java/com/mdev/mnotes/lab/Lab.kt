@@ -258,6 +258,7 @@ object Lab : LabFeatures {
         ToggleRow(T.t("Wyrównaj oświetlenie", "Even out the lighting"), opt.flatten) { change(opt.copy(flatten = it)) }
         ToggleRow(T.t("Wyostrz kredę", "Sharpen the chalk"), opt.sharpen) { change(opt.copy(sharpen = it)) }
         ToggleRow(T.t("Dociągaj bladą kredę do wyraźnej", "Keep faint chalk joined to clear chalk"), opt.faint) { change(opt.copy(faint = it)) }
+        ToggleRow(T.t("Próg lokalny (blade litery w spokojnych miejscach)", "Local threshold (faint letters in quiet areas)"), opt.localCut) { change(opt.copy(localCut = it)) }
         ToggleRow(T.t("Usuń listwy, ramy i ścianę", "Remove ledges, frames and wall"), opt.frames) { change(opt.copy(frames = it)) }
         ToggleRow(T.t("Usuń drobinki (ziarno tablicy)", "Remove specks (board grain)"), opt.specks) { change(opt.copy(specks = it)) }
         ToggleRow(T.t("Edytowalne kreski jako gładkie krzywe", "Editable strokes as smooth curves"), opt.curves) { change(opt.copy(curves = it)) }
@@ -518,7 +519,7 @@ object Lab : LabFeatures {
             ToggleRow(T.t("Zdjęcie z trybu wykładu od razu przez kredę", "Lecture-mode photo straight through chalk cleanup"), set.lecture) { set.lecture = it }
             Steps(set.options()) { o ->
                 set.straighten = o.straighten; set.crop = o.crop; set.flatten = o.flatten; set.sharpen = o.sharpen
-                set.faint = o.faint; set.frames = o.frames; set.specks = o.specks; set.curves = o.curves
+                set.faint = o.faint; set.localCut = o.localCut; set.frames = o.frames; set.specks = o.specks; set.curves = o.curves
                 set.autoCut = o.autoCut; set.cut = o.cut; set.solid = o.solid
                 set.tint = listOf(null, LabSettings.tintColor(1), LabSettings.tintColor(2)).indexOf(o.tint).coerceAtLeast(0)
             }

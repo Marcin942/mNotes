@@ -210,3 +210,56 @@ go nie wprowadzam (w pustych miejscach wyciągałby smugi). Podglądy: `KREDA_DI
 `KredaPomiaryTest` (zdjęcie | krycie) i `app/build/kreda-krzywe/okladka-wzor-calosc.png` z `KredaKrzyweTest` (cały wzór:
 łamane z lewej, krzywe z prawej, u dołu w pełnej grubości). Do poprawy zostaje drobiazg: przy `Y_lm` kreseczka obok
 nóżki Y (to samo w łamanej i krzywej).
+
+## Próg lokalny (2c-B9, 28.10): za przełącznikiem, domyślnie wyłączony
+
+`Chalk.localCut`: dla każdego piksela średnia + K·σ siły kredy w oknie 1/16 szerokości (rozmycie pudełkowe, 2 przejścia),
+przycięte do 0,6 × próg globalny … próg globalny. Próg tylko spada, nigdy nie rośnie. Histereza (blada kreda połączona z
+wyraźną) liczy się wtedy od 0,6 × próg lokalny. Pomiar `KredaPomiaryTest.measureLocalCut`: to samo źródło
+(`BoardPipeline.prepare`) wykończone bez i z `localCut`; „niżej %” to część tablicy, gdzie próg lokalny jest niższy od
+globalnego, a „widoczne %” to piksele z jakimkolwiek kryciem (kreda % liczy tylko krycie > 50 %).
+
+| K, dół | niżej % | widoczne % bez → z | kreda % | fragmenty % (średnio) | najgorszy przyrost fragmentów |
+|---|---|---|---|---|---|
+| 3, 0,6 | 30 | (nie mierzone) | 3,9 → 3,9 | 18,2 → 18,2 | +0,2 p.p. (20260318_153200) |
+| **2, 0,6** (w kodzie) | 49 | 5,2 → 5,6 | 3,9 → 3,9 | 18,2 → 18,3 | **+1,1 p.p.** (20260401_133044) |
+| 1,5, 0,5 | 68 | 5,2 → 6,3 | 3,9 → 3,9 | 18,2 → 18,3 | +1,6 p.p. (20260401_133044) |
+
+**Wniosek (uczciwie):** na tych 24 zdjęciach próg lokalny prawie nic nie daje. Kreda % i liczba kresek stoją, przybywa
+tylko bladych pikseli (krycie < 50 %) przy brzegach kresek. Na podglądzie najgorszego zdjęcia (`*-lokalny.png`, na czerwono
+to, co doszło z kryciem > 50 %) nie wróciła żadna nowa litera, są tylko pojedyncze punkty na brzegach. Przy K = 2 jedno
+zdjęcie przekracza próg planu (+1,1 p.p. fragmentów > 1 p.p.), więc zgodnie z planem próg lokalny jest **za przełącznikiem**
+(panel „Próg lokalny (blade litery w spokojnych miejscach)”, Ustawienia → Laboratorium, `board.localCut`) i
+**domyślnie wyłączony**. Strojenia K pod te 24 zdjęcia nie robiłem (to byłoby dopasowanie do zbioru). Zgadza się to z
+wcześniejszym wnioskiem przy wzorze z okładki: tam też progu lokalnego nie trzeba było. Czas `finish` rośnie z ok. 60 do
+ok. 110 ms (dwa rozmycia pełnego obrazu).
+
+Pełna tabela (K = 2, dół 0,6):
+
+| zdjęcie | próg | niżej % | kreda % bez → z | widoczne % bez → z | kresek bez → z | śr. długość px bez → z | fragmenty % bez → z | Δ fragm. p.p. | czas ms bez → z |
+| 20260317_142449.jpg | 0.50 | 61 | 2.9 → 2.9 | 3.4 → 3.7 | 469 → 469 | 25.4 → 25.4 | 16 → 16 | +0.0 | 287 → 336 |
+| 20260318_152335.jpg | 0.33 | 52 | 2.9 → 2.9 | 4.0 → 4.1 | 391 → 391 | 28.8 → 28.8 | 21 → 21 | +0.0 | 81 → 154 |
+| 20260318_152745.jpg | 0.29 | 60 | 2.2 → 2.2 | 3.0 → 3.2 | 267 → 267 | 29.6 → 29.6 | 26 → 26 | +0.0 | 130 → 137 |
+| 20260318_152749.jpg | 0.47 | 67 | 2.5 → 2.5 | 3.3 → 4.1 | 201 → 202 | 30.0 → 29.9 | 16 → 17 | +0.9 | 33 → 56 |
+| 20260318_153153.jpg | 0.25 | 41 | 2.9 → 2.9 | 4.2 → 4.8 | 317 → 317 | 25.1 → 25.1 | 31 → 31 | +0.0 | 47 → 111 |
+| 20260318_153200.jpg | 0.36 | 44 | 2.7 → 2.7 | 3.5 → 4.0 | 400 → 401 | 27.1 → 27.1 | 14 → 14 | -0.0 | 42 → 93 |
+| 20260318_153635.jpg | 0.38 | 57 | 1.6 → 1.6 | 2.5 → 3.2 | 359 → 359 | 23.3 → 23.5 | 16 → 16 | +0.3 | 49 → 110 |
+| 20260318_153647.jpg | 0.45 | 42 | 4.5 → 4.5 | 5.5 → 5.6 | 530 → 530 | 26.7 → 26.7 | 23 → 23 | +0.0 | 49 → 106 |
+| 20260318_154119.jpg | 0.50 | 45 | 3.7 → 3.7 | 4.3 → 4.9 | 521 → 523 | 29.2 → 29.2 | 14 → 15 | +0.1 | 27 → 76 |
+| 20260318_154441.jpg | 0.50 | 57 | 1.9 → 1.9 | 2.5 → 3.2 | 372 → 379 | 28.8 → 28.5 | 15 → 15 | +0.5 | 62 → 142 |
+| 20260318_155207.jpg | 0.44 | 46 | 3.3 → 3.3 | 4.3 → 4.6 | 452 → 452 | 29.7 → 29.7 | 14 → 14 | +0.0 | 56 → 143 |
+| 20260318_155215.jpg | 0.43 | 46 | 3.3 → 3.3 | 4.5 → 4.8 | 388 → 389 | 26.0 → 25.9 | 17 → 17 | +0.2 | 30 → 67 |
+| 20260318_155221.jpg | 0.41 | 58 | 2.3 → 2.3 | 3.2 → 3.7 | 381 → 380 | 27.6 → 27.6 | 16 → 16 | +0.0 | 23 → 62 |
+| 20260318_155524.jpg | 0.44 | 76 | 3.0 → 3.0 | 5.1 → 5.4 | 279 → 282 | 38.0 → 37.9 | 21 → 22 | +0.8 | 54 → 132 |
+| 20260323_135040.jpg | 0.50 | 47 | 6.7 → 6.7 | 8.9 → 9.0 | 509 → 508 | 29.6 → 29.7 | 18 → 18 | +0.0 | 43 → 89 |
+| 20260323_135048.jpg | 0.50 | 44 | 4.9 → 4.9 | 6.1 → 6.1 | 693 → 692 | 33.6 → 33.7 | 14 → 14 | -0.3 | 65 → 149 |
+| 20260324_154544.jpg | 0.50 | 54 | 3.3 → 3.3 | 4.7 → 6.7 | 340 → 340 | 25.7 → 25.7 | 17 → 17 | +0.0 | 45 → 92 |
+| 20260326_140000.jpg | 0.50 | 29 | 10.4 → 10.4 | 13.9 → 14.6 | 424 → 425 | 28.0 → 28.0 | 18 → 18 | -0.0 | 42 → 80 |
+| 20260326_144419.jpg | 0.30 | 24 | 3.4 → 3.4 | 4.8 → 5.0 | 412 → 412 | 37.8 → 37.8 | 10 → 10 | +0.0 | 56 → 133 |
+| 20260326_161035.jpg | 0.33 | 40 | 5.2 → 5.2 | 6.8 → 7.1 | 437 → 438 | 34.0 → 33.9 | 20 → 20 | -0.0 | 41 → 80 |
+| 20260326_161039.jpg | 0.30 | 37 | 5.1 → 5.1 | 6.5 → 6.8 | 412 → 412 | 34.0 → 34.0 | 16 → 16 | +0.0 | 27 → 72 |
+| 20260401_133044.jpg | 0.43 | 42 | 3.8 → 3.8 | 5.9 → 6.0 | 335 → 337 | 30.1 → 30.0 | 15 → 16 | +1.1 | 40 → 86 |
+| 20260525_134500.jpg | 0.50 | 56 | 4.2 → 4.2 | 5.4 → 5.8 | 515 → 516 | 27.4 → 27.3 | 20 → 20 | +0.2 | 38 → 79 |
+| 20260525_144320.jpg | 0.50 | 47 | 5.9 → 5.9 | 8.1 → 8.4 | 691 → 691 | 24.3 → 24.3 | 28 → 28 | +0.0 | 46 → 105 |
+| **średnio (24)** | | 49 | 3.9 → 3.9 | 5.2 → 5.6 | 421 → 421 | 29.2 → 29.1 | 18.2 → 18.3 | +0.2 | |
+Najgorszy przyrost fragmentów: +1.1 p.p. (20260401_133044.jpg); próg lokalny niższy od globalnego średnio na 49 % tablicy (K = 2.0, dół 0.6)

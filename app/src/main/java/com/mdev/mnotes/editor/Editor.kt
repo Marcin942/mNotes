@@ -592,7 +592,10 @@ class Editor(val ctx: Context, val nbId: String) {
     }
 
     private fun pngToClipboard(png: ByteArray, name: String): Boolean = runCatching {
+        // obrazy ze schowka zostawały w cache/share do następnego eksportu (dostępne pod starym adresem schowka)
         val dir = java.io.File(ctx.cacheDir, "share").apply { mkdirs() }
+        val old = System.currentTimeMillis() - 24 * 3600_000L
+        dir.listFiles()?.filter { it.name.endsWith(".png") && it.lastModified() < old }?.forEach { it.delete() }
         val f = java.io.File(dir, "$name-${System.currentTimeMillis()}.png").apply { writeBytes(png) }
         val uri = androidx.core.content.FileProvider.getUriForFile(ctx, "${ctx.packageName}.files", f)
         val cm = ctx.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager

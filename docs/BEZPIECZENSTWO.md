@@ -14,6 +14,7 @@ Cele atakującego: odczyt notatek, podrzucenie treści, awaria aplikacji albo ut
 | ID | Waga | Gdzie | Scenariusz | Stan |
 |----|------|-------|------------|------|
 | S-01 | średnie | paczka instalacyjna (wersja debug) | Instalowany APK jest w wersji debug (`debuggable=true`): z włączonym debugowaniem USB `run-as` daje pełny odczyt danych aplikacji, także zeszytów zablokowanych biometrią. | do decyzji (wymaga klucza wydania, D13/D14) |
+| S-03 | średnie | `core/codec/PageCodec.kt` (`inflate`) | Strona we wrogim zeszycie (`.mnotes`) ma ~20 bajtów skompresowanych i deklaruje 256 MB po rozpakowaniu; dekoder przydzielał bufor z góry → brak pamięci przy otwieraniu. | naprawione `ebe9629` (limit z ilorazu deflate; test `HostileInputTest`) |
 | S-02 | niskie | manifest wersji debug (`PreviewActivity` z narzędzi Compose) | Wyeksportowana aktywność podglądu Compose w wersji debug: inna aplikacja może ją uruchomić z nazwą funkcji `@Composable`. | w analizie |
 
 ## Sprawdzone bez problemów

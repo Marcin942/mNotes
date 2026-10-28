@@ -114,6 +114,7 @@ class RfcommTransport(
                         post { if (conns[id] === this) machine.onReceived(id, m) }
                     }
                 } catch (e: IOException) {
+                    post { if (conns[id] === this) machine.note("rfcomm: odczyt przerwany: ${LinkScrub.error(e)}") }
                 } finally {
                     close()
                     post { if (conns[id] === this) { conns.remove(id); machine.onDisconnected(id) } }
@@ -127,6 +128,7 @@ class RfcommTransport(
                         StreamFramer.write(pipe.output, b)
                     }
                 } catch (e: IOException) {
+                    post { machine.note("rfcomm: zapis przerwany: ${LinkScrub.error(e)}") }
                     close()  // odczyt to zauważy i zgłosi rozłączenie
                 }
             }
@@ -160,9 +162,9 @@ class RfcommTransport(
         closeServer()
         if (!ready()) return
         val s = try { port.listen(RfcommIds.uuidFor(name), RfcommIds.SERVICE) } catch (e: SecurityException) {
-            post { machine.onFailed(LinkErrors.NO_PERMISSION) }; return
+            post { machine.note("rfcomm: nasłuch bez zgody: ${LinkScrub.error(e)}"); machine.onFailed(LinkErrors.NO_PERMISSION) }; return
         } catch (e: IOException) {
-            post { machine.onFailed(LinkErrors.RADIO_ERROR) }; return
+            post { machine.note("rfcomm: nasłuch nieudany: ${LinkScrub.error(e)}"); machine.onFailed(LinkErrors.RADIO_ERROR) }; return
         }
         server = s
         daemon("rfcomm-nasluch") {
@@ -209,13 +211,17 @@ class RfcommTransport(
         dialing = endpoint
         val uuid = RfcommIds.uuidFor(name)
         daemon("rfcomm-laczenie") {
+            val t0 = System.currentTimeMillis()
             val p = try { port.connect(endpoint, uuid) } catch (e: SecurityException) {
-                post { if (dialing == endpoint) { dialing = null; machine.onConnectFailed(endpoint, LinkErrors.NO_PERMISSION) } }
+                post { if (dialing == endpoint) { dialing = null; machine.note("rfcomm: łączenie bez zgody: ${LinkScrub.error(e)}"); machine.onConnectFailed(endpoint, LinkErrors.NO_PERMISSION) } }
                 return@daemon
             } catch (e: IOException) {
-                post { if (dialing == endpoint) { dialing = null; machine.onConnectFailed(endpoint, LinkErrors.PEER_NOT_LISTENING) } }
+                val ms = System.currentTimeMillis() - t0
+                post { if (dialing == endpoint) { dialing = null; machine.note("rfcomm: łączenie nieudane po $ms ms: ${LinkScrub.error(e)}"); machine.onConnectFailed(endpoint, LinkErrors.PEER_NOT_LISTENING) } }
                 return@daemon
             }
+            val ms = System.currentTimeMillis() - t0
+            post { machine.note("rfcomm: gniazdo otwarte po $ms ms") }
             post {
                 if (dialing != endpoint) { p.close(); return@post }
                 dialing = null

@@ -4,6 +4,7 @@ import android.content.Context
 import com.google.android.gms.common.api.ApiException
 import com.google.android.gms.nearby.Nearby
 import com.google.android.gms.nearby.connection.AdvertisingOptions
+import com.google.android.gms.nearby.connection.BandwidthInfo
 import com.google.android.gms.nearby.connection.ConnectionInfo
 import com.google.android.gms.nearby.connection.ConnectionLifecycleCallback
 import com.google.android.gms.nearby.connection.ConnectionResolution
@@ -16,6 +17,7 @@ import com.google.android.gms.nearby.connection.PayloadTransferUpdate
 import com.google.android.gms.nearby.connection.Strategy
 import com.mdev.mnotes.core.nearby.LinkErrors
 import com.mdev.mnotes.core.nearby.LinkMachine
+import com.mdev.mnotes.core.nearby.LinkScrub
 import com.mdev.mnotes.core.nearby.LinkTransport
 
 /**
@@ -32,7 +34,13 @@ class NearbyTransport(context: Context) : LinkTransport {
             if (payload.type == Payload.Type.BYTES) payload.asBytes()?.let { machine.onReceived(id, it) }
         }
 
-        override fun onPayloadTransferUpdate(id: String, update: PayloadTransferUpdate) = Unit
+        /** Do dziennika (3b-B1) tylko porażki: ładunek, który Nearby porzuciło, to „zdjęcie nie dochodzi”. */
+        override fun onPayloadTransferUpdate(id: String, update: PayloadTransferUpdate) {
+            when (update.status) {
+                PayloadTransferUpdate.Status.FAILURE -> machine.note("Nearby: ładunek nieudany (${update.bytesTransferred / 1024}/${update.totalBytes / 1024} KB)")
+                PayloadTransferUpdate.Status.CANCELED -> machine.note("Nearby: ładunek anulowany (${update.bytesTransferred / 1024}/${update.totalBytes / 1024} KB)")
+            }
+        }
     }
 
     private val lifecycle = object : ConnectionLifecycleCallback() {
@@ -43,6 +51,12 @@ class NearbyTransport(context: Context) : LinkTransport {
         }
 
         override fun onDisconnected(id: String) = machine.onDisconnected(id)
+
+        /** Medium po przejściu z Bluetooth na Wi-Fi (albo z powrotem): LOW to sam Bluetooth, czyli wolne zdjęcia. */
+        override fun onBandwidthChanged(id: String, info: BandwidthInfo) {
+            val q = when (info.quality) { BandwidthInfo.Quality.LOW -> "niskie (Bluetooth)"; BandwidthInfo.Quality.MEDIUM -> "średnie"; BandwidthInfo.Quality.HIGH -> "wysokie (Wi-Fi)"; else -> "nieznane" }
+            machine.note("Nearby: pasmo $q")
+        }
     }
 
     private val discovery = object : EndpointDiscoveryCallback() {
@@ -52,14 +66,16 @@ class NearbyTransport(context: Context) : LinkTransport {
 
     private fun code(e: Exception) = (e as? ApiException)?.statusCode ?: LinkErrors.STATUS_ERROR
 
+    private fun failed(what: String, e: Exception) { machine.note("Nearby: $what nieudane: ${LinkScrub.error(e)}") }
+
     override fun advertise(name: String) {
         client.startAdvertising(name, SERVICE_ID, lifecycle, AdvertisingOptions.Builder().setStrategy(STRATEGY).build())
-            .addOnFailureListener { machine.onFailed(code(it)) }
+            .addOnFailureListener { failed("ogłaszanie", it); machine.onFailed(code(it)) }
     }
 
     override fun discover(name: String) {
         client.startDiscovery(SERVICE_ID, discovery, DiscoveryOptions.Builder().setStrategy(STRATEGY).build())
-            .addOnFailureListener { machine.onFailed(code(it)) }
+            .addOnFailureListener { failed("szukanie", it); machine.onFailed(code(it)) }
     }
 
     override fun stopSearch() {
@@ -70,12 +86,13 @@ class NearbyTransport(context: Context) : LinkTransport {
     override fun request(endpoint: String, name: String) {
         client.requestConnection(name, endpoint, lifecycle).addOnFailureListener {
             val c = code(it)
+            failed("łączenie", it)
             if (c != LinkErrors.ALREADY_CONNECTED) machine.onConnectFailed(endpoint, c)
         }
     }
 
     override fun accept(endpoint: String) {
-        client.acceptConnection(endpoint, payloads).addOnFailureListener { machine.onConnectFailed(endpoint, code(it)) }
+        client.acceptConnection(endpoint, payloads).addOnFailureListener { failed("akceptacja", it); machine.onConnectFailed(endpoint, code(it)) }
     }
 
     override fun reject(endpoint: String) { client.rejectConnection(endpoint) }

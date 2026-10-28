@@ -126,6 +126,7 @@ fun PhoneLinkDialog(start: LinkMode, ed: Editor?, files: List<Outgoing>? = null,
     val notebooks = if (start == LinkMode.SEND) files != null else ed == null
     var imported by remember { mutableIntStateOf(0) }
     val store = remember { PairStore(ctx) }
+    val journals = remember { LinkJournalStore.of(ctx) }
     val bt = remember { com.mdev.mnotes.lab.LinkSettings.of(ctx).bluetooth }
     val fullPhoto = remember { com.mdev.mnotes.lab.LinkSettings.of(ctx).fullPhoto }
     val me = remember { deviceName(ctx) }
@@ -177,7 +178,9 @@ fun PhoneLinkDialog(start: LinkMode, ed: Editor?, files: List<Outgoing>? = null,
     link = remember(mode, role, generation, ready, key?.contentHashCode()) {
         if (!ready) null else {
             val t: LinkTransport = if (bt) RfcommTransport(AndroidBtPort(ctx), { mainThread.post(it) }, store.peerAddress.ifEmpty { null }) else NearbyTransport(ctx)
-            val m = LinkMachine(t, mode, role, me, if (mode == LinkMode.PAIR) null else key, store.peerName, files = LinkFiles.disk(linkDir(ctx)), listener = object : LinkMachine.Listener {
+            // 3b-B1: każde otwarcie łącza to sesja dziennika (po obu stronach), nazwy urządzeń są z niego usuwane.
+            journals.journal.begin(if (bt) "Bluetooth" else "Nearby", mode, role, LinkDiagnostics.env(ctx, bt), listOf(me, store.peerName))
+            val m = LinkMachine(t, mode, role, me, if (mode == LinkMode.PAIR) null else key, store.peerName, files = LinkFiles.disk(linkDir(ctx)), journal = journals.journal, listener = object : LinkMachine.Listener {
                 override fun changed(s: LinkState) {
                     state = s
                     // para zrobiona przez Nearby albo tablet z nowym adresem: zapamiętaj, z kim połączył Bluetooth
@@ -209,11 +212,12 @@ fun PhoneLinkDialog(start: LinkMode, ed: Editor?, files: List<Outgoing>? = null,
             for (p in waiting) m.sendFile(p.name, p.mime, p.file)
             waiting.clear()
         }
-        onDispose { link?.let { (m, t) -> m.stop(); (t as? NearbyTransport)?.close(); (t as? RfcommTransport)?.close() } }
+        onDispose { link?.let { (m, t) -> m.stop(); (t as? NearbyTransport)?.close(); (t as? RfcommTransport)?.close() }; journals.save() }
     }
     LaunchedEffect(link) {
         val m = link?.first ?: return@LaunchedEffect
-        while (true) { delay(1_000); m.tick() }
+        var n = 0
+        while (true) { delay(1_000); m.tick(); if (++n % 5 == 0) journals.save() }
     }
 
     val pick = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->

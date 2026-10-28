@@ -801,3 +801,8 @@ z krzywych, pismo odręczne, podpisy z α i a²) — `pdflatex tikz-przyklad.tex
 **Tablet:** narysuj z przytrzymaniem trójkąt i okrąg, dopisz polem tekstu „α” → zaznacz lassem → przytrzymaj →
 „Zaznaczenie jako ▸” → „Kopiuj jako TikZ (LaTeX)” → dymek „Kod TikZ w schowku” → wklej w notatniku/Overleaf: `\draw … --
 cycle;`, `circle [radius=…]`, `{$\alpha$}`. Eksport → „TikZ” → zapisz plik `.tex` całego zeszytu (rysunek na stronę).
+
+**28.10, 11:48 (Agent A):** `noc/lab2` (2b-B4: pomiary krzywych kredy, zamykanie dziur) scalona do `noc/wszystko` (1071e87):
+core 813, lab 884, 0 porażek (2 i 5 pominięte: podglądy i zdjęcia kredy bez zmiennych), oba APK. FAZY 2c wciąż nie ma;
+lista A wyczerpana poza FB5 (kafelek szybkiej notatki), więc **dalej FAZA 3a-1**: analiza open source → `docs/OPEN-SOURCE.md`
+(tylko dokument, nic nie publikuję, `main` nietknięty). Ok. 12:30 raport dnia w `dzienniki/RAPORT-NOCY.md`.

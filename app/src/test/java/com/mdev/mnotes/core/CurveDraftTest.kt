@@ -142,11 +142,7 @@ class CurveDraftTest {
         // Krzywa przestała być zamknięta → bez wypełnienia.
         val open = CurveFit.through(floatArrayOf(0f, 0f, 100f, 0f, 50f, 80f), closed = false)!!
         assertEquals(0, Bezier.withCtrl(back, open).fill)
-        // Kreska bez wypełnienia zapisuje się bajt w bajt jak dawniej (bez ogona).
-        val plain = Stroke(2, PenKind.BALLPOINT, 0xFF000000.toInt(), 1f, Bezier.sample(c), ctrl = c)
-        val a = PageCodec.encode(PageContent.of(listOf(plain)))
-        val b = PageCodec.encode(PageContent.of(listOf(Stroke(2, PenKind.BALLPOINT, 0xFF000000.toInt(), 1f, Bezier.sample(c), ctrl = c, fill = 0))))
-        assertTrue(a.contentEquals(b))
+        // Zgodność bajt w bajt ze starą wersją: FormatCompatTest (wzorcem jest koder z main, nie ten sam koder).
     }
 
     @Test fun hintsFollowProgress() {

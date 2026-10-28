@@ -1020,13 +1020,21 @@ Nearby nie zmieniam do odpowiedzi Marcina na pytania z `plan/NEARBY-OPEN-SOURCE.
   znika, palec znów przewija. Włącz „Wykład”, w Więcej przełącz mini-mapę → po chwili dymek „Zapisać w profilu
   „Wykład”?” → Tak; wyłącz i włącz profil — mini-mapa jak zapisano. Przypnij „Rysowanie” do zeszytu („Włączaj …
   przy otwieraniu”), wyjdź do biblioteki — profil wyłączony; wejdź — włączony.
-- **2c-A12 (noc/f2c-szukaj):** wyszukiwarka ustawień. Słowo zapytania trafia w początek wyrazu albo w odmianę
+- **2c-A12 (454a080):** wyszukiwarka ustawień. Słowo zapytania trafia w początek wyrazu albo w odmianę
   z końcówką 1–3 litery po rdzeniu; synonimy tak samo. Znikły fałszywe trafienia obraz→obracanie, kolor→koło,
   share→sharpness, ruled→ruler (ostatnie przez listę wyjątków `SettingsSynonyms.NO_STEM`). Test
   `trimmingDoesNotJoinDifferentWords` (przed poprawką padał na „obraz”). Strata: „pióro” nie znajdzie już „piór”
   (sam rdzeń bez końcówki), fragment ze środka wyrazu też nie.
   **Tablet:** Ustawienia → szukaj „obraz” — nie ma „Obracanie i kąty”, są wiersze o obrazach; „kolor” — bez „koła”;
   „ścieranie”, „gum”, „lupa”, „ciemny” dalej znajdują gumkę, powiększenie i motyw.
+- **2c-A13 (noc/f2c-format):** zgodność formatu. Koder stron z `main` przeniesiony do testów jako
+  `core/format/LegacyPageCodec.kt` (`main` bez zmian). `FormatCompatTest`: (a) 5 stron bez nowych flag — nowy zapis ==
+  stary bajt w bajt; (b) stara wersja czyta nową stronę z wypełnioną krzywą na współrzędnych tablicy (ujemne, > 8000)
+  — bez wyjątku, kontur i dalsze elementy zachowane; (c) 3 zeszyty `.mnotes` z `app/src/test/resources/format/`
+  (pismo, obrazy, PDF) zapisane starym koderem i polami meta z `main` otwierają się nowym. Wzorce odtwarza
+  `env MNOTES_FORMAT_REGEN=1 ./gradlew :app:testCoreDebugUnitTest --tests '*FormatCompatTest'` (zwykły przebieg go
+  pomija). Usunięty tautologiczny test bajt w bajt z `CurveDraftTest`. Nie sprawdzone: `PageSpec` tablicy czytany
+  starą wersją (plan wymaga tylko kodera stron). Tablet: nic do sprawdzenia (same testy).
 
 ### Na tablecie po FAZIE 2c/2d — kolejność (z `dzienniki/PRZEGLAD-FABLE-2.md` §5, szczegóły tam)
 Instalacja: `labDebug` z `noc/wszystko` (tablet i telefon), do pkt 16 też `coreDebug`. Przy punktach poprawionych

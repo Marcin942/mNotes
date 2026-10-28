@@ -134,7 +134,7 @@ class Settings(ctx: Context) {
         set(v) { helperMenuPref = v.encode() }
     var laserColor by Pref("laser.color", 0xFF3B30)    // RGB śladu lasera (LaserColors.PALETTE)
     var axesLast by Pref("axes.last", "")            // ostatnio wstawiony układ współrzędnych (AxesSpec.encode), F8
-    var axesSnap by Pref("axes.snap", true)          // 2b-A6: układ na kratce i kreski w nim dociskane do siatki
+    var axesSnap by Pref("axes.snap", false)         // 2b-A6: układ na kratce i kreski w nim dociskane do siatki; 2c-A3: wyłączone do testu na tablecie
     var axesSnapDp by Pref("axes.snap_dp", 3f)       // próg docisku kresek do linii siatki układu (dp ekranu; 0 = bez)
     var guideOffered by Pref("guide.offered", false) // zeszyt-przewodnik był już proponowany (F20)
     var attach by Pref("snap.attach", false)         // F22: końce linii i przeciągane punkty przyczepiają się do innych figur

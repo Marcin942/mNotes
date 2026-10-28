@@ -1057,7 +1057,15 @@ class Editor(val ctx: Context, val nbId: String) {
         // 2b-A6: na kratce podziałka to wielokrotność oczka, a początek układu leży na węźle — osie i siatka układu
         // pokrywają się z kratką strony, więc wykres rysuje się „po kratkach”.
         val grid = if (settings.axesSnap) AxesSnap.pageGrid(page.spec) else null
-        if (grid != null) s = s.copy(unit = AxesSnap.alignInsert(s.unit, s.xStep, 0f, 0f, grid)[0])
+        if (grid != null) {
+            val u = AxesSnap.alignInsert(s.unit, s.xStep, 0f, 0f, grid)[0]
+            // 2c-A3: jednostka zmieniona do kratki (np. 7 mm → 5 mm) nie może przejść po cichu
+            if (AxesSnap.unitChanged(s.unit, u)) {
+                fun mm(v: Float) = String.format(java.util.Locale.ROOT, "%.1f", v * s.xStep * 25.4f / 72f).removeSuffix(".0")
+                say(T.t("Podziałka dopasowana do kratki: ${mm(u)} mm zamiast ${mm(s.unit)} mm", "Scale fitted to the grid: ${mm(u)} mm instead of ${mm(s.unit)} mm"))
+            }
+            s = s.copy(unit = u)
+        }
         val w = (s.xMax - s.xMin) * s.unit; val h = (s.yMax - s.yMin) * s.unit
         val m = Axes.OVERHANG + Axes.ARROW + 12f
         var left = (cx - w / 2f).coerceIn(m, maxOf(m, page.spec.w - w - m))

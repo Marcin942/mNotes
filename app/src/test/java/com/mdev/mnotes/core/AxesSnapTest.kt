@@ -16,6 +16,7 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import kotlin.math.abs
+import kotlin.math.max
 import kotlin.random.Random
 
 /** 2b-A6: układ współrzędnych dociskany do kratki — wstawianie, przesuwanie, kreski „po kratkach”. */
@@ -75,5 +76,67 @@ class AxesSnapTest {
         // Kreska poza układem — bez zmian.
         val outside = FloatArray(3 * 20) { k -> when (k % 3) { 0 -> 500f + k; 1 -> 700f; else -> 1f } }
         assertNull(AxesSnap.followGrid(outside, f, thr = 1.5f))
+    }
+
+    /** 2c-A3: prosta pod niewielkim kątem nie zamienia się w schodki. */
+    @Test fun slantedLinesStayStraight() {
+        val f = AxesSnap.frames(axesEls(AxesSpec(0f, 12f, 0f, 8f, unit = g.sp), 100f, 100f)).single()
+        val thr = 1.5f
+        for (deg in listOf(3.0, 5.0, 10.0, 15.0, 30.0)) {
+            val a = Math.toRadians(deg); val rnd = Random(deg.toInt())
+            val n = 100
+            // Start 3 pt pod linią siatki y = 1, więc nawet prosta pod 3° ją przecina (dawniej tu robił się stopień).
+            val x0 = f.ox + 5f; val y0 = f.oy - g.sp + 3f
+            val pts = FloatArray(3 * n) { k ->
+                val t = (k / 3) * 1.5f
+                when (k % 3) { 0 -> x0 + t * kotlin.math.cos(a).toFloat(); 1 -> y0 - t * kotlin.math.sin(a).toFloat() + (rnd.nextFloat() - 0.5f); else -> 1f }
+            }
+            val out = AxesSnap.followGrid(pts, f, thr) ?: pts
+            val tanA = kotlin.math.tan(a).toFloat()
+            for (i in 0 until n) {
+                val ideal = y0 - (out[3 * i] - x0) * tanA
+                assertTrue("$deg°: punkt $i odchylony o ${out[3 * i + 1] - ideal}", abs(out[3 * i + 1] - ideal) <= 0.5f + 0.5f * thr)
+            }
+            // Co 20 punktów (30 pt) prosta rośnie wyraźniej niż drżenie: y maleje bez płaskich stopni.
+            for (i in 20 until n step 20) assertTrue("$deg°: schodek przy $i", out[3 * i + 1] < out[3 * (i - 20) + 1])
+        }
+    }
+
+    @Test fun entryIntoGridLineHasNoJump() {
+        val f = AxesSnap.frames(axesEls(AxesSpec(0f, 12f, 0f, 8f, unit = g.sp), 100f, 100f)).single()
+        val thr = 1.5f
+        val yLine = f.oy - 3f * g.sp
+        // Zejście pod kątem ~27° i bieg 1,2 pt nad linią siatki (w progu).
+        val n = 80
+        val xs = f.ox + 20f
+        val pts = FloatArray(3 * n) { k ->
+            val x = f.ox + 2f + (k / 3)
+            when (k % 3) { 0 -> x; 1 -> yLine - 1.2f - max(0f, xs - x) * 0.5f; else -> 1f }
+        }
+        val out = AxesSnap.followGrid(pts, f, thr)!!
+        assertEquals(yLine, out[3 * (n - 1) + 1], 1e-4f)
+        var maxStep = 0f
+        for (i in 1 until n) maxStep = maxOf(maxStep, abs(out[3 * i + 1] - out[3 * i - 2]))
+        // Bez przejścia uskok na wejściu wynosił ≥ thr (punkt tuż przed biegiem był ponad 1,5 pt od linii, a bieg już na niej).
+        assertTrue("największy krok $maxStep", maxStep < 0.8f * thr)
+    }
+
+    @Test fun crossedLinesWithoutTicksAreNotAxes() {
+        fun seg(x1: Float, y1: Float, x2: Float, y2: Float) =
+            Stroke(Ids.next(), PenKind.BALLPOINT, 0, 1f, floatArrayOf(x1, y1, 1f, x2, y2, 1f), poly = true)
+        // Tabela 3×3: długie linie, które się przecinają, bez podziałki.
+        val table = listOf(100f, 140f, 180f, 220f).map { y -> seg(50f, y, 350f, y) } + listOf(50f, 150f, 250f, 350f).map { x -> seg(x, 100f, x, 220f) }
+        assertTrue(AxesSnap.frames(table).isEmpty())
+        // Ten sam krzyż z podziałką już jest układem.
+        val ticks = listOf(80f, 110f, 140f).map { x -> seg(150f + x, 137f, 150f + x, 143f) }
+        assertEquals(1, AxesSnap.frames(listOf(seg(50f, 140f, 350f, 140f), seg(150f, 100f, 150f, 220f)) + ticks).size)
+    }
+
+    @Test fun unitChangeIsReported() {
+        val mm7 = 7f * 72f / 25.4f
+        val u = AxesSnap.alignInsert(mm7, 1f, 0f, 0f, g)[0]
+        assertEquals(g.sp, u, 1e-3f)                         // 7 mm → oczko 5 mm
+        assertTrue(AxesSnap.unitChanged(mm7, u))
+        assertTrue(!AxesSnap.unitChanged(2f * g.sp, AxesSnap.alignInsert(2f * g.sp, 1f, 0f, 0f, g)[0]))
     }
 }

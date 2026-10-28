@@ -179,7 +179,7 @@ object Profiles {
             )),
             Profile("rysowanie", t("Rysowanie", "Drawing"), linkedMapOf(
                 FINGER to PVal.I(FINGER_SCROLL), "input.hold_to_shape" to PVal.B(true), "snap.attach" to PVal.B(true),
-                "axes.snap" to PVal.B(true), "view.minimap" to PVal.B(true), "toolbar.helper_strip" to PVal.I(1),
+                "axes.snap" to PVal.B(false), "view.minimap" to PVal.B(true), "toolbar.helper_strip" to PVal.I(1),
             )),
             Profile("rysik", t("Tylko rysik", "Stylus only"), linkedMapOf(
                 FINGER to PVal.I(FINGER_OFF), "input.palm_rejection" to PVal.B(true), "input.two_finger_undo" to PVal.B(false),

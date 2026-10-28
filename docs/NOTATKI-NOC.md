@@ -876,7 +876,7 @@ lista A wyczerpana poza FB5 (kafelek szybkiej notatki), więc **dalej FAZA 3a-1*
 
 **28.10, 12:00 (Agent A): FAZA 3a-1 gotowa** → `docs/OPEN-SOURCE.md` (df26e5e, `noc/f3a-oss` → `noc/wszystko`) i skrypt
 `tools/podobienstwo.py`. Najważniejsze: kreda wymaga zgody Piotrka; łącze Nearby (`SyncCrypto`, `SyncLink`,
-`NearbyTransport`) jest wzorowane na kodzie mChochlika z `docs/nearby/kod` (Marcin ma potwierdzić, że to jego kod);
+`NearbyTransport`) jest wzorowane na kodzie Marcina z innego jego projektu (zgoda jest, 28.10 12:45);
 `play-services-nearby` niewolna → warianty `foss`/`gms`; licencjat czysty (0 skopiowanego kodu); rekomendacja: czysty
 start historii. 14 decyzji dla Marcina w §6.2. **Dalej 3a-2**: `oss/main` (warianty `foss`/`gms`, łącze w `src/gms`,
 kreda w `src/kreda` tylko na `oss/kreda`, ładowana przez `Class.forName`), potem raport dnia.

@@ -12,15 +12,15 @@ drogę, a decyzja należy do Marcina.
 - **Blokery są prawne, nie techniczne:**
   1. **Kreda** to port algorytmów z `materialy/kreda/kreda.py` Piotrka (bez pliku licencji, README bez autora i licencji).
      Gałąź `kreda` może być publiczna dopiero po jego **pisemnej zgodzie i wyborze licencji**.
-  2. **Łącze Nearby** powstało na wzór kodu z aplikacji mChochlik (`docs/nearby/kod/`, pakiet `com.mdev.chochlik`).
-     Automatyczne porównanie pokazuje wyraźne zapożyczenia (te same komunikaty błędów, układ protokołu) w
-     `SyncCrypto.kt`, `SyncLink.kt` i `NearbyTransport.kt`. Jeśli mChochlik jest Marcina, wystarczy to potwierdzić; jeśli
-     ma współautora, potrzebna jego zgoda.
+  2. **Łącze Nearby** powstało na wzór kodu z innego projektu Marcina (`SyncCrypto.kt`, `SyncLink.kt`,
+     `NearbyTransport.kt`). **Rozstrzygnięte (D8, 28.10):** kod jest w całości Marcina, zgoda na użycie jest; kopia
+     wzoru usunięta z drzewa (2e-B2).
   3. **`play-services-nearby` jest niewolna**: F-Droid jej nie przyjmie, a przy GPL potrzebny jest wyjątek. Rekomendacja:
      dwa warianty, `foss` (bez Nearby) i `gms` (z Nearby).
 - **Licencjat: czysto.** Porównanie całego kodu mNotes z `materialy/licencjat/` (118 plików py/js/html/css) nie
   znalazło skopiowanego kodu; wspólne są tylko polskie nazwy konstrukcji geometrycznych i jeden wzór szkolny (§3.3).
-- **Historia: rekomenduję czysty start** (jeden commit), bo w historii jest kod kredy, kod mChochlika, ścieżki
+- **Historia: czysty start jest warunkiem publikacji** (jeden commit, §4), bo w historii jest kod kredy, wzmianki
+  o projekcie zewnętrznym wskazanym przez Marcina (do usunięcia, lista poza repozytorium), ścieżki
   `/home/piotr/…`, dziennik nocnej pracy agentów i 55 gałęzi roboczych (§4).
 - Lista decyzji z rekomendacjami: §6.2. Stan przygotowań (gałęzie `oss/main`, `oss/kreda`): § „Stan” na końcu.
 
@@ -208,18 +208,13 @@ Wzór wiadomości do Piotrka:
 > `kreda.py` do Kotlina. Czy zgadzasz się na ich publikację na licencji X i jak mam Cię podpisać (imię i nazwisko,
 > pseudonim, bez podpisu)?
 
-### 3.5 Łącze Nearby i mChochlik
+### 3.5 Łącze Nearby
 
-`docs/nearby/kod/` (5 plików) i `docs/nearby/testy/` (2 pliki) to kod aplikacji mChochlik, dodany jako wzór. Porównanie:
-`SyncCrypto.kt` ma 277 wspólnych ciągów 8 tokenów z `ChochlikCrypto.kt`/`KeyboardCrypto.kt`, `SyncLink.kt` 128 z
-`LocalCodec.kt`, `NearbyTransport.kt` 91 z `NearbyLink.kt`; wspólne są też komunikaty błędów („nonce ma … bajtów
-zamiast …”, „szyfrogram krótszy niż nonce + tag”, „pierwsza ramka nie jest hello”, „powtórzona albo spóźniona ramka”).
-To utwór zależny od mChochlika.
-
-- Jeśli mChochlik jest w całości Marcina (pakiet `com.mdev.chochlik` na to wskazuje): wystarczy to potwierdzić (D8).
-- Jeśli ma współautora: potrzebna jego zgoda, jak przy kredzie.
-- `docs/nearby/kod` i `docs/nearby/testy` **nie są potrzebne** w publicznym repo (mNotes ma własną wersję) i opisują
-  protokół innej aplikacji; rekomendacja: usunąć z publicznej wersji.
+Łącze (`SyncCrypto.kt`, `SyncLink.kt`, `NearbyTransport.kt`) powstało na wzór kodu z innego projektu Marcina —
+automatyczne porównanie pokazało wspólne fragmenty i komunikaty błędów. **D8 zamknięte (Marcin, 28.10):** kod jest
+w całości jego, zgoda na użycie w mNotes jest. Kopia wzoru (dawne `docs/nearby/kod`, `docs/nearby/testy`) usunięta
+z drzewa (2e-B2); w repozytorium nie ma wzmianek o tamtym projekcie, a historia z nimi nie trafia do publicznej
+wersji (§4, warunek twardy).
 
 ### 3.6 Ikony, czcionki, obrazy, pliki testowe
 
@@ -250,16 +245,21 @@ Skan wszystkich gałęzi (`git log --all -p`), 28.10:
 | Imiona | „Marcin” w 12 plikach (5 w kodzie i testach: komentarze „w zeszycie Marcina”, nazwa urządzenia „Tablet Marcina” w teście) |
 | Wzmianki o agentach/Claude/Fable | 33 pliki (komentarze z numerami zadań nocy, `CLAUDE.md`, `skills/`) |
 | Duże pliki binarne | brak; największe to rendery PNG w `docs/podglad/` (do ~0,5 MB); żaden plik binarny nie został usunięty z historii |
-| Kod spoza projektu w historii | kreda (`src/lab/core/image/*`), kod mChochlika (`docs/nearby/kod`) |
+| Kod spoza projektu w historii | kreda (`src/lab/core/image/*`), kopia wzoru łącza z projektu zewnętrznego (dawne `docs/nearby/kod`) i wzmianki o nim w plikach i komunikatach commitów |
 | Dokumenty wewnętrzne | `CLAUDE.md`, `docs/NOTATKI-NOC.md`, `docs/STAN-PRACY.md`, `docs/INTEGRACJA-MLABS.md`, `docs/NEARBY-PRZEBUDOWA.md`, `docs/KREDA-POMIARY.md` |
 
 Opcje:
-- **Pełna historia**: przejrzystość, ale w historii `main` zostaje kod kredy i mChochlika (nawet po usunięciu z drzewa),
+- **Pełna historia**: przejrzystość, ale w historii `main` zostaje kod kredy i wzmianki o projekcie zewnętrznym (nawet po usunięciu z drzewa),
   ścieżki domowe, imiona i dziennik nocy. Przepisanie historii (`git filter-repo`) jest możliwe, ale przy 55 gałęziach i
   scaleniach pracochłonne i łatwo coś przeoczyć.
 - **Czysty start (rekomendacja)**: publiczna gałąź zaczyna się od jednego commita z drzewem `oss/main`
   („mNotes 0.1.0: pierwsza publiczna wersja”), autor wybrany przez Marcina; `kreda` = ten commit + jeden commit z
   katalogami kredy. Pełna historia zostaje prywatnie w tym repo (archiwum, nic nie ginie).
+
+**Warunek twardy publikacji (Marcin, 28.10 12:45):** publiczne repo startuje wyłącznie od czystej historii (nowy commit
+początkowy), bez wzmianek o projekcie zewnętrznym wskazanym przez Marcina — w plikach i w komunikatach commitów. Lista
+nazw do sprawdzenia jest poza repozytorium (`plan/`); przed publikacją `git grep -i` tych nazw na publikowanym drzewie
+i `git log --all --format=%B` publicznej gałęzi muszą być puste.
 
 ## 5. Higiena repozytorium
 
@@ -287,7 +287,7 @@ Opcje:
    `src/gms`, bez kredy i bez „Wyślij do mLabs”, bez dokumentów wewnętrznych), testy obu wariantów zielone; gałąź
    `oss/kreda` = `oss/main` + `app/src/kreda*`; szkice README, CONTRIBUTING, NOTICE, `LICENSE-DO-DECYZJI.md`,
    `.github/workflows/ci.yml`.
-2. **Marcin:** decyzje D1–D14 (poniżej); potwierdzenie autorstwa mChochlika (D8); wiadomość do Piotrka (§3.4).
+2. **Marcin:** decyzje D1–D14 (poniżej; D8 zamknięte); wiadomość do Piotrka (§3.4).
 3. **Agent albo Marcin:** LICENSE i nagłówek licencji wg D1; README z udziałem AI (D4) i podziękowaniami (D9);
    zamiana imion w komentarzach.
 4. **Marcin, na tablecie:** sprawdzić APK `gms` z `oss/main` (zdjęcie z telefonu, wysyłanie zeszytu) i `foss` (brak
@@ -320,7 +320,7 @@ Opcje:
 | D5 | Nearby: warianty `foss` + `gms` | tak; własny transport (Bluetooth) później, jeśli potrzebny |
 | D6 | „Wyślij do mLabs” i `Recognizer` | przy kredzie, do czasu publikacji mLabs |
 | D7 | Kreda publicznie | tylko po pisemnej zgodzie Piotrka i jego wyborze licencji (najlepiej tej samej) |
-| D8 | mChochlik: czy kod jest Twój | potwierdź; `docs/nearby/kod` i `docs/nearby/testy` usunąć z publicznej wersji |
+| D8 | Wzór łącza z innego projektu Marcina | **zamknięte 28.10:** zgoda jest; wzmianki usunięte z drzewa (2e-B2), publikacja tylko z czystą historią |
 | D9 | Podziękowanie autorce licencjatu | bez nazwiska, chyba że się zgodzi |
 | D10 | Narzędzia `skills/` (import Samsung Notes, zadania z PDF) | publikować jako `narzedzia/` z README; format „skill” zostaje |
 | D11 | `applicationId` `com.mdev.mnotes` | zostaje; przed Google Play sprawdzić, czy wolny |

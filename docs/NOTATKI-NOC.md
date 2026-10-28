@@ -831,4 +831,10 @@ Nearby nie zmieniam do odpowiedzi Marcina na pytania z `plan/NEARBY-OPEN-SOURCE.
   znika, a rysunek na ekranie **nie skacze** w bok; Ctrl+Y wraca bez skoku. Panel stron: „Dodaj stronę”, „Duplikuj”,
   „Wstaw przed/po” wyszarzone; odciągnięcie w dół za tablicą nie dodaje strony. „Zdjęcie tablicy” → zdjęcie ląduje
   na tablicy przy środku ekranu, w panelu dalej jedna strona.
+- **2c-A2 tryb ciemny: tekst na wypełnieniu** — `noc/f2c-ciemne-wypelnienie`, 34a500e. Tło pola tekstu i wiaderko
+  (bez zakreślacza) mapowane jak papier (`ThemeMap.surface`), tekst na nich z kontrastem WCAG ≥ 4,5:1 (`textOn`);
+  opis w `docs/TRYB-CIEMNY.md`. Testy: core 818, lab 889, 0 porażek. **Nie sprawdzone:** na urządzeniu.
+  **Tablet:** pole tekstu z żółtym/różowym/błękitnym tłem i tekstem czarnym, granatowym, czerwonym → „⋮” → Strony →
+  „Ciemne”: tło pola ciemne w tym samym odcieniu, tekst wyraźnie jasny i czytelny (wcześniej jasne tło i jasny tekst);
+  wiaderkiem wypełniony obszar też ciemnieje. Zakreślacz i wypełnienie zamkniętej krzywej wyglądają jak przedtem.
 

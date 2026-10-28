@@ -283,6 +283,8 @@ data class BoardOptions(
     val frames: Boolean = true,
     /** Usuń drobinki mniejsze niż kropka (ziarno tablicy, pył kredy) (2b-B2). */
     val specks: Boolean = true,
+    /** „Edytowalne kreski” jako gładkie krzywe Béziera; wyłączone — łamane po pikselach szkieletu jak dawniej (2b-B4). */
+    val curves: Boolean = true,
 )
 
 /**

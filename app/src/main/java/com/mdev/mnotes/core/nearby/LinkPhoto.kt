@@ -192,6 +192,8 @@ class PhotoReceiver(private val maxBytes: Int = LinkChunks.MAX_MESSAGE, private 
                 if (a.step == 0) {
                     if (p.bytes.isEmpty()) return false
                     a.step = p.bytes.size
+                    // przesunięcie części to index·step: wielka pierwsza część i ostatnia nr 256 dawały rzadki plik ~5 GB
+                    if (a.step.toLong() * (a.count - 1) > maxBytes) return false
                     a.tail?.let { t -> if (t.size > a.step) return false; a.file.write((a.count - 1).toLong() * a.step, t); a.tail = null }
                 } else if (p.bytes.size != a.step) return false
                 a.file.write(p.index.toLong() * a.step, p.bytes)

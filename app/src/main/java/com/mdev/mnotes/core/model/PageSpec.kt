@@ -120,6 +120,9 @@ data class PageSpec(
         const val MIN_SIZE = 72f
         const val MAX_SIZE = 8000f
 
+        /** Brak pola, NaN i nieskończoność dają [default] (optDouble bez domyślnej zwraca NaN). */
+        private fun finite(v: Double, default: Float): Float = v.toFloat().takeIf { it.isFinite() } ?: default
+
         fun fromJson(json: String): PageSpec = try {
             val o = JSONObject(json)
             val t = Template.fromCode(o.optInt("t", 0))
@@ -128,13 +131,14 @@ data class PageSpec(
             // Tablica może być większa niż zwykła strona; starsza wersja przytnie ją do MAX_SIZE (treść dalej jest w pliku).
             val max = if (opts and OPT_BOARD != 0) com.mdev.mnotes.core.layout.Board.MAX else MAX_SIZE
             PageSpec(
-                w = o.optDouble("w", PageFormat.A4.w.toDouble()).toFloat().coerceIn(MIN_SIZE, max),
-                h = o.optDouble("h", PageFormat.A4.h.toDouble()).toFloat().coerceIn(MIN_SIZE, max),
+                // "NaN" z obcego pliku przechodzi przez coerceIn; strona NaN×NaN to bitmapa 0×0 i wyjątek przy rysowaniu
+                w = finite(o.optDouble("w"), PageFormat.A4.w).coerceIn(MIN_SIZE, max),
+                h = finite(o.optDouble("h"), PageFormat.A4.h).coerceIn(MIN_SIZE, max),
                 paper = paper,
                 template = t,
                 line = Paper.migrateLine(paper, o.optInt("l", Paper.autoLineColor(paper))),
-                spacing = o.optDouble("s", t.defaultSpacing.toDouble()).toFloat(),
-                lineWidth = o.optDouble("lw", 0.6).toFloat(),
+                spacing = finite(o.optDouble("s"), t.defaultSpacing),
+                lineWidth = finite(o.optDouble("lw"), 0.6f),
                 opts = opts,
                 pdf = if (o.has("pa")) PdfRef(o.getString("pa"), o.optInt("pn", 0)) else null,
             )

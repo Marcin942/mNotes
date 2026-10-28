@@ -472,6 +472,17 @@ class Importer(private val repo: Repository, private val pdf: PdfPool) {
 
     fun importPdf(input: InputStream, title: String, folderId: String?): NotebookMeta? {
         val id = newId()
+        return cleanOnFailure(id) { pdfNotebook(id, input, title, folderId) }
+    }
+
+    /**
+     * Nieudany import (urwany strumień, brak miejsca, zepsuty PDF) nie zostawia katalogu: bez `meta.json` biblioteka go
+     * nie widzi i nikt by go nie usunął.
+     */
+    private fun cleanOnFailure(id: String, make: () -> NotebookMeta?): NotebookMeta? =
+        try { make() } catch (e: Throwable) { repo.dir(id).deleteRecursively(); throw e }
+
+    private fun pdfNotebook(id: String, input: InputStream, title: String, folderId: String?): NotebookMeta? {
         val asset = repo.importAsset(id, input, "pdf")
         val count = pdf.pageCount(id, asset).coerceAtMost(3000)
         if (count <= 0) { repo.dir(id).deleteRecursively(); return null }
@@ -487,6 +498,10 @@ class Importer(private val repo: Repository, private val pdf: PdfPool) {
     /** Każdy obraz staje się stroną o proporcjach obrazu (dłuższy bok = 842 pt), obraz leży na stronie jako element. */
     fun importImages(inputs: List<Pair<() -> InputStream?, String>>, title: String, folderId: String?): NotebookMeta? {
         val id = newId()
+        return cleanOnFailure(id) { imagesNotebook(id, inputs, title, folderId) }
+    }
+
+    private fun imagesNotebook(id: String, inputs: List<Pair<() -> InputStream?, String>>, title: String, folderId: String?): NotebookMeta? {
         val now = System.currentTimeMillis()
         val pages = ArrayList<PageMeta>()
         for ((open, ext) in inputs) {
@@ -512,7 +527,9 @@ class Importer(private val repo: Repository, private val pdf: PdfPool) {
         } catch (_: Throwable) { null }
         if (meta == null) { dst.deleteRecursively(); return null }
         val now = System.currentTimeMillis()
-        return meta.copy(id = id, folderId = folderId, trashedAt = 0L, opened = now, modified = now)
+        // `lock` z cudzego pliku po cichu wyłączał zeszyt z wyszukiwania i folderu wymiany (blokady pojedynczych zeszytów
+        // aplikacja jeszcze nie ustawia, docs/BEZPIECZENSTWO.md)
+        return meta.copy(id = id, folderId = folderId, trashedAt = 0L, opened = now, modified = now, locked = false)
     }
 
     companion object { const val MAX_IMPORT = 2L * 1024 * 1024 * 1024 }

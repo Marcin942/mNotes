@@ -103,6 +103,18 @@ class LinkMachine(
     private val events = ArrayDeque<LinkEvent>()
     val log: List<LinkEvent> get() = events.toList()
 
+    /** Nazwy urządzeń widziane w tej sesji (do czyszczenia [report]). */
+    private val seenNames = LinkedHashSet<String>()
+
+    /**
+     * Zdarzenia do „Kopiuj raport” (schowek, wysyłane dalej): bez nazw urządzeń i adresów, jak dziennik ([LinkScrub]).
+     * Na ekranie diagnostyki zostaje [log] z nazwami — to urządzenia użytkownika.
+     */
+    val report: List<LinkEvent> get() {
+        val names = seenNames + deviceName + peerLabel
+        return events.map { it.copy(text = LinkScrub.clean(it.text, names)) }
+    }
+
     private val ownName = if (pairKey == null) PAIR_PREFIX + deviceName.take(40) else SyncCrypto.nearbyName(pairKey)
     private val found = LinkedHashMap<String, String>()
     private var endpoint: String? = null
@@ -286,6 +298,8 @@ class LinkMachine(
     fun onReceived(id: String, bytes: ByteArray) {
         if (id != endpoint) return
         try {
+            // Do uwierzytelnienia (hello z kluczem pary) obcy, który zna ogłaszaną nazwę, mógłby słać 24 MB porcji.
+            joiner.max = if (codec?.ready == true) LinkChunks.MAX_MESSAGE else LinkChunks.PRE_AUTH_MAX
             val raw = joiner.feed(bytes) ?: return
             handle(raw)
         } catch (e: Exception) {
@@ -456,7 +470,7 @@ class LinkMachine(
 
     private fun accepts(name: String) = if (pairKey == null) name.startsWith(PAIR_PREFIX) else name == ownName
 
-    private fun label(name: String) = if (pairKey == null) name.removePrefix(PAIR_PREFIX) else peerLabel
+    private fun label(name: String) = (if (pairKey == null) name.removePrefix(PAIR_PREFIX) else peerLabel).also { if (it.isNotBlank()) seenNames += it }
 
     private fun set(s: LinkState) {
         if (s == state) return

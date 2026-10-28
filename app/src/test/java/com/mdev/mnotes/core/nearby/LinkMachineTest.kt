@@ -465,6 +465,32 @@ class LinkMachineTest {
     }
 
     @Test
+    fun strangerCannotBufferMegabytesBeforeTheHello() {
+        // Obcy zna nazwę ogłaszaną przez tablet (słychać ją w eterze), więc dostaje połączenie; zanim przejdzie `hello`,
+        // nie może kazać tabletowi trzymać w pamięci dziesiątek MB (audyt, docs/BEZPIECZENSTWO.md).
+        val key = pairKey()
+        val tablet = machine(air.end("tablet"), LinkMode.RECEIVE, SyncRole.HOST, "Galaxy Tab S10+", key)
+        air.end("obcy")
+        tablet.start(); air.pump()
+        tablet.onInitiated("obcy", SyncCrypto.nearbyName(key))
+        tablet.onConnected("obcy")
+        tablet.onReceived("obcy", byteArrayOf(1) + ByteArray(1 shl 20))
+        assertTrue(tablet.log.joinToString { it.text }, tablet.log.any { it.text.startsWith("zła ramka") })
+    }
+
+    @Test
+    fun copiedReportHasNoDeviceNamesOrAddresses() {
+        // „Kopiuj raport” w diagnostyce szedł do schowka z surowymi nazwami i adresem MAC (pusta nazwa po Bluetooth)
+        val phone = machine(air.end("telefon"), LinkMode.PAIR, SyncRole.CLIENT, "Pixel Kowalskiego", null)
+        phone.start()
+        phone.onFound("AA:BB:CC:DD:EE:FF", "mnp|Galaxy Tab Nowaka")
+        phone.onFound("11:22:33:44:55:66", "mnp|11:22:33:44:55:66")
+        val text = phone.report.joinToString("\n") { it.text }
+        for (bad in listOf("Nowaka", "Kowalskiego", "AA:BB", "11:22")) assertTrue(text, bad !in text)
+        assertTrue(phone.log.any { "Nowaka" in it.text })  // ekran diagnostyki pokazuje nazwy jak dawniej
+    }
+
+    @Test
     fun logKeepsTheLastTwentyEvents() {
         val phone = machine(air.end("telefon"), LinkMode.SEND, SyncRole.CLIENT, "P", ByteArray(32))
         phone.start()

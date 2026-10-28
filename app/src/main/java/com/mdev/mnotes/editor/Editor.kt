@@ -599,7 +599,7 @@ class Editor(val ctx: Context, val nbId: String) {
         if (els.isEmpty()) return
         val r = TikzExport.picture(els)
         val cm = ctx.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
-        cm.setPrimaryClip(android.content.ClipData.newPlainText("TikZ", r.code))
+        cm.setPrimaryClip(clip(android.content.ClipData.newPlainText("TikZ", r.code)))
         say(
             if (r.skipped > 0) T.t("Kod TikZ w schowku (pominięte: ${r.skipped}) — wklej do LaTeX-a", "TikZ code copied (skipped: ${r.skipped}) — paste into LaTeX")
             else T.t("Kod TikZ w schowku — wklej do LaTeX-a", "TikZ code copied — paste into LaTeX"),
@@ -607,12 +607,22 @@ class Editor(val ctx: Context, val nbId: String) {
     }
 
     private fun pngToClipboard(png: ByteArray, name: String): Boolean = runCatching {
+        // obrazy ze schowka zostawały w cache/share do następnego eksportu (dostępne pod starym adresem schowka)
         val dir = java.io.File(ctx.cacheDir, "share").apply { mkdirs() }
+        val old = System.currentTimeMillis() - 24 * 3600_000L
+        dir.listFiles()?.filter { it.name.endsWith(".png") && it.lastModified() < old }?.forEach { it.delete() }
         val f = java.io.File(dir, "$name-${System.currentTimeMillis()}.png").apply { writeBytes(png) }
         val uri = androidx.core.content.FileProvider.getUriForFile(ctx, "${ctx.packageName}.files", f)
         val cm = ctx.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
-        view?.post { cm.setPrimaryClip(android.content.ClipData.newUri(ctx.contentResolver, "mNotes", uri)) }
+        view?.post { cm.setPrimaryClip(clip(android.content.ClipData.newUri(ctx.contentResolver, "mNotes", uri))) }
     }.isSuccess
+
+    /** Przy blokadzie aplikacji system nie pokazuje treści schowka w podglądzie (Android 13+): notatka jest prywatna. */
+    private fun clip(c: android.content.ClipData) = c.apply {
+        if (settings.appLock && android.os.Build.VERSION.SDK_INT >= 33) {
+            description.extras = android.os.PersistableBundle().apply { putBoolean(android.content.ClipDescription.EXTRA_IS_SENSITIVE, true) }
+        }
+    }
 
     /**
      * F15: autobalans bieli zaznaczonych obrazów — piksele pomniejszonego obrazu (najwyżej 256 px) liczone w tle,

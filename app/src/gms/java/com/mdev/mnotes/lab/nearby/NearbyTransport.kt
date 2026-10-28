@@ -31,7 +31,11 @@ class NearbyTransport(context: Context) : LinkTransport {
 
     private val payloads = object : PayloadCallback() {
         override fun onPayloadReceived(id: String, payload: Payload) {
-            if (payload.type == Payload.Type.BYTES) payload.asBytes()?.let { machine.onReceived(id, it) }
+            if (payload.type == Payload.Type.BYTES) { payload.asBytes()?.let { machine.onReceived(id, it) }; return }
+            // łącze używa tylko BYTES; plik albo strumień od połączonego (jeszcze przed hello) Nearby zapisywałoby bez limitu
+            client.cancelPayload(payload.id)
+            runCatching { payload.close() }
+            machine.note("Nearby: odrzucony ładunek typu ${payload.type}")
         }
 
         /** Do dziennika (3b-B1) tylko porażki: ładunek, który Nearby porzuciło, to „zdjęcie nie dochodzi”. */

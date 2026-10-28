@@ -449,13 +449,16 @@ object PathMath {
         return out.toDoubleArray()
     }
 
+    private const val MAX_FLAT = 1 shl 18
+
     private fun cubic(
         x0: Double, y0: Double, x1: Double, y1: Double, x2: Double, y2: Double, x3: Double, y3: Double,
         tol: Double, out: ArrayList<Double>, depth: Int,
     ) {
         val d1 = distToLine(x1, y1, x0, y0, x3, y3)
         val d2 = distToLine(x2, y2, x0, y0, x3, y3)
-        if (depth >= 16 || max(d1, d2) <= tol) { out.add(x3); out.add(y3); return }
+        // MAX_FLAT: krzywa o współrzędnych 1e9 dzieli się do dna, a każda daje 2¹⁶ punktów (wrogi PDF → brak pamięci)
+        if (depth >= 16 || max(d1, d2) <= tol || out.size >= MAX_FLAT) { out.add(x3); out.add(y3); return }
         val ax = (x0 + x1) / 2; val ay = (y0 + y1) / 2
         val bx = (x1 + x2) / 2; val by = (y1 + y2) / 2
         val cx = (x2 + x3) / 2; val cy = (y2 + y3) / 2

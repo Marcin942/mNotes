@@ -106,10 +106,12 @@ class PdfDocument(val data: ByteArray) {
         val index = (d["Index"] as? List<*>)?.map { (it as? Double)?.toInt() ?: 0 } ?: listOf(0, size)
         val bytes = decodeStream(obj)
         val rec = w.sum()
+        // rekord 0 bajtów nie przesuwa `p`, więc kontrola końca danych nie przerwałaby pętli po /Index (2³¹ obrotów)
+        if (rec == 0) throw PdfException("złe /W")
         var p = 0
         var k = 0
         while (k + 1 < index.size) {
-            val first = index[k]; val count = index[k + 1]
+            val first = index[k]; val count = minOf(index[k + 1], (bytes.size - p) / rec)
             for (i in 0 until count) {
                 if (p + rec > bytes.size) break
                 fun field(n: Int): Long { var v = 0L; repeat(n) { v = (v shl 8) or (bytes[p++].toLong() and 0xFF) }; return v }
@@ -206,7 +208,8 @@ class PdfDocument(val data: ByteArray) {
 
     fun obj(num: Int): Any? {
         if (cache.containsKey(num)) return cache[num]
-        if (!loading.add(num)) return null
+        // łańcuch /Length → strumień → /Length… ładuje obiekty rekurencyjnie; 50 000 ogniw przepełniało stos
+        if (loading.size >= MAX_LOADING || !loading.add(num)) return null
         try {
             val v: Any? = compressed[num]?.let { (stm, idx) ->
                 val list = objStm(stm)
@@ -351,6 +354,8 @@ class PdfDocument(val data: ByteArray) {
         val cols = (p?.get("Columns") as? Double)?.toInt()?.coerceIn(1, 1 shl 20) ?: 1
         val bpp = maxOf(1, (colors * bpc + 7) / 8)
         val row = (colors * bpc * cols + 7) / 8
+        // wiersz dłuższy niż całe dane to plik zepsuty albo wrogi (1 bajt + /Columns 2²⁰ dawał 64 MB na wiersz)
+        if (row > src.size) return src
         if (pred == 2) {
             if (bpc != 8) return src
             val out = src.copyOf()
@@ -415,7 +420,11 @@ class PdfDocument(val data: ByteArray) {
             val c = src[i++].toInt() and 0xFF
             if (c == '~'.code) break
             if (PdfLexer.isWs(c)) continue
-            if (c == 'z'.code && n == 0) { repeat(4) { out.write(0) }; continue }
+            if (c == 'z'.code && n == 0) {
+                repeat(4) { out.write(0) }
+                if (out.size() > MAX_STREAM) throw PdfException("strumień za duży")
+                continue
+            }
             if (c < 33 || c > 117) continue
             group[n++] = c - 33
             if (n == 5) {
@@ -567,6 +576,8 @@ class PdfDocument(val data: ByteArray) {
     }
 
     companion object {
+        /** Zwykły PDF zagnieżdża ładowanie obiektów na kilka poziomów (strumień obiektów, długość jako odwołanie). */
+        private const val MAX_LOADING = 64
         const val MAX_STREAM = 128 * 1024 * 1024
         const val MAX_PAGES = 5000
         private val INHERITED = listOf("Resources", "MediaBox", "CropBox", "Rotate")

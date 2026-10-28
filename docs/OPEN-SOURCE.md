@@ -135,6 +135,11 @@ własnego kodera/dekodera (~500–800 wierszy) albo nowej zależności (np. ZXin
 **Rekomendacja:** teraz B (`foss` + `gms`). Po publikacji, jeśli łącze w `foss` będzie potrzebne: transport Bluetooth
 RFCOMM za `LinkTransport` (zachowuje „bez INTERNET”), testowany na dwóch urządzeniach.
 
+**Werdykt w sprawie transportu wydaje osobna analiza** `plan/NEARBY-OPEN-SOURCE.md` (sesja `noc-nearby`, dopisek planu
+z 28.10, 12:00); w chwili pisania (12:10) pliku jeszcze nie ma. Ta sekcja to tylko tło. **Transportu nie zmieniamy, dopóki
+Marcin nie odpowie na pytania z tamtej analizy**; podział `foss`/`gms` z 3a-2 transportu nie rusza, tylko odcina Nearby od
+wariantu `foss`.
+
 ## 3. Prawa i licencje
 
 ### 3.1 Licencja projektu (decyzja Marcina, D1)
@@ -325,4 +330,21 @@ Opcje:
 
 ## Stan
 
-28.10, 12:00: analiza (3a-1) gotowa. Przygotowanie (3a-2) jeszcze nie zaczęte.
+**28.10, 12:00:** analiza (3a-1) gotowa.
+
+**28.10, 12:10: 3a-2 w toku** (przerwane, bo FAZA 2c ma pierwszeństwo; wraca po niej):
+
+| Gałąź | Commit | Co jest | Testy |
+|---|---|---|---|
+| `oss/main` | `b1eea12` (od `noc/wszystko` @ `de6d5e1`) | warianty `foss`/`gms`; łącze (`lab/nearby/*`, nowy `lab/PhoneLink.kt` z sekcją ustawień i `LinkSettings`) w `src/gms/`; `LabFeatures` z domyślnymi metodami i `board`; `app/Extensions.kt` skleja łącze i kredę (ładowaną po nazwie klasy); bez kredy i bez „Wyślij do mLabs” | foss 817, gms 817, 0 porażek; oba APK |
+| `oss/kreda` | `f38c3c7` = `oss/main` + 1 commit | tylko katalogi `app/src/kreda/` (kreda, `Lab.kt` bez części Nearby, `LabSettings` bez przełącznika łącza, `recognize/*`) i `app/src/testKreda/` | foss 888, gms 888, 0 porażek (5 pominiętych: zdjęcia bez `KREDA_DIR`); oba APK |
+
+Sprawdzone w APK z `oss/main`: `foss` nie ma w dex klas `com/google/android/gms/nearby` ani uprawnienia `BLUETOOTH_SCAN`;
+`gms` ma oba; żaden nie ma klasy kredy `com.mdev.mnotes.lab.Lab`. Ustawienia zostają w `mnotes.lab` pod tymi samymi
+kluczami (`nearby.enabled`, `board.*`).
+
+Jeszcze nie zrobione: usunięcie dokumentów wewnętrznych i `docs/nearby/` z `oss/main`, szkice README/CONTRIBUTING/NOTICE,
+`LICENSE-DO-DECYZJI.md`, `.github/workflows/ci.yml`, zamiana imion w komentarzach, nazwa kategorii „Laboratorium”
+(w `oss/main` jest w niej tylko łącze), `docs/KREDA-POMIARY.md` bez ścieżek domowych na `oss/kreda`. Nie sprawdzone na
+urządzeniu: niczego z 3a-2 nie uruchamiałem (bez tabletu); przejście z dzisiejszego APK `lab` na `gms`/`kreda` powinno
+zachować parowanie i ustawienia, bo pliki preferencji i klucze są te same.

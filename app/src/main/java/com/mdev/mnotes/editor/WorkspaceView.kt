@@ -13,6 +13,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.setValue
 import com.mdev.mnotes.core.layout.CacheBudget
+import com.mdev.mnotes.core.layout.EdgeScroll
 import com.mdev.mnotes.core.layout.Fling
 import com.mdev.mnotes.core.layout.Workspace
 import com.mdev.mnotes.core.model.DocEdit
@@ -47,6 +48,8 @@ interface LaneHost {
      * a [removal] (usunięcie u źródła) trafił na stos źródła w parze z wstawieniem.
      */
     fun dropOutside(v: NoteView, els: List<Element>, cx: Float, cy: Float, removal: DocEdit): Boolean
+    /** Przeciągane zaznaczenie pod palcem w ([sx], [sy]); NaN — koniec przeciągania. */
+    fun dragOver(v: NoteView, sx: Float, sy: Float)
 }
 
 /**
@@ -250,6 +253,48 @@ class WorkspaceView(ctx: Context, private val st: Station) : ViewGroup(ctx), Lan
     override fun stop() {
         anim?.cancel(); anim = null
         if (flingPair != null) { flingPair = null; Choreographer.getInstance().removeFrameCallback(flingFrame) }
+        stopEdge()
+    }
+
+    // — autoprzewijanie pasa docelowego przy krawędzi okna (2c-A7) —
+
+    private var edgeLane = -1
+    private var edgeSpeed = 0f
+    private var edgeT = 0L
+    private val edgeFrame = Choreographer.FrameCallback { now -> edgeStep(now) }
+
+    /**
+     * Zaznaczenie przeciągane nad innym dokumentem przy krawędzi okna w kierunku stron: ten dokument jedzie sam, żeby
+     * dało się upuścić na stronę spoza ekranu. Prędkość rośnie liniowo w pasie [EDGE_DP] przy krawędzi.
+     */
+    override fun dragOver(v: NoteView, sx: Float, sy: Float) {
+        val w = ws
+        val t = if (w == null || sx.isNaN()) -1 else w.laneAt(sx, sy)
+        if (w == null || t < 0 || lanes.getOrNull(t) === v) { stopEdge(); return }
+        val at = if (w.horizontal) sx else sy
+        val len = if (w.horizontal) width.toFloat() else height.toFloat()
+        val band = EDGE_DP * resources.displayMetrics.density
+        val k = EdgeScroll.factor(at, len, band)
+        if (k == 0f) { stopEdge(); return }
+        edgeLane = t
+        edgeSpeed = k * EDGE_SPEED_DP * resources.displayMetrics.density
+        if (edgeT == 0L) { edgeT = System.nanoTime(); Choreographer.getInstance().postFrameCallback(edgeFrame) }
+    }
+
+    private fun edgeStep(now: Long) {
+        val w = ws
+        if (w == null || edgeT == 0L || edgeLane !in 0 until w.size) { stopEdge(); return }
+        val d = edgeSpeed * ((now - edgeT).coerceAtLeast(0L) / 1e9f)
+        edgeT = now
+        if (w.horizontal) w.pan(edgeLane, d, 0f) else w.pan(edgeLane, 0f, d)
+        push()
+        Choreographer.getInstance().postFrameCallback(edgeFrame)
+    }
+
+    private fun stopEdge() {
+        if (edgeT == 0L) return
+        edgeT = 0L; edgeLane = -1
+        Choreographer.getInstance().removeFrameCallback(edgeFrame)
     }
 
     // — wspólny budżet bitmap (2c-A6): podział wg widocznej części, pas poza ekranem po 2 s zwalnia wszystko —
@@ -345,6 +390,9 @@ class WorkspaceView(ctx: Context, private val st: Station) : ViewGroup(ctx), Lan
     }
 
     companion object {
+        /** Pas przy krawędzi okna, w którym przeciąganie przewija dokument docelowy, i najwyższa prędkość (dp/s). */
+        const val EDGE_DP = 48f
+        const val EDGE_SPEED_DP = 900f
         /** Po tylu ms poza ekranem pas zwalnia kafelki i bazy stron. */
         const val HIDDEN_MS = 2000L
     }

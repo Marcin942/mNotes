@@ -3466,6 +3466,7 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
             LM.DRAW -> addLasso(px, py)
             LM.MOVE, LM.SCALE, LM.ROTATE -> {
                 if (!lLifting) { if (!toolMoved) return; liftSelection() }
+                if (lm == LM.MOVE) lane?.dragOver(this, curX, curY)
                 lM = when (lm) {
                     LM.MOVE -> {
                         var dx = px - lStartX; var dy = py - lStartY
@@ -3550,6 +3551,7 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
         if (lm == LM.MOVE) PageDrop.target(layout, lPage, lM.mapBounds(lBounds)) else lPage
 
     private fun commitTransform(cancel: Boolean) {
+        lane?.dragOver(this, Float.NaN, Float.NaN)
         val page = doc.pages.getOrNull(lPage)
         val orig = lOrig; val lifted = lLifted
         val vertex = lm == LM.VERTEX || lm == LM.RESIZE

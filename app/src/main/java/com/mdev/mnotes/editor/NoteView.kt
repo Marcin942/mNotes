@@ -1069,9 +1069,15 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
             c.drawCircle(vx, vy, r * 1.15f, handleFill); c.drawCircle(vx, vy, r * 1.15f, handleStroke)
         }
         textSel()?.let { tb ->
+            // 3c-A12: uchwyty boków to podłużne „pigułki” wzdłuż krawędzi — od razu widać, że ciągnie się szerokość/wysokość.
             for (side in TextFit.Side.values()) {
                 val hx = scrX(pi, textHandleX(tb, side)); val hy = scrY(pi, textHandleY(tb, side))
-                c.drawCircle(hx, hy, r * 0.95f, handleFill); c.drawCircle(hx, hy, r * 0.95f, handleStroke)
+                val across = side == TextFit.Side.LEFT || side == TextFit.Side.RIGHT
+                val hw = if (across) r * 0.6f else r * 1.6f; val hh = if (across) r * 1.6f else r * 0.6f
+                c.save(); c.rotate(Math.toDegrees(tb.rot.toDouble()).toFloat(), hx, hy)
+                c.drawRoundRect(hx - hw, hy - hh, hx + hw, hy + hh, r * 0.6f, r * 0.6f, handleFill)
+                c.drawRoundRect(hx - hw, hy - hh, hx + hw, hy + hh, r * 0.6f, r * 0.6f, handleStroke)
+                c.restore()
             }
         }
         val sf = shape?.let { ShapeBox.frameOf(it) }

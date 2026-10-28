@@ -287,7 +287,7 @@ object Guide {
                 listOf(
                     t("Przerysuj szary trójkąt jednym pociągnięciem i przytrzymaj pióro, aż się wyprostuje. Zaznacz go lassem, przytrzymaj zaznaczenie → „Konstrukcja” → „Okrąg opisany”. Czy środek O leży w środku trójkąta?", "Trace the grey triangle in one stroke and hold the pen until it snaps. Select it with the lasso, long-press the selection → “Construction” → “Circumcircle”. Is the centre O inside the triangle?"),
                     t("Narzędziem Geometria → „Wysokości i ortocentrum” dotknij tego samego trójkąta.", "With the Geometry tool → “Altitudes and orthocentre” tap the same triangle."),
-                    t("Zaznacz lassem oba okręgi po prawej → „Konstrukcja” → „Przecięcie okręgów”. Pojawią się punkty P i Q.", "Lasso both circles on the right → “Construction” → “Circle intersection”. Points P and Q appear."),
+                    t("Zaznacz lassem oba okręgi po prawej → „Konstrukcja” → „Przecięcie okręgów i prosta przez punkty”. Pojawią się punkty P i Q i prosta przez nie.", "Lasso both circles on the right → “Construction” → “Circle intersection and the line through it”. Points P and Q appear with the line through them."),
                     t("Narzędziem Tekst wpisz: \\alpha + \\beta = 90° oraz x^2 + y^2 = r^2 — znaki zamienią się same.", "With the Text tool type: \\alpha + \\beta = 90° and x^2 + y^2 = r^2 — the symbols convert as you type."),
                     t("„⋮” → „Układ współrzędnych…” → „t ≥ 0”. Krzywą „przez wskazane punkty” naszkicuj prędkość v(t) samochodu, który rusza i przyspiesza.", "“⋮” → “Coordinate axes…” → “t ≥ 0”. With the curve “through tapped points” sketch the velocity v(t) of a car that starts and speeds up."),
                 ),

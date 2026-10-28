@@ -99,7 +99,8 @@ class GuideTest {
             val rings = strokes.filter { it.ellipse }
             assertEquals(2, rings.size)
             val cross = ConstructOps.ops(rings).first { it.id == "xcc" }.build(0, 1f)
-            assertEquals(2, cross.filterIsInstance<Stroke>().size)
+            // Dwie kropki i prosta przez nie (2c-A8: menu rysuje ją jak narzędzie).
+            assertEquals(3, cross.filterIsInstance<Stroke>().size)
             val tri = strokes.single { it.poly }
             assertTrue(ConstructOps.ops(listOf(tri)).any { it.id == "circum" })
         }

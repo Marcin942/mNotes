@@ -970,6 +970,21 @@ Nearby nie zmieniam do odpowiedzi Marcina na pytania z `plan/NEARBY-OPEN-SOURCE.
   przytrzymaj palec przy prawej krawędzi okna: dolny zeszyt sam jedzie w prawo (szybciej im bliżej krawędzi), górny
   stoi; odsuń palec od krawędzi — staje; puść na dalszej stronie — obiekt ląduje tam. W układzie „Pionowo” to samo
   przy dolnej krawędzi.
+- **2c-A8 (e08cddf, 3f58b92):** geometria. Próg „prawie równoległe/współliniowe” względny (sinus kąta ok. 0,03°,
+  `Construct.SIN_EPS`), wynik dalej niż 3 przekątne strony odrzucony z dymkiem „Proste prawie równoległe…” /
+  „Punkty prawie współliniowe…”; nazwy punktów zajęte na stronie dostają kolejne litery (P → Q → R); menu
+  „Przecięcie okręgów” rysuje prostą przez punkty jak narzędzie; nowe: „Styczne z punktu” (menu i narzędzie),
+  „Odbicie względem punktu” w narzędziu, obrót o 30/45/60/90/120/180° albo własny kąt; dymek przy chybieniu mówi,
+  czego brakuje. Testy: `ConstructTest` (+6), `GeoToolTest` (+4), `ConstructOpsTest` (xcc: 3 kreski).
+  **Tablet:** Geometria (listwa) →
+  1. „Przecięcie prostych” na dwóch prawie równoległych odcinkach: dymek „Proste prawie równoległe…”, nic nie
+     przybywa (na Tablicy płótno się nie rozpycha). Dwa zwykłe przecięcia na jednej stronie: „P”, potem „Q”.
+  2. „Obrót wokół punktu”: pod podpowiedzią chipy kątów; wybierz 45°, stuknij punkt i obiekt → kopia obrócona o 45°.
+     „Inny…” → wpisz -30 → OK → obrót w drugą stronę.
+  3. „Odbicie względem punktu” (ostatnia ikona): punkt, potem obiekt → kopia odbita przez punkt.
+  4. „Styczne z punktu do okręgu”: punkt poza okręgiem, potem okrąg → dwie styczne i punkty styczności.
+  5. Stuknij puste miejsce, gdy narzędzie czeka na okrąg: dymek „Tu nie ma okręgu (narysuj go i przytrzymaj pióro) · …”.
+  6. Lasso na dwóch okręgach → „Konstrukcja ▸ Przecięcie okręgów i prosta przez punkty”: kropki i prosta przez nie.
 
 ### Na tablecie po FAZIE 2c/2d — kolejność (z `dzienniki/PRZEGLAD-FABLE-2.md` §5, szczegóły tam)
 Instalacja: `labDebug` z `noc/wszystko` (tablet i telefon), do pkt 16 też `coreDebug`. Przy punktach poprawionych

@@ -158,11 +158,14 @@ object ToolGlyphParts {
     private fun ring(role: GlyphRole, cx: Float, cy: Float, rx: Float, ry: Float = rx, n: Int = 18) =
         GlyphPart(role, FloatArray(2 * n) { k -> val a = 2 * Math.PI * (k / 2) / n; if (k % 2 == 0) cx + rx * kotlin.math.cos(a).toFloat() else cy + ry * kotlin.math.sin(a).toFloat() })
 
-    /** Wspólna gumka: gumowa końcówka i oprawka, rozdzielone opaską; długość jak zakreślacz, żeby stała w rzędzie z piórami. */
+    /**
+     * Wspólna gumka: szeroki klocek gumy z fazowanym czubkiem i węższa oprawka. 2c-A15: dawniej prostokąt z opaską
+     * długości zakreślacza — na pasku oba wyglądały tak samo; teraz krótsza i szersza sylwetka (zakreślacz: długi, ścięty).
+     */
     val eraserBase: List<GlyphPart> = listOf(
-        uv(GlyphRole.BODY, 0.8f, -2.8f, 7.2f, -3.1f, 7.2f, 3.1f, 0.8f, 2.8f),
-        uv(GlyphRole.BODY, 7.2f, -3.1f, 19.5f, -3.1f, 19.5f, 3.1f, 7.2f, 3.1f),
-        uv(GlyphRole.DETAIL, 9.6f, -3.1f, 9.6f, 3.1f, closed = false),
+        uv(GlyphRole.BODY, 1.2f, -2.6f, 2.6f, -4.2f, 9.0f, -4.2f, 9.0f, 4.2f, 2.6f, 4.2f, 1.2f, 2.6f),
+        uv(GlyphRole.BODY, 9.0f, -3.0f, 17.5f, -3.0f, 17.5f, 3.0f, 9.0f, 3.0f),
+        uv(GlyphRole.DETAIL, 11.4f, -3.0f, 11.4f, 3.0f, closed = false),
     )
 
     /** Fala (cała kreska) w prawym dolnym rogu. */

@@ -89,7 +89,25 @@ class PenGlyphsTest {
         assertTrue(ToolGlyphParts.lasso(false).any { it.role == GlyphRole.DASH })
     }
 
-    /** 2b-A1: każda pozycja paska narzędzi ma ikonę (glif albo ikona Material). */
+    /**
+     * 2c-A15: gumka ma inną sylwetkę niż zakreślacz — szerszy klocek gumy i krótsza całość — bo przy tym samym kształcie
+     * (prostokąt z opaską) na pasku myliły się. Współrzędne wzdłuż przekątnej glifu (u) i w poprzek (v).
+     */
+    @Test fun eraserSilhouetteDiffersFromHighlighter() {
+        fun uv(parts: List<GlyphPart>): Pair<Float, Float> {
+            var maxU = 0f; var maxV = 0f
+            for (p in parts) if (p.role == GlyphRole.BODY || p.role == GlyphRole.INK) for (i in 0 until p.pts.size / 2) {
+                val dx = p.pts[2 * i] - 2.5f; val dy = p.pts[2 * i + 1] - 21.5f
+                maxU = maxOf(maxU, (dx - dy) / 1.41421356f); maxV = maxOf(maxV, kotlin.math.abs(dx + dy) / 1.41421356f)
+            }
+            return maxU to maxV
+        }
+        val (eu, ev) = uv(ToolGlyphParts.eraserBase)
+        val (hu, hv) = uv(PenGlyphs.parts(PenKind.HIGHLIGHTER))
+        assertTrue("gumka nie szersza: $ev vs $hv", ev >= hv + 0.8f)
+        assertTrue("gumka nie krótsza: $eu vs $hu", eu <= hu - 5f)
+    }
+
     /** Ciało funkcji `ToolBar` z `EditorScreen.kt` (do następnej funkcji najwyższego poziomu). */
     private fun toolBarSource(): String {
         val src = java.io.File("src/main/java/com/mdev/mnotes/ui/EditorScreen.kt").readText()

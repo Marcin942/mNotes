@@ -281,4 +281,33 @@ class BoardPipelineTest {
         val want = floatArrayOf(60f, 10f, 330f, 10f, 330f, 180f, 60f, 180f)
         for (k in 0 until 8) assertEquals("współrzędna $k", want[k], q.pts[k], 2f)
     }
+
+    /** 3c-B1: listwa przez całą szerokość znika; falująca kreska i prosta kreska podziału przez 60 % zostają. */
+    @Test
+    fun fullWidthRailGoesHandDrawnLinesStay() {
+        val ink = Raster.rgbF(0.95f, 0.95f, 0.95f)
+        val r = Raster(800, 400)
+        // Listwa: prosta, lekko pochylona (1 px na 400), 6 px, przez całą szerokość z jedną przerwą (ręka).
+        for (x in 0 until 800) if (x !in 300..310) for (d in 0 until 6) r[x, 200 + x / 400 + d] = ink
+        // Kreska kredą: falująca, 3 px, przez 75 % szerokości (nie mieści się w paśmie ±1).
+        for (x in 100 until 700) { val y = 80 + (6 * Math.sin(x / 40.0)).toInt(); for (d in 0 until 3) r[x, y + d] = ink }
+        for (x in 150 until 630) for (d in 0 until 3) r[x, 320 + d] = ink
+        val out = Chalk.dropRails(r)
+        assertEquals("listwa", 0, (0 until 800).count { Raster.alpha(out[it, 203]) > 128 })
+        assertTrue("falująca kreska", (100 until 700).count { x -> (60..100).any { Raster.alpha(out[x, it]) > 128 } } > 590)
+        assertTrue("kreska podziału", (150 until 630).count { Raster.alpha(out[it, 321]) > 128 } > 470)
+    }
+
+    /** 3c-B1: kawałek ramy wzdłuż brzegu wyniku znika, „=” ucięte brzegiem (w poprzek) zostaje. */
+    @Test
+    fun frameScrapAlongTheEdgeGoesCutLetterStays() {
+        val ink = Raster.rgbF(0.95f, 0.95f, 0.95f)
+        val r = Raster(800, 400)
+        for (y in 50 until 200) for (x in 795 until 799) r[x, y] = ink
+        for (x in 0 until 30) for (y in 100 until 103) r[x, y] = ink
+        for (x in 0 until 30) for (y in 110 until 113) r[x, y] = ink
+        val out = Chalk.dropEdgeScraps(r)
+        assertEquals("rama", 0, (50 until 200).count { Raster.alpha(out[797, it]) > 128 })
+        assertEquals("litera", 30, (0 until 30).count { Raster.alpha(out[it, 101]) > 128 })
+    }
 }

@@ -181,6 +181,137 @@ object Chalk {
     }
 
     /**
+     * Usuwa proste listwy i krawędzie ram cieńsze od progu [dropThick] (3c-B1): prawie poziomy (pionowy) pas, który bez
+     * przerw dłuższych niż [RAIL_GAP] boku ciągnie się przez co najmniej [RAIL_SPAN] szerokości (wysokości) wyniku (listwa idzie od brzegu do brzegu; kreska podziału kredą rzadko).
+     * Kandydaci z głosowania Hougha (±[RAIL_TILT]°, tylko piksele kryjące), potem sprawdzenie wzdłuż prostej. Odręczna
+     * kreska kredą tak długa i tak prosta nie bywa; przerywana też nie przechodzi. Znika pas z otoczką 2 px.
+     */
+    fun dropRails(img: Raster): Raster {
+        val w = img.w; val h = img.h
+        val solid = BooleanArray(w * h) { Raster.alpha(img.px[it]) > 128 }
+        val out = img.px.copyOf()
+        val a = railsAlong(solid, out, w, h, horizontal = true)
+        val b = railsAlong(solid, out, w, h, horizontal = false)
+        return if (a + b == 0) img else Raster(w, h, out)
+    }
+
+    /** Listwy w jednym kierunku; zwraca liczbę usuniętych. [solid] i [out] zmieniają się na miejscu. */
+    private fun railsAlong(solid: BooleanArray, out: IntArray, w: Int, h: Int, horizontal: Boolean): Int {
+        val len = if (horizontal) w else h
+        val across = if (horizontal) h else w
+        fun at(u: Int, v: Int) = if (horizontal) v * w + u else u * w + v
+        val steps = (2 * RAIL_TILT / RAIL_STEP).toInt() + 1
+        val tans = FloatArray(steps) { Math.tan(Math.toRadians(-RAIL_TILT + it * RAIL_STEP)).toFloat() }
+        val pad = (len * tans[steps - 1]).toInt() + 2
+        val bins = across + 2 * pad
+        val votes = IntArray(steps * bins)
+        var count = 0
+        for (v in 0 until across) for (u in 0 until len) if (solid[at(u, v)]) {
+            count++
+            for (s in 0 until steps) {
+                val b = (v - u * tans[s]).toInt() + pad
+                if (b in 0 until bins) votes[s * bins + b]++
+            }
+        }
+        if (count == 0 || count > 0.3 * w * h) return 0
+        val need = (RAIL_SPAN * len).toInt()
+        val cand = (votes.indices).filter { votes[it] >= need }.sortedByDescending { votes[it] }.take(400)
+        val gap = max(4, (RAIL_GAP * len).toInt())
+        val maxThick = max(6, (RAIL_THICK * across).toInt())
+        var removed = 0
+        for (c in cand) {
+            if (removed >= 12) break
+            val t = tans[c / bins]; val v0 = c % bins - pad
+            fun line(u: Int, d: Int) = (v0 + u * t).toInt() + d
+            fun hit(u: Int, d: Int): Boolean { val v = line(u, d); return v in 0 until across && solid[at(u, v)] }
+            // Odcinki w paśmie ±1 z przerwami ≤ gap; liczą się tylko długie ([RAIL_PIECE]): listwa przerwana półką, kablem
+            // albo ręką to kilka długich kawałków na jednej prostej, a pismo takich nie ma.
+            val runs = ArrayList<IntArray>()
+            var s = -1; var last = -1
+            for (u in 0..len) {
+                val on = u < len && (hit(u, -1) || hit(u, 0) || hit(u, 1))
+                if (on && (s < 0 || u - last <= gap)) { if (s < 0) s = u; last = u; continue }
+                if (s >= 0 && last - s + 1 >= RAIL_PIECE * len) runs += intArrayOf(s, last)
+                s = if (on) u else -1; last = u
+            }
+            if (runs.sumOf { it[1] - it[0] + 1 } < need) continue
+            // Grubość: kolejne przesunięcia od prostej, na których pas pokrywa co najmniej połowę odcinków.
+            fun cover(d: Int): Float {
+                var n = 0; var all = 0
+                for (r in runs) for (u in r[0]..r[1]) { all++; if (hit(u, d)) n++ }
+                return n.toFloat() / all
+            }
+            var lo = 0; var hi = 0
+            while (lo > -maxThick && cover(lo - 1) >= 0.5f) lo--
+            while (hi < maxThick && cover(hi + 1) >= 0.5f) hi++
+            if (hi - lo + 1 >= maxThick || (cover(0) < 0.5f && cover(-1) < 0.5f && cover(1) < 0.5f)) continue
+            for (r in runs) for (u in r[0]..r[1]) for (d in lo - 2..hi + 2) {
+                val v = line(u, d)
+                if (v in 0 until across) { val i = at(u, v); out[i] = 0; solid[i] = false }
+            }
+            removed++
+        }
+        return removed
+    }
+
+    /** Listwa ciągnie się przez co najmniej taki ułamek boku wyniku. */
+    const val RAIL_SPAN = 0.7f
+    /** Najkrótszy kawałek listwy (ułamek boku), który liczy się do [RAIL_SPAN]. */
+    const val RAIL_PIECE = 0.04f
+    /** Najdłuższa przerwa w listwie (ułamek boku): zatarcie, kreda na listwie. Przerywana kreska ma dłuższe. */
+    const val RAIL_GAP = 0.006f
+    /** Listwa grubsza niż taki ułamek drugiego boku to już nie listwa (zostaje dla [dropThick]). */
+    const val RAIL_THICK = 0.03f
+    /** Pochylenie listwy po prostowaniu (stopnie) i krok szukania. */
+    const val RAIL_TILT = 4.0
+    const val RAIL_STEP = 0.2
+
+    /**
+     * Usuwa z pasa przy brzegu wyniku ([EDGE_STRIP] boku) kawałki ramy (3c-B1): spójne plamy kryjące, które w całości
+     * leżą w pasie przy jednym brzegu i ciągną się wzdłuż niego (długość ≥ 3 × grubość). Litera ucięta kadrem sterczy
+     * w poprzek brzegu albo wychodzi poza pas, więc zostaje.
+     */
+    fun dropEdgeScraps(img: Raster): Raster {
+        val w = img.w; val h = img.h; val n = w * h
+        val solid = BooleanArray(n) { Raster.alpha(img.px[it]) > 128 }
+        val sx = max(3, (EDGE_STRIP * w).toInt()); val sy = max(3, (EDGE_STRIP * h).toInt())
+        val seen = BooleanArray(n); val queue = IntArray(n)
+        val out = img.px.copyOf()
+        var changed = false
+        for (start in 0 until n) {
+            if (!solid[start] || seen[start]) continue
+            var head = 0; var tail = 0
+            queue[tail++] = start; seen[start] = true
+            var x0 = w; var y0 = h; var x1 = -1; var y1 = -1
+            while (head < tail) {
+                val p = queue[head++]; val x = p % w; val y = p / w
+                x0 = min(x0, x); x1 = max(x1, x); y0 = min(y0, y); y1 = max(y1, y)
+                for (dy in -1..1) for (dx in -1..1) {
+                    val nx = x + dx; val ny = y + dy
+                    if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue
+                    val q = ny * w + nx
+                    if (solid[q] && !seen[q]) { seen[q] = true; queue[tail++] = q }
+                }
+            }
+            val bw = x1 - x0 + 1; val bh = y1 - y0 + 1
+            val scrap = (x1 < sx || x0 >= w - sx) && bh >= 3 * bw || (y1 < sy || y0 >= h - sy) && bw >= 3 * bh
+            if (!scrap) continue
+            changed = true
+            for (i in 0 until tail) {
+                val p = queue[i]; val x = p % w; val y = p / w
+                for (dy in -2..2) for (dx in -2..2) {
+                    val nx = x + dx; val ny = y + dy
+                    if (nx in 0 until w && ny in 0 until h) out[ny * w + nx] = 0
+                }
+            }
+        }
+        return if (changed) Raster(w, h, out) else img
+    }
+
+    /** Pas przy brzegu wyniku (ułamek boku), w którym szukane są kawałki ramy. */
+    const val EDGE_STRIP = 0.012f
+
+    /**
      * Usuwa drobinki (2b-B2): spójne (8-sąsiedztwo) plamki kryjące (krycie > 50 %) mniejsze niż [minArea] px razem z ich
      * półprzezroczystą otoczką. To ziarno tablicy i pył kredy; kropka nad „i” albo przecinek dziesiętny są większe.
      */
@@ -399,7 +530,7 @@ object BoardPipeline {
         val cut = if (opt.autoCut) src.autoCut else opt.cut
         val map = if (opt.localCut) Chalk.localCut(src.image, src.black, cut) else null
         var out = Chalk.toAlpha(src.image, src.black, cut, opt.solid, opt.tint, low = if (opt.faint) cut * Chalk.FAINT_FRACTION else null, cutMap = map)
-        if (opt.frames) out = Chalk.dropThick(out, Chalk.thickLimit(out.w))
+        if (opt.frames) out = Chalk.dropEdgeScraps(Chalk.dropRails(Chalk.dropThick(out, Chalk.thickLimit(out.w))))
         if (opt.specks) out = Chalk.despeckle(out, Chalk.speckArea(out.w))
         if (erase.isNotEmpty()) out = Chalk.erase(out, erase)
         opt.paper?.let { out = ChalkInk.fitImage(out, it) }

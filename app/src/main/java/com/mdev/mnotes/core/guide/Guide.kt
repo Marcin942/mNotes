@@ -111,7 +111,7 @@ object Guide {
                     t("„Skaluj i obracaj” na pasku zaznaczenia pokazuje uchwyty.", "“Resize & rotate” on the selection bar shows the handles."),
                     t("„Tylko zahacz” na listwie lassa: wystarczy musnąć obiekt. Prostokąt łapie to, co w ramce.", "“Just touch” on the lasso strip: brushing an object is enough. The rectangle catches what is inside the frame."),
                 ),
-                t("Przytrzymaj zaznaczenie — menu ma m.in. „Wycinek jako obraz”, „Zapisz jako naklejkę” i „Konstrukcja ▸”.", "Long-press the selection — the menu has “Snip as image”, “Save as sticker” and “Construction ▸”, among others."),
+                t("Przytrzymaj zaznaczenie — menu ma m.in. „Zaznaczenie jako ▸” (wycinek, naklejka) i „Konstrukcja ▸”.", "Long-press the selection — the menu has “Selection as ▸” (snip, sticker) and “Construction ▸”, among others."),
             ) { y -> solid(listOf(rect(MARGIN + 20f, y + 10f, MARGIN + 120f, y + 110f), circle(MARGIN + 220f, y + 60f, 50f))) },
             Lesson(0, t("Tekst, wzory i greckie litery", "Text, formulas and Greek letters"),
                 t("Narzędzie Tekst: dotknij miejsca i pisz z klawiatury. Pole rośnie samo; uchwyty boków zmieniają szerokość.", "Text tool: tap a spot and type. The box grows by itself; side handles change its width."),
@@ -215,7 +215,7 @@ object Guide {
             Lesson(1, t("Naklejki", "Stickers"),
                 t("Naklejka to zapisany rysunek do wielokrotnego użycia: strzałka, symbol, schemat.", "A sticker is a saved drawing to reuse: an arrow, a symbol, a diagram."),
                 listOf(
-                    t("Zaznacz lassem gwiazdkę poniżej, przytrzymaj zaznaczenie → „Zapisz jako naklejkę”.", "Lasso the star below, long-press the selection → “Save as sticker”."),
+                    t("Zaznacz lassem gwiazdkę poniżej, przytrzymaj zaznaczenie → „Zaznaczenie jako ▸” → „Zapisz jako naklejkę”.", "Lasso the star below, long-press the selection → “Selection as ▸” → “Save as sticker”."),
                     t("„⋮” → „Naklejki…” i dotknij jej — wstawi się na stronę.", "“⋮” → “Stickers…” and tap it — it is inserted on the page."),
                     t("Naklejka zachowuje swoje kolory, a tło ma przezroczyste — pasuje też na ciemną stronę.", "A sticker keeps its colours and has a transparent background — it fits dark pages too."),
                 ),
@@ -228,7 +228,7 @@ object Guide {
             Lesson(1, t("Wycinek strony i zdjęcia", "Page snips and photos"),
                 t("Fragment strony możesz zamienić w obraz, a zdjęcie kartki — oczyścić i wyprostować.", "You can turn part of a page into an image, and clean up and straighten a photo of a page."),
                 listOf(
-                    t("Zaznacz lassem wzór w ramce, przytrzymaj → „Wycinek jako obraz” albo „Kopiuj wycinek do schowka”.", "Lasso the formula in the frame, long-press → “Snip as image” or “Copy snip to clipboard”."),
+                    t("Zaznacz lassem wzór w ramce, przytrzymaj → „Zaznaczenie jako ▸” → „Wycinek jako obraz” albo „do schowka”.", "Lasso the formula in the frame, long-press → “Selection as ▸” → “Snip as image” or “to clipboard”."),
                     t("Zdjęcie kartki: zaznacz je, „Efekty obrazu” → „Auto: białe tło”, potem jasność i temperatura.", "Photo of a page: select it, “Image effects” → “Auto: white background”, then brightness and temperature."),
                     t("Obraz przytniesz i wyprostujesz z menu zaznaczenia.", "Crop and straighten an image from the selection menu."),
                 ),

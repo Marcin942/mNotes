@@ -68,6 +68,7 @@ import com.mdev.mnotes.app.app
 import com.mdev.mnotes.core.model.PageFormat
 import com.mdev.mnotes.core.model.Paper
 import com.mdev.mnotes.core.model.Template
+import com.mdev.mnotes.core.pen.LaserColors
 import com.mdev.mnotes.editor.T
 import androidx.compose.foundation.focusable
 import androidx.compose.runtime.LaunchedEffect
@@ -505,6 +506,14 @@ private fun EditorPrefs(set: com.mdev.mnotes.data.Settings) {
         ToggleRow(T.t("Przyciągaj do siatki", "Snap to grid"), set.snapGrid, keys = "grid siatka magnes snap") { set.snapGrid = it }
         // F22 był tylko w „⋮” edytora (przegląd Fable §3.2): rodzeństwo przyciągania do siatki.
         ToggleRow(T.t("Przyczep do figur (końce linii i punkty)", "Attach to shapes (line ends and points)"), set.attach, keys = "przyczep magnes wierzchołek końce punkty figury attach snap vertex") { set.attach = it }
+    }
+    // Przegląd §3.2a: kolor lasera był tylko na listwie lasera.
+    Group(T.t("Laser", "Laser"), keys = "laser wskaźnik pokaz prezentacja pointer") {
+        Opt(T.t("Kolor śladu lasera", "Laser trail colour"), "laser wskaźnik kolor ślad czerwony zielony niebieski fioletowy pointer colour trail") {
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                for (c in LaserColors.PALETTE) Dot(Color(0xFF000000.toInt() or c), 34.dp, set.laserColor == c, { set.laserColor = c })
+            }
+        }
     }
     Group(T.t("Obracanie i kąty", "Rotation & angles"), keys = "$ROTATION_QUERY przyciąganie równe kąty obrót obracanie kątomierz tarcza stopnie rotate snap protractor dial degrees") {
         ToggleRow(T.t("Przyciągaj do równych kątów", "Snap to even angles"), set.rotSnap, keys = "obrót obracanie kąt snap rotate angle") { set.rotSnap = it }

@@ -46,6 +46,16 @@ class PointEditTest {
         assertNull(PointEdit.toCurve(poly(0f, 0f, 10f, 10f)))
     }
 
+    @Test fun pointsButtonOnlyWhereItChangesSomething() {
+        val wave = Stroke(Ids.next(), PenKind.BALLPOINT, 0, 1f, FloatArray(3 * 50) { i -> when (i % 3) { 0 -> (i / 3) * 4f; 1 -> 20f * sin((i / 3) * 0.2f); else -> 1f } })
+        val sq = poly(0f, 0f, 10f, 0f, 10f, 10f, 0f, 10f, 0f, 0f)
+        assertTrue("kreska odręczna → krzywa", PointEdit.offers(wave))
+        assertTrue("prostokąt → wierzchołki zamiast ramki", PointEdit.offers(sq))
+        assertFalse("odcinek ma uchwyty od razu", PointEdit.offers(poly(0f, 0f, 10f, 10f)))
+        assertFalse("krzywa ma uchwyty od razu", PointEdit.offers(PointEdit.toCurve(wave)!!))
+        assertFalse("zablokowana", PointEdit.offers(Stroke(wave.id, wave.pen, 0, 1f, wave.pts, locked = true)))
+    }
+
     @Test fun removeAndInsertVertices() {
         val sq = poly(0f, 0f, 10f, 0f, 10f, 10f, 0f, 10f, 0f, 0f)
         val tri = PointEdit.removeVertex(sq, 1)!!

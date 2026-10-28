@@ -37,6 +37,16 @@ object PointEdit {
         return Bezier.withCtrl(s, c)
     }
 
+    /**
+     * Czy przycisk „Punkty i uchwyty” na pasku zaznaczenia coś zmieni dla [s] — to samo co podwójne dotknięcie, ale
+     * widoczne (przegląd Fable §3.2 F21: gest był ukryty). Krzywa i łamana bez ramki mają uchwyty od razu.
+     */
+    fun offers(s: Stroke): Boolean = !s.locked && s.count >= 2 && when {
+        s.ctrl != null -> false
+        s.poly -> ShapeBox.frameOf(s) != null
+        else -> true
+    }
+
     /** Łamana bez wierzchołka [i] (zamknięta zostaje zamknięta); null, gdy zostałyby mniej niż 2 wierzchołki. */
     fun removeVertex(s: Stroke, i: Int): Stroke? {
         val n = s.vertexCount

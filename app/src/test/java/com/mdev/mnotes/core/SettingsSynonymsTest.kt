@@ -64,6 +64,7 @@ class SettingsSynonymsTest {
         expect("pierwiastek", "√")
         expect("zoom", "powiększenie")
         expect("gum", "Rozmiar gumki")            // fragment słowa
+        expect("wskaznik", "lasera")              // przegląd §3.2a: kolor lasera także w Ustawieniach
     }
 
     @Test fun synonymsDoNotMatchInsideOtherWords() {

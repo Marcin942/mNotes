@@ -131,6 +131,7 @@ import androidx.compose.material.icons.rounded.ExpandMore
 import androidx.compose.material.icons.rounded.WbAuto
 import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material.icons.rounded.TextFields
+import androidx.compose.material.icons.rounded.Timeline
 import androidx.compose.material.icons.rounded.TrackChanges
 import androidx.compose.material.icons.rounded.ViewSidebar
 import androidx.compose.material.icons.rounded.ArrowDownward
@@ -1732,6 +1733,12 @@ private fun SelectionButtons(ed: Editor, panel: Panel?, toggle: (Panel) -> Unit,
                 { toggle(Panel.BOARD) }, selected = panel == Panel.BOARD, size = 36.dp, iconSize = 20.dp,
             )
             if (!locked) IconBtn(Icons.Rounded.CropRotate, T.t("Skaluj i obracaj", "Resize & rotate"), { ed.transformMode = !ed.transformMode }, selected = ed.transformMode, size = 36.dp, iconSize = 20.dp)
+            // F21: to samo co podwójne dotknięcie kreski — bez przycisku gest był niewidoczny (przegląd Fable §3.2).
+            val one = els.singleOrNull() as? InkStroke
+            if (one != null && !ed.readOnly && (ed.pointEdit || com.mdev.mnotes.core.shapes.PointEdit.offers(one))) IconBtn(
+                Icons.Rounded.Timeline, T.t("Punkty i uchwyty (lub dotknij kreski dwa razy)", "Points and handles (or double-tap the stroke)"),
+                { ed.editPoints() }, selected = ed.pointEdit, size = 36.dp, iconSize = 20.dp,
+            )
             if (!locked && els.size == 1 && els[0] is ImageEl && !ed.readOnly) IconBtn(Icons.Rounded.Crop, T.t("Przytnij", "Crop"), { ed.startCrop() }, size = 36.dp, iconSize = 20.dp)
             if (ed.canFlipSel()) {
                 IconBtn(Icons.Rounded.Flip, T.t("Odbij w poziomie", "Flip horizontally"), { ed.flipSel(true) }, size = 36.dp, iconSize = 20.dp)
@@ -1913,6 +1920,9 @@ internal fun PointMenuOverlay(ed: Editor) {
     }
 }
 
+/** Podmenu menu kontekstowego płótna. */
+private enum class Sub { NONE, CONSTRUCTION, AS }
+
 /**
  * Menu kontekstowe płótna. F4 (A2-5): dolny zeszyt ma to samo menu, ale bez „Styl strony…” ([openStyle] = null, panel
  * stylu działa na górny), a narzędzie zmienia przez [tools] = górny edytor, bo pasek narzędzi jest wspólny.
@@ -1928,37 +1938,52 @@ internal fun CtxMenuOverlay(ed: Editor, openStyle: (() -> Unit)?, tools: Editor 
         onClick = { close(); onClick() },
     )
     // A2-9: konstrukcje w podmenu „Konstrukcja ▸” (trójkąt dawał 5 pozycji w i tak długim menu); „‹” wraca.
-    var sub by remember(cm) { mutableStateOf(false) }
+    // Przegląd §3.2a: tak samo „Zaznaczenie jako ▸” (wycinek, schowek, naklejka) — trzy pozycje mniej na pierwszym poziomie.
+    var sub by remember(cm) { mutableStateOf(Sub.NONE) }
     val cons = remember(cm) { if (cm.hasSel) ed.constructionOps() else emptyList() }
+    @Composable
+    fun SubHeader(title: String) {
+        DropdownMenuItem(
+            text = { Text(title, style = MaterialTheme.typography.titleSmall) },
+            leadingIcon = { Icon(Icons.AutoMirrored.Rounded.KeyboardArrowLeft, T.t("Wstecz", "Back")) },
+            onClick = { sub = Sub.NONE },
+        )
+        HorizontalDivider()
+    }
+    @Composable
+    fun SubEntry(title: String, to: Sub) = DropdownMenuItem(
+        text = { Text(title) },
+        trailingIcon = { Icon(Icons.AutoMirrored.Rounded.KeyboardArrowRight, null) },
+        onClick = { sub = to },
+    )
     Box(Modifier.fillMaxSize()) {
         Box(Modifier.offset { IntOffset(cm.x.toInt(), cm.y.toInt()) }) {
             DropdownMenu(true, { close() }) {
-                if (sub) {
-                    DropdownMenuItem(
-                        text = { Text(T.t("Konstrukcja", "Construction"), style = MaterialTheme.typography.titleSmall) },
-                        leadingIcon = { Icon(Icons.AutoMirrored.Rounded.KeyboardArrowLeft, T.t("Wstecz", "Back")) },
-                        onClick = { sub = false },
-                    )
-                    HorizontalDivider()
-                    for (op in cons) Item(T.t(op.pl, op.en)) { ed.applyConstruction(op) }
-                    return@DropdownMenu
+                when (sub) {
+                    Sub.CONSTRUCTION -> {
+                        SubHeader(T.t("Konstrukcja", "Construction"))
+                        for (op in cons) Item(T.t(op.pl, op.en)) { ed.applyConstruction(op) }
+                        return@DropdownMenu
+                    }
+                    Sub.AS -> {
+                        SubHeader(T.t("Zaznaczenie jako", "Selection as"))
+                        // F14: wycinek strony pod zaznaczeniem (z papierem i tłem) jako obraz.
+                        Item(T.t("Wycinek jako obraz", "Snip as image"), enabled = !ed.readOnly) { ed.snipSel(false) }
+                        Item(T.t("Kopiuj wycinek do schowka", "Copy snip to clipboard")) { ed.snipSel(true) }
+                        Item(T.t("Zapisz jako naklejkę…", "Save as sticker…")) { ed.stickerSaveOpen = true }
+                        return@DropdownMenu
+                    }
+                    Sub.NONE -> {}
                 }
                 if (cm.hasSel) {
                     Item(T.t("Wytnij", "Cut"), "Ctrl+X") { ed.cutSel() }
                     Item(T.t("Kopiuj", "Copy"), "Ctrl+C") { ed.copySel() }
                     Item(T.t("Duplikuj", "Duplicate"), "Ctrl+D") { ed.duplicateSel() }
-                    // F14: wycinek strony pod zaznaczeniem (z papierem i tłem) jako obraz.
-                    Item(T.t("Wycinek jako obraz", "Snip as image"), enabled = !ed.readOnly) { ed.snipSel(false) }
-                    Item(T.t("Kopiuj wycinek do schowka", "Copy snip to clipboard")) { ed.snipSel(true) }
-                    Item(T.t("Zapisz jako naklejkę…", "Save as sticker…")) { ed.stickerSaveOpen = true }
+                    SubEntry(T.t("Zaznaczenie jako…", "Selection as…"), Sub.AS)
                     if (ed.canArrangeSel()) Item(T.t("Uporządkuj obrazy", "Arrange images")) { ed.arrangeSel() }
                     if (ed.canStickBackground()) Item(T.t("Przyklej do strony jako tło", "Stick to page as background")) { ed.stickBackground() }
                     // L1: konstrukcje dla zaznaczonych kształtów (trójkąt, proste, okręgi, punkty) — jedna pozycja z podmenu.
-                    if (cons.isNotEmpty()) DropdownMenuItem(
-                        text = { Text(T.t("Konstrukcja", "Construction")) },
-                        trailingIcon = { Icon(Icons.AutoMirrored.Rounded.KeyboardArrowRight, null) },
-                        onClick = { sub = true },
-                    )
+                    if (cons.isNotEmpty()) SubEntry(T.t("Konstrukcja", "Construction"), Sub.CONSTRUCTION)
                     else if (remember(cm) { ed.constructionHint() }) Text(
                         T.t("Konstrukcje: zaznacz kształty narysowane z przytrzymaniem", "Constructions: select shapes drawn with a hold"),
                         Modifier.padding(horizontal = 16.dp, vertical = 6.dp).widthIn(max = 240.dp),

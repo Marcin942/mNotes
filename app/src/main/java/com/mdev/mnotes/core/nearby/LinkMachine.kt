@@ -32,10 +32,19 @@ sealed interface LinkState {
     data class Securing(val peer: String) : LinkState
     data class ConfirmDigits(val sas: String, val peer: String) : LinkState
     data class Ready(val peer: String, val sent: Int, val received: Int) : LinkState
-    /** Bieżące zdjęcie: potwierdzone części [part] z [parts], [progress] ∈ [0, 1], ile zdjęć jeszcze w kolejce. */
-    data class Sending(val peer: String, val part: Int, val parts: Int, val progress: Float, val queued: Int) : LinkState
-    /** [retrying]: łącze samo spróbuje ponownie; inaczej trzeba coś włączyć albo nacisnąć „Spróbuj ponownie”. */
-    data class Problem(val problem: LinkProblem, val retrying: Boolean) : LinkState
+    /**
+     * Bieżące zdjęcie: potwierdzone części [part] z [parts], [progress] ∈ [0, 1], ile zdjęć jeszcze w kolejce; w partii
+     * (zdjęcia dodane, zanim kolejka się opróżniła) to zdjęcie [photo] z [photos], a [batchProgress] liczy bajty całej partii.
+     */
+    data class Sending(
+        val peer: String, val part: Int, val parts: Int, val progress: Float, val queued: Int,
+        val photo: Int = 1, val photos: Int = 1, val batchProgress: Float = progress,
+    ) : LinkState
+    /**
+     * [retrying]: łącze samo spróbuje ponownie; inaczej trzeba coś włączyć albo nacisnąć „Spróbuj ponownie”.
+     * [cause]: ostatni wpis dziennika (krótka przyczyna do głównego okna, obok kodu z [problem]).
+     */
+    data class Problem(val problem: LinkProblem, val retrying: Boolean, val cause: String = "") : LinkState
 }
 
 /**
@@ -60,6 +69,8 @@ class LinkMachine(
         fun changed(state: LinkState) {}
         fun photo(p: SyncMsg.Photo) {}
         fun sent(id: String) {}
+        /** To urządzenie odrzuciło połączenie od [peer] (zajęte innym albo obce); UI pokazuje to zdaniem. */
+        fun rejected(peer: String) {}
     }
 
     init { require(mode == LinkMode.PAIR || pairKey != null) { "praca po parowaniu wymaga klucza pary" } }
@@ -90,6 +101,11 @@ class LinkMachine(
     private val receiver = PhotoReceiver(FILE_MAX)
     private var sentCount = 0
     private var receivedCount = 0
+    /** Partia: zdjęcia dodane od chwili, gdy kolejka była pusta (do „zdjęcie 2 z 3” i paska bajtów całości). */
+    private var batchCount = 0
+    private var batchDone = 0
+    private var batchBytes = 0L
+    private var batchDoneBytes = 0L
     private var photoSeq = 0
     private var running = false
     private var searchStart = 0L
@@ -140,6 +156,9 @@ class LinkMachine(
     fun sendPhoto(name: String, mime: String, bytes: ByteArray): String {
         require(bytes.size <= FILE_MAX) { "plik ponad ${FILE_MAX shr 20} MB" }
         val id = "${clock()}-${++photoSeq}"
+        if (current == null && outbox.isEmpty()) { batchCount = 0; batchDone = 0; batchBytes = 0; batchDoneBytes = 0 }
+        batchCount++
+        batchBytes += bytes.size
         outbox.addLast(PhotoSender(id, name, mime, bytes))
         record("zdjęcie w kolejce: ${bytes.size / 1024} KB")
         pump()
@@ -183,7 +202,15 @@ class LinkMachine(
     }
 
     fun onInitiated(id: String, name: String) {
-        if (!running || !accepts(name) || (endpoint != null && endpoint != id)) { transport.reject(id); return }
+        if (!running || !accepts(name) || (endpoint != null && endpoint != id)) {
+            transport.reject(id)
+            if (running) {
+                val who = if (accepts(name)) label(name) else "?"
+                record(if (accepts(name)) "odrzucono: $who (zajęte innym połączeniem)" else "odrzucono obce urządzenie")
+                listener.rejected(who)
+            }
+            return
+        }
         endpoint = id
         peerName = label(name)
         joiner = ChunkJoiner()
@@ -212,7 +239,11 @@ class LinkMachine(
         // zajęta druga strona odrzuca od razu i bez przerwy kręcilibyśmy się w kółko.
         found.remove(id)
         if (LinkErrors.isSetup(code)) problem(code)
-        else { retryAt = clock() + RETRY_MS; showSearching() }
+        else {
+            retryAt = clock() + RETRY_MS
+            // Odmowę widać („Drugie urządzenie odrzuciło…”, ponowienie samo); inne błędy łączenia to zwykłe szukanie.
+            if (code == LinkErrors.REJECTED) set(problemState(code, retrying = true)) else showSearching()
+        }
     }
 
     fun onDisconnected(id: String) {
@@ -250,7 +281,7 @@ class LinkMachine(
         record("Nearby: błąd", code)
         transport.stopSearch()
         if (LinkErrors.isSetup(code)) problem(code)
-        else { retryAt = clock() + RETRY_MS; set(LinkState.Problem(LinkErrors.explain(code), retrying = true)) }
+        else { retryAt = clock() + RETRY_MS; set(problemState(code, retrying = true)) }
     }
 
     // --- środek ------------------------------------------------------------------------------------------------
@@ -284,6 +315,8 @@ class LinkMachine(
                 val s = current
                 if (s != null && s.id == m.id) {
                     current = null
+                    batchDone++
+                    batchDoneBytes += s.length
                     if (m.ok) { sentCount++; record("zdjęcie wstawione na tablecie"); listener.sent(m.id) }
                     else record("tablet odrzucił zdjęcie")
                 }
@@ -318,10 +351,11 @@ class LinkMachine(
             outbox.addFirst(s)
             held = true
             record("zdjęcie nie doszło po ${PhotoSender.MAX_TRIES} próbach (runda ${s.rounds})")
-            set(LinkState.Problem(LinkErrors.explain(LinkErrors.ENDPOINT_IO), retrying = false))
+            set(problemState(LinkErrors.ENDPOINT_IO, retrying = false))
             return
         }
-        set(LinkState.Sending(peerName, s.confirmed, s.count, s.progress, outbox.size))
+        val batch = if (batchBytes > 0) ((batchDoneBytes + s.progress * s.length) / batchBytes).coerceIn(0f, 1f) else s.progress
+        set(LinkState.Sending(peerName, s.confirmed, s.count, s.progress, outbox.size, batchDone + 1, maxOf(batchCount, batchDone + 1), batch))
     }
 
     private fun search() {
@@ -368,8 +402,11 @@ class LinkMachine(
 
     private fun problem(code: Int) {
         transport.stopSearch()
-        set(LinkState.Problem(LinkErrors.explain(code), retrying = false))
+        set(problemState(code, retrying = false))
     }
+
+    private fun problemState(code: Int, retrying: Boolean) =
+        LinkState.Problem(LinkErrors.explain(code), retrying, events.lastOrNull()?.text.orEmpty())
 
     private fun showSearching() = set(LinkState.Searching(found.map { LinkPeer(it.key, it.value) }, clock() - searchStart > SEARCH_MS))
 

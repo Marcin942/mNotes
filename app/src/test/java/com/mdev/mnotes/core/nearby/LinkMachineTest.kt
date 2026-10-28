@@ -127,9 +127,11 @@ class LinkMachineTest {
         val states = ArrayList<LinkState>()
         val photos = ArrayList<SyncMsg.Photo>()
         val sent = ArrayList<String>()
+        val rejected = ArrayList<String>()
         override fun changed(state: LinkState) { states += state }
         override fun photo(p: SyncMsg.Photo) { photos += p }
         override fun sent(id: String) { sent += id }
+        override fun rejected(peer: String) { rejected += peer }
     }
 
     private fun machine(end: FakeAir.End, mode: LinkMode, role: SyncRole, name: String, key: ByteArray?, seen: Seen = Seen()) =
@@ -339,6 +341,50 @@ class LinkMachineTest {
         phone.start()
         run(tablet, phone) { phone.state is LinkState.Ready }
         assertTrue(phone.state is LinkState.Ready)
+    }
+
+    @Test
+    fun progressCountsPhotosOfTheBatchNotPartsOfOnePhoto() {
+        val key = pairKey()
+        val pSeen = Seen()
+        val tablet = machine(air.end("tablet"), LinkMode.RECEIVE, SyncRole.HOST, "T", key)
+        val phone = machine(air.end("telefon"), LinkMode.SEND, SyncRole.CLIENT, "P", key, pSeen)
+        tablet.start(); phone.start()
+        threePhotos().forEachIndexed { i, b -> phone.sendPhoto("t$i.jpg", "image/jpeg", b) }
+        run(tablet, phone) { pSeen.sent.size == 3 }
+        val sending = pSeen.states.filterIsInstance<LinkState.Sending>()
+        assertEquals(setOf(1, 2, 3), sending.map { it.photo }.toSet())
+        assertTrue(sending.all { it.photos == 3 })
+        val bar = sending.map { it.batchProgress }
+        assertEquals(bar.sorted(), bar)  // pasek całej partii nie cofa się przy następnym zdjęciu
+        assertTrue(sending.any { it.photo == 2 && it.batchProgress in 0.33f..0.67f })
+        // następna partia liczy się od nowa
+        phone.sendPhoto("d.jpg", "image/jpeg", photo)
+        run(tablet, phone) { pSeen.sent.size == 4 }
+        assertTrue(pSeen.states.filterIsInstance<LinkState.Sending>().last().photos == 1)
+    }
+
+    @Test
+    fun rejectionIsVisibleOnBothSides() {
+        val key = pairKey()
+        val tSeen = Seen(); val pSeen = Seen()
+        val tEnd = air.end("tablet")
+        val tablet = machine(tEnd, LinkMode.RECEIVE, SyncRole.HOST, "T", key, tSeen)
+        val phone = machine(air.end("telefon"), LinkMode.SEND, SyncRole.CLIENT, "P", key, pSeen)
+        tEnd.refuse = 1
+        tablet.start(); phone.start()
+        run(tablet, phone) { phone.state is LinkState.Ready && tablet.state is LinkState.Ready }
+        // telefon: zdanie o odmowie z kodem i przyczyną, potem ponowienie samo
+        val p = pSeen.states.filterIsInstance<LinkState.Problem>().single()
+        assertEquals(LinkErrors.REJECTED, p.problem.code)
+        assertTrue(p.retrying)
+        assertTrue(p.cause, p.cause.startsWith("połączenie nieudane"))
+        // tablet: zajęty połączeniem odrzuca drugą prośbę i mówi o tym; obce urządzenie też
+        air.end("telefon-2"); air.end("obcy")
+        tablet.onInitiated("telefon-2", SyncCrypto.nearbyName(key))
+        tablet.onInitiated("obcy", "ktoś inny")
+        assertEquals(listOf("druga strona", "?"), tSeen.rejected)
+        assertTrue(tablet.state is LinkState.Ready)
     }
 
     @Test

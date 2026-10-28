@@ -121,6 +121,10 @@ fun PhoneLinkDialog(start: LinkMode, ed: Editor?, files: List<SyncMsg.Photo>? = 
             val t = NearbyTransport(ctx)
             val m = LinkMachine(t, mode, role, me, if (mode == LinkMode.PAIR) null else key, store.peerName, listener = object : LinkMachine.Listener {
                 override fun changed(s: LinkState) { state = s }
+                override fun rejected(peer: String) {
+                    note = if (peer == "?") T.t("Odrzucono połączenie od obcego urządzenia (inna para).", "Rejected a connection from an unknown device (another pairing).")
+                    else T.t("Odrzucono drugie połączenie od „$peer”: to okno ma już połączenie.", "Rejected a second connection from “$peer”: this window is already connected.")
+                }
                 override fun photo(p: SyncMsg.Photo) {
                     if (p.mime == ExportFormat.MNOTES.mime) {
                         // zeszyt z drugiego urządzenia: kopia jako nowy zeszyt w bibliotece (nic nie jest nadpisywane)
@@ -274,15 +278,24 @@ private fun StatePart(state: LinkState, mode: LinkMode, role: SyncRole, me: Stri
             },
         )
         is LinkState.Sending -> {
-            val pct = (state.progress * 100).toInt()
+            // Pasek i procent dla całej partii („zdjęcie 2 z 3”), części bieżącego pliku tylko w drugiej linii.
+            val pct = (state.batchProgress * 100).toInt()
             val part = minOf(state.part + 1, state.parts)
-            Status(Icons.Rounded.PhoneAndroid, if (notebooks) T.t("Wysyłam zeszyt · część $part z ${state.parts} · $pct %", "Sending the notebook · part $part of ${state.parts} · $pct %")
-                else T.t("Wysyłam zdjęcie · część $part z ${state.parts} · $pct %", "Sending the photo · part $part of ${state.parts} · $pct %"))
-            LinearProgressIndicator(progress = { state.progress }, modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp), color = mint.accent)
-            if (state.queued > 0) Line(T.t("W kolejce: ${state.queued}", "Queued: ${state.queued}"))
+            val many = state.photos > 1
+            Status(Icons.Rounded.PhoneAndroid, when {
+                notebooks && many -> T.t("Wysyłam zeszyt ${state.photo} z ${state.photos} · $pct %", "Sending notebook ${state.photo} of ${state.photos} · $pct %")
+                notebooks -> T.t("Wysyłam zeszyt · $pct %", "Sending the notebook · $pct %")
+                many -> T.t("Wysyłam zdjęcie ${state.photo} z ${state.photos} · $pct %", "Sending photo ${state.photo} of ${state.photos} · $pct %")
+                else -> T.t("Wysyłam zdjęcie · $pct %", "Sending the photo · $pct %")
+            })
+            LinearProgressIndicator(progress = { state.batchProgress }, modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp), color = mint.accent)
+            if (state.parts > 1) Line(T.t("Część $part z ${state.parts} bieżącego pliku", "Part $part of ${state.parts} of the current file"))
         }
         is LinkState.Problem -> {
             Status(Icons.Rounded.Warning, T.t(state.problem.pl, state.problem.en))
+            // Kod i przyczyna od razu tutaj, nie tylko w „Diagnostyce” (przyczyna to wpis dziennika, po polsku).
+            Line(if (state.cause.isEmpty()) T.t("Kod ${state.problem.code}", "Code ${state.problem.code}")
+                else T.t("Kod ${state.problem.code}: ${state.cause}", "Code ${state.problem.code}: ${state.cause}"))
             if (state.retrying) Line(T.t("Spróbuję ponownie za chwilę.", "I will retry in a moment."))
             else TextButton(onClick = { machine?.retry() }) { Text(T.t("Spróbuj ponownie", "Try again")) }
         }

@@ -112,6 +112,25 @@ class LinkPhotoTest {
     }
 
     @Test
+    fun absurdPartCountIsRefusedWithoutAllocating() {
+        // dawniej arrayOfNulls(count) z ramki: Int.MAX_VALUE kończył się OutOfMemoryError
+        val p = SyncMsg.PhotoPart("x", 0, Int.MAX_VALUE, ByteArray(32), "a.jpg", "image/jpeg", ByteArray(10))
+        val res = PhotoReceiver().accept(p)
+        assertTrue(res.bad)
+        assertNull(res.photo)
+    }
+
+    @Test
+    fun atMostFourPhotosAreAssembledAtOnce() {
+        val r = PhotoReceiver()
+        val senders = (1..5).map { PhotoSender("z$it", "a.jpg", "image/jpeg", ByteArray(2000) { b -> (b * it).toByte() }, partSize = 1000) }
+        for (s in senders) assertNull(r.accept(s.due(0).first()).photo)  // pierwsza część każdego
+        // najstarsze składanie (z1) wypadło: jego druga część go nie domyka; najnowsze (z5) się domyka
+        assertNull(r.accept(senders[0].part(1)).photo)
+        assertNotNull(r.accept(senders[4].part(1)).photo)
+    }
+
+    @Test
     fun newMessagesRoundTrip() {
         val ack = SyncMsg.decode(SyncMsg.encode(SyncMsg.PhotoAck("x", 4)))
         assertEquals(SyncMsg.PhotoAck("x", 4), ack)

@@ -14,6 +14,8 @@ class PhotoSender(
     partSize: Int = PART,
 ) {
     val count: Int = maxOf(1, (bytes.size + partSize - 1) / partSize)
+    /** Długość całego pliku w bajtach (do paska partii). */
+    val length: Int get() = bytes.size
     private val size = partSize
     private val sha = SyncCrypto.sha256(bytes)
     private val acked = BooleanArray(count)
@@ -103,13 +105,17 @@ class PhotoReceiver(private val maxBytes: Int = LinkChunks.MAX_MESSAGE) {
         var bytes = 0L
     }
 
-    private val open = HashMap<String, Assembly>()
+    private val open = LinkedHashMap<String, Assembly>()
     private val finished = LinkedHashSet<String>()
+    /** Więcej części nie zmieści się w [maxBytes] przy części [PhotoSender.PART]; `count` z ramki nie przydziela tablic na ślepo. */
+    private val maxParts = maxBytes / PhotoSender.PART + 1
 
     fun accept(p: SyncMsg.PhotoPart): Result {
         val ack = SyncMsg.PhotoAck(p.id, p.index)
         if (p.id in finished) return Result(listOf(ack, SyncMsg.PhotoDone(p.id, true)))
-        if (p.count <= 0 || p.index !in 0 until p.count) return Result(emptyList(), bad = true)
+        if (p.count <= 0 || p.count > maxParts || p.index !in 0 until p.count) return Result(emptyList(), bad = true)
+        // Najwyżej OPEN_MAX zdjęć składanych naraz (nadawca wysyła po kolei): najstarsze porzucone składanie wypada.
+        if (p.id !in open && open.size >= OPEN_MAX) open.remove(open.keys.first())
         val a = open.getOrPut(p.id) { Assembly(p.count, p.sha, p.name, p.mime) }
         if (a.count != p.count || !SyncCrypto.same(a.sha, p.sha)) return Result(emptyList(), bad = true)
         if (a.parts[p.index] == null) {
@@ -126,6 +132,11 @@ class PhotoReceiver(private val maxBytes: Int = LinkChunks.MAX_MESSAGE) {
         finished += p.id
         while (finished.size > 64) finished.remove(finished.first())
         return Result(listOf(ack, SyncMsg.PhotoDone(p.id, true)), SyncMsg.Photo(a.name, a.mime, all))
+    }
+
+    companion object {
+        /** Nadawca kończy zdjęcie przed następnym (utknięte wraca na początek kolejki), więc 4 składania to zapas. */
+        const val OPEN_MAX = 4
     }
 }
 

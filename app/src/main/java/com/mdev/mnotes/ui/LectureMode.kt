@@ -15,6 +15,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -33,15 +34,16 @@ import java.io.File
 @Composable
 internal fun BoxScope.LectureControls(ed: Editor) {
     val ctx = LocalContext.current
-    val pending = remember { mutableStateOf<File?>(null) }
+    // 2c-A15: ścieżka w rememberSaveable — gdy system zamknie aktywność przy aparacie, zdjęcie po powrocie nie ginie.
+    val pending = rememberSaveable { mutableStateOf<String?>(null) }
     val camera = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { ok ->
-        val f = pending.value
+        val f = pending.value?.let(::File)
         pending.value = null
         if (ok && f != null) ed.lectureShot(f) else f?.delete()
     }
     fun shoot() {
         val f = ed.lectureFile()
-        pending.value = f
+        pending.value = f.path
         // A2-8: bez aparatu tryb nie ma sensu — kończymy go, zamiast zostawiać kapsułę, która nic nie zrobi.
         runCatching { camera.launch(FileProvider.getUriForFile(ctx, "${ctx.packageName}.files", f)) }
             .onFailure { pending.value = null; f.delete(); ed.lectureMode = false; ed.say(T.t("Brak aplikacji aparatu", "No camera app")) }

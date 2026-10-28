@@ -141,7 +141,7 @@ fun commandList(
         "arrangeImages" to ({ ed.canArrangeSel() } to { ed.arrangeSel() }),
         "dualOpen" to ({ true } to { ed.station?.picking = true }),
         "stations" to ({ true } to { ed.station?.listing = true }),
-        "profileNext" to ({ true } to { switchProfile(ed, com.mdev.mnotes.core.prefs.Profiles.next(set.profiles, set.profileActive)) }),
+        "profileNext" to ({ true } to { ed.useProfile(com.mdev.mnotes.core.prefs.Profiles.next(set.profiles, set.profileActive)) }),
         "lecture" to ({ !ed.readOnly } to { ed.lectureMode = true; ed.lectureShootTick++ }),
         "boardPhoto" to ({ !ed.readOnly } to { ed.lectureShootTick++ }),
         "stickers" to ({ !ed.readOnly } to { ed.stickersOpen = true }),

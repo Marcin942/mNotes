@@ -1535,11 +1535,28 @@ class Editor(val ctx: Context, val nbId: String) {
     fun close() {
         // 2c-A10: szkic krzywej przy zamknięciu zeszytu staje się krzywą, zamiast zniknąć.
         if (curveDraft != null) curveCommit()
+        // 2c-A11: wyjście z zeszytu zdejmuje przypięty profil (dołożone rzędy stanowiska tego nie robią).
+        station?.takeIf { it.main === this }?.unpinProfile()
         flushWriting()
         doc.flush()
         doc.setLastPage(pageIndex)
         view?.dispose()
         view = null
+    }
+
+    /** Przełącza profil pracy i mówi, co się stało (dotyk to najczęstsze zaskoczenie, więc jest w dymku). */
+    fun useProfile(p: com.mdev.mnotes.core.prefs.Profile?, pinned: Boolean = false) {
+        settings.switchProfile(p)
+        val finger = when (settings.fingerMode) {
+            com.mdev.mnotes.core.prefs.Profiles.FINGER_DRAW -> T.t("palec rysuje", "finger draws")
+            com.mdev.mnotes.core.prefs.Profiles.FINGER_OFF -> T.t("palec wyłączony", "finger off")
+            else -> T.t("palec przewija", "finger scrolls")
+        }
+        say(
+            if (p == null) T.t("Bez profilu — ustawienia jak przed profilem ($finger)", "No profile — settings as before ($finger)")
+            else T.t("Profil „${p.name}”${if (pinned) " (przypięty)" else ""} — $finger", "Profile “${p.name}”${if (pinned) " (pinned)" else ""} — $finger"),
+        )
+        (station?.rows ?: listOf(this)).forEach { it.view?.invalidate() }
     }
 
     // — Skróty klawiszowe wspólne z paletą poleceń —

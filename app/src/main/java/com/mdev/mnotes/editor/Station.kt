@@ -6,6 +6,7 @@ import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import com.mdev.mnotes.core.layout.Workbench
+import com.mdev.mnotes.core.prefs.Profiles
 import com.mdev.mnotes.core.model.LinkedUndo
 import com.mdev.mnotes.core.model.UndoStack
 
@@ -33,6 +34,11 @@ class Station(private val ctx: Context, val main: Editor) {
     val rows: List<Editor> get() = listOf(main) + extra
     val on: Boolean get() = extra.isNotEmpty()
 
+    /** 2c-A11: profil przypięty do zeszytu albo stanowiska — włączony przy otwarciu, zdejmowany przy wyjściu. */
+    private var pin: Profiles.Pin? = null
+    private var pinChecked = false
+    private var stationProfile = ""
+
     /** Pary kroków cofania przeniesień między dokumentami (2c-A5). */
     val linked = LinkedUndo<Editor>()
 
@@ -46,7 +52,29 @@ class Station(private val ctx: Context, val main: Editor) {
             main.app.pendingStation = null
             s.ids.drop(1).forEach { add(it) }
             applyMode(s); restore = s
+            stationProfile = s.profile
         }
+    }
+
+    /** Przy pierwszym pokazaniu edytora: profil stanowiska albo zeszytu. Powrót z ustawień nie włącza go drugi raz. */
+    fun pinOnOpen() {
+        if (pinChecked) return
+        pinChecked = true
+        pinProfile(stationProfile.ifEmpty { Profiles.pinsDecode(main.settings.profilePins)[main.nbId] } ?: return)
+    }
+
+    private fun pinProfile(id: String) {
+        val set = main.settings
+        val p = set.profiles.firstOrNull { it.id == id } ?: return
+        pin = Profiles.pin(pin, id, set.profileActive)
+        if (set.profileActive != id) main.useProfile(p, pinned = true)
+    }
+
+    /** Wyjście: przypięty profil ustępuje temu, co działało przed nim — chyba że w trakcie zmieniono profil ręcznie. */
+    fun unpinProfile() {
+        val back = Profiles.unpin(pin, main.settings.profileActive)
+        pin = null
+        if (back != null) main.settings.switchProfile(main.settings.profiles.firstOrNull { it.id == back })
     }
 
     /** Dokumenty zapisanego stanowiska czekającego na odtworzenie (stan stosuje się, gdy pasy są w komplecie). */
@@ -115,9 +143,12 @@ class Station(private val ctx: Context, val main: Editor) {
             name.trim().ifBlank { T.t("Stanowisko", "Workspace") }, rows.map { it.nbId },
             scroll = p?.let { -it.cross } ?: 0f, zoom = p?.zoom ?: 0f, mode = if (horizontal) 1 else 0,
             offsets = p?.main?.toList().orEmpty(), active = rows.indexOf(active).coerceAtLeast(0),
+            profile = main.settings.profileActive,
         )
         main.settings.stations = Workbench.encode(Workbench.upsert(Workbench.decode(main.settings.stations), s))
-        main.say(T.t("Zapisano stanowisko „${s.name}”", "Workspace “${s.name}” saved"))
+        val prof = main.settings.activeProfile?.name
+        main.say(if (prof == null) T.t("Zapisano stanowisko „${s.name}”", "Workspace “${s.name}” saved")
+            else T.t("Zapisano stanowisko „${s.name}” z profilem „$prof”", "Workspace “${s.name}” saved with profile “$prof”"))
     }
 
     fun delete(name: String) {
@@ -134,6 +165,7 @@ class Station(private val ctx: Context, val main: Editor) {
             for (e in extra.toList()) if (e.nbId !in s.ids) remove(e)
             s.ids.drop(1).forEach { add(it) }
             applyMode(s); restore = s
+            if (s.profile.isNotEmpty()) pinProfile(s.profile)
             view?.post { view?.restorePending() }
         } else {
             main.app.pendingStation = s

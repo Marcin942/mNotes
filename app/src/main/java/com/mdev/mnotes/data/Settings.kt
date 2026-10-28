@@ -3,6 +3,7 @@ package com.mdev.mnotes.data
 import android.content.Context
 import android.content.SharedPreferences
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import com.mdev.mnotes.core.edit.AngleSnap
@@ -24,6 +25,9 @@ class Settings(ctx: Context) {
     private val sp: SharedPreferences = ctx.getSharedPreferences("mnotes", Context.MODE_PRIVATE)
     /** Ustawienia po kluczu (2b-A12): profil zmienia je przez stan Compose, więc UI i widok widzą zmianę od razu. */
     private val registry = HashMap<String, Pref<*>>()
+    /** 2c-A11: ręczne zmiany ustawień z profilu przy włączonym profilu (klucz → przed i po); edytor pyta, czy je zapisać. */
+    val profileEdits = mutableStateMapOf<String, Pair<com.mdev.mnotes.core.prefs.PVal, com.mdev.mnotes.core.prefs.PVal>>()
+    private var applyingProfile = false
 
     private inner class Pref<T>(val key: String, val def: T) : ReadWriteProperty<Any?, T> {
         private var state by mutableStateOf(read())
@@ -47,7 +51,9 @@ class Settings(ctx: Context) {
 
         override fun getValue(thisRef: Any?, property: KProperty<*>): T = state
         override fun setValue(thisRef: Any?, property: KProperty<*>, value: T) {
+            val old = state
             state = value
+            if (old != value) noteEdit(key, old, value)
             val e = sp.edit()
             when (value) {
                 is Int -> e.putInt(key, value)
@@ -256,7 +262,9 @@ class Settings(ctx: Context) {
         set(v) { profilesRaw = com.mdev.mnotes.core.prefs.Profiles.encode(v).ifEmpty { "mnotes-profiles 1\n" } }
 
     /** Bieżąca wartość ustawienia [key] (null — nieznany klucz). */
-    fun prefValue(key: String): com.mdev.mnotes.core.prefs.PVal? = when (val v = registry[key]?.current()) {
+    fun prefValue(key: String): com.mdev.mnotes.core.prefs.PVal? = pval(registry[key]?.current())
+
+    private fun pval(v: Any?): com.mdev.mnotes.core.prefs.PVal? = when (v) {
         is Int -> com.mdev.mnotes.core.prefs.PVal.I(v)
         is Boolean -> com.mdev.mnotes.core.prefs.PVal.B(v)
         is Float -> com.mdev.mnotes.core.prefs.PVal.F(v)
@@ -272,9 +280,31 @@ class Settings(ctx: Context) {
     /** Włącza profil [p] (null — wyłącza); wyłączenie przywraca dokładnie to, co profil nadpisał. */
     fun switchProfile(p: com.mdev.mnotes.core.prefs.Profile?) {
         val sw = com.mdev.mnotes.core.prefs.Profiles.switch(p, com.mdev.mnotes.core.prefs.Profiles.decodeValues(profileBackup), ::prefValue)
-        for ((k, v) in sw.write) putPrefValue(k, v)
+        applyingProfile = true
+        try { for ((k, v) in sw.write) putPrefValue(k, v) } finally { applyingProfile = false }
         profileBackup = com.mdev.mnotes.core.prefs.Profiles.encodeValues(sw.backup)
         profileActive = p?.id ?: ""
+        profileEdits.clear()
+    }
+
+    /** Ręczna zmiana klucza profilu; powrót do wartości sprzed zmiany ją kasuje. Aktywny profil przez rejestr — ten Pref może jeszcze nie istnieć. */
+    private fun noteEdit(key: String, old: Any?, new: Any?) {
+        if (applyingProfile || !com.mdev.mnotes.core.prefs.Profiles.known(key)) return
+        if ((registry["profile.active"]?.current() as? String).isNullOrEmpty()) return
+        val o = profileEdits[key]?.first ?: pval(old) ?: return
+        val n = pval(new) ?: return
+        if (o == n) profileEdits.remove(key) else profileEdits[key] = o to n
+    }
+
+    /** Odpowiedź na pytanie o zapis: [save] — zmiany trafiają do aktywnego profilu; inaczej działają do jego wyłączenia. */
+    fun keepProfileEdits(save: Boolean) {
+        val p = activeProfile
+        if (save && p != null) {
+            val (np, nb) = com.mdev.mnotes.core.prefs.Profiles.adopt(p, com.mdev.mnotes.core.prefs.Profiles.decodeValues(profileBackup), profileEdits.toMap())
+            profiles = profiles.map { if (it.id == p.id) np else it }
+            profileBackup = com.mdev.mnotes.core.prefs.Profiles.encodeValues(nb)
+        }
+        profileEdits.clear()
     }
 
     val activeProfile: com.mdev.mnotes.core.prefs.Profile? get() = profileActive.takeIf { it.isNotEmpty() }?.let { id -> profiles.firstOrNull { it.id == id } }

@@ -53,6 +53,8 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
@@ -286,10 +288,18 @@ fun EditorScreen(main: Editor, tabs: TabsCtl, onExit: () -> Unit, onSettings: ()
     val ed = st.active
     val set = ed.settings
     val m = mint
-    // 2b-A12: zeszyt z przypiętym profilem włącza go przy otwarciu (zostaje włączony po wyjściu — przełącza się ręcznie).
-    LaunchedEffect(main.nbId) {
-        val pid = com.mdev.mnotes.core.prefs.Profiles.pinsDecode(set.profilePins)[main.nbId] ?: return@LaunchedEffect
-        if (pid != set.profileActive) set.profiles.firstOrNull { it.id == pid }?.let { switchProfile(main, it, pinned = true) }
+    // 2c-A11: profil przypięty do zeszytu albo stanowiska włącza się przy otwarciu, a wyjście (Editor.close) go zdejmuje.
+    LaunchedEffect(main.nbId) { st.pinOnOpen() }
+    // 2c-A11: ręczna zmiana ustawienia z profilu — pytanie, czy zapisać ją w profilu (inaczej zniknie po jego wyłączeniu).
+    val profileEdits = set.profileEdits.toMap()
+    LaunchedEffect(profileEdits) {
+        if (profileEdits.isEmpty()) return@LaunchedEffect
+        delay(800)
+        val p = set.activeProfile ?: return@LaunchedEffect set.keepProfileEdits(false)
+        ed.say(T.t("Zapisać w profilu „${p.name}”?", "Save in profile “${p.name}”?"), listOf(
+            T.t("Tak", "Yes") to { set.keepProfileEdits(true); ed.say(T.t("Zapisano w profilu „${p.name}”", "Saved in profile “${p.name}”")) },
+            T.t("Nie", "No") to { set.keepProfileEdits(false) },
+        ))
     }
     var panel by remember { mutableStateOf<Panel?>(null) }
     var palette by remember { mutableStateOf(false) }
@@ -533,6 +543,8 @@ private fun TopChrome(
 @Composable
 private fun PageCluster(ed: Editor, panel: Panel?, toggle: (Panel) -> Unit, goTo: () -> Unit, pickImage: () -> Unit, showZoom: Boolean) {
     Row(verticalAlignment = Alignment.CenterVertically) {
+        // 2c-A11: włączony profil widać zawsze — „Tylko rysik” bez znacznika wygląda jak awaria palca.
+        ed.settings.activeProfile?.let { ProfileChip(ed, it) }
         Text(
             "${ed.pageIndex + 1} / ${ed.pageCount}", style = MaterialTheme.typography.labelLarge,
             modifier = Modifier.clip(RoundedCornerShape(6.dp)).clickable { goTo() }.padding(horizontal = 8.dp, vertical = 8.dp),
@@ -549,6 +561,22 @@ private fun PageCluster(ed: Editor, panel: Panel?, toggle: (Panel) -> Unit, goTo
         }
         if (Flavor.lab?.phoneButton() == true) IconBtn(Icons.Rounded.PhoneAndroid, T.t("Zdjęcie z telefonu", "Photo from phone"), { toggle(Panel.PHONE) }, selected = panel == Panel.PHONE, enabled = !ed.readOnly)
         IconBtn(Icons.Rounded.MoreVert, T.t("Więcej", "More"), { toggle(Panel.MORE) }, selected = panel == Panel.MORE)
+    }
+}
+
+/** Znacznik włączonego profilu w nagłówku; stuknięcie otwiera menu z wyłączeniem. */
+@Composable
+private fun ProfileChip(ed: Editor, p: com.mdev.mnotes.core.prefs.Profile) {
+    var open by remember { mutableStateOf(false) }
+    Box(Modifier.padding(end = 4.dp)) {
+        Text(
+            p.name, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.labelMedium,
+            modifier = Modifier.widthIn(max = 120.dp).clip(RoundedCornerShape(12.dp)).background(mint.accentSoft).clickable { open = true }
+                .semantics { contentDescription = T.t("Profil pracy: ${p.name}", "Work profile: ${p.name}") }.padding(horizontal = 10.dp, vertical = 5.dp),
+        )
+        DropdownMenu(open, { open = false }) {
+            DropdownMenuItem(text = { Text(T.t("Wyłącz profil „${p.name}”", "Turn off profile “${p.name}”")) }, onClick = { open = false; ed.useProfile(null) })
+        }
     }
 }
 
@@ -2089,8 +2117,8 @@ private fun MoreMenu(ed: Editor, set: com.mdev.mnotes.data.Settings, close: () -
             // 2b-A12: profile pracy — jedno dotknięcie przełącza dotyk, gesty i paski.
             SectionLabel(T.t("Profil pracy", "Work profile"))
             FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Chip(T.t("Bez profilu", "None"), set.profileActive.isEmpty(), { switchProfile(ed, null) })
-                for (p in set.profiles) Chip(p.name, set.profileActive == p.id, { switchProfile(ed, p) })
+                Chip(T.t("Bez profilu", "None"), set.profileActive.isEmpty(), { ed.useProfile(null) })
+                for (p in set.profiles) Chip(p.name, set.profileActive == p.id, { ed.useProfile(p) })
             }
             set.activeProfile?.let { p ->
                 val pins = com.mdev.mnotes.core.prefs.Profiles.pinsDecode(set.profilePins)
@@ -2125,22 +2153,6 @@ private fun MoreMenu(ed: Editor, set: com.mdev.mnotes.data.Settings, close: () -
             MenuRow(Icons.Rounded.Settings, T.t("Ustawienia", "Settings"), "") { close(); onSettings() }
         }
     }
-}
-
-/** Przełącza profil pracy i mówi, co się stało (dotyk to najczęstsze zaskoczenie, więc jest w dymku). */
-fun switchProfile(ed: Editor, p: com.mdev.mnotes.core.prefs.Profile?, pinned: Boolean = false) {
-    val set = ed.settings
-    set.switchProfile(p)
-    val finger = when (set.fingerMode) {
-        com.mdev.mnotes.core.prefs.Profiles.FINGER_DRAW -> T.t("palec rysuje", "finger draws")
-        com.mdev.mnotes.core.prefs.Profiles.FINGER_OFF -> T.t("palec wyłączony", "finger off")
-        else -> T.t("palec przewija", "finger scrolls")
-    }
-    ed.say(
-        if (p == null) T.t("Bez profilu — ustawienia jak przed profilem ($finger)", "No profile — settings as before ($finger)")
-        else T.t("Profil „${p.name}”${if (pinned) " (przypięty do zeszytu)" else ""} — $finger", "Profile “${p.name}”${if (pinned) " (pinned to notebook)" else ""} — $finger"),
-    )
-    ed.view?.invalidate()
 }
 
 fun pageThemeLabels() = listOf(

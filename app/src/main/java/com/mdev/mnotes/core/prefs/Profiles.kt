@@ -188,6 +188,31 @@ object Profiles {
         )
     }
 
+    // — 2c-A11: ręczne zmiany przy włączonym profilu i przypięcie na czas pracy —
+
+    /**
+     * Ręczne zmiany [edits] (klucz → wartość przed i po) zapisane w profilu [p]. Kopia stanu sprzed profilu dostaje
+     * wartość „przed” kluczy, których profil dotąd nie miał, więc wyłączenie profilu cofa i tę zmianę.
+     */
+    fun adopt(p: Profile, backup: Map<String, PVal>, edits: Map<String, Pair<PVal, PVal>>): Pair<Profile, Map<String, PVal>> {
+        val vals = LinkedHashMap(p.values)
+        val b = LinkedHashMap(backup)
+        for ((k, e) in edits) if (known(k)) {
+            if (k !in p.values && k !in b) b[k] = e.first
+            vals[k] = e.second
+        }
+        return p.copy(values = vals) to b
+    }
+
+    /** Profil przypięty na czas pracy: [pinned] włączony przy otwarciu, [before] — aktywny wcześniej ("" — żaden). */
+    data class Pin(val pinned: String, val before: String)
+
+    /** Przypięcie [target] przy aktywnym [active]; kolejne (stanowisko po zeszycie) zachowuje pierwotne „przed”. */
+    fun pin(session: Pin?, target: String, active: String) = Pin(target, session?.before ?: active)
+
+    /** Profil do przywrócenia przy wyjściu ("" — bez profilu); null, gdy w trakcie zmieniono go ręcznie albo nie ma czego cofać. */
+    fun unpin(session: Pin?, active: String): String? = session?.takeIf { it.pinned == active && it.before != active }?.before
+
     // — Przypięcia: zeszyt → profil („nb=id;nb2=id2”) —
 
     fun pinsDecode(s: String): Map<String, String> =

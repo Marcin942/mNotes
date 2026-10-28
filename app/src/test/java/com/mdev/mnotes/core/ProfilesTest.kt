@@ -95,6 +95,56 @@ class ProfilesTest {
         assertEquals(PVal.I(Profiles.FINGER_OFF), l[2].values[Profiles.FINGER])
     }
 
+    /** 2c-A11: profil, który nadpisuje nieistniejące ustawienie, nic nie robi — klucze sprawdzamy w źródle Settings. */
+    @Test fun everyKeyExistsInSettings() {
+        val src = java.io.File("src/main/java/com/mdev/mnotes/data/Settings.kt").readText()
+        val prefs = Regex("""Pref\("([^"]+)"""").findAll(src).map { it.groupValues[1] }.toSet()
+        assertTrue(prefs.size > 50)
+        assertEquals(emptyList<String>(), Profiles.KEYS.map { it.key }.filter { it !in prefs })
+    }
+
+    @Test fun manualChangeSavedInProfileSurvivesAndRevertsOnOff() {
+        val p = Prefs(start.toMutableMap())
+        var stylus = Profile("x", "Tylko rysik", mapOf("input.finger" to PVal.I(2)))
+        p.switch(stylus)
+        // Ręcznie: palec rysuje (klucz profilu) i mini-mapa (spoza profilu); „Tak” zapisuje obie w profilu.
+        val edits = mapOf("input.finger" to (PVal.I(2) to PVal.I(1)), "view.minimap" to (PVal.B(false) to PVal.B(true)))
+        for ((k, e) in edits) p.m[k] = e.second
+        val (np, nb) = Profiles.adopt(stylus, p.backup, edits)
+        stylus = np; p.backup = nb
+        assertEquals(PVal.I(1), stylus.values["input.finger"])
+        assertEquals(PVal.B(true), stylus.values["view.minimap"])
+        p.switch(null)
+        assertEquals(start, p.m)
+        p.switch(stylus)
+        assertEquals(PVal.I(1), p.m["input.finger"]); assertEquals(PVal.B(true), p.m["view.minimap"])
+    }
+
+    @Test fun leavingPinnedNotebookRestoresStateBefore() {
+        val p = Prefs(start.toMutableMap())
+        val a = Profile("a", "A", mapOf("view.minimap" to PVal.B(true)))
+        val pinned = Profile("rysik", "Tylko rysik", mapOf("input.finger" to PVal.I(2)))
+        p.switch(a)
+        val before = p.m.toMap()
+        // Otwarcie zeszytu z przypiętym profilem, potem stanowisko z tym samym profilem: „przed” zostaje pierwotne.
+        var pin = Profiles.pin(null, pinned.id, "a"); p.switch(pinned)
+        pin = Profiles.pin(pin, pinned.id, pinned.id)
+        assertEquals("a", Profiles.unpin(pin, pinned.id))
+        p.switch(a)
+        assertEquals(before, p.m)
+        // Zmiana profilu w trakcie albo profil już włączony przy otwarciu — wyjście niczego nie przełącza.
+        assertNull(Profiles.unpin(pin, "a"))
+        assertNull(Profiles.unpin(Profiles.pin(null, "rysik", "rysik"), "rysik"))
+        assertEquals("", Profiles.unpin(Profiles.pin(null, "rysik", ""), "rysik"))
+    }
+
+    @Test fun stationKeepsItsProfile() {
+        val s = com.mdev.mnotes.core.layout.Workbench.Station("Analiza", listOf("nb1", "nb2"), profile = "rysik")
+        val back = com.mdev.mnotes.core.layout.Workbench.decode(com.mdev.mnotes.core.layout.Workbench.encode(listOf(s)))
+        assertEquals("rysik", back.single().profile)
+        assertEquals("", com.mdev.mnotes.core.layout.Workbench.decode("""[{"n":"S","ids":["a"],"s":0,"z":0}]""").single().profile)
+    }
+
     @Test fun pinsRoundTrip() {
         val m = mapOf("nb1" to "p1", "nb-2" to "rysik")
         assertEquals(m, Profiles.pinsDecode(Profiles.pinsEncode(m)))

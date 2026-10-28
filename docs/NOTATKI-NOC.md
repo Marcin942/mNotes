@@ -1007,6 +1007,19 @@ Nearby nie zmieniam do odpowiedzi Marcina na pytania z `plan/NEARBY-OPEN-SOURCE.
   **Tablet:** Krzywa → Piórko: stuknij dwa węzły, potem przeciągnij od drugiego — wyciąga się uchwyt, węzłów dalej
   dwa. ↶ w kapsule (albo Backspace z klawiaturą) zdejmuje ostatni węzeł; przy ostatnim szkic znika. Postaw trzy węzły
   i wyjdź z zeszytu strzałką wstecz — po powrocie krzywa jest na stronie.
+- **2c-A11 (noc/f2c-profile):** profile. Znacznik włączonego profilu w nagłówku (obok „n / N”), stuknięcie → „Wyłącz
+  profil”. Ręczna zmiana ustawienia z listy profilu przy włączonym profilu (także w Ustawieniach) → dymek „Zapisać
+  w profilu …?” [Tak/Nie]; „Nie” — zmiana działa do wyłączenia profilu. Przypięty profil (zeszyt albo stanowisko)
+  wyłącza się po wyjściu z zeszytu i wraca profil sprzed (chyba że w trakcie zmieniono go ręcznie); powrót
+  z Ustawień nie włącza go drugi raz. Zapis stanowiska zapamiętuje włączony profil (pole `p` w JSON, stare zapisy
+  bez zmian). `ProfilesTest` +4: każdy klucz `KEYS` jest w `Settings.kt` (z źródła), „Tak” → profil ma zmianę
+  i wyłączenie cofa także klucz spoza profilu, wyjście z przypiętego → stan sprzed, stanowisko z profilem.
+  **Nie sprawdzone na JVM:** rejestr zmian w `Settings` (Android) i dymek. Ubicie aplikacji przy przypiętym profilu
+  zostawia go włączonym (sesja nie jest zapisywana).
+  **Tablet:** Więcej → Profil pracy → „Tylko rysik”: w nagłówku chip „Tylko rysik”; stuknij → „Wyłącz profil” → chip
+  znika, palec znów przewija. Włącz „Wykład”, w Więcej przełącz mini-mapę → po chwili dymek „Zapisać w profilu
+  „Wykład”?” → Tak; wyłącz i włącz profil — mini-mapa jak zapisano. Przypnij „Rysowanie” do zeszytu („Włączaj …
+  przy otwieraniu”), wyjdź do biblioteki — profil wyłączony; wejdź — włączony.
 
 ### Na tablecie po FAZIE 2c/2d — kolejność (z `dzienniki/PRZEGLAD-FABLE-2.md` §5, szczegóły tam)
 Instalacja: `labDebug` z `noc/wszystko` (tablet i telefon), do pkt 16 też `coreDebug`. Przy punktach poprawionych

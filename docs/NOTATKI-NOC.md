@@ -814,3 +814,21 @@ lista A wyczerpana poza FB5 (kafelek szybkiej notatki), więc **dalej FAZA 3a-1*
 start historii. 14 decyzji dla Marcina w §6.2. **Dalej 3a-2**: `oss/main` (warianty `foss`/`gms`, łącze w `src/gms`,
 kreda w `src/kreda` tylko na `oss/kreda`, ładowana przez `Class.forName`), potem raport dnia.
 
+**28.10, 12:10 (Agent A): FAZA 2c ma pierwszeństwo** (pojawiła się 11:55, po moim sprawdzeniu planu o 11:49). 3a-2 jest
+**w toku** na gałęziach `oss/main` (22a14a1 + b1eea12: warianty `foss`/`gms`, kreda poza drzewem) i `oss/kreda` (f38c3c7,
+z kredą): foss/gms 817 i 888 testów, 0 porażek, oba APK; nie scalone do `noc/wszystko`. Zostało: usunięcie dokumentów
+wewnętrznych i `docs/nearby/` z `oss/main`, szkice README/CONTRIBUTING/NOTICE, `LICENSE-DO-DECYZJI.md`, CI. Transportu
+Nearby nie zmieniam do odpowiedzi Marcina na pytania z `plan/NEARBY-OPEN-SOURCE.md`.
+
+### FAZA 2c — agent A (poprawki po przeglądzie, `noc/f2c-<temat>` → `noc/wszystko`)
+
+- **2c-A1 tablica: jedna strona, cofnięcie wzrostu bez skoku** — `noc/f2c-tablica`, 45964b8. `Board.canAddPage` blokuje
+  „Dodaj stronę”, duplikowanie, wstawianie przed/po (wyszarzone w panelu stron), odciągnięcie za ostatnią stroną, F10
+  i przepełnienie; „Zdjęcie tablicy” na tablicy wstawia obraz na tej samej stronie przy środku widoku. Wzrost w lewo/w górę
+  to `DocEdit.Shift` (dwie liczby zamiast kopii wszystkich elementów), cofnięcie przesuwa widok razem z treścią.
+  Testy (3 nowe w `BoardTest`): core 816, lab 887, 0 porażek, oba APK. **Nie sprawdzone:** na urządzeniu.
+  **Tablet:** Biblioteka → „Nowy” → „Nowa tablica” → pisz przy lewej krawędzi, aż płótno urośnie → Ctrl+Z (albo ↶): kreska
+  znika, a rysunek na ekranie **nie skacze** w bok; Ctrl+Y wraca bez skoku. Panel stron: „Dodaj stronę”, „Duplikuj”,
+  „Wstaw przed/po” wyszarzone; odciągnięcie w dół za tablicą nie dodaje strony. „Zdjęcie tablicy” → zdjęcie ląduje
+  na tablicy przy środku ekranu, w panelu dalej jedna strona.
+

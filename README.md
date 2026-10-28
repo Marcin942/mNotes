@@ -27,7 +27,7 @@ Więcej podglądów w `docs/podglad/`, a specyfikacje funkcji w `docs/features/`
 | Wariant | Co zawiera |
 |---|---|
 | `foss` | Tylko wolne biblioteki (AndroidX, Compose, Kotlin). |
-| `gms` | Dokłada łącze z telefonem przez Nearby z Usług Google Play. Łącze jest wyłączone, dopóki nie włączysz go w ustawieniach. |
+| `gms` | Dokłada łącze z telefonem: przez Nearby z Usług Google Play albo przez Bluetooth (wybór w ustawieniach łącza). Łącze jest wyłączone, dopóki nie włączysz go w ustawieniach. |
 
 Oba warianty mają ten sam identyfikator `com.mdev.mnotes` i ten sam format zeszytów.
 
@@ -47,6 +47,10 @@ jednostkowe. Zasady pracy nad kodem są w `CONTRIBUTING.md`.
 ## Licencja
 
 Licencja jeszcze nie została wybrana, zob. `LICENSE-DO-DECYZJI.md`. Zależności i podziękowania są w `NOTICE.md`.
+
+## Jak powstał
+
+Duża część kodu i testów powstała z pomocą asystentów AI (Claude); każdą zmianę sprawdzają testy jednostkowe.
 
 ## English
 

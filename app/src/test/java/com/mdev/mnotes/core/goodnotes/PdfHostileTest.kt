@@ -54,8 +54,10 @@ class PdfHostileTest {
         // ~60 KB treści: 2000 krzywych o współrzędnych 1e9 dzieliło się do głębokości 16, po 2¹⁶ punktów każda (GB pamięci)
         val ink = "0 0 0 RG 2 w " + (1..2000).joinToString(" ") { "0 0 m 0 1000000000 1000000000 -1000000000 1000000000 0 c S" }
         val r = runCatching { GoodNotesConvert.convert(goodNotes(ink), "wrogi.pdf", ConvertOptions(ImportMode.STANDARD)) }
-        // wyjątek (strona odrzucona) jest w porządku; błąd braku pamięci nie
+        // wyjątek (strona odrzucona) jest w porządku; błąd braku pamięci nie, a wynik nie może mieć setek milionów punktów
         assertTrue(r.exceptionOrNull().toString(), r.exceptionOrNull() == null || r.exceptionOrNull() is Exception)
+        val points = r.getOrNull()?.pages?.sumOf { p -> p.elements.sumOf { (it as? com.mdev.mnotes.core.model.Stroke)?.count ?: 0 } } ?: 0
+        assertTrue("$points", points < 4_000_000)
     }
 
     @Test(timeout = 5_000)

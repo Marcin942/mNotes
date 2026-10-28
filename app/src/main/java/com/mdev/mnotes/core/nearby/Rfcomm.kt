@@ -44,7 +44,25 @@ object StreamFramer {
     }
 }
 
-class BtDevice(val address: String, val name: String)
+/** [major]: główna klasa urządzenia Bluetooth (`BluetoothClass.Device.Major`), -1 gdy nieznana. */
+class BtDevice(val address: String, val name: String, val major: Int = -1)
+
+/**
+ * Wybór z listy sparowanych (3b-B3): słuchawki, głośniki, zegarki, myszy, drukarki i opaski nie mogą być tabletem,
+ * więc nie trafiają na listę parowania ani do prób łączenia (każda próba to kilka sekund). Telefony i komputery
+ * (tablety Samsung zgłaszają się jako jedno z nich) idą pierwsze, nieznana klasa na końcu. Gdyby filtr wyciął
+ * wszystko, zostaje pełna lista (lepiej za dużo niż nic).
+ */
+object BtPick {
+    const val COMPUTER = 0x0100
+    const val PHONE = 0x0200
+    private val NOT_PEER = setOf(0x0300, 0x0400, 0x0500, 0x0600, 0x0700, 0x0800, 0x0900)
+
+    fun peers(list: List<BtDevice>): List<BtDevice> {
+        val ok = list.filter { it.major !in NOT_PEER }.sortedBy { if (it.major == COMPUTER || it.major == PHONE) 0 else 1 }
+        return ok.ifEmpty { list }
+    }
+}
 
 /** Otwarte gniazdo RFCOMM: [peer] to druga strona. [close] przerywa czekające odczyty i zapisy (także z innych wątków). */
 interface BtPipe {
@@ -114,6 +132,7 @@ class RfcommTransport(
                         post { if (conns[id] === this) machine.onReceived(id, m) }
                     }
                 } catch (e: IOException) {
+                    post { if (conns[id] === this) machine.note("rfcomm: odczyt przerwany: ${LinkScrub.error(e)}") }
                 } finally {
                     close()
                     post { if (conns[id] === this) { conns.remove(id); machine.onDisconnected(id) } }
@@ -127,6 +146,7 @@ class RfcommTransport(
                         StreamFramer.write(pipe.output, b)
                     }
                 } catch (e: IOException) {
+                    post { machine.note("rfcomm: zapis przerwany: ${LinkScrub.error(e)}") }
                     close()  // odczyt to zauważy i zgłosi rozłączenie
                 }
             }
@@ -160,9 +180,9 @@ class RfcommTransport(
         closeServer()
         if (!ready()) return
         val s = try { port.listen(RfcommIds.uuidFor(name), RfcommIds.SERVICE) } catch (e: SecurityException) {
-            post { machine.onFailed(LinkErrors.NO_PERMISSION) }; return
+            post { machine.note("rfcomm: nasłuch bez zgody: ${LinkScrub.error(e)}"); machine.onFailed(LinkErrors.NO_PERMISSION) }; return
         } catch (e: IOException) {
-            post { machine.onFailed(LinkErrors.RADIO_ERROR) }; return
+            post { machine.note("rfcomm: nasłuch nieudany: ${LinkScrub.error(e)}"); machine.onFailed(LinkErrors.RADIO_ERROR) }; return
         }
         server = s
         daemon("rfcomm-nasluch") {
@@ -185,7 +205,7 @@ class RfcommTransport(
         searching = true
         if (!ready()) return
         val pairing = name.startsWith(LinkMachine.PAIR_PREFIX)
-        val list = try { if (pairing || known == null) port.bonded() else emptyList() } catch (e: SecurityException) {
+        val list = try { if (pairing || known == null) BtPick.peers(port.bonded()) else emptyList() } catch (e: SecurityException) {
             post { machine.onFailed(LinkErrors.NO_PERMISSION) }; return
         }
         val found = if (pairing) list.map { it.address to LinkMachine.PAIR_PREFIX + it.name }
@@ -209,13 +229,17 @@ class RfcommTransport(
         dialing = endpoint
         val uuid = RfcommIds.uuidFor(name)
         daemon("rfcomm-laczenie") {
+            val t0 = System.currentTimeMillis()
             val p = try { port.connect(endpoint, uuid) } catch (e: SecurityException) {
-                post { if (dialing == endpoint) { dialing = null; machine.onConnectFailed(endpoint, LinkErrors.NO_PERMISSION) } }
+                post { if (dialing == endpoint) { dialing = null; machine.note("rfcomm: łączenie bez zgody: ${LinkScrub.error(e)}"); machine.onConnectFailed(endpoint, LinkErrors.NO_PERMISSION) } }
                 return@daemon
             } catch (e: IOException) {
-                post { if (dialing == endpoint) { dialing = null; machine.onConnectFailed(endpoint, LinkErrors.PEER_NOT_LISTENING) } }
+                val ms = System.currentTimeMillis() - t0
+                post { if (dialing == endpoint) { dialing = null; machine.note("rfcomm: łączenie nieudane po $ms ms: ${LinkScrub.error(e)}"); machine.onConnectFailed(endpoint, LinkErrors.PEER_NOT_LISTENING) } }
                 return@daemon
             }
+            val ms = System.currentTimeMillis() - t0
+            post { machine.note("rfcomm: gniazdo otwarte po $ms ms") }
             post {
                 if (dialing != endpoint) { p.close(); return@post }
                 dialing = null

@@ -10,6 +10,7 @@ import androidx.core.content.ContextCompat
 import androidx.core.location.LocationManagerCompat
 import com.google.android.gms.common.ConnectionResult
 import com.google.android.gms.common.GoogleApiAvailability
+import com.mdev.mnotes.core.nearby.LinkEnv
 import com.mdev.mnotes.core.nearby.LinkEvent
 import com.mdev.mnotes.core.nearby.LinkPermissions
 import com.mdev.mnotes.editor.T
@@ -30,6 +31,10 @@ object LinkDiagnostics {
     fun locationOn(ctx: Context): Boolean? = runCatching {
         LocationManagerCompat.isLocationEnabled(ctx.getSystemService(Context.LOCATION_SERVICE) as LocationManager)
     }.getOrNull()
+
+    fun bluetoothOn(ctx: Context): Boolean? = runCatching { (ctx.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager).adapter?.isEnabled }.getOrNull()
+
+    fun wifiOn(ctx: Context): Boolean? = runCatching { (ctx.applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager).isWifiEnabled }.getOrNull()
 
     private fun bluetooth(ctx: Context) = com.mdev.mnotes.lab.LinkSettings.of(ctx).bluetooth
 
@@ -52,6 +57,21 @@ object LinkDiagnostics {
         out += Check(T.t("Usługi Google Play", "Google Play services"), runCatching { GoogleApiAvailability.getInstance().isGooglePlayServicesAvailable(ctx) == ConnectionResult.SUCCESS }.getOrNull())
         return out
     }
+
+    /** Stan urządzenia do nagłówka sesji dziennika (3b-B1): bez nazw i adresów; zgody wybranego transportu ([bt]). */
+    fun env(ctx: Context, bt: Boolean): LinkEnv = LinkEnv(
+        android = Build.VERSION.RELEASE.orEmpty(),
+        sdk = Build.VERSION.SDK_INT,
+        maker = Build.MANUFACTURER.orEmpty(),
+        model = Build.MODEL.orEmpty(),
+        oneUi = LinkEnv.oneUi(runCatching { Build.VERSION::class.java.getField("SEM_PLATFORM_INT").getInt(null) }.getOrNull()),
+        bluetooth = bluetoothOn(ctx),
+        wifi = wifiOn(ctx),
+        location = locationOn(ctx),
+        playServices = if (bt) null else runCatching { GoogleApiAvailability.getInstance().isGooglePlayServicesAvailable(ctx) == ConnectionResult.SUCCESS }.getOrNull(),
+        permissions = (if (bt) LinkPermissions.rfcomm(Build.VERSION.SDK_INT, discovery = true, visible = true, scanForLocation = true) else LinkPermissions.required(Build.VERSION.SDK_INT))
+            .associate { it.substringAfterLast('.') to has(ctx, it) },
+    )
 
     fun permissionName(p: String): String = when {
         p.endsWith("BLUETOOTH_SCAN") || p.endsWith("BLUETOOTH_ADVERTISE") || p.endsWith("BLUETOOTH_CONNECT") ->

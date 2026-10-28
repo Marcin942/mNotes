@@ -2,7 +2,7 @@ package com.mdev.mnotes.core.nearby
 
 /**
  * Zdjęcie przez łącze w częściach z potwierdzeniami (`docs/NEARBY-PRZEBUDOWA.md` §3.4): nadawca wie, ile doszło
- * („2 z 3 · 64 %”), część bez potwierdzenia wraca po [TIMEOUT_MS], a po zerwaniu wysyłanie wznawia się od pierwszej
+ * („2 z 3 · 64 %”), część bez potwierdzenia wraca po [timeout], a po zerwaniu wysyłanie wznawia się od pierwszej
  * niepotwierdzonej. Każda część niesie nagłówek całości (nazwa, typ, liczba części, SHA-256), więc odbiorca może
  * zacząć składać od dowolnej. Szyfrowanie robi [SyncCodec], tu tylko porządek części. Części czyta się z [source]
  * dopiero przy wysyłaniu, więc zeszyt z pliku nie trafia w całości do pamięci.
@@ -27,6 +27,16 @@ class PhotoSender(
 
     val done: Boolean get() = acked.all { it }
 
+    /** Wygładzony czas od wysłania części do potwierdzenia (ms); -1, dopóki nic nie wróciło. */
+    private var rtt = -1.0
+
+    /**
+     * Limit czasu części (3b-B3): przed pierwszym potwierdzeniem [FIRST_TIMEOUT_MS] (wolny Bluetooth albo BLE nie zdąży
+     * w 15 s z 2 × 256 KB, a ponowienie tylko dokłada bajtów do zapchanego łącza), potem 3 × zmierzony czas części,
+     * w granicach [TIMEOUT_MS]…[MAX_TIMEOUT_MS].
+     */
+    fun timeout(): Long = if (rtt < 0) FIRST_TIMEOUT_MS else (3 * rtt).toLong().coerceIn(TIMEOUT_MS, MAX_TIMEOUT_MS)
+
     /** Część przekroczyła [MAX_TRIES] wysłań bez potwierdzenia: dalej nie ma sensu. */
     var failed = false
         private set
@@ -43,16 +53,17 @@ class PhotoSender(
         SyncMsg.PhotoPart(id, i, count, sha, name, mime, source.read(i.toLong() * size, partLength(i)))
 
     /**
-     * Części do wysłania w chwili [now]: najwyżej [WINDOW] w drodze; niepotwierdzona po [TIMEOUT_MS] idzie jeszcze raz.
+     * Części do wysłania w chwili [now]: najwyżej [WINDOW] w drodze; niepotwierdzona po [timeout] idzie jeszcze raz.
      * Po [MAX_TRIES] wysłaniach jednej części [failed] = true i nic już nie wychodzi.
      */
     fun due(now: Long): List<SyncMsg.PhotoPart> {
         if (failed || done) return emptyList()
         val out = ArrayList<SyncMsg.PhotoPart>()
-        var inFlight = (0 until count).count { !acked[it] && sentAt[it] >= 0 && now - sentAt[it] < TIMEOUT_MS }
+        val limit = timeout()
+        var inFlight = (0 until count).count { !acked[it] && sentAt[it] >= 0 && now - sentAt[it] < limit }
         for (i in 0 until count) {
             if (acked[i] || inFlight >= WINDOW) continue
-            val waiting = sentAt[i] >= 0 && now - sentAt[i] < TIMEOUT_MS
+            val waiting = sentAt[i] >= 0 && now - sentAt[i] < limit
             if (waiting) continue
             if (tries[i] >= MAX_TRIES) { failed = true; return emptyList() }
             tries[i]++
@@ -63,9 +74,20 @@ class PhotoSender(
         return out
     }
 
-    /** Potwierdzenie części [index]; false dla obcego albo powtórzonego. */
-    fun ack(index: Int): Boolean {
+    /** Która to próba wysłania części [index] (1 = pierwsza). */
+    fun tries(index: Int): Int = tries.getOrElse(index) { 0 }
+
+    /** Ile ms minęło od ostatniego wysłania części [index]; null, gdy jeszcze nie wyszła albo już potwierdzona. */
+    fun sinceSent(index: Int, now: Long): Long? =
+        if (index !in 0 until count || acked[index] || sentAt[index] < 0) null else now - sentAt[index]
+
+    /** Potwierdzenie części [index]; false dla obcego albo powtórzonego. [now] ≥ 0: pomiar czasu części do [timeout]. */
+    fun ack(index: Int, now: Long = -1): Boolean {
         if (index !in 0 until count || acked[index]) return false
+        if (now >= 0 && sentAt[index] >= 0) {
+            val sample = (now - sentAt[index]).coerceAtLeast(0).toDouble()
+            rtt = if (rtt < 0) sample else 0.7 * rtt + 0.3 * sample
+        }
         acked[index] = true
         return true
     }
@@ -91,6 +113,8 @@ class PhotoSender(
         const val PART = 256 * 1024
         const val WINDOW = 2
         const val TIMEOUT_MS = 15_000L
+        const val FIRST_TIMEOUT_MS = 60_000L
+        const val MAX_TIMEOUT_MS = 120_000L
         const val MAX_TRIES = 4
     }
 }

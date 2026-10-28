@@ -19,6 +19,7 @@ import com.mdev.mnotes.core.nearby.LinkMode
 import com.mdev.mnotes.editor.Editor
 import com.mdev.mnotes.editor.T
 import com.mdev.mnotes.lab.nearby.DiagnosticsDialog
+import com.mdev.mnotes.lab.nearby.LinkJournalDialog
 import com.mdev.mnotes.lab.nearby.NotebookSendDialog
 import com.mdev.mnotes.lab.nearby.Outgoing
 import com.mdev.mnotes.lab.nearby.PairStore
@@ -44,7 +45,7 @@ object PhoneLink : LabFeatures {
         var dialog by remember { mutableStateOf(0) }
         var tick by remember { mutableStateOf(0) }
         var outgoing by remember { mutableStateOf<Outgoing?>(null) }
-        Group(T.t("Telefon i tablet (Nearby / Bluetooth)", "Phone and tablet (Nearby / Bluetooth)"), keys = "nearby telefon tablet zdjęcie bluetooth rfcomm parowanie połącz wyślij diagnostyka łącze jakość phone pair connect send diagnostics link quality") {
+        Group(T.t("Telefon i tablet (Nearby / Bluetooth)", "Phone and tablet (Nearby / Bluetooth)"), keys = "nearby telefon tablet zdjęcie bluetooth rfcomm parowanie połącz wyślij diagnostyka dziennik eksperymentalne łącze jakość phone pair connect send diagnostics log experimental link quality") {
             Text(
                 T.t(
                     "Zdjęcie zrobione telefonem trafia od razu na stronę na tablecie, bez internetu i bez wspólnej sieci; każda ramka jest szyfrowana kluczem pary. Gdy Android pyta o lokalizację, to dlatego, że szukanie urządzeń mogłoby ją zdradzić; mNotes położenia nie odczytuje. Jedno zdjęcie bez parowania: Udostępnij → Quick Share na tablet i wstaw obraz.",
@@ -79,6 +80,7 @@ object PhoneLink : LabFeatures {
                     TextButton(onClick = { dialog = 5 }) { Text(T.t("Odbierz zeszyt z drugiego urządzenia", "Receive a notebook from the other device")) }
                 }
                 TextButton(onClick = { dialog = 3 }) { Text(T.t("Diagnostyka łącza", "Link diagnostics")) }
+                TextButton(onClick = { dialog = 7 }) { Text(T.t("Dziennik łącza", "Link log")) }
             }
         }
         when (dialog) {
@@ -88,6 +90,7 @@ object PhoneLink : LabFeatures {
             4 -> NotebookSendDialog({ dialog = 0 }) { file -> outgoing = file; dialog = 6 }
             5 -> PhoneLinkDialog(LinkMode.RECEIVE, null) { dialog = 0 }
             6 -> PhoneLinkDialog(LinkMode.SEND, null, outgoing?.let { listOf(it) }) { dialog = 0; outgoing = null }
+            7 -> LinkJournalDialog { dialog = 0 }
         }
     }
 }

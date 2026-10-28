@@ -45,20 +45,24 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.dp
 import com.mdev.mnotes.app.MNotesApp
 import com.mdev.mnotes.core.nearby.BtLimits
 import com.mdev.mnotes.core.nearby.LinkErrors
 import com.mdev.mnotes.core.nearby.LinkFile
 import com.mdev.mnotes.core.nearby.LinkFiles
+import com.mdev.mnotes.core.nearby.LinkIssue
 import com.mdev.mnotes.core.nearby.LinkMachine
 import com.mdev.mnotes.core.nearby.LinkMode
 import com.mdev.mnotes.core.nearby.LinkPermissions
+import com.mdev.mnotes.core.nearby.LinkPreflight
 import com.mdev.mnotes.core.nearby.LinkReceived
 import com.mdev.mnotes.core.nearby.LinkState
 import com.mdev.mnotes.core.nearby.LinkTransport
@@ -126,6 +130,7 @@ fun PhoneLinkDialog(start: LinkMode, ed: Editor?, files: List<Outgoing>? = null,
     val notebooks = if (start == LinkMode.SEND) files != null else ed == null
     var imported by remember { mutableIntStateOf(0) }
     val store = remember { PairStore(ctx) }
+    val journals = remember { LinkJournalStore.of(ctx) }
     val bt = remember { com.mdev.mnotes.lab.LinkSettings.of(ctx).bluetooth }
     val fullPhoto = remember { com.mdev.mnotes.lab.LinkSettings.of(ctx).fullPhoto }
     val me = remember { deviceName(ctx) }
@@ -146,6 +151,10 @@ fun PhoneLinkDialog(start: LinkMode, ed: Editor?, files: List<Outgoing>? = null,
     val waiting = remember { ArrayList<Outgoing>(files.orEmpty()) }
     // Zeszyt do wysłania leży w cache tylko na czas okna.
     DisposableEffect(Unit) { onDispose { files?.forEach { it.file.delete() } } }
+    // 3b-B3: ekran nie gaśnie, dopóki okno łącza jest otwarte (wygaszony Samsung usypia radio i zrywa łącze).
+    val view = LocalView.current
+    DisposableEffect(view) { val was = view.keepScreenOn; view.keepScreenOn = true; onDispose { view.keepScreenOn = was } }
+    var issues by remember { mutableStateOf(emptyList<LinkIssue>()) }
 
     /** Zeszyt z drugiego urządzenia: kopia jako nowy zeszyt w bibliotece (nic nie jest nadpisywane), czytany strumieniem. */
     fun importNotebook(f: LinkReceived) {
@@ -177,7 +186,9 @@ fun PhoneLinkDialog(start: LinkMode, ed: Editor?, files: List<Outgoing>? = null,
     link = remember(mode, role, generation, ready, key?.contentHashCode()) {
         if (!ready) null else {
             val t: LinkTransport = if (bt) RfcommTransport(AndroidBtPort(ctx), { mainThread.post(it) }, store.peerAddress.ifEmpty { null }) else NearbyTransport(ctx)
-            val m = LinkMachine(t, mode, role, me, if (mode == LinkMode.PAIR) null else key, store.peerName, files = LinkFiles.disk(linkDir(ctx)), listener = object : LinkMachine.Listener {
+            // 3b-B1: każde otwarcie łącza to sesja dziennika (po obu stronach), nazwy urządzeń są z niego usuwane.
+            journals.journal.begin(if (bt) "Bluetooth" else "Nearby", mode, role, LinkDiagnostics.env(ctx, bt), listOf(me, store.peerName))
+            val m = LinkMachine(t, mode, role, me, if (mode == LinkMode.PAIR) null else key, store.peerName, files = LinkFiles.disk(linkDir(ctx)), journal = journals.journal, listener = object : LinkMachine.Listener {
                 override fun changed(s: LinkState) {
                     state = s
                     // para zrobiona przez Nearby albo tablet z nowym adresem: zapamiętaj, z kim połączył Bluetooth
@@ -209,11 +220,22 @@ fun PhoneLinkDialog(start: LinkMode, ed: Editor?, files: List<Outgoing>? = null,
             for (p in waiting) m.sendFile(p.name, p.mime, p.file)
             waiting.clear()
         }
-        onDispose { link?.let { (m, t) -> m.stop(); (t as? NearbyTransport)?.close(); (t as? RfcommTransport)?.close() } }
+        onDispose { link?.let { (m, t) -> m.stop(); (t as? NearbyTransport)?.close(); (t as? RfcommTransport)?.close() }; journals.save() }
+    }
+    // Radio sprawdzane co 2 s: włączony w międzyczasie Bluetooth od razu wznawia łącze, bez „Spróbuj ponownie”.
+    val liveLink = rememberUpdatedState(link)
+    LaunchedEffect(Unit) {
+        while (true) {
+            val now = LinkPreflight.check(bt, LinkDiagnostics.bluetoothOn(ctx), LinkDiagnostics.locationOn(ctx), LinkDiagnostics.wifiOn(ctx))
+            if (LinkIssue.BT_OFF in issues && LinkIssue.BT_OFF !in now) liveLink.value?.first?.retry()
+            issues = now
+            delay(2_000)
+        }
     }
     LaunchedEffect(link) {
         val m = link?.first ?: return@LaunchedEffect
-        while (true) { delay(1_000); m.tick() }
+        var n = 0
+        while (true) { delay(1_000); m.tick(); if (++n % 5 == 0) journals.save() }
     }
 
     val pick = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
@@ -258,6 +280,7 @@ fun PhoneLinkDialog(start: LinkMode, ed: Editor?, files: List<Outgoing>? = null,
             else {
                 if (expired && mode == LinkMode.PAIR) Line(T.t("Para wygasła (np. po przywróceniu kopii zapasowej): połącz urządzenia jeszcze raz.", "The pairing expired (e.g. after restoring a backup): connect the devices again."))
                 else if (mode == LinkMode.PAIR && start != LinkMode.PAIR) Line(T.t("Najpierw połącz telefon z tabletem (raz).", "First connect the phone and the tablet (once)."))
+                IssuesPart(ctx, issues)
                 StatePart(state, mode, role, me, store.peerName, if (notebooks) imported else received, link?.first, notebooks)
                 if (mode == LinkMode.PAIR && digits == null) {
                     TextButton(onClick = { role = if (role == SyncRole.HOST) SyncRole.CLIENT else SyncRole.HOST }) {
@@ -277,7 +300,7 @@ fun PhoneLinkDialog(start: LinkMode, ed: Editor?, files: List<Outgoing>? = null,
                         if (missing(ctx, bt, visible = true).isEmpty()) showTablet(ctx) else { extra = 2; ask.launch(required(bt, visible = true).toTypedArray()) }
                     }) { Text(T.t("Pokaż tablet na 2 min", "Make the tablet visible for 2 min")) }
                 }
-                if (rt != null && (state as? LinkState.Problem)?.problem?.code == LinkErrors.BT_OFF) TextButton(onClick = {
+                if (rt != null && LinkIssue.BT_OFF !in issues && (state as? LinkState.Problem)?.problem?.code == LinkErrors.BT_OFF) TextButton(onClick = {
                     runCatching { ctx.startActivity(Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
                 }) { Text(T.t("Włącz Bluetooth", "Turn on Bluetooth")) }
             }
@@ -286,6 +309,20 @@ fun PhoneLinkDialog(start: LinkMode, ed: Editor?, files: List<Outgoing>? = null,
         }
     }
     if (diagnostics) DiagnosticsDialog(link?.first) { diagnostics = false }
+}
+
+/** Radio do włączenia (3b-B3): zdanie i przycisk do właściwego ustawienia systemu. */
+@Composable
+private fun IssuesPart(ctx: Context, issues: List<LinkIssue>) {
+    for (i in issues) {
+        Line((if (i.blocking) "⚠ " else "") + T.t(i.pl, i.en))
+        val intent = when (i) {
+            LinkIssue.BT_OFF -> Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE) to T.t("Włącz Bluetooth", "Turn on Bluetooth")
+            LinkIssue.LOCATION_OFF -> Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS) to T.t("Ustawienia lokalizacji", "Location settings")
+            LinkIssue.WIFI_OFF -> Intent(if (Build.VERSION.SDK_INT >= 29) Settings.Panel.ACTION_WIFI else Settings.ACTION_WIFI_SETTINGS) to T.t("Włącz Wi-Fi", "Turn on Wi-Fi")
+        }
+        TextButton(onClick = { runCatching { ctx.startActivity(intent.first.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) } }) { Text(intent.second) }
+    }
 }
 
 /** Ekran „Dlaczego” przed prośbą systemową; po odmowie droga do ustawień aplikacji. */

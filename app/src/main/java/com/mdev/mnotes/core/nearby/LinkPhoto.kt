@@ -63,6 +63,13 @@ class PhotoSender(
         return out
     }
 
+    /** Która to próba wysłania części [index] (1 = pierwsza). */
+    fun tries(index: Int): Int = tries.getOrElse(index) { 0 }
+
+    /** Ile ms minęło od ostatniego wysłania części [index]; null, gdy jeszcze nie wyszła albo już potwierdzona. */
+    fun sinceSent(index: Int, now: Long): Long? =
+        if (index !in 0 until count || acked[index] || sentAt[index] < 0) null else now - sentAt[index]
+
     /** Potwierdzenie części [index]; false dla obcego albo powtórzonego. */
     fun ack(index: Int): Boolean {
         if (index !in 0 until count || acked[index]) return false

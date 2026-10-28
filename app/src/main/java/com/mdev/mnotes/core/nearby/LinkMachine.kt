@@ -74,6 +74,8 @@ class LinkMachine(
     private val listener: Listener = object : Listener {},
     /** Gdzie składać odbierane pliki: w aplikacji katalog w cache ([LinkFiles.disk]), w testach pamięć. */
     files: LinkFiles = LinkFiles.MEMORY,
+    /** Dziennik do eksportu (3b-B1): sesję zaczyna aplikacja ([LinkJournal.begin]), maszyna dopisuje etapy i części. */
+    private val journal: LinkJournal? = null,
 ) {
     interface Listener {
         fun changed(state: LinkState) {}
@@ -85,7 +87,11 @@ class LinkMachine(
         fun rejected(peer: String) {}
     }
 
-    init { require(mode == LinkMode.PAIR || pairKey != null) { "praca po parowaniu wymaga klucza pary" } }
+    init {
+        require(mode == LinkMode.PAIR || pairKey != null) { "praca po parowaniu wymaga klucza pary" }
+        journal?.redact(deviceName)
+        journal?.redact(peerLabel)
+    }
 
     var state: LinkState = LinkState.Idle
         private set
@@ -207,7 +213,8 @@ class LinkMachine(
     fun onFound(id: String, name: String) {
         if (!running || role != SyncRole.CLIENT || !accepts(name)) return
         found[id] = label(name)
-        record("znaleziono: ${label(name)}")
+        journal?.redact(label(name))
+        record("znaleziono: ${label(name)}", peer = id)
         if (mode == LinkMode.PAIR) {
             if (endpoint == null) {
                 showSearching()
@@ -232,6 +239,8 @@ class LinkMachine(
         }
         endpoint = id
         peerName = label(name)
+        journal?.redact(peerName)
+        trace("połączenie przychodzące", id)
         joiner = ChunkJoiner()
         linkStart = clock()
         // Sesja powstaje przed `onConnected`, bo pierwsza ramka drugiej strony może przyjść tuż po nim.
@@ -324,12 +333,19 @@ class LinkMachine(
         }
         when (val m = c.open(raw)) {
             is SyncMsg.PhotoPart -> {
+                trace("odebrano część ${m.index + 1}/${m.count}: ${m.bytes.size / 1024} KB")
                 val r = receiver.accept(m)
                 for (m2 in r.reply) send(c.seal(m2))
                 if (r.bad) record("zdjęcie odrzucone: zła suma kontrolna")
                 r.file?.let { receivedCount++; record("odebrano plik: ${it.file.length / 1024} KB"); listener.file(it); ready() }
             }
-            is SyncMsg.PhotoAck -> { current?.ack(m.index); pump() }
+            is SyncMsg.PhotoAck -> {
+                current?.let { s ->
+                    val ms = s.sinceSent(m.index, clock())
+                    if (s.ack(m.index)) trace("część ${m.index + 1}/${s.count} potwierdzona" + (ms?.let { " po $it ms" } ?: ""))
+                }
+                pump()
+            }
             is SyncMsg.PhotoDone -> {
                 val s = current
                 if (s != null && s.id == m.id) {
@@ -362,7 +378,11 @@ class LinkMachine(
             if (state is LinkState.Sending) set(LinkState.Ready(peerName, sentCount, receivedCount))
             return
         }
-        for (p in s.due(clock())) send(c.seal(p))
+        for (p in s.due(clock())) {
+            val k = s.tries(p.index)
+            trace("część ${p.index + 1}/${p.count} wysłana: ${p.bytes.size / 1024} KB" + if (k > 1) " (ponowienie, próba $k)" else "")
+            send(c.seal(p))
+        }
         if (s.failed) {
             // Nie porzucamy: zdjęcie wraca na początek kolejki, potwierdzone części zostają u odbiorcy.
             s.rearm()
@@ -396,7 +416,7 @@ class LinkMachine(
         linkStart = clock()
         autoPickAt = 0
         retryAt = 0
-        record("łączę z: $peerName")
+        record("łączę z: $peerName", peer = id)
         set(LinkState.Connecting(peerName))
         transport.request(id, ownName)
     }
@@ -438,12 +458,24 @@ class LinkMachine(
 
     private fun label(name: String) = if (pairKey == null) name.removePrefix(PAIR_PREFIX) else peerLabel
 
-    private fun set(s: LinkState) { if (s != state) { state = s; listener.changed(s) } }
+    private fun set(s: LinkState) {
+        if (s == state) return
+        if (s::class != state::class) trace("stan: ${s::class.simpleName}")
+        state = s
+        listener.changed(s)
+    }
 
-    private fun record(text: String, code: Int? = null) {
+    private fun record(text: String, code: Int? = null, peer: String? = null) {
         events.addLast(LinkEvent(clock(), text, code))
         while (events.size > LOG_SIZE) events.removeFirst()
+        journal?.add(if (peer == null) text else text + " " + journal.peer(peer), code)
     }
+
+    /** Tylko do dziennika (części, stany): za drobne na 20 wpisów „Diagnostyki”. */
+    private fun trace(text: String, peer: String? = null) { journal?.add(if (peer == null) text else text + " " + journal.peer(peer)) }
+
+    /** Wpis transportu do dziennika (wyjątki, stan ładunków Nearby); tekst i tak przechodzi przez [LinkScrub]. */
+    fun note(text: String) = trace(text)
 
     companion object {
         /** Nazwa punktu w parowaniu: przedrostek + nazwa urządzenia (lista „Znaleziono: Galaxy Tab S10+”). */

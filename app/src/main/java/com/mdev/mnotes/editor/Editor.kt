@@ -317,21 +317,45 @@ class Editor(val ctx: Context, val nbId: String) {
 
     /** Wykonanie z zapisem na stosie cofania. */
     fun exec(edit: DocEdit) {
-        val grown = boardGrowth(edit)
-        doc.exec(grown?.first ?: edit); undoTick++
+        val follow = liveFollow(edit, after = false)
+        val grown = boardGrowth(edit, follow)
+        doc.exec(grown?.first ?: follow?.let { DocEdit.Group(listOf(edit, it)) } ?: edit); undoTick++
         grown?.second?.let { (dx, dy) -> view?.boardShifted(dx, dy) }
+    }
+
+    // — Żywa konstrukcja (NAU-3) —
+    /** Z czego powstały wyniki Konstrukcji i Geometrii w tej sesji; w pliku zostają zwykłe elementy. */
+    val live = com.mdev.mnotes.core.geom.Live()
+
+    /**
+     * Przeliczone wyniki konstrukcji po edycji [edit] ([after]: edycja już wykonana, jak w [record]); idą w tym samym
+     * wpisie cofania co zmiana ucznia, więc jedno cofnięcie wraca wejście i wynik naraz.
+     */
+    private fun liveFollow(edit: DocEdit, after: Boolean): DocEdit.Elements? {
+        if (edit !is DocEdit.Elements || live.links(edit.pageId).isEmpty()) return null
+        val page = doc.page(edit.pageId) ?: return null
+        val cur = doc.content(page)
+        val (before, next) = if (after) cur.apply(edit.edit.inverse()) to cur else cur to cur.apply(edit.edit)
+        return live.follow(page.id, before, next)?.let { DocEdit.Elements(page.id, it) }
+    }
+
+    /** Wynik konstrukcji wypada daleko poza stroną [pageId] — przeliczenie go nie wstawia (jak [constructed]). */
+    private fun liveTooFar(pageId: String, els: List<Element>): Boolean {
+        val spec = doc.page(pageId)?.spec ?: return true
+        return ConstructOps.tooFar(els, spec.w, spec.h)
     }
 
     /**
      * 2b-A13: zmiana treści tablicy blisko brzegu dokłada płótna w tym samym wpisie cofania; przy wzroście w lewo/w górę
      * cała treść przesuwa się o (dx, dy) — wtedy zwraca też to przesunięcie, żeby widok poszedł za treścią.
      */
-    private fun boardGrowth(edit: DocEdit): Pair<DocEdit, Pair<Float, Float>?>? {
+    private fun boardGrowth(edit: DocEdit, follow: DocEdit.Elements? = null): Pair<DocEdit, Pair<Float, Float>?>? {
         if (edit !is DocEdit.Elements) return null
         val page = doc.page(edit.pageId) ?: return null
         if (!page.spec.board) return null
-        val (parts, shift) = boardParts(page, doc.content(page).apply(edit.edit)) ?: return null
-        return DocEdit.Group(listOf(edit) + parts) to shift
+        val after = doc.content(page).apply(edit.edit).let { c -> follow?.let { c.apply(it.edit) } ?: c }
+        val (parts, shift) = boardParts(page, after) ?: return null
+        return DocEdit.Group(listOfNotNull(edit, follow) + parts) to shift
     }
 
     /** Edycje powiększające tablicę [page] dla treści [after] (rozmiar, ewentualnie przesunięcie całej treści). */
@@ -353,7 +377,11 @@ class Editor(val ctx: Context, val nbId: String) {
         doc.exec(DocEdit.Group(parts)); undoTick++
         shift?.let { (dx, dy) -> view?.boardShifted(dx, dy) }
     }
-    fun record(edit: DocEdit) { doc.record(edit); undoTick++; boardAfter(edit) }
+    fun record(edit: DocEdit) {
+        val follow = liveFollow(edit, after = true)
+        follow?.apply(doc)
+        doc.record(follow?.let { DocEdit.Group(listOf(edit, it)) } ?: edit); undoTick++; boardAfter(edit)
+    }
 
     // — Zaznaczenie —
     fun clearSel() { if (sel != null) { sel = null; transformMode = false; pointEdit = false; selTick++ } }
@@ -907,7 +935,12 @@ class Editor(val ctx: Context, val nbId: String) {
         val els = constructed(p, op.build(ink, pen.width.coerceIn(0.6f, 3f)), ConstructOps.failOf(op.id))
             ?: return say(T.t("Ta konstrukcja nie ma rozwiązania dla zaznaczonych kształtów", "This construction has no solution for the selected shapes"))
         if (els.isEmpty()) return
+        val ins = selElements()
         exec(DocEdit.Elements(p.id, ElementsEdit.add(doc.content(p), els)))
+        val names = settings.constructNames; val pl = T.pl; val w = pen.width.coerceIn(0.6f, 3f); val id = op.id; val pid = p.id
+        live.add(pid, ins.map { it.id }, els.map { it.id }) { cur ->
+            ConstructOps.ops(cur, names, pl).firstOrNull { it.id == id }?.build?.invoke(ink, w)?.takeUnless { liveTooFar(pid, it) }
+        }
         select(p.id, els.map { it.id }.toSet())
     }
 
@@ -916,6 +949,8 @@ class Editor(val ctx: Context, val nbId: String) {
     var geoKind by mutableStateOf(GeoTool.Kind.COMPASS)
         private set
     val geoInputs = androidx.compose.runtime.mutableStateListOf<GeoTool.Input>()
+    /** Skąd wzięto [geoInputs] (te same pozycje) — dla żywej konstrukcji (NAU-3). */
+    private val geoPicks = ArrayList<GeoTool.Picked>()
     var geoPage: String? = null
         private set
 
@@ -925,7 +960,7 @@ class Editor(val ctx: Context, val nbId: String) {
     var geoAngle by mutableStateOf(90f)
 
     fun geoChoose(k: GeoTool.Kind) { geoKind = k; geoReset() }
-    fun geoReset() { geoInputs.clear(); geoPage = null; view?.invalidate() }
+    fun geoReset() { geoInputs.clear(); geoPicks.clear(); geoPage = null; view?.invalidate() }
 
     /**
      * Dotknięcie strony [pageId] w ([x], [y]) narzędziem Geometria: następne wejście wybranej konstrukcji; po ostatnim —
@@ -934,21 +969,29 @@ class Editor(val ctx: Context, val nbId: String) {
     fun geoTap(pageId: String, x: Float, y: Float, tol: Float) {
         if (readOnly) return
         val page = doc.page(pageId) ?: return
-        if (geoPage != null && geoPage != pageId) geoInputs.clear()
+        if (geoPage != null && geoPage != pageId) { geoInputs.clear(); geoPicks.clear() }
         geoPage = pageId
         val want = geoKind.inputs[geoInputs.size]
-        val input = GeoTool.pick(doc.content(page).elements, x, y, tol, want)
-        if (input == null) { say(GeoTool.missHint(geoKind, geoInputs.size, T.pl)); return }
-        geoInputs += input
+        val picked = GeoTool.pickFrom(doc.content(page).elements, x, y, tol, want)
+        if (picked == null) { say(GeoTool.missHint(geoKind, geoInputs.size, T.pl)); return }
+        geoInputs += picked.input; geoPicks += picked
         if (geoInputs.size < geoKind.inputs.size) { view?.invalidate(); return }
         val ink = (if (pen.kind == PenKind.HIGHLIGHTER) 0xFF37474F.toInt() else pen.color) or (0xFF shl 24)
-        val kind = geoKind
-        val built = GeoTool.build(kind, geoInputs.toList(), ink, pen.width.coerceIn(0.6f, 3f), settings.constructNames, T.pl, geoAngle)
+        val kind = geoKind; val w = pen.width.coerceIn(0.6f, 3f); val names = settings.constructNames; val pl = T.pl; val angle = geoAngle
+        val picks = geoPicks.toList()
+        val built = GeoTool.build(kind, geoInputs.toList(), ink, w, names, pl, angle)
         geoReset()
         val els = constructed(page, built, GeoTool.failOf(kind))
             ?: return say(T.t("Ta konstrukcja nie ma rozwiązania dla wskazanych kształtów", "This construction has no solution for the picked shapes"))
         if (els.isEmpty()) return
         exec(DocEdit.Elements(page.id, ElementsEdit.add(doc.content(page), els)))
+        // NAU-3: wejście z wolnego miejsca strony jest stałe; wskazane kropki, wierzchołki i kształty ciągną wynik za sobą.
+        val pid = page.id
+        live.add(pid, picks.mapNotNull { it.id }, els.map { it.id }) { cur ->
+            val byId = cur.associateBy { it.id }
+            val ins = picks.mapIndexed { i, pk -> if (pk.id == null) pk.input else GeoTool.resolve(kind.inputs[i], byId[pk.id] ?: return@add null, pk.part) ?: return@add null }
+            GeoTool.build(kind, ins, ink, w, names, pl, angle).takeUnless { it.isEmpty() || liveTooFar(pid, it) }
+        }
     }
 
     // — Krzywa krok po kroku (2b-A10): przez punkty, kontur, piórko —

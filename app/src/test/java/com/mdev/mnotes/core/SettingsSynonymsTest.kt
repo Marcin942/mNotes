@@ -3,6 +3,7 @@ package com.mdev.mnotes.core
 import com.mdev.mnotes.core.search.SettingsQuery
 import com.mdev.mnotes.core.search.SettingsSynonyms
 import com.mdev.mnotes.core.search.TextSearch
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
@@ -65,6 +66,23 @@ class SettingsSynonymsTest {
         expect("zoom", "powiększenie")
         expect("gum", "Rozmiar gumki")            // fragment słowa
         expect("wskaznik", "lasera")              // przegląd §3.2a: kolor lasera także w Ustawieniach
+    }
+
+    /** 2c-A12: przycinanie słów nie łączy różnych wyrazów o wspólnym początku; zwykłe odmiany i fragmenty dalej trafiają. */
+    @Test fun trimmingDoesNotJoinDifferentWords() {
+        fun miss(query: String, label: String, keys: String = "") =
+            assertFalse("„$query” trafiło w „$label”", SettingsQuery.of(query)!!.matches(label, keys))
+        miss("obraz", "Obracanie i kąty", "obrót obracanie kąt snap rotate angle")
+        miss("kolor", "Koło zębate")
+        miss("share", "Image sharpness")
+        miss("ruled", "Show ruler")
+        assertTrue(hits("ścieranie").any { "gumki" in it })
+        assertTrue(hits("gum").any { "gumki" in it })
+        assertTrue(hits("lupa").any { "powiększenie" in it })
+        assertTrue(hits("ciemny").any { "Motyw" in it })
+        assertTrue(SettingsQuery.of("profil")!!.matches("Profile pracy"))
+        assertTrue(SettingsQuery.of("obraz")!!.matches("Obrazy na stronie"))
+        assertTrue(SettingsQuery.of("kolor")!!.matches("Kolory pióra"))
     }
 
     @Test fun synonymsDoNotMatchInsideOtherWords() {

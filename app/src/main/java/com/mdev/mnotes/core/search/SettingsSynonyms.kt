@@ -65,21 +65,38 @@ object SettingsSynonyms {
 
     /**
      * Słowa skojarzone ze słowem zapytania [word] (złożonym, bez polskich znaków): członkowie każdej grupy, której
-     * któreś słowo zaczyna się od [word]. Krótkie słowa (< 3 litery) nie rozszerzają się, bo pasowałyby do wszystkiego.
+     * któreś słowo zaczyna się od [word] albo jest jego odmianą. Krótkie słowa (< 3 litery) nie rozszerzają się.
      */
     fun alternatives(word: String): Set<String> {
         if (word.length < 3) return emptySet()
         val out = HashSet<String>()
-        for (g in folded) if (g.any { it.startsWith(word) }) out.addAll(g)
+        for (g in folded) if (g.any { queryMatches(it, word) }) out.addAll(g)
         out.remove(word)
         return out
     }
 
     /**
-     * Czy wyraz tekstu [w] to słowo skojarzone [a] (oba złożone): ten sam wyraz albo — dla słów ≥ 5 liter — ten sam
-     * rdzeń z inną końcówką („telefonem” ↔ „telefon”, „gumki” ↔ „gumka”). Fragment innego wyrazu się nie liczy.
+     * Czy wyraz tekstu [w] to słowo skojarzone [a] (oba złożone): ten sam wyraz albo jego odmiana ([inflected]).
+     * Fragment innego wyrazu się nie liczy.
      */
-    fun wordMatches(w: String, a: String): Boolean = w == a || (a.length >= 5 && w.startsWith(stem(a)))
+    fun wordMatches(w: String, a: String): Boolean = w == a || inflected(w, a)
+
+    /** Wyraz [w] zaczyna się od słowa zapytania [q] („gum” → „gumki”) albo jest jego odmianą. */
+    fun queryMatches(w: String, q: String): Boolean = w.startsWith(q) || inflected(w, q)
+
+    /**
+     * 2c-A12: czy [w] to [q] z inną końcówką — wspólny rdzeń ([stem]) i 1–3 litery po nim („gumki” ↔ „gumka”,
+     * „telefonem” ↔ „telefon”). Dłuższy ogon to inny wyraz („obracanie” ≠ „obraz”, „sharpness” ≠ „share”), sam rdzeń
+     * też („koło” ≠ „kolor”). Słowa krótsze niż 5 liter i [NO_STEM] pasują tylko jako początek wyrazu.
+     */
+    fun inflected(w: String, q: String): Boolean {
+        if (q.length < 5 || q in NO_STEM) return false
+        val s = stem(q)
+        return w.startsWith(s) && w.length - s.length in 1..3
+    }
+
+    /** Słowa bez przycinania: ich rdzeń z krótką końcówką to inny wyraz („ruled” → „ruler”). */
+    val NO_STEM = setOf("ruled")
 
     /** Rdzeń jak w [SettingsQuery]: bez jednej (5–7 liter) albo dwóch (≥ 8 liter) ostatnich liter. */
     fun stem(w: String): String = when { w.length >= 8 -> w.dropLast(2); w.length >= 5 -> w.dropLast(1); else -> w }

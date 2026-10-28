@@ -1007,7 +1007,7 @@ Nearby nie zmieniam do odpowiedzi Marcina na pytania z `plan/NEARBY-OPEN-SOURCE.
   **Tablet:** Krzywa → Piórko: stuknij dwa węzły, potem przeciągnij od drugiego — wyciąga się uchwyt, węzłów dalej
   dwa. ↶ w kapsule (albo Backspace z klawiaturą) zdejmuje ostatni węzeł; przy ostatnim szkic znika. Postaw trzy węzły
   i wyjdź z zeszytu strzałką wstecz — po powrocie krzywa jest na stronie.
-- **2c-A11 (noc/f2c-profile):** profile. Znacznik włączonego profilu w nagłówku (obok „n / N”), stuknięcie → „Wyłącz
+- **2c-A11 (cd01f9e):** profile. Znacznik włączonego profilu w nagłówku (obok „n / N”), stuknięcie → „Wyłącz
   profil”. Ręczna zmiana ustawienia z listy profilu przy włączonym profilu (także w Ustawieniach) → dymek „Zapisać
   w profilu …?” [Tak/Nie]; „Nie” — zmiana działa do wyłączenia profilu. Przypięty profil (zeszyt albo stanowisko)
   wyłącza się po wyjściu z zeszytu i wraca profil sprzed (chyba że w trakcie zmieniono go ręcznie); powrót
@@ -1020,6 +1020,13 @@ Nearby nie zmieniam do odpowiedzi Marcina na pytania z `plan/NEARBY-OPEN-SOURCE.
   znika, palec znów przewija. Włącz „Wykład”, w Więcej przełącz mini-mapę → po chwili dymek „Zapisać w profilu
   „Wykład”?” → Tak; wyłącz i włącz profil — mini-mapa jak zapisano. Przypnij „Rysowanie” do zeszytu („Włączaj …
   przy otwieraniu”), wyjdź do biblioteki — profil wyłączony; wejdź — włączony.
+- **2c-A12 (noc/f2c-szukaj):** wyszukiwarka ustawień. Słowo zapytania trafia w początek wyrazu albo w odmianę
+  z końcówką 1–3 litery po rdzeniu; synonimy tak samo. Znikły fałszywe trafienia obraz→obracanie, kolor→koło,
+  share→sharpness, ruled→ruler (ostatnie przez listę wyjątków `SettingsSynonyms.NO_STEM`). Test
+  `trimmingDoesNotJoinDifferentWords` (przed poprawką padał na „obraz”). Strata: „pióro” nie znajdzie już „piór”
+  (sam rdzeń bez końcówki), fragment ze środka wyrazu też nie.
+  **Tablet:** Ustawienia → szukaj „obraz” — nie ma „Obracanie i kąty”, są wiersze o obrazach; „kolor” — bez „koła”;
+  „ścieranie”, „gum”, „lupa”, „ciemny” dalej znajdują gumkę, powiększenie i motyw.
 
 ### Na tablecie po FAZIE 2c/2d — kolejność (z `dzienniki/PRZEGLAD-FABLE-2.md` §5, szczegóły tam)
 Instalacja: `labDebug` z `noc/wszystko` (tablet i telefon), do pkt 16 też `coreDebug`. Przy punktach poprawionych

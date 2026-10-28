@@ -64,6 +64,8 @@ enum class SyncRole { HOST, CLIENT; val opposite get() = if (this == HOST) CLIEN
 object LinkChunks {
     const val CHUNK = 900_000
     const val MAX_MESSAGE = 24 shl 20
+    /** Najdłuższa wiadomość przed uwierzytelnieniem (hello, kroki parowania mają po kilkaset bajtów). */
+    const val PRE_AUTH_MAX = 16 shl 10
 
     fun split(data: ByteArray, chunk: Int = CHUNK): List<ByteArray> {
         if (data.isEmpty()) return listOf(byteArrayOf(0))
@@ -75,7 +77,7 @@ object LinkChunks {
 }
 
 /** Skleja porcje z [LinkChunks.split]; za długą wiadomość albo złą flagę odrzuca (wyjątek zrywa łącze). */
-class ChunkJoiner(private val max: Int = LinkChunks.MAX_MESSAGE) {
+class ChunkJoiner(var max: Int = LinkChunks.MAX_MESSAGE) {
     private val buf = ByteArrayOutputStream()
 
     fun feed(part: ByteArray): ByteArray? {

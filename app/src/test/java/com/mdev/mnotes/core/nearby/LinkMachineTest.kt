@@ -465,6 +465,20 @@ class LinkMachineTest {
     }
 
     @Test
+    fun strangerCannotBufferMegabytesBeforeTheHello() {
+        // Obcy zna nazwę ogłaszaną przez tablet (słychać ją w eterze), więc dostaje połączenie; zanim przejdzie `hello`,
+        // nie może kazać tabletowi trzymać w pamięci dziesiątek MB (audyt, docs/BEZPIECZENSTWO.md).
+        val key = pairKey()
+        val tablet = machine(air.end("tablet"), LinkMode.RECEIVE, SyncRole.HOST, "Galaxy Tab S10+", key)
+        air.end("obcy")
+        tablet.start(); air.pump()
+        tablet.onInitiated("obcy", SyncCrypto.nearbyName(key))
+        tablet.onConnected("obcy")
+        tablet.onReceived("obcy", byteArrayOf(1) + ByteArray(1 shl 20))
+        assertTrue(tablet.log.joinToString { it.text }, tablet.log.any { it.text.startsWith("zła ramka") })
+    }
+
+    @Test
     fun logKeepsTheLastTwentyEvents() {
         val phone = machine(air.end("telefon"), LinkMode.SEND, SyncRole.CLIENT, "P", ByteArray(32))
         phone.start()

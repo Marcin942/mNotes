@@ -286,6 +286,8 @@ class LinkMachine(
     fun onReceived(id: String, bytes: ByteArray) {
         if (id != endpoint) return
         try {
+            // Do uwierzytelnienia (hello z kluczem pary) obcy, który zna ogłaszaną nazwę, mógłby słać 24 MB porcji.
+            joiner.max = if (codec?.ready == true) LinkChunks.MAX_MESSAGE else LinkChunks.PRE_AUTH_MAX
             val raw = joiner.feed(bytes) ?: return
             handle(raw)
         } catch (e: Exception) {

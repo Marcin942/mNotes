@@ -353,6 +353,8 @@ class PdfDocument(val data: ByteArray) {
         val cols = (p?.get("Columns") as? Double)?.toInt()?.coerceIn(1, 1 shl 20) ?: 1
         val bpp = maxOf(1, (colors * bpc + 7) / 8)
         val row = (colors * bpc * cols + 7) / 8
+        // wiersz dłuższy niż całe dane to plik zepsuty albo wrogi (1 bajt + /Columns 2²⁰ dawał 64 MB na wiersz)
+        if (row > src.size) return src
         if (pred == 2) {
             if (bpc != 8) return src
             val out = src.copyOf()
@@ -417,7 +419,11 @@ class PdfDocument(val data: ByteArray) {
             val c = src[i++].toInt() and 0xFF
             if (c == '~'.code) break
             if (PdfLexer.isWs(c)) continue
-            if (c == 'z'.code && n == 0) { repeat(4) { out.write(0) }; continue }
+            if (c == 'z'.code && n == 0) {
+                repeat(4) { out.write(0) }
+                if (out.size() > MAX_STREAM) throw PdfException("strumień za duży")
+                continue
+            }
             if (c < 33 || c > 117) continue
             group[n++] = c - 33
             if (n == 5) {

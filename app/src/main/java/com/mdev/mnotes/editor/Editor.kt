@@ -449,7 +449,13 @@ class Editor(val ctx: Context, val nbId: String) {
         val page = doc.pages.getOrNull(pi) ?: return null
         var b = Bounds.EMPTY
         for (e in els) b = b.union(e.bounds)
-        val dx = cx - b.cx; val dy = cy - b.cy
+        var dx = cx - b.cx; var dy = cy - b.cy
+        // 3c-A2: wklejone albo upuszczone z innego dokumentu leży całe na stronie (wystające strona przycinała, jakby
+        // obiekt był pod nią); tablica rośnie sama, więc tam bez dosuwania.
+        if (!page.spec.board) {
+            val (fx, fy) = com.mdev.mnotes.core.layout.PageDrop.pushInside(Bounds(b.l + dx, b.t + dy, b.r + dx, b.b + dy), page.spec.w, page.spec.h)
+            dx += fx; dy += fy
+        }
         val copies = els.map { e ->
             var n = dup(e, dx, dy)
             if (n is ImageEl && fromNb != nbId) {

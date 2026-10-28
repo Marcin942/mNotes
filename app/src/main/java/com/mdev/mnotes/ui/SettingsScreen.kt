@@ -319,6 +319,10 @@ private fun Appearance(set: com.mdev.mnotes.data.Settings) {
         ToggleRow(T.t("Pokazuj dymki o narzędziach po ich wybraniu", "Show tool tips after picking a tool"), set.toolHints, keys = "dymki komunikaty napis wybrane narzędzie podpowiedź toast hint") { set.toolHints = it }
         HelperStripPrefs(set)
         ToggleRow(
+            T.t("Przewijanie o pół ekranu poza brzeg stron (wygodniej pisać przy brzegu, np. leworęcznym)", "Scroll half a screen past the page edges (easier writing near an edge, e.g. left-handed)"),
+            set.scrollMargin, keys = "leworęczny lewa ręka dłoń przewijanie margines zapas brzeg pierwsza strona przesuń left handed scroll margin overscroll",
+        ) { set.scrollMargin = it }
+        ToggleRow(
             T.t("Mini-mapa strony po przewinięciu przy dużym powiększeniu (przesuwana palcem)", "Page mini-map after scrolling when zoomed in (moved with a finger)"),
             set.miniMap, keys = "mini mapa podgląd strony nawigacja powiększenie zoom róg minimap overview",
         ) { set.miniMap = it }

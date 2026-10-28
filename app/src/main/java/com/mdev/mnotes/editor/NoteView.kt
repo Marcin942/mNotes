@@ -49,6 +49,7 @@ import com.mdev.mnotes.core.layout.ZoomLimits
 import com.mdev.mnotes.core.layout.MiniMap
 import com.mdev.mnotes.core.layout.Board
 import com.mdev.mnotes.core.layout.ToolReturn
+import com.mdev.mnotes.core.layout.ScrollRange
 import com.mdev.mnotes.core.model.BoxElement
 import com.mdev.mnotes.core.color.ThemeMap
 import com.mdev.mnotes.core.model.DocEdit
@@ -347,8 +348,11 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
     private fun maxZoom() = lane?.maxZoom() ?: ZoomLimits.maxZoom(baseZoom(), settings.zoomMaxFactor)
 
     // 2d-A1: w pasie stanowiska oś wspólna należy do modelu (widok ma wysokość okna, nie pasa) — tu tylko oś stron.
-    private fun clampX(x: Float, z: Float): Float { if (lane != null && ed.layoutMode != 1) return x; val cw = layout.docWidth * z; return if (cw <= width) (width - cw) / 2 else x.coerceIn(width - cw, 0f) }
-    private fun clampY(y: Float, z: Float): Float { if (lane != null && ed.layoutMode == 1) return y; val ch = layout.docHeight * z; return if (ch <= height) (height - ch) / 2 else y.coerceIn(height - ch, 0f) }
+    private fun clampX(x: Float, z: Float): Float { if (lane != null && ed.layoutMode != 1) return x; return ScrollRange.clamp(x, layout.docWidth * z, width.toFloat(), marginX()) }
+    private fun clampY(y: Float, z: Float): Float { if (lane != null && ed.layoutMode == 1) return y; return ScrollRange.clamp(y, layout.docHeight * z, height.toFloat(), marginY()) }
+    // 3c-A4: zapas przewijania wokół dokumentu (pół ekranu); na stanowisku pasy liczy model, tam bez zapasu.
+    private fun marginX() = if (lane == null && settings.scrollMargin) width * ScrollRange.MARGIN else 0f
+    private fun marginY() = if (lane == null && settings.scrollMargin) height * ScrollRange.MARGIN else 0f
 
     private fun docX(sx: Float) = (sx - tx) / zoom
     private fun docY(sy: Float) = (sy - ty) / zoom
@@ -855,8 +859,8 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
             val s2 = c.save()
             c.translate(layout.left(tgt), layout.top(tgt))
             if (clip) c.clipRect(0f, 0f, spec.w, spec.h)
-            c.translate(layout.left(lPage) - layout.left(tgt), layout.top(lPage) - layout.top(tgt))
-            c.concat(matrixOf(lM))
+            // 3c-A2: podgląd stoi tam, gdzie zaznaczenie wyląduje (na innej stronie dosunięte w całości na nią).
+            c.concat(matrixOf(PageDrop.intoTarget(layout, lPage, tgt, lM, lBounds)))
             val z = zoom * lM.scaleFactor
             renderer.theme = themeFor(spec); renderer.themePhotos = settings.pageThemePhotos
             for (el in lEls) renderer.drawElement(c, doc.id, el, z, false, spec.darkPaper)
@@ -1584,11 +1588,11 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
                 tracker.computeCurrentVelocity(1000, cfg.scaledMaximumFlingVelocity.toFloat())
                 val vx = tracker.getXVelocity(navPid); val vy = tracker.getYVelocity(navPid)
                 if (hypot(vx, vy) > cfg.scaledMinimumFlingVelocity) {
-                    val cw = layout.docWidth * zoom; val ch = layout.docHeight * zoom
-                    val minX = if (cw <= width) ((cw - width) / 2).toInt() else 0
-                    val maxX = if (cw <= width) minX else (cw - width).toInt()
-                    val minY = if (ch <= height) ((ch - height) / 2).toInt() else 0
-                    val maxY = if (ch <= height) minY else (ch - height).toInt()
+                    // Scroller liczy -tx/-ty, więc zakres z [ScrollRange] odwrócony.
+                    val rx = ScrollRange.of(layout.docWidth * zoom, width.toFloat(), marginX())
+                    val ry = ScrollRange.of(layout.docHeight * zoom, height.toFloat(), marginY())
+                    val minX = (-rx[1]).toInt(); val maxX = (-rx[0]).toInt()
+                    val minY = (-ry[1]).toInt(); val maxY = (-ry[0]).toInt()
                     // 2d-A1: na stanowisku rzut liczy model (oba kierunki naraz, ten sam wzór co OverScroller).
                     val lh = lane
                     if (lh != null) lh.fling(this, vx, vy)
@@ -3111,11 +3115,17 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
         c.scale(z, z)
         c.translate(-zw.x, -zw.y)
         c.clipRect(0f, 0f, spec.w, spec.h)
+        // 3c-A1: okno powiększenia pokazuje stronę w tym samym trybie (ciemny/jasny) co główny widok.
+        val th = themeFor(spec)
+        renderer.theme = th; renderer.themePhotos = settings.pageThemePhotos
         renderer.drawPaper(c, spec, z, cache.backdrop(page))
         renderer.drawElements(c, doc.id, doc.content(page), 0, Bounds(zw.x, zw.y, zw.x + rw, zw.y + rh), z, false, spec.darkPaper)
+        renderer.theme = null
         if (liveActive && livePage == zwPage) {
-            if (shapeSnapped) renderer.drawStrokeData(c, builder.penKind, builder.penColor, builder.width, shapePts, shapePts.size / 3, z, spec.darkPaper, shapePoly, builder.line, true)
-            else renderer.drawStrokeData(c, builder.penKind, builder.penColor, builder.width, builder.pts, builder.count, z, spec.darkPaper, line = builder.line)
+            val col = if (th == null) builder.penColor else if (builder.penKind == PenKind.HIGHLIGHTER) th.highlighter(builder.penColor) else th.ink(builder.penColor)
+            val dk = th?.toDark ?: spec.darkPaper
+            if (shapeSnapped) renderer.drawStrokeData(c, builder.penKind, col, builder.width, shapePts, shapePts.size / 3, z, dk, shapePoly, builder.line, true)
+            else renderer.drawStrokeData(c, builder.penKind, col, builder.width, builder.pts, builder.count, z, dk, line = builder.line)
         }
         c.restore()
 
@@ -3406,7 +3416,10 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
         c.save()
         c.translate(layout.left(ghostPage), layout.top(ghostPage))
         c.clipRect(0f, 0f, spec.w, spec.h)
+        // 3c-A1: duch zasłania stare kafelki — bez przekształcenia trybu ciemnego biały obiekt błyskał tu na biało.
+        renderer.theme = themeFor(spec); renderer.themePhotos = settings.pageThemePhotos
         for (el in ghostEls) renderer.drawElement(c, doc.id, el, zoom, false, spec.darkPaper)
+        renderer.theme = null
         c.restore()
         postInvalidateOnAnimation()
     }
@@ -3584,7 +3597,8 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
             doc.applyElements(page.id, ElementsEdit.diff(lifted, orig))
         } else if (tgt != lPage) {
             val target = doc.pages[tgt]
-            val moved = lEls.map { it.transformed(PageDrop.inTarget(layout, lPage, tgt, m)) }
+            val into = PageDrop.intoTarget(layout, lPage, tgt, m, lBounds)
+            val moved = lEls.map { it.transformed(into) }
             val remove = DocEdit.Elements(page.id, ElementsEdit.remove(orig, lIds))
             val add = DocEdit.Elements(target.id, ElementsEdit.add(doc.content(target), moved))
             applyInBackground(tgt, moved) { add.apply(doc) }

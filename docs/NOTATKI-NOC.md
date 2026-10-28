@@ -612,3 +612,96 @@ Wygląd ikon sprawdzam rysunkiem Java2D z tej samej geometrii (`PreviewHarness`,
   stopka „n / 17”; strona 8 „Krzywe Béziera”: Krzywa → „Przez wskazane punkty”, stuknij A–E i E drugi raz; strona 9:
   Geometria → „Przecięcie okręgów” na dwóch okręgach strony; strona 15: „⋮” → Strony → „Ciemne” i porównaj z ilustracją;
   w wersji lab strona 14 mówi o kredzie, w core nie.
+- **2b-A12** profile pracy — `noc/f2b-profile`; `ProfilesTest` (8 testów), core 773, lab 827, zielone. Logika:
+  `core/prefs/Profiles.kt` — lista kluczy, które profil może nadpisać (5 sekcji; nic z danych), `switch` (najpierw powrót
+  do kopii sprzed profilu, potem nowy — A → B → brak = stan sprzed A), plik tekstowy z wierszami i tabulatorami (bez JSON,
+  bo `org.json` w testach JVM to atrapa), `merge`, `next`, przypięcia. `Settings`: rejestr `Pref` po kluczu,
+  `prefValue`, `switchProfile`, `profiles` (pusty zapis = gotowe profile). **Decyzje:** zmiany ustawień zrobione ręcznie
+  w trakcie profilu znikają po jego wyłączeniu, jeśli dotyczą kluczy profilu (powrót jest dokładny) — żeby je zachować w
+  profilu: „Zapisz obecne”; przypięty profil włącza się przy otwarciu zeszytu i zostaje po wyjściu (bez cichego
+  przełączania z powrotem); stanowisko — przez główny zeszyt. **Wygląd:** „⋮” → sekcja „Profil pracy” (chipy jak „Strony”)
+  i przełącznik przypięcia; Ustawienia → Wejście na górze: karta z wyjaśnieniem, profil = nazwa + opis „palec … · sekcje:
+  n” + chipy akcji; okno profilu: nazwa, dotyk (chipy), 5 przełączników sekcji, uwaga jak zmienić pasek w profilu.
+  **Tablet:** „⋮” → Profil pracy → „Tylko rysik” → dymek „palec wyłączony”; przesuń palcem — nic, rysik pisze; „Bez
+  profilu” — palec znów przewija; Ustawienia → Wejście → „Nowy z obecnych ustawień…” → „Moje”, dotyk „Rysuje” → zapisz →
+  włącz z „⋮”; włączony profil + „Włączaj … przy otwieraniu tego zeszytu” → wyjdź, przełącz na „Bez profilu”, otwórz
+  zeszyt → dymek „(przypięty do zeszytu)”; eksport profili do pliku i import (pojawią się kopie z nowymi id).
+- **Scalenie `noc/lab2`** (po 2b-A12): agent B skończył listę (narożniki bez ściany 2b-B2, notatki); bez konfliktów; core 773,
+  lab 830.
+- **2b-A13** zeszyt „Tablica” — `noc/f2b-tablica`; `BoardTest` (7 testów), core 780, lab 837, zielone. Logika:
+  `core/layout/Board.kt` (rozmiar startowy, krok i zapas wzrostu, limit, kadr eksportu, punkt startu widoku);
+  `PageSpec.OPT_BOARD` w polu `o` (tablica może mieć do 24 000 pt; zwykłe strony dalej przycinane do 8000).
+  `Editor.exec` dokłada płótno w tej samej grupie edycji (`DocEdit.Group`: zmiana treści + rozmiar + ewentualne
+  przesunięcie całej treści), `Editor.record` (przeciągnięcie lassem) — osobnym wpisem; `NoteView.boardShifted` przesuwa
+  widok razem z treścią. `PageCache.tiledBase`: baza kafelków najwyżej 4 mln pikseli. **Decyzje:** tablica to jedna
+  strona, nie nowy format (stara wersja ją otworzy); „100 %” = szerokość A4; mini-mapa zawsze na tablicy; eksport = kadr
+  treści. **Znane:** cofnięcie wzrostu w lewo/w górę przesuwa treść z powrotem bez przesunięcia widoku (widać skok o krok
+  płótna); stara wersja po zapisie tablicy > 8000 pt zapisze przycięty rozmiar (treść zostaje, nowa wersja dołoży płótno
+  przy następnej zmianie). **Wygląd:** tablica wygląda jak duża kartka w kratkę bez marginesu, okładka w bibliotece
+  w kratkę. **Tablet:** Biblioteka → „Nowy” → „Nowa tablica” → otwiera się na środku płótna w skali zeszytu; rysuj, przesuń
+  widok do prawej krawędzi i pisz przy niej → płótno się wydłuża (mini-mapa w rogu pokazuje większą stronę); to samo przy
+  lewej krawędzi — treść nie skacze; cofnij — płótno wraca; szczypnij maksymalnie — widać całe płótno; Ctrl+0 / „Dopasuj” —
+  cała treść; Eksport → PNG → obraz samego rysunku z małym marginesem; pamięć przy długim rysowaniu.
+- **2b-A14** aparat i tablica — `noc/f2b-aparat`; `KeymapTest.everyCommandHasAnAction` (nowy), core 781, lab 838, zielone.
+  Nagłówek: ikona wstawiania obrazu z pliku → `AddPhotoAlternate` (ramka z górami i plusem), nowy przycisk „Zdjęcie
+  tablicy” z glifem B (`BoardCameraIcon`). Jeden przepływ: `ed.lectureShootTick++` → aparat systemowy (bez uprawnienia
+  CAMERA) → `Editor.lectureShot` (nowa strona z datą) → w lab `Flavor.lab.onLecturePhoto` (kreda). Tryb wykładu dalej
+  włącza kapsułę i używa tej samej ścieżki. **Decyzja:** „Zdjęcie tablicy” wkłada zdjęcie na nową stronę (jak tryb
+  wykładu), nie na bieżącą — notatki z wykładu nie lądują pod zdjęciem; do potwierdzenia. **Tablet:** w nagłówku dwie
+  różne ikony obok siebie: obraz z plusem (galeria/pliki) i aparat przy tablicy; dotknij aparatu → aparat systemowy →
+  zrób zdjęcie → nowa strona za bieżącą z datą i zdjęciem; w lab zdjęcie ciemnej tablicy po chwili zamienia się w samą
+  kredę, ↶ wraca do zdjęcia; obróć tablet podczas aparatu — po powrocie aparat nie otwiera się drugi raz.
+- **Faza 2b — lista A wyczerpana** (2b-A1…A14). Dalej reszta fazy 2: A2-14, A2-15.
+- **A2-14** pomysły Fable FB5–FB8 i FB13 → BACKLOG (sekcja K, „Pomysły Fable na później”) z „Nauka: …”; bez wdrażania —
+  po A2-13 lista nie była pusta (A2-14, A2-15), więc warunek „wdrażaj FB7/FB6” nie zaszedł. Gałąź `noc/f2-pomysly`.
+- **A2-15** przegląd własny — `noc/f2-przeglad`; testy na `noc/wszystko`: core 781, lab 838, 0 porażek, oba APK.
+  PRZEGLAD-FABLE §3.1–3.4 przejrzane punkt po punkcie; zamknięte wcześniej w fazie 2/2b: B5 (A2-11), B6/B8 (A2-12), F4 →
+  stanowiska (2b-A7), F6 (A2-7), F11 → tryb ciemny (A2-6, 2b-A9), F12 i F22/F28 w wyszukiwarce (2b-A4), F18 (A2-3), F19
+  (2b-A5, A2-11), F20 (A2-11, 2b-A11), L1 (A2-9), L2 (A2-1), FB1 (A2-8, 2b-A14), FB3 (A2-2, 2b-A3), FB4 (A2-13). **Zamknięte
+  teraz:** F7 nazwy w panelach jak w Ustawieniach („Gumka pomija zakreślacz”, „Co zaznacza lasso”, „Połowa w pętli” /
+  „Wystarczy dotknąć” zamiast „Zbalansowane”); F8 „I ćwiartka” przez `T.t`, pola zakresu z klawiaturą liczbową; F17 komentarz
+  o bitach flag osobnych dla rodzaju rekordu (też nowy 128 = wypełnienie kreski); F21 podpowiedź „To uchwyt…” jako tekst,
+  nie wyszarzona pozycja; F22 „Przyczep do figur” także w panelu lassa; F25 „Największe powiększenie” → Wygląd, zdjęcia do
+  kratki → Edytor i pióro; F26 dopowiedzenie znika razem z wierszem w wyszukiwaniu; §3.2a menu „⋮” przewijane (do 560 dp)
+  z sekcjami Układ stron / Strony / Profil pracy / Widok / Wstaw / Stanowisko; ikony orientacji kartki `CropPortrait/
+  CropLandscape` zamiast telefonu. **Zostaje na tablet / decyzję:** B1, B2, B9 (tylko pomiar), F21 czas podwójnego dotknięcia.
+
+### Raport końcowy agenta A — faza 2 i 2b (27.10, lista wyczerpana)
+
+**Gałęzie** (każda od `noc/wszystko`, po punkcie przewinięta do `noc/wszystko`): fazy 2 `noc/f2-*` (A2-1…A2-15), fazy 2b
+`noc/f2b-*` (ikony, pasek-pomocniczy, minimapa, synonimy, naklejki, osie, stanowiska, geometria, tryb-ciemny, bezier,
+samouczek, profile, tablica, aparat). **`noc/wszystko`** = całość A + wszystkie scalenia `noc/lab2` agenta B (ostatnie po
+2b-A12, B skończył listę). `main` nietknięty, bez push. **Testy:** core 781, lab 838, 0 porażek (1 i 3 pominięte: podgląd
+i testy na prawdziwych zdjęciach kredy bez `KREDA_DIR`), oba APK debug się budują. Podglądy wyglądu (Java2D z kodu
+aplikacji): `docs/podglad/` — ikony narzędzi, geometria, tryb ciemny, krzywe, strony przewodnika.
+
+**Zgodność wstecz (dodatki fazy 2/2b, PRZEGLAD §6):** wypełnienie zamkniętej krzywej — flaga 128 kreski + i32 na końcu
+rekordu (stara wersja: sam kontur); zamknięta krzywa — kotwica końcowa = początkowa (bez nowego pola); tablica — bit 4
+w polu `o` stylu strony (stara wersja: duża strona z kratką, powyżej 8000 pt przycięta przy odczycie); kątomierz, nazwy
+punktów, konstrukcje — zwykłe kreski i pola tekstu; tryb ciemny stron, profile, stanowiska — tylko ustawienia aplikacji,
+nie plik zeszytu. Kreska bez wypełnienia zapisuje się bajt w bajt jak dawniej (test). `applicationId`, `versionCode`,
+`versionName` bez zmian; bez nowych zależności i bez INTERNET w core.
+
+**Decyzje do potwierdzenia:** obrót w Geometrii tylko o 90°; „Zdjęcie tablicy” na nową stronę (jak tryb wykładu); przypięty
+profil zostaje włączony po wyjściu z zeszytu; okładki biblioteki w oryginale przy trybie ciemnym; eksport SVG/MD zawsze w
+oryginale; tablica: „100 %” = szerokość A4, eksport = kadr treści.
+
+**Co Marcin ma sprawdzić na tablecie — po fazie 2 i 2b (najważniejsze najpierw):**
+1. Stary zeszyt i PDF otwierają się jak wcześniej; eksport PDF wygląda jak przedtem (bez nowych opcji).
+2. Pasek: nowe ikony gumki (4 tryby) i lassa (2) w stylu piór; obok wstawiania obrazu (ramka z plusem) ikona „Zdjęcie
+   tablicy” → aparat → nowa strona z datą; w lab tablica od razu oczyszczona, ↶ wraca do zdjęcia.
+3. Gumka/lasso: domyślnie zostają kolory i grubości pióra, opcje wyskakują przy ikonie; dotknięcie koloru wraca do pisania;
+   Ustawienia → Wygląd → „Pasek przy narzędziach pomocniczych” przełącza na opcje na listwie z przyciskiem powrotu.
+4. „⋮” → Strony → „Ciemne”: czerwony zostaje czerwony, zakreślacz nie świeci, PDF ciemny, zdjęcia jak w aparacie;
+   pipeta bierze kolor, który po narysowaniu wygląda jak próbka; Eksport → „Kolory jak na ekranie”.
+5. Krzywa: 4 tryby na listwie; „Przez wskazane punkty”, „Kontur zamknięty” + wiaderko, „Piórko” (przeciągnij = uchwyty);
+   ✓/✕ na karcie u góry; krzywa zamknięta po edycji kotwic dalej zamknięta i wypełniona.
+6. Geometria: „Przecięcie okręgów”, „Symetralna”, „Kąt” na stronie przewodnika 9; kątomierz z paska.
+7. Stanowisko: „⋮” → „Dołóż zeszyt poniżej…” ×2, wspólne przewijanie w pionie i zoom, osobno w bok; przeciągnięcie
+   zaznaczenia między rzędami; zapis i otwarcie stanowiska; pamięć przy trzech PDF-ach.
+8. Tablica: Biblioteka → „Nowy” → „Nowa tablica”; pisanie przy krawędziach (płótno rośnie, nic nie skacze), oddalenie do
+   całości, Ctrl+0, eksport PNG = sam rysunek; płynność i pamięć przy długim rysowaniu.
+9. Profile: „⋮” → Profil pracy → „Tylko rysik” (palec nic nie robi), „Bez profilu” (wraca); przypięcie do zeszytu.
+10. Przewodnik: „Nowy” → Przewodnik — 17 stron, czy akapity nie nachodzą na rysunki przy czcionce tabletu.
+11. Układ współrzędnych: wstawianie i przesuwanie na kratce, kreska po linii siatki dociąga się; naklejki na ciemnym tle.
+12. Ustawienia: wyszukiwarka potocznie („gumka”, „zoom”, „ciemny”, „profil”); menu „⋮” przewija się na telefonie w poziomie.

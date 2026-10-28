@@ -64,8 +64,8 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.FormatColorFill
 import androidx.compose.material.icons.rounded.FormatPaint
-import androidx.compose.material.icons.rounded.StayCurrentLandscape
-import androidx.compose.material.icons.rounded.StayCurrentPortrait
+import androidx.compose.material.icons.rounded.CropLandscape
+import androidx.compose.material.icons.rounded.CropPortrait
 import androidx.compose.material.icons.rounded.IosShare
 import androidx.compose.material.icons.rounded.Colorize
 import androidx.compose.material.icons.rounded.Straighten
@@ -110,7 +110,6 @@ import androidx.compose.material.icons.rounded.Fullscreen
 import androidx.compose.material.icons.rounded.Gesture
 import androidx.compose.material.icons.rounded.Highlight
 import androidx.compose.material.icons.rounded.HighlightAlt
-import androidx.compose.material.icons.rounded.Image
 import androidx.compose.material.icons.rounded.Lock
 import androidx.compose.material.icons.rounded.LockOpen
 import androidx.compose.material.icons.rounded.MoreVert
@@ -126,6 +125,7 @@ import androidx.compose.material.icons.rounded.Interests
 import androidx.compose.material.icons.rounded.ViewAgenda
 import androidx.compose.material.icons.rounded.Dashboard
 import androidx.compose.material.icons.rounded.PhotoCamera
+import androidx.compose.material.icons.rounded.AddPhotoAlternate
 import androidx.compose.material.icons.rounded.ExpandLess
 import androidx.compose.material.icons.rounded.ExpandMore
 import androidx.compose.material.icons.rounded.WbAuto
@@ -283,6 +283,11 @@ fun EditorScreen(main: Editor, tabs: TabsCtl, onExit: () -> Unit, onSettings: ()
     val ed = st.active
     val set = ed.settings
     val m = mint
+    // 2b-A12: zeszyt z przypiętym profilem włącza go przy otwarciu (zostaje włączony po wyjściu — przełącza się ręcznie).
+    LaunchedEffect(main.nbId) {
+        val pid = com.mdev.mnotes.core.prefs.Profiles.pinsDecode(set.profilePins)[main.nbId] ?: return@LaunchedEffect
+        if (pid != set.profileActive) set.profiles.firstOrNull { it.id == pid }?.let { switchProfile(main, it, pinned = true) }
+    }
     var panel by remember { mutableStateOf<Panel?>(null) }
     var palette by remember { mutableStateOf(false) }
     var goTo by remember { mutableStateOf(false) }
@@ -531,7 +536,12 @@ private fun PageCluster(ed: Editor, panel: Panel?, toggle: (Panel) -> Unit, goTo
         val bm = ed.isBookmarked(ed.pageIndex)
         IconBtn(if (bm) Icons.Rounded.Bookmark else Icons.Rounded.BookmarkBorder, T.t("Zakładka", "Bookmark"), { ed.toggleBookmark() }, selected = bm, shortcut = "Ctrl+B")
         IconBtn(Icons.Rounded.ViewSidebar, T.t("Strony", "Pages"), { toggle(Panel.PAGES) }, selected = panel == Panel.PAGES, shortcut = "F9")
-        IconBtn(Icons.Rounded.Image, T.t("Wstaw obraz", "Insert image"), pickImage, enabled = !ed.readOnly)
+        // 2b-A14: obraz z pliku (ramka z górami i plusem) i zdjęcie tablicy (aparat przy tablicy) — dwie różne ikony, jeden
+        // przepływ aparatu: zdjęcie na nową stronę jak w trybie wykładu, w wersji lab od razu przez kredę.
+        IconBtn(Icons.Rounded.AddPhotoAlternate, T.t("Wstaw obraz z pliku", "Insert image from file"), pickImage, enabled = !ed.readOnly, shortcut = "Ctrl+I")
+        ToolBtn(T.t("Zdjęcie tablicy — aparat, zdjęcie na nową stronę", "Board photo — camera, photo on a new page"), { ed.lectureShootTick++ }, enabled = !ed.readOnly) { c ->
+            BoardCameraIcon(c, Modifier.size(24.dp))
+        }
         if (Flavor.lab?.phoneButton() == true) IconBtn(Icons.Rounded.PhoneAndroid, T.t("Zdjęcie z telefonu", "Photo from phone"), { toggle(Panel.PHONE) }, selected = panel == Panel.PHONE, enabled = !ed.readOnly)
         IconBtn(Icons.Rounded.MoreVert, T.t("Więcej", "More"), { toggle(Panel.MORE) }, selected = panel == Panel.MORE)
     }
@@ -969,7 +979,7 @@ private fun WriteBackBtn(ed: Editor, set: com.mdev.mnotes.data.Settings) {
 }
 
 /**
- * Opcje gumki (F7): tryby z ikonami, rozmiary, „Nie ruszaj zakreślacza” i panel. [items] = grupy do pokazania (w menu
+ * Opcje gumki (F7): tryby z ikonami, rozmiary, „Gumka pomija zakreślacz” i panel. [items] = grupy do pokazania (w menu
  * przy ikonie wybrane w Ustawieniach, na listwie wszystkie), [back] = przycisk powrotu do pisania na końcu (2b-A2).
  */
 @Composable
@@ -1255,7 +1265,7 @@ private fun ToolPanel(ed: Editor, set: com.mdev.mnotes.data.Settings, panel: Pan
                         Text(String.format("%.0f pt", set.eraserSize), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     MSlider(set.eraserSize, 1f, 60f) { set.eraserSize = it }
-                    ToggleRow(T.t("Nie ruszaj zakreślacza", "Keep highlighter"), set.eraserKeepHighlighter) { set.eraserKeepHighlighter = it }
+                    ToggleRow(T.t("Gumka pomija zakreślacz", "Eraser ignores highlighter"), set.eraserKeepHighlighter) { set.eraserKeepHighlighter = it }
                     HorizontalDivider(Modifier.padding(vertical = 6.dp), color = m.line)
                     Chip(T.t("Wyczyść stronę", "Clear page"), false, { ed.clearPage(); close() }, icon = Icons.Rounded.Delete)
                 }
@@ -1298,13 +1308,15 @@ private fun ToolPanel(ed: Editor, set: com.mdev.mnotes.data.Settings, panel: Pan
                         Chip(T.t("Odręczne", "Freehand"), !set.lassoRect, { set.lassoRect = false }, icon = Icons.Rounded.Gesture)
                         Chip(T.t("Prostokąt", "Rectangle"), set.lassoRect, { set.lassoRect = true }, icon = Icons.Rounded.HighlightAlt)
                     }
-                    SectionLabel(T.t("Co zaznacza pętla", "What the loop selects"))
+                    SectionLabel(T.t("Co zaznacza lasso", "What the lasso selects"))
                     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Chip(T.t("Zbalansowane", "Balanced"), !set.lassoTouch, { set.lassoTouch = false })
-                        Chip(T.t("Tylko zahacz", "Just touch"), set.lassoTouch, { set.lassoTouch = true })
+                        Chip(T.t("Połowa w pętli", "Half in the loop"), !set.lassoTouch, { set.lassoTouch = false })
+                        Chip(T.t("Wystarczy dotknąć", "Just touch"), set.lassoTouch, { set.lassoTouch = true })
                     }
                     Text(lassoModeHint(set.lassoTouch), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     ToggleRow(T.t("Przyciągaj do siatki", "Snap to grid"), ed.gridSnap) { ed.gridSnap = it; set.snapGrid = it }
+                    // Przegląd §3.2 F22: „Przyczep do figur” obok innych przyciągań, nie tylko w „⋮”.
+                    ToggleRow(T.t("Przyczep do figur (końce linii i punkty)", "Attach to shapes (line ends and points)"), set.attach) { set.attach = it }
                     ToggleRow(T.t("Przyciągaj do równych kątów", "Snap to even angles"), set.rotSnap) { set.rotSnap = it }
                     Text(rotationHint(set), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Text(T.t("Ctrl+A zaznacza wszystko na stronie.", "Ctrl+A selects everything on the page."), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -1890,7 +1902,8 @@ internal fun PointMenuOverlay(ed: Editor) {
                         Item(T.t("Usuń kotwicę", "Delete anchor"), enabled = com.mdev.mnotes.core.shapes.Bezier.anchors(c) > 2) {
                             ed.pointAction(pm) { s -> s.ctrl?.let { cc -> com.mdev.mnotes.core.shapes.PointEdit.removeAnchor(cc, pm.index)?.let { com.mdev.mnotes.core.shapes.Bezier.withCtrl(s, it) } } }
                         }
-                    } else Item(T.t("To uchwyt — przeciągnij go, by wygiąć krzywą", "This is a handle — drag it to bend the curve"), enabled = false) {}
+                    // Podpowiedź, nie akcja: zwykły tekst jak nagłówek „Konstrukcja”, a nie wyszarzona pozycja menu (przegląd §3.2 F21).
+                    } else Text(T.t("To uchwyt — przeciągnij go, by wygiąć krzywą", "This is a handle — drag it to bend the curve"), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp).widthIn(max = 240.dp))
                 } else {
                     Item(T.t("Usuń punkt", "Delete point"), enabled = st.vertexCount > 2) { ed.pointAction(pm) { com.mdev.mnotes.core.shapes.PointEdit.removeVertex(it, pm.index) } }
                     Item(T.t("Dodaj punkt obok", "Add point next to it")) { ed.pointAction(pm) { com.mdev.mnotes.core.shapes.PointEdit.insertAfter(it, pm.index) } }
@@ -1989,8 +2002,9 @@ internal fun androidx.compose.foundation.layout.BoxScope.EdToast(ed: Editor, bot
 @Composable
 private fun MoreMenu(ed: Editor, set: com.mdev.mnotes.data.Settings, close: () -> Unit, applyLayout: (Int) -> Unit, openStyle: () -> Unit, palette: () -> Unit, onSettings: () -> Unit) {
     val m = mint
+    // Przegląd §3.2a: menu urosło (tryb stron, profile, stanowiska) — przewija się jak inne panele i ma sekcje.
     FloatingCard(Modifier.width(280.dp)) {
-        Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Column(Modifier.heightIn(max = 560.dp).verticalScroll(rememberScrollState()).padding(10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             SectionLabel(T.t("Układ stron", "Page layout"))
             FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Chip(T.t("Pionowo", "Vertical"), ed.layoutMode == 0, { applyLayout(0) })
@@ -2005,19 +2019,36 @@ private fun MoreMenu(ed: Editor, set: com.mdev.mnotes.data.Settings, close: () -
                     (ed.station?.rows ?: listOf(ed)).forEach { it.view?.invalidate() }
                 })
             }
+            // 2b-A12: profile pracy — jedno dotknięcie przełącza dotyk, gesty i paski.
+            SectionLabel(T.t("Profil pracy", "Work profile"))
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Chip(T.t("Bez profilu", "None"), set.profileActive.isEmpty(), { switchProfile(ed, null) })
+                for (p in set.profiles) Chip(p.name, set.profileActive == p.id, { switchProfile(ed, p) })
+            }
+            set.activeProfile?.let { p ->
+                val pins = com.mdev.mnotes.core.prefs.Profiles.pinsDecode(set.profilePins)
+                ToggleRow(T.t("Włączaj „${p.name}” przy otwieraniu tego zeszytu", "Turn on “${p.name}” when opening this notebook"), pins[ed.nbId] == p.id) { on ->
+                    set.profilePins = com.mdev.mnotes.core.prefs.Profiles.pinsEncode(if (on) pins + (ed.nbId to p.id) else pins - ed.nbId)
+                }
+            }
             HorizontalDivider(Modifier.padding(vertical = 4.dp), color = m.line)
+            SectionLabel(T.t("Widok", "View"))
             MenuRow(Icons.Rounded.FitScreen, T.t("Dopasuj do szerokości", "Fit width"), "Ctrl+0") { ed.view?.fitWidth(); close() }
             MenuRow(Icons.Rounded.Palette, T.t("Styl strony…", "Page style…"), "") { openStyle() }
-            if (!ed.readOnly) MenuRow(Icons.Rounded.ShowChart, T.t("Układ współrzędnych…", "Coordinate axes…"), "") { close(); ed.axesOpen = true }
-            if (!ed.readOnly) MenuRow(Icons.Rounded.Interests, T.t("Naklejki…", "Stickers…"), "") { close(); ed.stickersOpen = true }
-            if (!ed.readOnly) MenuRow(Icons.Rounded.PhotoCamera, T.t("Tryb wykładu…", "Lecture mode…"), "") { close(); ed.lectureMode = true; ed.lectureShootTick++ }
+            MenuRow(Icons.Rounded.Fullscreen, T.t("Ukryj paski (tryb skupienia)", "Hide bars (focus mode)"), "F11") { ed.chrome = false; close() }
+            ToggleRow(T.t("Okno powiększenia (pisz w powiększeniu)", "Zoom window (write magnified)"), ed.zoomWin) { ed.toggleZoomWin(); close() }
+            ToggleRow(T.t("Tylko do odczytu", "Read-only"), ed.readOnly) { ed.readOnly = it }
+            if (!ed.readOnly) {
+                SectionLabel(T.t("Wstaw", "Insert"))
+                MenuRow(Icons.Rounded.ShowChart, T.t("Układ współrzędnych…", "Coordinate axes…"), "") { close(); ed.axesOpen = true }
+                MenuRow(Icons.Rounded.Interests, T.t("Naklejki…", "Stickers…"), "") { close(); ed.stickersOpen = true }
+                MenuRow(Icons.Rounded.PhotoCamera, T.t("Tryb wykładu…", "Lecture mode…"), "") { close(); ed.lectureMode = true; ed.lectureShootTick++ }
+                ToggleRow(T.t("Przyczep do figur (końce linii i punkty)", "Attach to shapes (line ends and points)"), ed.settings.attach) { ed.settings.attach = it }
+            }
             // 2b-A7: stanowisko — kolejne dokumenty pod spodem i zapisane układy (przełączane jak karty).
+            SectionLabel(T.t("Stanowisko", "Workspace"))
             MenuRow(Icons.Rounded.ViewAgenda, T.t("Dołóż zeszyt poniżej…", "Add notebook below…"), "") { close(); ed.station?.picking = true }
             MenuRow(Icons.Rounded.Dashboard, T.t("Stanowiska…", "Workspaces…"), "") { close(); ed.station?.listing = true }
-            MenuRow(Icons.Rounded.Fullscreen, T.t("Ukryj paski (tryb skupienia)", "Hide bars (focus mode)"), "F11") { ed.chrome = false; close() }
-            ToggleRow(T.t("Tylko do odczytu", "Read-only"), ed.readOnly) { ed.readOnly = it }
-            ToggleRow(T.t("Okno powiększenia (pisz w powiększeniu)", "Zoom window (write magnified)"), ed.zoomWin) { ed.toggleZoomWin(); close() }
-            ToggleRow(T.t("Przyczep do figur (końce linii i punkty)", "Attach to shapes (line ends and points)"), ed.settings.attach) { ed.settings.attach = it }
             HorizontalDivider(Modifier.padding(vertical = 4.dp), color = m.line)
             MenuRow(Icons.Rounded.Search, T.t("Szukaj w zeszycie…", "Search in notebook…"), "Ctrl+F") { close(); ed.openSearch() }
             MenuRow(Icons.Rounded.IosShare, T.t("Eksport i udostępnianie…", "Export & share…"), "Ctrl+E") { close(); ed.exportOpen = true }
@@ -2025,6 +2056,22 @@ private fun MoreMenu(ed: Editor, set: com.mdev.mnotes.data.Settings, close: () -
             MenuRow(Icons.Rounded.Settings, T.t("Ustawienia", "Settings"), "") { close(); onSettings() }
         }
     }
+}
+
+/** Przełącza profil pracy i mówi, co się stało (dotyk to najczęstsze zaskoczenie, więc jest w dymku). */
+fun switchProfile(ed: Editor, p: com.mdev.mnotes.core.prefs.Profile?, pinned: Boolean = false) {
+    val set = ed.settings
+    set.switchProfile(p)
+    val finger = when (set.fingerMode) {
+        com.mdev.mnotes.core.prefs.Profiles.FINGER_DRAW -> T.t("palec rysuje", "finger draws")
+        com.mdev.mnotes.core.prefs.Profiles.FINGER_OFF -> T.t("palec wyłączony", "finger off")
+        else -> T.t("palec przewija", "finger scrolls")
+    }
+    ed.say(
+        if (p == null) T.t("Bez profilu — ustawienia jak przed profilem ($finger)", "No profile — settings as before ($finger)")
+        else T.t("Profil „${p.name}”${if (pinned) " (przypięty do zeszytu)" else ""} — $finger", "Profile “${p.name}”${if (pinned) " (pinned to notebook)" else ""} — $finger"),
+    )
+    ed.view?.invalidate()
 }
 
 fun pageThemeLabels() = listOf(
@@ -2128,17 +2175,21 @@ private fun StylePanel(ed: Editor, close: () -> Unit) {
                         commit = { ed.commitSpecPreview() },
                         reset = { apply { it.copy(spacing = it.template.defaultSpacing) } })
                 }
-                SectionLabel(T.t("Rozmiar", "Size"))
-                // Każda strona trzyma własny format i orientację (F5); „cały zeszyt” zmienia format, a orientację zostawia.
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    for (f in com.mdev.mnotes.core.model.PageFormat.entries) Chip(formatName(f), spec.format == f, { apply { it.withFormat(f) } })
+                // 2b-A13: tablica nie ma formatu — płótno rośnie samo.
+                if (spec.board) Text(T.t("Tablica: płótno rośnie samo, gdy piszesz blisko brzegu.", "Board: the canvas grows by itself when you write near the edge."), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                else {
+                    SectionLabel(T.t("Rozmiar", "Size"))
+                    // Każda strona trzyma własny format i orientację (F5); „cały zeszyt” zmienia format, a orientację zostawia.
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        for (f in com.mdev.mnotes.core.model.PageFormat.entries) Chip(formatName(f), spec.format == f, { apply { it.withFormat(f) } })
+                    }
                 }
             }
-            if (!isPdf && spec.w != spec.h) {
+            if (!isPdf && !spec.board && spec.w != spec.h) {
                 SectionLabel(T.t("Orientacja", "Orientation"))
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Chip(T.t("Pionowo", "Portrait"), !spec.landscape, { apply { it.oriented(false) } }, icon = Icons.Rounded.StayCurrentPortrait)
-                    Chip(T.t("Poziomo", "Landscape"), spec.landscape, { apply { it.oriented(true) } }, icon = Icons.Rounded.StayCurrentLandscape)
+                    Chip(T.t("Pionowo", "Portrait"), !spec.landscape, { apply { it.oriented(false) } }, icon = Icons.Rounded.CropPortrait)
+                    Chip(T.t("Poziomo", "Landscape"), spec.landscape, { apply { it.oriented(true) } }, icon = Icons.Rounded.CropLandscape)
                 }
                 Text(T.t("Treść zostaje na miejscu; to, co wyjdzie poza nową krawędź, przesuń lassem.", "Content stays in place; move anything past the new edge with the lasso."), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }

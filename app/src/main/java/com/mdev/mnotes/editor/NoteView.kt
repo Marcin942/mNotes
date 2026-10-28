@@ -46,6 +46,7 @@ import com.mdev.mnotes.core.layout.PageShift
 import com.mdev.mnotes.core.layout.ZoomRegion
 import com.mdev.mnotes.core.layout.ZoomLimits
 import com.mdev.mnotes.core.layout.MiniMap
+import com.mdev.mnotes.core.layout.Board
 import com.mdev.mnotes.core.layout.ToolReturn
 import com.mdev.mnotes.core.model.BoxElement
 import com.mdev.mnotes.core.color.ThemeMap
@@ -326,6 +327,8 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
         // 2b-A7: w rzędzie stanowiska wysokość widoku wynika z powiększenia, więc „100 %” podaje pole, nie widok.
         baseZoomOverride?.let { return it }
         if (width == 0 || layout.count == 0) return 1f
+        // 2b-A13: na tablicy „100 %” to szerokość kartki A4 — pisze się jak w zeszycie, a nie na całym płótnie.
+        if (boardDoc) return width / Board.VIEW_W
         return when (ed.layoutMode) {
             0 -> width / layout.docWidth
             1 -> height / layout.docHeight
@@ -333,7 +336,11 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
         }
     }
 
-    private fun minZoom() = baseZoom() * 0.3f
+    /** Tablica (2b-A13): jedna strona-płótno, które rośnie z treścią. */
+    private val boardDoc: Boolean get() = doc.pages.size == 1 && doc.pages[0].spec.board
+
+    // Tablicę da się oddalić do całości (podgląd całego płótna), zwykłe strony — do 30 % „100 %”.
+    private fun minZoom() = if (boardDoc && width > 0 && layout.count > 0) min(baseZoom() * 0.3f, min(width / layout.docWidth, height / layout.docHeight)) else baseZoom() * 0.3f
     private fun maxZoom() = ZoomLimits.maxZoom(baseZoom(), settings.zoomMaxFactor)
 
     private fun clampX(x: Float, z: Float): Float { val cw = layout.docWidth * z; return if (cw <= width) (width - cw) / 2 else x.coerceIn(width - cw, 0f) }
@@ -351,7 +358,7 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
             ed.zoomPct = (zoom / baseZoom() * 100f).roundToInt()
         }
         ed.viewTick++
-        if (settings.miniMap) { miniMovedAt = SystemClock.uptimeMillis(); removeCallbacks(miniFade); postDelayed(miniFade, MiniMap.HOLD_MS) }
+        if (settings.miniMap || boardDoc) { miniMovedAt = SystemClock.uptimeMillis(); removeCallbacks(miniFade); postDelayed(miniFade, MiniMap.HOLD_MS) }
         invalidate()
     }
 
@@ -380,6 +387,10 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
 
     private fun targetFor(i: Int): Triple<Float, Float, Float> {
         val spec = doc.pages[i].spec
+        if (boardDoc) {
+            val (fx, fy) = Board.focus(doc.content(doc.pages[i]).bounds, spec.w, spec.h)
+            return Triple(zoom, clampX(width / 2f - (layout.left(i) + fx) * zoom, zoom), clampY(height / 2f - (layout.top(i) + fy) * zoom, zoom))
+        }
         return when (ed.layoutMode) {
             0 -> Triple(zoom, clampX(tx, zoom), clampY(-(layout.top(i) - layout.pad * 0.5f) * zoom, zoom))
             1 -> Triple(zoom, clampX(-(layout.left(i) - layout.pad * 0.5f) * zoom, zoom), clampY(ty, zoom))
@@ -411,6 +422,13 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
         moved()
     }
 
+    /** 2b-A13: treść tablicy przesunęła się o (dx, dy) pt, bo płótno urosło w lewo/w górę — widok idzie za nią. */
+    fun boardShifted(dx: Float, dy: Float) {
+        stopAnim()
+        tx -= dx * zoom; ty -= dy * zoom
+        moved()
+    }
+
     fun ensureVisible(pageId: String) {
         val i = doc.indexOf(pageId)
         if (i < 0 || width == 0) return
@@ -421,6 +439,14 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
 
     fun fitWidth() {
         if (width == 0 || layout.count == 0) return
+        if (boardDoc) {
+            // Na tablicy „dopasuj” pokazuje całą treść (kadr), a nie całe płótno.
+            val sp = doc.pages[0].spec
+            val f = Board.frame(doc.content(doc.pages[0]).bounds, sp.w, sp.h) ?: return goToPage(0)
+            val z = min(width / f.w, height / f.h).coerceIn(minZoom(), maxZoom())
+            animateView(z, clampX(width / 2f - (layout.left(0) + f.cx) * z, z), clampY(height / 2f - (layout.top(0) + f.cy) * z, z))
+            return
+        }
         val i = ed.pageIndex.coerceIn(0, layout.count - 1)
         val z = if (ed.layoutMode == 2) fitPageZoom(i) else baseZoom()
         val k = z / zoom
@@ -654,8 +680,9 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
 
     /** Mini-mapa bieżącej strony, gdy powiększenie jest duże (i nie ma okna powiększenia); inaczej null. */
     private fun miniGeom(): MiniMap.Geometry? {
-        if (!settings.miniMap || width == 0 || ed.zoomWin || layout.count == 0) return null
-        if (zoom < baseZoom() * MiniMap.MIN_ZOOM_FACTOR) return null
+        // Na tablicy mini-mapa jest zawsze: płótno jest wielokrotnie większe od ekranu przy każdym powiększeniu.
+        if (!(settings.miniMap || boardDoc) || width == 0 || ed.zoomWin || layout.count == 0) return null
+        if (!boardDoc && zoom < baseZoom() * MiniMap.MIN_ZOOM_FACTOR) return null
         val pi = ed.pageIndex.coerceIn(0, layout.count - 1)
         val spec = doc.pages[pi].spec
         val vis = Bounds(docX(0f) - layout.left(pi), docY(0f) - layout.top(pi), docX(width.toFloat()) - layout.left(pi), docY(height.toFloat()) - layout.top(pi))
@@ -1570,7 +1597,7 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
     private val pullRing = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE; strokeCap = Paint.Cap.ROUND }
     private val pullText = Paint(Paint.ANTI_ALIAS_FLAG).apply { typeface = Typeface.DEFAULT_BOLD }
 
-    private fun pullEnabled() = settings.pullAddPage && !ed.readOnly && layout.count > 0
+    private fun pullEnabled() = settings.pullAddPage && !ed.readOnly && layout.count > 0 && !boardDoc
     private fun pullThreshold() = 120f * dp
     private fun pullLimit(): Float =
         if (ed.layoutMode == 1) clampX(Float.NEGATIVE_INFINITY, zoom) else clampY(Float.NEGATIVE_INFINITY, zoom)

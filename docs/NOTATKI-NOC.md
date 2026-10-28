@@ -695,6 +695,13 @@ Gałąź `noc/f2c-zaleglosci` od `noc/wszystko`. PRZEGLAD-FABLE §3.1–3.4 i §
   odcinek — glifu nie ma. Przytrzymaj zaznaczenie → „Zaznaczenie jako ▸” → trzy pozycje, „‹” wraca. Ustawienia → szukaj
   „wskaźnik” → „Kolor śladu lasera”; zmień na zielony i sprawdź ślad lasera.
 
+- **FB8 tagi stron** (po zaległościach, wg A2-14: lista pusta do czasu FAZY 2c) — `noc/f2c-tagi`; `PageTagsTest` (9),
+  core 791, lab 848, zielone, oba APK. Szczegóły w BACKLOG (FB8). **Wygląd:** okno `MDialog` z chipami „#tag”; tagi w
+  zakładce „Zakładki” panelu stron (trzecia zakładka nie mieści się w 236 dp). **Nie sprawdzone:** UI tylko kompilacja.
+  **Tablet:** miniatura → „⋮” → „Tagi strony…” → „#definicja” → Zapisz; pod miniaturą „#definicja”; Ctrl+F „#def” →
+  strony z tagiem; biblioteka: szukaj „#definicja” → zeszyt z „· n stron”, otwarcie przenosi do pierwszej.
+- **Zostaje (limit użycia):** FB7 statystyki zeszytu, FB6 strona jako obraz do schowka; FAZA 2c, gdy się pojawi.
+
 ### Raport końcowy agenta A — faza 2 i 2b (27.10, lista wyczerpana)
 
 **Gałęzie** (każda od `noc/wszystko`, po punkcie przewinięta do `noc/wszystko`): fazy 2 `noc/f2-*` (A2-1…A2-15), fazy 2b

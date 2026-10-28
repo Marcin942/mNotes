@@ -1,6 +1,7 @@
 package com.mdev.mnotes.data
 
 import com.mdev.mnotes.core.layout.ViewMode
+import com.mdev.mnotes.core.pages.PageTags
 import com.mdev.mnotes.core.text.NameText
 import com.mdev.mnotes.core.model.PageSpec
 import org.json.JSONArray
@@ -60,6 +61,8 @@ data class NotebookMeta(
     val pdfDoc: Boolean = false,
     val pages: List<PageMeta> = emptyList(),
     val bookmarks: List<Bookmark> = emptyList(),
+    /** Tagi stron (FB8): identyfikator strony → tagi; zapis jako jeden napis [PageTags.encode], stara wersja go pomija. */
+    val pageTags: Map<String, List<String>> = emptyMap(),
 ) {
     val isTrashed: Boolean get() = trashedAt > 0L
 
@@ -76,6 +79,7 @@ data class NotebookMeta(
         val bm = JSONArray()
         for (b in bookmarks) bm.put(JSONObject().put("p", b.pageId).put("t", b.title))
         o.put("bm", bm)
+        if (pageTags.isNotEmpty()) o.put("ptag", PageTags.encode(pageTags))
         return o.toString()
     }
 
@@ -103,7 +107,7 @@ data class NotebookMeta(
                 cover = o.optInt("cov", 0xFF4C9A6A.toInt()), coverStyle = o.optInt("cs", 0),
                 favorite = o.optBoolean("fav"), trashedAt = o.optLong("tr"), tags = tags, locked = o.optBoolean("lock"),
                 lastPage = o.optInt("last"), viewMode = o.optInt("vm", ViewMode.DEFAULT), pdfDoc = if (o.has("pdfdoc")) o.optBoolean("pdfdoc") else ViewMode.looksLikePdf(pages.map { it.spec }),
-                pages = pages, bookmarks = bms,
+                pages = pages, bookmarks = bms, pageTags = PageTags.decode(o.optString("ptag", "")),
             )
         }
     }

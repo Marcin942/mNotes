@@ -132,7 +132,7 @@ object Guide {
                 listOf(
                     t("Otwórz panel stron i dodaj stronę; obok „Dodaj stronę” jest strona pozioma.", "Open the pages panel and add a page; next to “Add page” there is a landscape page."),
                     t("„⋮” → „Styl strony…”: wzór, papier, rozmiar i orientacja — dla tej strony albo całego zeszytu.", "“⋮” → “Page style…”: template, paper, size and orientation — for this page or the whole notebook."),
-                    t("Zakładka (Ctrl+B) oznacza początek tematu; eksport może potem wziąć sam ten temat.", "A bookmark (Ctrl+B) marks the start of a topic; export can later take just that topic."),
+                    t("Zakładka (Ctrl+B) oznacza początek tematu, a tag z „⋮” przy miniaturze — rodzaj strony: szukaj potem „#definicja”.", "A bookmark (Ctrl+B) marks the start of a topic, a tag from the thumbnail’s “⋮” — the kind of page: then search “#definition”."),
                 ),
                 t("Ustawienia mają wyszukiwarkę: wpisz potocznie, np. „gumka” albo „zoom”.", "Settings have a search box: type plain words, e.g. “eraser” or “zoom”."),
             ) { y ->

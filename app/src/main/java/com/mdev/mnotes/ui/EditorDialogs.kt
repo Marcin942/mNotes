@@ -150,6 +150,7 @@ fun commandList(
         "snipCopy" to ({ ed.sel != null } to { ed.snipSel(true) }),
         "addPage" to ({ !ed.readOnly } to { ed.addPage() }),
         "bookmark" to ({ true } to { ed.toggleBookmark() }),
+        "pageTags" to ({ !ed.readOnly } to { ed.doc.pages.getOrNull(ed.pageIndex)?.let { ed.tagsFor = it.id } }),
         "copyPage" to ({ true } to { ed.copyPage() }),
         "cutPage" to ({ !ed.readOnly && ed.pageCount > 1 } to { ed.cutPage() }),
         "pastePage" to ({ !ed.readOnly && Clip.page != null } to { ed.pastePage() }),

@@ -130,6 +130,7 @@ import androidx.compose.material.icons.rounded.ExpandLess
 import androidx.compose.material.icons.rounded.ExpandMore
 import androidx.compose.material.icons.rounded.WbAuto
 import androidx.compose.material.icons.rounded.Settings
+import androidx.compose.material.icons.rounded.Tag
 import androidx.compose.material.icons.rounded.TextFields
 import androidx.compose.material.icons.rounded.Timeline
 import androidx.compose.material.icons.rounded.TrackChanges
@@ -293,7 +294,7 @@ fun EditorScreen(main: Editor, tabs: TabsCtl, onExit: () -> Unit, onSettings: ()
     var palette by remember { mutableStateOf(false) }
     var goTo by remember { mutableStateOf(false) }
     val focus = remember { FocusRequester() }
-    val dialogOpen = palette || goTo || ed.exportOpen || ed.axesOpen || ed.stickersOpen || ed.stickerSaveOpen || st.picking || st.listing || ed.textReq != null
+    val dialogOpen = palette || goTo || ed.exportOpen || ed.axesOpen || ed.stickersOpen || ed.stickerSaveOpen || st.picking || st.listing || ed.textReq != null || ed.tagsFor != null
     val searchTyping = ed.searchOpen && fieldFocused
     val widthDp = androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp
     val showMenu = ed.chrome && menuBarVisible(set.menuBar, widthDp)
@@ -440,6 +441,7 @@ fun EditorScreen(main: Editor, tabs: TabsCtl, onExit: () -> Unit, onSettings: ()
         if (st.picking) StationPickDialog(st) { st.picking = false }
         if (st.listing) StationsDialog(st, tabs.open) { st.listing = false }
         if (ed.stickerSaveOpen) SaveStickerDialog(ed) { ed.stickerSaveOpen = false }
+        ed.tagsFor?.let { id -> PageTagsDialog(ed, id) { ed.tagsFor = null } }
         if (panel == Panel.PHONE) Flavor.lab?.PhonePanel(ed) { panel = null }
         Flavor.lab?.Overlay(ed)
         if (palette) PaletteDialog(cmds) { palette = false }
@@ -2060,6 +2062,7 @@ private fun MoreMenu(ed: Editor, set: com.mdev.mnotes.data.Settings, close: () -
             SectionLabel(T.t("Widok", "View"))
             MenuRow(Icons.Rounded.FitScreen, T.t("Dopasuj do szerokości", "Fit width"), "Ctrl+0") { ed.view?.fitWidth(); close() }
             MenuRow(Icons.Rounded.Palette, T.t("Styl strony…", "Page style…"), "") { openStyle() }
+            if (!ed.readOnly) MenuRow(Icons.Rounded.Tag, T.t("Tagi tej strony…", "Tags of this page…"), "") { close(); ed.doc.pages.getOrNull(ed.pageIndex)?.let { ed.tagsFor = it.id } }
             MenuRow(Icons.Rounded.Fullscreen, T.t("Ukryj paski (tryb skupienia)", "Hide bars (focus mode)"), "F11") { ed.chrome = false; close() }
             ToggleRow(T.t("Okno powiększenia (pisz w powiększeniu)", "Zoom window (write magnified)"), ed.zoomWin) { ed.toggleZoomWin(); close() }
             ToggleRow(T.t("Tylko do odczytu", "Read-only"), ed.readOnly) { ed.readOnly = it }

@@ -17,6 +17,7 @@ import com.mdev.mnotes.core.geom.Bounds
 import com.mdev.mnotes.core.geom.ConstructOps
 import com.mdev.mnotes.core.geom.GeoTool
 import com.mdev.mnotes.core.pages.LecturePages
+import com.mdev.mnotes.core.pages.PageTags
 import com.mdev.mnotes.core.model.DocEdit
 import com.mdev.mnotes.core.model.Element
 import com.mdev.mnotes.core.model.ElementsEdit
@@ -200,12 +201,25 @@ class Editor(val ctx: Context, val nbId: String) {
 
     fun pagesSnapshot(): List<PageState> = ArrayList(doc.pages)
     fun bookmarksSnapshot(): List<Bookmark> = repo.meta(nbId)?.bookmarks ?: emptyList()
+    fun pageTagsSnapshot(): Map<String, List<String>> = repo.meta(nbId)?.pageTags ?: emptyMap()
 
-    /** Fraza (bez wielkości liter i diakrytyków) w polach tekstowych i nazwach zakładek; wołać poza wątkiem UI. */
-    fun runSearch(q: String, pages: List<PageState>, bookmarks: List<Bookmark>): List<SearchHit> {
+    /**
+     * Fraza (bez wielkości liter i diakrytyków) w polach tekstowych i nazwach zakładek; zapytanie z „#” szuka stron
+     * z tagami (FB8, [PageTags.matchesPage]). Wołać poza wątkiem UI.
+     */
+    fun runSearch(q: String, pages: List<PageState>, bookmarks: List<Bookmark>, tags: Map<String, List<String>> = emptyMap()): List<SearchHit> {
         val phrase = TextSearch.fold(q.trim())
         if (phrase.isEmpty()) return emptyList()
         val out = ArrayList<SearchHit>()
+        val tq = PageTags.query(q)
+        if (tq.isTag) {
+            for ((i, p) in pages.withIndex()) {
+                val pt = tags[p.id].orEmpty()
+                val text = TextSearch.fold(TextSearch.pageText(doc.peekContent(p)))
+                if (PageTags.matchesPage(pt, text, tq)) out.add(SearchHit(p.id, i, null, PageTags.label(pt)))
+            }
+            return out
+        }
         for ((i, p) in pages.withIndex()) {
             for (b in bookmarks) if (b.pageId == p.id && TextSearch.fold(b.title).contains(phrase)) out.add(SearchHit(p.id, i, null, b.title))
             for (tb in TextSearch.textBoxes(doc.peekContent(p))) {
@@ -1369,6 +1383,20 @@ class Editor(val ctx: Context, val nbId: String) {
     }
 
     fun isBookmarked(i: Int): Boolean { structTick; return doc.pages.getOrNull(i)?.let { p -> repo.meta(nbId)?.bookmarks?.any { it.pageId == p.id } } ?: false }
+
+    // — Tagi stron (FB8) — jak zakładki: dane zeszytu poza treścią stron, bez wpisu cofania.
+    fun tagsOf(pageId: String): List<String> { structTick; return repo.meta(nbId)?.pageTags?.get(pageId).orEmpty() }
+
+    fun setPageTags(pageId: String, tags: List<String>) {
+        repo.update(nbId) { m -> m.copy(pageTags = PageTags.with(m.pageTags, pageId, tags)) }
+        structTick++
+    }
+
+    /** Tagi zeszytu z numerami stron (najczęstsze najpierw). */
+    fun tagUsage(): List<PageTags.Usage> { structTick; return PageTags.usage(pageTagsSnapshot(), doc.pages.map { it.id }) }
+
+    /** Strona do okna tagów (z menu miniatury albo „⋮” edytora); null = okno zamknięte. */
+    var tagsFor by mutableStateOf<String?>(null)
 
     fun close() {
         doc.flush()

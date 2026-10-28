@@ -61,7 +61,8 @@ fun BoxScope.SearchBar(ed: Editor, extraBottom: Dp = 0.dp) {
         ed.searchBusy = true
         val pages = ed.pagesSnapshot()
         val marks = ed.bookmarksSnapshot()
-        val hits = withContext(Dispatchers.Default) { ed.runSearch(q, pages, marks) }
+        val tags = ed.pageTagsSnapshot()
+        val hits = withContext(Dispatchers.Default) { ed.runSearch(q, pages, marks, tags) }
         ed.searchHits = hits
         ed.searchBusy = false
         if (fresh) {
@@ -87,7 +88,7 @@ fun BoxScope.SearchBar(ed: Editor, extraBottom: Dp = 0.dp) {
                             else -> false
                         }
                     },
-                    hint = T.t("Szukaj w tekście i zakładkach", "Search text and bookmarks"),
+                    hint = T.t("Szukaj w tekście, zakładkach, #tagach", "Search text, bookmarks, #tags"),
                 )
                 Box(Modifier.widthIn(min = 64.dp).padding(horizontal = 6.dp), contentAlignment = Alignment.Center) {
                     Text(

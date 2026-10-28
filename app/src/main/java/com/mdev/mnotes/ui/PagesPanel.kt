@@ -29,6 +29,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
@@ -55,6 +56,7 @@ import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.FileCopy
 import androidx.compose.material.icons.rounded.MoreVert
 import androidx.compose.material.icons.rounded.SwapVert
+import androidx.compose.material.icons.rounded.Tag
 import androidx.compose.material.icons.rounded.VerticalAlignBottom
 import androidx.compose.material.icons.rounded.VerticalAlignTop
 import androidx.compose.material3.Surface
@@ -317,7 +319,8 @@ fun PagesPanel(ed: Editor, close: () -> Unit, @Suppress("UNUSED_PARAMETER") pick
             HorizontalDivider(color = m.line)
             PageActions(ed, cur, pages.size, ro)
         } else {
-            BookmarksList(ed, nb?.bookmarks.orEmpty(), pages, cur) { renaming = it }
+            // FB8: tagi stron obok zakładek — trzecia zakładka nie mieści się w panelu 236 dp, a to ta sama nawigacja.
+            MarksAndTags(ed, pages, cur) { BookmarksList(ed, nb?.bookmarks.orEmpty(), pages, cur) { renaming = it } }
         }
     }
     moveTo?.let { id -> MoveToDialog(ed, id) { moveTo = null } }
@@ -436,6 +439,7 @@ private fun PageThumbItem(
                     It(T.t("Wklej stronę po tej", "Paste page after"), Icons.Rounded.ContentPaste, !ro && Clip.page != null) { ed.pastePage(i) }
                     It(if (marked) T.t("Usuń zakładkę", "Remove bookmark") else T.t("Dodaj zakładkę", "Add bookmark"), if (marked) Icons.Rounded.BookmarkBorder else Icons.Rounded.Bookmark) { ed.toggleBookmark(i) }
                     if (marked) It(T.t("Zmień nazwę zakładki", "Rename bookmark"), Icons.Rounded.Edit) { rename() }
+                    It(T.t("Tagi strony…", "Page tags…"), Icons.Rounded.Tag, !ro) { ed.tagsFor = page.id }
                     HorizontalDivider(color = m.line)
                     It(if (i > 0) T.t("Przesuń wcześniej (na stronę $i)", "Move earlier (to page $i)") else T.t("Przesuń wcześniej", "Move earlier"), Icons.Rounded.ArrowUpward, !ro && i > 0) { ed.movePage(i, i - 1) }
                     It(if (i < total - 1) T.t("Przesuń dalej (na stronę ${i + 2})", "Move later (to page ${i + 2})") else T.t("Przesuń dalej", "Move later"), Icons.Rounded.ArrowDownward, !ro && i < total - 1) { ed.movePage(i, i + 1) }
@@ -449,6 +453,13 @@ private fun PageThumbItem(
             }
         }
         Box(Modifier.fillMaxWidth().padding(top = 4.dp)) {
+            // FB8: pierwszy tag strony po lewej od numeru, żeby przewijając panel widzieć rodzaje stron.
+            val tags = ed.tagsOf(page.id)
+            if (tags.isNotEmpty()) Text(
+                "#" + tags[0] + if (tags.size > 1) " +${tags.size - 1}" else "",
+                Modifier.align(Alignment.CenterStart).widthIn(max = 78.dp), maxLines = 1, overflow = TextOverflow.Ellipsis,
+                style = MaterialTheme.typography.labelSmall, color = m.accentText,
+            )
             Text(
                 "${index + 1}",
                 Modifier.align(Alignment.Center).clip(RoundedCornerShape(50)).background(if (current) m.accent else Color.Transparent).padding(horizontal = 9.dp, vertical = 1.dp),
@@ -502,7 +513,7 @@ private fun BookmarksList(ed: Editor, marks: List<Bookmark>, pages: List<PageSta
     val m = mint
     val rows = marks.mapNotNull { b -> pages.indexOfFirst { it.id == b.pageId }.takeIf { it >= 0 }?.let { it to b } }.sortedBy { it.first }
     if (rows.isEmpty()) {
-        Text(T.t("Brak zakładek. Użyj ikony zakładki w nagłówku (Ctrl+B) albo menu „⋮” przy miniaturze strony.", "No bookmarks. Use the bookmark icon (Ctrl+B) or the “⋮” menu of a page thumbnail."), Modifier.padding(16.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(T.t("Brak zakładek. Użyj ikony zakładki w nagłówku (Ctrl+B) albo menu „⋮” przy miniaturze strony — tam też dodasz tagi, np. #definicja.", "No bookmarks. Use the bookmark icon (Ctrl+B) or the “⋮” menu of a page thumbnail — that is also where you add tags, e.g. #definition."), Modifier.padding(16.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         return
     }
     LazyColumn(Modifier.fillMaxHeight()) {

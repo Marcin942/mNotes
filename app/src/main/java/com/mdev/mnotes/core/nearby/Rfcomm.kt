@@ -44,7 +44,25 @@ object StreamFramer {
     }
 }
 
-class BtDevice(val address: String, val name: String)
+/** [major]: główna klasa urządzenia Bluetooth (`BluetoothClass.Device.Major`), -1 gdy nieznana. */
+class BtDevice(val address: String, val name: String, val major: Int = -1)
+
+/**
+ * Wybór z listy sparowanych (3b-B3): słuchawki, głośniki, zegarki, myszy, drukarki i opaski nie mogą być tabletem,
+ * więc nie trafiają na listę parowania ani do prób łączenia (każda próba to kilka sekund). Telefony i komputery
+ * (tablety Samsung zgłaszają się jako jedno z nich) idą pierwsze, nieznana klasa na końcu. Gdyby filtr wyciął
+ * wszystko, zostaje pełna lista (lepiej za dużo niż nic).
+ */
+object BtPick {
+    const val COMPUTER = 0x0100
+    const val PHONE = 0x0200
+    private val NOT_PEER = setOf(0x0300, 0x0400, 0x0500, 0x0600, 0x0700, 0x0800, 0x0900)
+
+    fun peers(list: List<BtDevice>): List<BtDevice> {
+        val ok = list.filter { it.major !in NOT_PEER }.sortedBy { if (it.major == COMPUTER || it.major == PHONE) 0 else 1 }
+        return ok.ifEmpty { list }
+    }
+}
 
 /** Otwarte gniazdo RFCOMM: [peer] to druga strona. [close] przerywa czekające odczyty i zapisy (także z innych wątków). */
 interface BtPipe {
@@ -187,7 +205,7 @@ class RfcommTransport(
         searching = true
         if (!ready()) return
         val pairing = name.startsWith(LinkMachine.PAIR_PREFIX)
-        val list = try { if (pairing || known == null) port.bonded() else emptyList() } catch (e: SecurityException) {
+        val list = try { if (pairing || known == null) BtPick.peers(port.bonded()) else emptyList() } catch (e: SecurityException) {
             post { machine.onFailed(LinkErrors.NO_PERMISSION) }; return
         }
         val found = if (pairing) list.map { it.address to LinkMachine.PAIR_PREFIX + it.name }

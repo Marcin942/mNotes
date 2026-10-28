@@ -343,6 +343,24 @@ class RfcommTransportTest {
     }
 
     @Test
+    fun bondedListHidesHeadphonesAndWatchesWhenTheClassIsKnown() {
+        val tab = BtDevice("AA:00:00:00:00:11", "Galaxy Tab", BtPick.COMPUTER)
+        val budsC = BtDevice("AA:00:00:00:00:13", "Buds", 0x0400)
+        val watchC = BtDevice("AA:00:00:00:00:14", "Watch", 0x0700)
+        val car = BtDevice("AA:00:00:00:00:15", "Auto", -1)
+        assertEquals(listOf(tab, car), BtPick.peers(listOf(budsC, car, watchC, tab)))
+        assertEquals("same słuchawki: lepiej pokazać niż nic", listOf(budsC), BtPick.peers(listOf(budsC)))
+        val tt = RfcommTransport(Port(tab, emptyList()), post)
+        val pt = RfcommTransport(Port(phone, listOf(budsC, watchC, tab)), post)
+        val host = machine(tt, LinkMode.PAIR, SyncRole.HOST, tab.name, null)
+        val client = machine(pt, LinkMode.PAIR, SyncRole.CLIENT, phone.name, null)
+        host.start(); client.start()
+        runUntil(host, client, what = "lista") { (client.state as? LinkState.Searching)?.found?.isNotEmpty() == true }
+        assertEquals(listOf(tab.address), (client.state as LinkState.Searching).found.map { it.id })
+        tt.close(); pt.close()
+    }
+
+    @Test
     fun pairMadeOverNearbyFindsTheTabletAmongBondedDevices() {
         val seen = Seen()
         val tt = RfcommTransport(Port(tablet, emptyList()), post)

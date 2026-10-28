@@ -73,7 +73,7 @@ class AndroidBtPort(context: Context) : BtPort {
         runCatching { adapter?.cancelDiscovery() }
     }
 
-    private fun dev(d: BluetoothDevice) = BtDevice(d.address, runCatching { d.name }.getOrNull().orEmpty())
+    private fun dev(d: BluetoothDevice) = BtDevice(d.address, runCatching { d.name }.getOrNull().orEmpty(), runCatching { d.bluetoothClass?.majorDeviceClass }.getOrNull() ?: -1)
 
     private fun pipe(s: BluetoothSocket): BtPipe = object : BtPipe {
         override val peer = dev(s.remoteDevice)

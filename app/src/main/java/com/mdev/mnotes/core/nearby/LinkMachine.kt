@@ -342,7 +342,7 @@ class LinkMachine(
             is SyncMsg.PhotoAck -> {
                 current?.let { s ->
                     val ms = s.sinceSent(m.index, clock())
-                    if (s.ack(m.index)) trace("część ${m.index + 1}/${s.count} potwierdzona" + (ms?.let { " po $it ms" } ?: ""))
+                    if (s.ack(m.index, clock())) trace("część ${m.index + 1}/${s.count} potwierdzona" + (ms?.let { " po $it ms" } ?: ""))
                 }
                 pump()
             }
@@ -481,8 +481,13 @@ class LinkMachine(
         /** Nazwa punktu w parowaniu: przedrostek + nazwa urządzenia (lista „Znaleziono: Galaxy Tab S10+”). */
         const val PAIR_PREFIX = "mnp|"
         const val SEARCH_MS = 30_000L
-        const val CONNECT_MS = 20_000L
-        const val SECURE_MS = 10_000L
+        /**
+         * 3b-B3: było 20 s i 10 s. Nearby po Bluetooth (zanim przejdzie na Wi-Fi) łączy się na części telefonów ponad
+         * 20 s, a po `onConnected` potrafi wstrzymać ładunki na czas zmiany medium; przerwanie w tej chwili zaczynało
+         * szukanie od nowa i dawało „wszystko trwa długo”. Dziennik pokaże prawdziwe czasy.
+         */
+        const val CONNECT_MS = 40_000L
+        const val SECURE_MS = 20_000L
         const val RETRY_MS = 3_000L
         const val AUTO_PICK_MS = 1_000L
         const val LOG_SIZE = 20

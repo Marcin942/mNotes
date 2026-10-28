@@ -32,6 +32,10 @@ object LinkDiagnostics {
         LocationManagerCompat.isLocationEnabled(ctx.getSystemService(Context.LOCATION_SERVICE) as LocationManager)
     }.getOrNull()
 
+    fun bluetoothOn(ctx: Context): Boolean? = runCatching { (ctx.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager).adapter?.isEnabled }.getOrNull()
+
+    fun wifiOn(ctx: Context): Boolean? = runCatching { (ctx.applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager).isWifiEnabled }.getOrNull()
+
     private fun bluetooth(ctx: Context) = com.mdev.mnotes.lab.LinkSettings.of(ctx).bluetooth
 
     /** Bluetooth RFCOMM (2e-B1): zgody tego transportu, Bluetooth i zapamiętany adres; bez wierszy o Wi-Fi i Usługach Google. */
@@ -61,8 +65,8 @@ object LinkDiagnostics {
         maker = Build.MANUFACTURER.orEmpty(),
         model = Build.MODEL.orEmpty(),
         oneUi = LinkEnv.oneUi(runCatching { Build.VERSION::class.java.getField("SEM_PLATFORM_INT").getInt(null) }.getOrNull()),
-        bluetooth = runCatching { (ctx.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager).adapter?.isEnabled }.getOrNull(),
-        wifi = runCatching { (ctx.applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager).isWifiEnabled }.getOrNull(),
+        bluetooth = bluetoothOn(ctx),
+        wifi = wifiOn(ctx),
         location = locationOn(ctx),
         playServices = if (bt) null else runCatching { GoogleApiAvailability.getInstance().isGooglePlayServicesAvailable(ctx) == ConnectionResult.SUCCESS }.getOrNull(),
         permissions = (if (bt) LinkPermissions.rfcomm(Build.VERSION.SDK_INT, discovery = true, visible = true, scanForLocation = true) else LinkPermissions.required(Build.VERSION.SDK_INT))

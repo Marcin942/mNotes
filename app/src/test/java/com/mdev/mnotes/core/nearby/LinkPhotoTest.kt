@@ -65,9 +65,44 @@ class LinkPhotoTest {
     fun givesUpAfterMaxTries() {
         val s = sender(ByteArray(10))
         var t = 0L
-        repeat(PhotoSender.MAX_TRIES) { assertEquals(1, s.due(t).size); t += PhotoSender.TIMEOUT_MS }
+        repeat(PhotoSender.MAX_TRIES) { assertEquals(1, s.due(t).size); t += s.timeout() }
         assertTrue(s.due(t).isEmpty())
         assertTrue(s.failed)
+    }
+
+    @Test
+    fun partTimeoutFollowsTheMeasuredLinkSpeed() {
+        val s = sender()
+        assertEquals("bez pomiaru: hojnie", PhotoSender.FIRST_TIMEOUT_MS, s.timeout())
+        s.due(0); s.ack(0, 200)
+        assertEquals("szybkie łącze: dolna granica", PhotoSender.TIMEOUT_MS, s.timeout())
+        val slow = sender()
+        slow.due(0); slow.ack(0, 50_000)
+        assertEquals("bardzo wolne: górna granica", PhotoSender.MAX_TIMEOUT_MS, slow.timeout())
+    }
+
+    /** 3b-B3: łącze, na którym część idzie ~25 s (Bluetooth bez Wi-Fi, BLE): żadnych ponowień, zdjęcie dochodzi. */
+    @Test
+    fun slowLinkIsNotFloodedWithResends() {
+        val s = sender(); val r = PhotoReceiver()
+        val arrive = HashMap<Int, Long>()  // część → chwila, w której dotrze (kolejno, 25 s każda)
+        var busyUntil = 0L
+        var got: SyncMsg.Photo? = null
+        var t = 0L
+        var sends = 0
+        while (!s.done && t < 600_000) {
+            for (p in s.due(t)) { sends++; busyUntil = maxOf(busyUntil, t) + 25_000; arrive[p.index] = busyUntil }
+            for ((i, at) in arrive.toMap()) if (at <= t) {
+                arrive.remove(i)
+                val res = r.accept(SyncMsg.decode(SyncMsg.encode(s.part(i))) as SyncMsg.PhotoPart)
+                for (m in res.reply) if (m is SyncMsg.PhotoAck) s.ack(m.index, t)
+                res.photo?.let { got = it }
+            }
+            t += 500
+        }
+        assertArrayEquals(photo, got!!.bytes)
+        assertEquals("każda część wysłana raz", 3, sends)
+        assertFalse(s.failed)
     }
 
     @Test

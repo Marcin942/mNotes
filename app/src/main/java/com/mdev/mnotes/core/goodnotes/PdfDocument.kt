@@ -106,10 +106,12 @@ class PdfDocument(val data: ByteArray) {
         val index = (d["Index"] as? List<*>)?.map { (it as? Double)?.toInt() ?: 0 } ?: listOf(0, size)
         val bytes = decodeStream(obj)
         val rec = w.sum()
+        // rekord 0 bajtów nie przesuwa `p`, więc kontrola końca danych nie przerwałaby pętli po /Index (2³¹ obrotów)
+        if (rec == 0) throw PdfException("złe /W")
         var p = 0
         var k = 0
         while (k + 1 < index.size) {
-            val first = index[k]; val count = index[k + 1]
+            val first = index[k]; val count = minOf(index[k + 1], (bytes.size - p) / rec)
             for (i in 0 until count) {
                 if (p + rec > bytes.size) break
                 fun field(n: Int): Long { var v = 0L; repeat(n) { v = (v shl 8) or (bytes[p++].toLong() and 0xFF) }; return v }

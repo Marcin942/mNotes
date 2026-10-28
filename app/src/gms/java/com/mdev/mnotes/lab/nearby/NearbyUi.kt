@@ -539,7 +539,7 @@ fun DiagnosticsDialog(machine: LinkMachine?, close: () -> Unit) {
         confirm = T.t("Kopiuj raport", "Copy report"),
         onConfirm = {
             val cm = ctx.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-            cm.setPrimaryClip(ClipData.newPlainText("mNotes Nearby", LinkDiagnostics.report(ctx, log)))
+            cm.setPrimaryClip(ClipData.newPlainText("mNotes Nearby", LinkDiagnostics.report(ctx, machine?.report.orEmpty())))
             close()
         },
         dismissText = T.t("Zamknij", "Close"),

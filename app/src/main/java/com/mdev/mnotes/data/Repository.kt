@@ -11,6 +11,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import com.mdev.mnotes.core.codec.LocalName
 import com.mdev.mnotes.core.codec.PageCodec
+import com.mdev.mnotes.core.codec.Streams
 import com.mdev.mnotes.core.model.PageContent
 import com.mdev.mnotes.core.model.PageSpec
 import org.json.JSONArray
@@ -237,7 +238,13 @@ class Repository(ctx: Context) {
         val name = newId() + "." + ext
         val f = assetFile(nb, name)
         f.parentFile?.mkdirs()
-        FileOutputStream(f).use { out -> input.copyTo(out) }
+        // Strumień od innej aplikacji może nie mieć końca: bez limitu zapełniał dysk, a urwany plik zostawał w zeszycie.
+        try {
+            FileOutputStream(f).use { out -> Streams.copyAtMost(input, out, MAX_ASSET) }
+        } catch (e: Throwable) {
+            f.delete()
+            throw e
+        }
         return name
     }
 
@@ -251,6 +258,8 @@ class Repository(ctx: Context) {
     companion object {
         const val DAY = 24L * 3600_000L
         const val TRASH_DAYS = 30L
+        /** Największy pojedynczy plik zasobu (PDF, obraz); tyle samo co cały import `.mnotes`. */
+        const val MAX_ASSET = 2L * 1024 * 1024 * 1024
 
         fun writeAtomic(f: File, bytes: ByteArray, keepBak: Boolean) {
             f.parentFile?.mkdirs()

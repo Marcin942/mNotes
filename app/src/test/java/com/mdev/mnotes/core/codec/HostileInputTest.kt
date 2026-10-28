@@ -3,6 +3,7 @@ package com.mdev.mnotes.core.codec
 import org.junit.Assert.assertTrue
 import org.junit.Assert.fail
 import org.junit.Test
+import java.io.File
 import java.util.zip.CRC32
 import java.util.zip.Deflater
 
@@ -46,6 +47,37 @@ class HostileInputTest {
         }
         // zwykłe nazwy (w tym z kropkami) bez zmian: stare zeszyty otwierają się jak dawniej
         for (n in listOf("3f9a01b2c4d5", "3f9a01b2c4d5.webp", "img-1.webp", "a..b.png")) assertTrue(LocalName.plain(n) == n)
+    }
+
+    @Test(timeout = 10_000)
+    fun endlessStreamStopsAtTheLimit() {
+        // strumień od innej aplikacji, który nigdy się nie kończy (np. udostępniony „PDF” z jej ContentProvidera)
+        val endless = object : java.io.InputStream() {
+            override fun read() = 0
+            override fun read(b: ByteArray, off: Int, len: Int): Int { java.util.Arrays.fill(b, off, off + len, 0); return len }
+        }
+        try {
+            Streams.copyAtMost(endless, java.io.OutputStream.nullOutputStream(), 10L shl 20)
+            fail("kopiowanie bez końca")
+        } catch (_: CodecException) {}
+        val small = ByteArray(1000)
+        val out = java.io.ByteArrayOutputStream()
+        assertTrue(Streams.copyAtMost(small.inputStream(), out, 1000) == 1000L && out.size() == 1000)
+    }
+
+    @Test
+    fun archiveWithTooManyEntriesIsRejected() {
+        // milion pustych wpisów to kilkadziesiąt MB ZIP-a i milion plików w katalogu zeszytu
+        val zip = java.io.ByteArrayOutputStream()
+        java.util.zip.ZipOutputStream(zip).use { z ->
+            z.putNextEntry(java.util.zip.ZipEntry("meta.json")); z.write("{}".toByteArray()); z.closeEntry()
+            for (i in 0..MnotesArchive.MAX_ENTRIES) { z.putNextEntry(java.util.zip.ZipEntry("assets/$i")); z.closeEntry() }
+        }
+        val dir = java.nio.file.Files.createTempDirectory("mn-entries").toFile()
+        try {
+            assertTrue(MnotesArchive.extract(zip.toByteArray().inputStream(), File(dir, "nb"), 1L shl 30, dir) == null)
+            assertTrue((File(dir, "nb/assets").list()?.size ?: 0) == 0)
+        } finally { dir.deleteRecursively() }
     }
 
     @Test

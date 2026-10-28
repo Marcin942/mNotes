@@ -68,7 +68,11 @@ object MnotesArchive {
         }
     }
 
+    /** Więcej wpisów nie ma żaden prawdziwy zeszyt; milion pustych wpisów (kilkadziesiąt MB ZIP-a) to milion plików. */
+    const val MAX_ENTRIES = 100_000
+
     private fun fromZipFile(zip: File, dst: File, maxBytes: Long): Result? = ZipFile(zip).use { z ->
+        if (z.size() > MAX_ENTRIES) return null
         val entries = z.entries().toList().filter { !it.isDirectory }
         val root = rootOf(entries.map { it.name }) ?: return null
         var total = 0L
@@ -81,7 +85,9 @@ object MnotesArchive {
 
     private fun fromStream(zip: File, dst: File, maxBytes: Long): Result? {
         val names = ArrayList<String>()
-        ZipInputStream(zip.inputStream()).use { z -> while (true) { val e = z.nextEntry ?: break; if (!e.isDirectory) names.add(e.name) } }
+        ZipInputStream(zip.inputStream()).use { z ->
+            while (true) { val e = z.nextEntry ?: break; if (!e.isDirectory) names.add(e.name); if (names.size > MAX_ENTRIES) return null }
+        }
         val root = rootOf(names) ?: return null
         var total = 0L
         ZipInputStream(zip.inputStream()).use { z ->

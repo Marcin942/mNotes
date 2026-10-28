@@ -262,32 +262,30 @@ class PreviewHarness {
         ImageIO.write(img, "png", File(dir, "curves.png"))
     }
 
-    /** Akapit pola tekstu zawinięty do szerokości pola (czcionka bezszeryfowa Java2D zamiast Roboto); zwraca wysokość. */
+    /**
+     * Akapit pola tekstu zawinięty do szerokości pola (czcionka bezszeryfowa Java2D zamiast Roboto) tym samym pomiarem,
+     * którym test liczy wysokości przewodnika; zwraca wysokość.
+     */
     private fun textBox(g: java.awt.Graphics2D, t: com.mdev.mnotes.core.model.TextBox): Float {
-        val font = java.awt.Font("SansSerif", if (t.style and com.mdev.mnotes.core.model.TextBox.STYLE_BOLD != 0) java.awt.Font.BOLD else java.awt.Font.PLAIN, 1).deriveFont(t.size)
+        val m = com.mdev.mnotes.core.text.AwtTextMeasure
+        val font = m.font(t)
         g.font = font
         val fm = g.getFontMetrics(font)
         val left = t.cx - t.w / 2; val top = t.cy - t.h / 2
-        val lines = ArrayList<String>()
-        var cur = ""
-        for (word in t.text.split(' ')) {
-            val next = if (cur.isEmpty()) word else "$cur $word"
-            if (fm.getStringBounds(next, g).width > t.w && cur.isNotEmpty()) { lines.add(cur); cur = word } else cur = next
-        }
-        if (cur.isNotEmpty()) lines.add(cur)
-        val lh = t.size * 1.17f
+        val lines = m.lines(t, t.w)
+        val lh = m.lineHeight(t)
         if (t.fill != 0) { g.color = col(t.fill); g.fill(Rectangle2D.Float(left, top, t.w, t.h)) }
         g.color = col(t.color)
         lines.forEachIndexed { i, l ->
             val x = if (t.align == com.mdev.mnotes.core.model.TextBox.ALIGN_END) left + t.w - fm.getStringBounds(l, g).width.toFloat() else left
-            g.drawString(l, x, top + t.size + i * lh)
+            g.drawString(l, x, top + m.ascent(t) + i * lh)
         }
         return lines.size * lh
     }
 
     /** 2b-A11: strony przewodnika (tym samym `Guide` co aplikacja): arkusz miniatur i kilka stron w pełnym rozmiarze. */
     private fun guideSheet(dir: String) {
-        val pages = com.mdev.mnotes.core.guide.Guide.pages(true)
+        val pages = com.mdev.mnotes.core.guide.Guide.pages(true, m = com.mdev.mnotes.core.text.AwtTextMeasure)
         val report = StringBuilder()
         fun render(p: com.mdev.mnotes.core.guide.Guide.Page, s: Float): BufferedImage {
             val img = paper(p.spec, s, p.spec.w.toInt(), p.spec.h.toInt())
@@ -309,6 +307,8 @@ class PreviewHarness {
                         g.draw(path)
                     }
                 }
+                // Taśma zakryta: pełny kolor, jak w aplikacji przed odsłonięciem.
+                is com.mdev.mnotes.core.model.TapeEl -> { g.color = col(e.color); g.fill(Rectangle2D.Float(e.cx - e.w / 2, e.cy - e.h / 2, e.w, e.h)) }
                 is com.mdev.mnotes.core.model.TextBox -> {
                     val need = textBox(g, e)
                     if (need > e.h + 1f) report.append("${p.title}: „${e.text.take(40)}” potrzebuje ${need.toInt()} pt, pole ${e.h.toInt()} pt\n")
@@ -326,7 +326,7 @@ class PreviewHarness {
         pages.forEachIndexed { i, p -> sg.drawImage(render(p, s), 10 + (i % cols) * (pw + 10), 10 + (i / cols) * (ph + 10), null) }
         sg.dispose()
         ImageIO.write(sheet, "png", File(dir, "guide.png"))
-        for (i in listOf(0, 1, 7, 8, 14)) if (i < pages.size) ImageIO.write(render(pages[i], 1.3f), "png", File(dir, "guide_${i + 1}.png"))
+        for (i in listOf(0, 7, 12, 13, 17, 20)) if (i < pages.size) ImageIO.write(render(pages[i], 1.3f), "png", File(dir, "guide_${i + 1}.png"))
         File(dir, "guide-overflow.txt").writeText(report.toString())
     }
 

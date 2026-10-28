@@ -440,8 +440,6 @@ private fun EditorPrefs(set: com.mdev.mnotes.data.Settings) {
     Group(T.t("Pióro", "Pen"), keys = "wygładzanie kształty rysowanie pen") {
         Opt(T.t("Wygładzanie: ${(set.smoothing * 100).toInt()}%", "Smoothing: ${(set.smoothing * 100).toInt()}%"), "gładkość stabilizacja drżenie pióro") { MSlider(set.smoothing, 0f, 2f) { set.smoothing = it } }
         ToggleRow(T.t("Przytrzymaj, aby wyprostować kształt", "Hold to snap to shape"), set.holdToShape, keys = "kształty prosta linia okrąg prostokąt prostowanie snap shape") { set.holdToShape = it }
-        // Przegląd §3.2a: wstawianie zdjęć to praca w edytorze, nie ustawienie wejścia.
-        ToggleRow(T.t("Wstawione zdjęcie wyrównuj do kratki", "Align inserted photos to the grid"), set.imageGridFit, keys = "zdjęcie obraz kratka siatka wyrównaj przyciągnij grid snap image") { set.imageGridFit = it }
         if (set.holdToShape) Opt(T.t("Czas przytrzymania: ${set.holdMs} ms", "Hold time: ${set.holdMs} ms"), "prostowanie kształt opóźnienie") { MSlider(set.holdMs.toFloat(), 250f, 1200f) { set.holdMs = (it / 50).toInt() * 50 } }
         // F28 (A2-4): te same przełączniki co kafelki w panelu pióra, żeby wyszukiwarka ustawień je znajdowała.
         if (set.holdToShape) {
@@ -451,6 +449,8 @@ private fun EditorPrefs(set: com.mdev.mnotes.data.Settings) {
         }
         if (set.holdToShape) ToggleRow(T.t("Trzymaj dalej, aby wygładzić w krzywą", "Keep holding to smooth into a curve"), set.holdToCurve, keys = "krzywa bezier wygładź gładka curve smooth") { set.holdToCurve = it }
         if (set.holdToShape && set.holdToCurve) Opt(T.t("Dodatkowy czas dla krzywej: ${set.curveHoldMs} ms", "Extra time for a curve: ${set.curveHoldMs} ms"), "krzywa bezier czas opóźnienie curve") { MSlider(set.curveHoldMs.toFloat(), 0f, 1000f) { set.curveHoldMs = (it / 50).toInt() * 50 } }
+        // Przegląd §3.2a: wstawianie zdjęć to praca w edytorze, nie ustawienie wejścia; 2c-A15: po parze „Przytrzymaj…” / „Czas przytrzymania”, nie między nimi.
+        ToggleRow(T.t("Wstawione zdjęcie wyrównuj do kratki", "Align inserted photos to the grid"), set.imageGridFit, keys = "zdjęcie obraz kratka siatka wyrównaj przyciągnij grid snap image") { set.imageGridFit = it }
     }
     Group(T.t("Układ współrzędnych", "Coordinate axes"), keys = "osie wykres funkcja kratka siatka axes graph plot grid") {
         ToggleRow(

@@ -85,6 +85,14 @@ class SettingsSynonymsTest {
         assertTrue(SettingsQuery.of("kolor")!!.matches("Kolory pióra"))
     }
 
+    /** 2c-A15: para „Przytrzymaj…” / „Czas przytrzymania” stoi razem — wiersz o zdjęciach jej nie rozdziela. */
+    @Test fun holdPairStaysTogether() {
+        val rows = File(sources[0]).readLines().filter { "ToggleRow(T.t(\"" in it || "Opt(T.t(\"" in it }
+        val i = rows.indexOfFirst { "Przytrzymaj, aby wyprostować" in it }
+        assertTrue(i >= 0)
+        assertTrue(rows[i + 1].trim(), "Czas przytrzymania" in rows[i + 1])
+    }
+
     @Test fun synonymsDoNotMatchInsideOtherWords() {
         // „cofnij” ma w grupie „back”, ale nie może przez to znaleźć „background”/„tło”.
         val sq = SettingsQuery.of("cofnij")!!

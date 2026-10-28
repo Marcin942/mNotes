@@ -407,6 +407,11 @@ Na starcie (`noc/wszystko` @ `471ed08`): lab 696 testów, 0 porażek.
   **Tablet:** zdjęcie tablicy → dymek z „Oczyścić?” → panel kredy dla tego zdjęcia; drugi raz → „Nie pokazuj więcej” →
   trzecie zdjęcie bez dymka. W panelu: gumka (2 pętle) → „Narożniki” → przesuń kółko → licznik „Wyczyść gumkę (0)”.
 
+- **2c-B6** (`bd8220d`): tabela przed/po (24 zdjęcia i okładka) i podglądy były już w 2b-B4 c.d.; dopisane wiersze dla
+  okręgu, sinusoidy, S i ∑ osobno (`docs/KREDA-POMIARY.md`): skręt < 25° na wszystkich, ≥ 3× mniej węzłów tylko okrąg.
+  PNG przed/po: `app/build/kreda-krzywe/{syntetyczne,okladka-wzor,20260318_154119,20260326_140000}.png` (plan podawał
+  `kreda-bezier/`, katalog z testu został). **Tablet:** jak 2b-B4 (zoom 4× na „Edytowalnych kreskach”).
+
 ### Co Marcin ma sprawdzić na tablecie — wariant lab, po fazie 2 (kolejność)
 
 Instalacja: `labDebug` z `noc/lab2` (albo `noc/wszystko` po scaleniu przez A) na tablecie **i** na telefonie (Nearby).

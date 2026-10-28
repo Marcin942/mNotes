@@ -398,6 +398,15 @@ Na starcie (`noc/wszystko` @ `471ed08`): lab 696 testów, 0 porażek.
   **Tablet:** tryb wykładu na białej stronie → zdjęcie tablicy → kreda ciemnoszara, czytelna; „Cofnij do oryginału”
   w dymku wraca do zdjęcia (także po przesunięciu go); zdjęcie szarej tablicy → podpowiedź „Wygląda jak tablica”.
 
+- **2c-B5** (`303cfdf`): resztki K1. Podpowiedź po wstawieniu zdjęcia tablicy ma dwa przyciski: „Oczyścić?” zaznacza
+  zdjęcie i otwiera panel kredy (przez `Lab.Overlay`, wspólny ekran bez zmian), „Nie pokazuj więcej” wyłącza ją (ten sam
+  przełącznik co w Ustawieniach → Laboratorium). Do tej chwili podpowiedź pokazuje się przy każdym zdjęciu tablicy, nie
+  raz. Gumka: `core/image/BoardEdits` — zmiana narożników, „Narożniki automatycznie”, prostowania albo kadru zeruje pętle
+  (były w ułamkach wyniku, więc po zmianie trafiały w inną kredę); `BoardEditsTest` (4). „Wyślij do mLabs”: `busy` i
+  zamknięcie okna w `finally` przez główny wątek, nie przez `ed.view`. Poprawiona linia o K1–K5 wyżej. Lab 875, core 793.
+  **Tablet:** zdjęcie tablicy → dymek z „Oczyścić?” → panel kredy dla tego zdjęcia; drugi raz → „Nie pokazuj więcej” →
+  trzecie zdjęcie bez dymka. W panelu: gumka (2 pętle) → „Narożniki” → przesuń kółko → licznik „Wyczyść gumkę (0)”.
+
 ### Co Marcin ma sprawdzić na tablecie — wariant lab, po fazie 2 (kolejność)
 
 Instalacja: `labDebug` z `noc/lab2` (albo `noc/wszystko` po scaleniu przez A) na tablecie **i** na telefonie (Nearby).

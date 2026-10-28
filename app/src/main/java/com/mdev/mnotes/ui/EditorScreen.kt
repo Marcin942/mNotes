@@ -723,7 +723,7 @@ private fun ToolBar(ed: Editor, set: com.mdev.mnotes.data.Settings, vertical: Bo
     icon("pipette", 2, 17, Icons.Rounded.Colorize, T.t("Pipeta — pobierz kolor ze strony", "Eyedropper — pick a colour from the page"), "I", !ro, ed.pipette != null, pin = false) { if (ed.pipette != null) ed.cancelPipette() else ed.pipetteForCurrent() }
     // Lasso z ikoną z przerywanej linii (F7), odręczne albo prostokątne — jak pętla na stronie.
     items += BarItem("lasso", 2, 4, T.t("Lasso", "Lasso"), "L", !ro, ed.tool == Tool.LASSO, ed.tool == Tool.LASSO, { pickTool(Tool.LASSO, Panel.LASSO) }) { c, s ->
-        LassoGlyph(set.lassoRect, c, Modifier.size(s))
+        LassoGlyph(set.lassoRect, c, Modifier.size(s + 2.dp))
     }
     tool("text", 7, Icons.Rounded.TextFields, T.t("Tekst", "Text"), "T", Tool.TEXT, null)
     tool("laser", 14, Icons.Rounded.TrackChanges, T.t("Laser", "Laser"), "O", Tool.LASER, null, enabled = true)

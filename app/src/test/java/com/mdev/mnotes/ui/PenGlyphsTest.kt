@@ -99,6 +99,16 @@ class PenGlyphsTest {
         return src.substring(start, end)
     }
 
+    /** 2c-A15: lasso i gumka rysowane glifem w stylu piór mają na pasku ten sam rozmiar co pióra. */
+    @Test fun styledGlyphsMatchPenSizeOnTheBar() {
+        val body = toolBarSource()
+        fun sizeOf(glyph: String) = Regex("""$glyph\([^\n]*Modifier\.size\(([^)]*)\)""").find(body)?.groupValues?.get(1)
+        val pen = sizeOf("PenGlyph")
+        assertNotNull(pen)
+        assertEquals("gumka", pen, sizeOf("EraserModeGlyph"))
+        assertEquals("lasso", pen, sizeOf("LassoGlyph"))
+    }
+
     /** 2c-A15: pozycje brane z prawdziwego paska (BarItem/tool/icon i BAR_PENS), nie z listy, którą sprawdzamy. */
     @Test fun everyBarItemHasAnIcon() {
         val body = toolBarSource()

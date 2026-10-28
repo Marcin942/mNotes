@@ -2,7 +2,7 @@
 
 Agent B, 27.10.2026. Marcin: „nie działa: urządzenia się nie widzą, parowanie nie przechodzi, zdjęcie nie dociera; UI
 beznadziejne po obu stronach”. Ten dokument powstał **przed** kodem: najpierw diagnoza z kodu `noc/lab2` i ze źródeł
-(AAR `play-services-nearby:19.3.0` z cache Gradle, notatka z działającej aplikacji mChochlik w `docs/nearby/CZYTAJ.md`),
+(AAR `play-services-nearby:19.3.0` z cache Gradle, notatka z innej działającej aplikacji Nearby),
 potem projekt. Czego nie da się sprawdzić bez dwóch urządzeń, jest oznaczone **[tablet]**.
 
 ## 1. Fakty ze źródeł (nie z pamięci)
@@ -25,10 +25,10 @@ Odczytane refleksją z `play-services-nearby-19.3.0-api.jar` (`ConnectionsStatus
 | 8050 | `API_CONNECTION_FAILED_ALREADY_IN_USE` | inna aplikacja używa Nearby |
 | 13 | `STATUS_ERROR` | ogólny |
 
-`ConnectionsClient.MAX_BYTES_DATA_SIZE = 1 047 552` B (nie 32 KB, jak zakładał materiał z mChochlika). Typy ładunku:
+`ConnectionsClient.MAX_BYTES_DATA_SIZE = 1 047 552` B (nie 32 KB, jak zakładał wcześniejszy materiał). Typy ładunku:
 `BYTES = 1`, `FILE = 2`, `STREAM = 3`; postęp: `PayloadTransferUpdate.Status` 1 sukces, 2 błąd, 3 w toku, 4 anulowano.
 AAR nie deklaruje uprawnień łącza w swoim manifeście: wszystkie muszą być w manifeście aplikacji (są, `src/lab/AndroidManifest.xml`).
-mChochlik (działająca klawiatura telefon → tablet): „`ACCESS_FINE_LOCATION` — szukanie wymaga jej także na nowych
+Notatka z innej działającej aplikacji Nearby: „`ACCESS_FINE_LOCATION` — szukanie wymaga jej także na nowych
 Androidach; na 16 bez niej błąd 8034”.
 
 ## 2. Diagnoza: dlaczego dziś nie działa

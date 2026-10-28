@@ -16,7 +16,7 @@ import javax.crypto.spec.SecretKeySpec
 class CryptoException(message: String, cause: Throwable? = null) : Exception(message, cause)
 
 /**
- * Kryptografia łącza telefon ↔ tablet bez serwera (wzór: klawiatura z mChochlika, `docs/nearby/`). Klucz pary
+ * Kryptografia łącza telefon ↔ tablet bez serwera (`docs/NEARBY-PRZEBUDOWA.md`). Klucz pary
  * powstaje z jednorazowego ECDH P-256. Podmianę kluczy w trakcie parowania wykrywa porównanie sześciu cyfr na obu
  * ekranach, a zobowiązanie przed ujawnieniem klucza ([PairingSession], commit-then-reveal) sprawia, że napastnik w
  * środku nie może dobrać swojego klucza pod te cyfry: każda próba to szansa 1 na 10⁶, a nie 10⁶ obliczeń w tle.

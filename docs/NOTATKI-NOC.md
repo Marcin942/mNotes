@@ -235,7 +235,7 @@ Na starcie (`noc/wszystko` @ `471ed08`): lab 696 testów, 0 porażek.
   (diagnoza z kodu i ze stałych odczytanych z jara 19.3.0, projekt, kolejność, jak sprawdzić). **Najważniejsze przyczyny
   „nie działa”:** (1) okno parowania z Ustawień startowało z rolą „telefon” **na obu** urządzeniach, więc oba szukały i
   nikt się nie ogłaszał; (2) kod 8025 (wyłączona *usługa* lokalizacji) był pokazywany jako „Nearby nie wystartowało…
-  Usługi Google Play?” i ponawiany w kółko; (3) przybliżona lokalizacja nie wystarcza (notatka z działającego mChochlika),
+  Usługi Google Play?” i ponawiany w kółko; (3) przybliżona lokalizacja nie wystarcza (notatka z innej działającej aplikacji Nearby),
   a B2-9 ją przepuszczał — wycofane; (4) brak limitów czasu i postępu, zdjęcie w 100+ porcjach po 30 KB, choć limit
   BYTES to 1 047 552 B.
   - `core/nearby/LinkMachine` (+ `LinkTransport`): cała logika łącza z testami na JVM (`FakeAir`: dwa końce w jednym

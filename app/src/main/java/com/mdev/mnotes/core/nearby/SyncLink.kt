@@ -10,7 +10,7 @@ import java.security.MessageDigest
 
 /**
  * Uprawnienia łącza na danej wersji Androida (`docs/NEARBY-PRZEBUDOWA.md` §3.6). Dokładna lokalizacja jest wymagana
- * wszędzie: notatka z działającej aplikacji (mChochlik) mówi, że szukanie bez niej zwraca 8034/8036 także na nowych
+ * wszędzie: notatka z innej działającej aplikacji Nearby mówi, że szukanie bez niej zwraca 8034/8036 także na nowych
  * Androidach (B2-9 przyjmował przybliżoną: to był błąd). Przybliżona jest na liście, bo Android 12+ pyta o obie naraz.
  */
 object LinkPermissions {
@@ -35,8 +35,8 @@ enum class SyncRole { HOST, CLIENT; val opposite get() = if (this == HOST) CLIEN
 
 /**
  * Wiadomość w porcjach po [CHUNK] bajtów z bajtem flagi (1: ciąg dalszy, 0: ostatnia). Limit ładunku BYTES w
- * `play-services-nearby:19.3.0` to `ConnectionsClient.MAX_BYTES_DATA_SIZE` = 1 047 552 B (odczytane z jara; materiał
- * z mChochlika zakładał 32 KB), więc porcja to 900 000 B i część zdjęcia (256 KB, [PhotoSender]) idzie jedną ramką.
+ * `play-services-nearby:19.3.0` to `ConnectionsClient.MAX_BYTES_DATA_SIZE` = 1 047 552 B (odczytane z jara; wcześniejszy
+ * materiał zakładał 32 KB), więc porcja to 900 000 B i część zdjęcia (256 KB, [PhotoSender]) idzie jedną ramką.
  * Odbiornik skleja porcje dowolnej wielkości (stare 30 KB też). Nearby zachowuje kolejność ładunków.
  */
 object LinkChunks {

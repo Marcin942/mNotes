@@ -234,6 +234,8 @@ object GeoGlyphParts {
         com.mdev.mnotes.core.geom.GeoTool.Kind.INCIRCLE -> listOf(tri, ring(GlyphRole.DASH, 9.4f, 15.3f, 3.9f))
         com.mdev.mnotes.core.geom.GeoTool.Kind.ORTHO -> listOf(tri, xy(GlyphRole.DASH, 8f, 5f, 8f, 19.5f), xy(GlyphRole.DASH, 20.5f, 19.5f, 5.2f, 9.6f), dot(8f, 11.3f))
         com.mdev.mnotes.core.geom.GeoTool.Kind.CENTROID -> listOf(tri, xy(GlyphRole.DASH, 8f, 5f, 12f, 19.5f), xy(GlyphRole.DASH, 3.5f, 19.5f, 14.25f, 12.25f), dot(10.7f, 14.7f))
+        com.mdev.mnotes.core.geom.GeoTool.Kind.TANGENTS -> listOf(ring(GlyphRole.MARK, 15f, 12f, 6f), xy(GlyphRole.DASH, 3f, 12f, 13.4f, 6f), xy(GlyphRole.DASH, 3f, 12f, 13.4f, 18f), dot(3f, 12f), dot(12f, 6.8f), dot(12f, 17.2f))
+        com.mdev.mnotes.core.geom.GeoTool.Kind.PREFLECT -> listOf(xy(GlyphRole.DASH, 6f, 6f, 18f, 18f), xy(GlyphRole.MARK, 3f, 3f, 10f, 3f, 3f, 10f, closed = true), xy(GlyphRole.DETAIL, 21f, 21f, 14f, 21f, 21f, 14f, closed = true), dot(12f, 12f, 1.8f))
         com.mdev.mnotes.core.geom.GeoTool.Kind.REFLECT -> listOf(xy(GlyphRole.DASH, 12f, 2.5f, 12f, 21.5f), xy(GlyphRole.MARK, 3f, 17f, 9f, 17f, 9f, 7f, closed = true), xy(GlyphRole.DETAIL, 21f, 17f, 15f, 17f, 15f, 7f, closed = true))
         com.mdev.mnotes.core.geom.GeoTool.Kind.ROTATE -> listOf(
             dot(12f, 13f, 1.8f), xy(GlyphRole.MARK, 8f, 16.5f, 16f, 16.5f, 16f, 21.5f, 8f, 21.5f, closed = true),

@@ -103,4 +103,41 @@ class GeoToolTest {
         assertEquals(0f, r.pts[3], 1e-3f); assertEquals(40f, abs(r.pts[4]), 1e-3f)
         assertEquals(40f, hypot(r.pts[3], r.pts[4]), 1e-3f)
     }
+
+    // — 2c-A8: kąt obrotu, odbicie względem punktu, styczne, dymek przy chybieniu —
+
+    @Test fun rotationUsesThePickedAngle() {
+        val o = GeoTool.Input.Point(com.mdev.mnotes.core.geom.Construct.P(0f, 0f))
+        val d = GeoTool.Input.Obj(dot(100f, 0f))
+        for (a in listOf(30f, 45f, 60f, 120f, 180f, -45f)) {
+            val r = strokes(GeoTool.build(Kind.ROTATE, listOf(o, d), 0, 1f, angle = a)).single()
+            val rad = a * PI / 180
+            assertEquals(100f * cos(rad).toFloat(), r.pts[0], 1e-2f)
+            assertEquals(100f * sin(rad).toFloat(), r.pts[1], 1e-2f)
+        }
+    }
+
+    @Test fun reflectionThroughAPointInTheTool() {
+        val c = GeoTool.Input.Point(com.mdev.mnotes.core.geom.Construct.P(50f, 50f))
+        val r = strokes(GeoTool.build(Kind.PREFLECT, listOf(c, GeoTool.Input.Obj(dot(60f, 70f))), 0, 1f)).single()
+        assertEquals(40f, r.pts[0], 1e-3f); assertEquals(30f, r.pts[1], 1e-3f)
+    }
+
+    @Test fun tangentsFromAPoint() {
+        val p = GeoTool.Input.Point(com.mdev.mnotes.core.geom.Construct.P(100f, 0f))
+        val c = GeoTool.Input.Circ(com.mdev.mnotes.core.geom.Construct.Circle(com.mdev.mnotes.core.geom.Construct.P(0f, 0f), 50f))
+        val out = GeoTool.build(Kind.TANGENTS, listOf(p, c), 0, 1f)
+        assertEquals(2, dots(out).size)
+        assertEquals(2, strokes(out).count { it.poly && it.count == 2 })
+        // Punkt wewnątrz okręgu: brak stycznych.
+        val inside = GeoTool.Input.Point(com.mdev.mnotes.core.geom.Construct.P(10f, 0f))
+        assertTrue(GeoTool.build(Kind.TANGENTS, listOf(inside, c), 0, 1f).isEmpty())
+    }
+
+    @Test fun missSaysWhatIsMissing() {
+        assertTrue(GeoTool.missHint(Kind.XCC, 0).startsWith("Tu nie ma okręgu"))
+        assertTrue(GeoTool.missHint(Kind.XLL, 1).startsWith("Tu nie ma odcinka ani prostej"))
+        assertTrue(GeoTool.missHint(Kind.XLL, 1).endsWith(GeoTool.hint(Kind.XLL, 1)))
+        assertEquals(GeoTool.hint(Kind.COMPASS, 0), GeoTool.missHint(Kind.COMPASS, 0))
+    }
 }

@@ -922,7 +922,7 @@ private fun GeoStripItems(ed: Editor, set: com.mdev.mnotes.data.Settings, vertic
     Lin(vertical, Modifier.padding(4.dp).then(if (vertical) Modifier.verticalScroll(scroll) else Modifier.horizontalScroll(scroll))) {
         com.mdev.mnotes.core.geom.GeoTool.Kind.entries.forEachIndexed { i, k ->
             // Grupy: okręgi i punkty, proste i kąty, przecięcia, trójkąt, przekształcenia.
-            if (i == 3 || i == 8 || i == 11 || i == 15) BarSep(vertical)
+            if (i == 3 || i == 8 || i == 12 || i == 16) BarSep(vertical)
             ToolBtn(T.t(k.pl, k.en), { ed.geoChoose(k) }, selected = ed.geoKind == k, size = sz) { c -> GlyphCanvas(GeoGlyphParts.parts(k), c, c, Modifier.size(isz + 2.dp)) }
         }
     }
@@ -932,13 +932,42 @@ private fun GeoStripItems(ed: Editor, set: com.mdev.mnotes.data.Settings, vertic
 @Composable
 private fun androidx.compose.foundation.layout.BoxScope.GeoHint(ed: Editor) {
     val m = mint
+    var custom by remember { mutableStateOf(false) }
     FloatingCard(Modifier.align(Alignment.TopCenter).padding(top = 10.dp).panelEnter()) {
-        Row(Modifier.padding(start = 14.dp, end = 4.dp, top = 6.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text(T.t(ed.geoKind.pl, ed.geoKind.en), style = MaterialTheme.typography.labelLarge, color = m.accentText)
-            Text("·  " + ed.geoHint, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            if (ed.geoInputs.isNotEmpty()) IconBtn(Icons.Rounded.Close, T.t("Zacznij wskazywanie od nowa", "Start picking again"), { ed.geoReset() }, size = 30.dp, iconSize = 16.dp)
-            else Spacer(Modifier.width(10.dp))
+        Column {
+            Row(Modifier.padding(start = 14.dp, end = 4.dp, top = 6.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(T.t(ed.geoKind.pl, ed.geoKind.en), style = MaterialTheme.typography.labelLarge, color = m.accentText)
+                Text("·  " + ed.geoHint, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                if (ed.geoInputs.isNotEmpty()) IconBtn(Icons.Rounded.Close, T.t("Zacznij wskazywanie od nowa", "Start picking again"), { ed.geoReset() }, size = 30.dp, iconSize = 16.dp)
+                else Spacer(Modifier.width(10.dp))
+            }
+            // 2c-A8: kąt obrotu — typowe wartości i własna.
+            if (ed.geoKind == com.mdev.mnotes.core.geom.GeoTool.Kind.ROTATE) Row(
+                Modifier.padding(start = 10.dp, end = 10.dp, bottom = 8.dp).horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                for (a in GEO_ANGLES) Chip("${a.toInt()}°", ed.geoAngle == a, { ed.geoAngle = a })
+                val own = ed.geoAngle !in GEO_ANGLES
+                Chip(if (own) com.mdev.mnotes.core.geom.ConstructOps.deg(ed.geoAngle, T.pl) else T.t("Inny…", "Other…"), own, { custom = true })
+            }
         }
+    }
+    if (custom) GeoAngleDialog(ed.geoAngle, { custom = false }) { ed.geoAngle = it; custom = false }
+}
+
+private val GEO_ANGLES = listOf(30f, 45f, 60f, 90f, 120f, 180f)
+
+/** Własny kąt obrotu w stopniach (także ujemny — w drugą stronę). */
+@Composable
+private fun GeoAngleDialog(start: Float, onDismiss: () -> Unit, onPick: (Float) -> Unit) {
+    var text by remember { mutableStateOf(com.mdev.mnotes.core.geom.ConstructOps.deg(start, T.pl).removeSuffix("°")) }
+    val value = text.trim().replace(',', '.').toFloatOrNull()?.takeIf { it.isFinite() && kotlin.math.abs(it) <= 360f && it != 0f }
+    MDialog(T.t("Kąt obrotu", "Rotation angle"), onDismiss, confirm = "OK", onConfirm = { value?.let(onPick) }, confirmEnabled = value != null) {
+        androidx.compose.material3.OutlinedTextField(
+            text, { text = it }, singleLine = true, suffix = { Text("°") },
+            supportingText = { Text(T.t("Od −360 do 360; ujemny obraca w drugą stronę", "From −360 to 360; negative turns the other way")) },
+            keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Decimal),
+        )
     }
 }
 

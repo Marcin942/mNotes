@@ -913,6 +913,9 @@ class Editor(val ctx: Context, val nbId: String) {
 
     val geoHint: String get() = GeoTool.hint(geoKind, geoInputs.size, T.pl)
 
+    /** Kąt obrotu narzędzia Geometria w stopniach (2c-A8: chipy 30–180° i własna wartość; dawniej tylko 90°). */
+    var geoAngle by mutableStateOf(90f)
+
     fun geoChoose(k: GeoTool.Kind) { geoKind = k; geoReset() }
     fun geoReset() { geoInputs.clear(); geoPage = null; view?.invalidate() }
 
@@ -927,12 +930,12 @@ class Editor(val ctx: Context, val nbId: String) {
         geoPage = pageId
         val want = geoKind.inputs[geoInputs.size]
         val input = GeoTool.pick(doc.content(page).elements, x, y, tol, want)
-        if (input == null) { say(geoHint); return }
+        if (input == null) { say(GeoTool.missHint(geoKind, geoInputs.size, T.pl)); return }
         geoInputs += input
         if (geoInputs.size < geoKind.inputs.size) { view?.invalidate(); return }
         val ink = (if (pen.kind == PenKind.HIGHLIGHTER) 0xFF37474F.toInt() else pen.color) or (0xFF shl 24)
         val kind = geoKind
-        val built = GeoTool.build(kind, geoInputs.toList(), ink, pen.width.coerceIn(0.6f, 3f), settings.constructNames, T.pl)
+        val built = GeoTool.build(kind, geoInputs.toList(), ink, pen.width.coerceIn(0.6f, 3f), settings.constructNames, T.pl, geoAngle)
         geoReset()
         val els = constructed(page, built, GeoTool.failOf(kind))
             ?: return say(T.t("Ta konstrukcja nie ma rozwiązania dla wskazanych kształtów", "This construction has no solution for the picked shapes"))

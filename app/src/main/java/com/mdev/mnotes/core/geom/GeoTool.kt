@@ -34,12 +34,14 @@ object GeoTool {
         XLL(listOf(In.LINE, In.LINE), "Przecięcie prostych", "Intersection of lines"),
         XLC(listOf(In.LINE, In.CIRCLE), "Przecięcie prostej i okręgu", "Line–circle intersection"),
         XCC(listOf(In.CIRCLE, In.CIRCLE), "Przecięcie okręgów i prosta przez punkty", "Circle intersection and the line through it"),
+        TANGENTS(listOf(In.POINT, In.CIRCLE), "Styczne z punktu do okręgu", "Tangents from a point to a circle"),
         CIRCUM(listOf(In.TRIANGLE), "Okrąg opisany", "Circumcircle"),
         INCIRCLE(listOf(In.TRIANGLE), "Okrąg wpisany", "Incircle"),
         ORTHO(listOf(In.TRIANGLE), "Wysokości i ortocentrum", "Altitudes and orthocentre"),
         CENTROID(listOf(In.TRIANGLE), "Środkowe i środek ciężkości", "Medians and centroid"),
         REFLECT(listOf(In.LINE, In.OBJECT), "Odbicie względem prostej", "Reflection across a line"),
-        ROTATE(listOf(In.POINT, In.OBJECT), "Obrót o 90° wokół punktu", "Rotation by 90° about a point"),
+        ROTATE(listOf(In.POINT, In.OBJECT), "Obrót wokół punktu", "Rotation about a point"),
+        PREFLECT(listOf(In.POINT, In.OBJECT), "Odbicie względem punktu", "Reflection through a point"),
     }
 
     /** Wskazane wejście: punkt (istniejący albo dowolne miejsce), prosta, okrąg, trójkąt albo obiekt do przekształcenia. */
@@ -52,6 +54,18 @@ object GeoTool {
     }
 
     /** Podpowiedź do kroku [step] konstrukcji [k] („Wskaż drugi okrąg”). */
+    /** 2c-A8: dymek przy chybieniu — czego pod palcem zabrakło, a potem zwykła podpowiedź kroku. */
+    fun missHint(k: Kind, step: Int, pl: Boolean = true): String {
+        val miss = when (k.inputs.getOrNull(step)) {
+            In.LINE -> if (pl) "Tu nie ma odcinka ani prostej" else "No segment or line here"
+            In.CIRCLE -> if (pl) "Tu nie ma okręgu (narysuj go i przytrzymaj pióro)" else "No circle here (draw one and hold the pen)"
+            In.TRIANGLE -> if (pl) "Tu nie ma trójkąta (narysuj go i przytrzymaj pióro)" else "No triangle here (draw one and hold the pen)"
+            In.OBJECT -> if (pl) "Tu nie ma obiektu" else "No object here"
+            In.POINT, null -> return hint(k, step, pl)
+        }
+        return "$miss · ${hint(k, step, pl)}"
+    }
+
     fun hint(k: Kind, step: Int, pl: Boolean = true): String {
         val want = k.inputs.getOrNull(step) ?: return if (pl) "Gotowe" else "Done"
         val nth = k.inputs.take(step).count { it == want }
@@ -143,7 +157,7 @@ object GeoTool {
     }
 
     /** Wynik konstrukcji [k] z wejść [ins] w kolorze [col] i grubości [w]; pusta lista — konstrukcja nie ma rozwiązania. */
-    fun build(k: Kind, ins: List<Input>, col: Int, w: Float, names: Boolean = true, pl: Boolean = true): List<Element> {
+    fun build(k: Kind, ins: List<Input>, col: Int, w: Float, names: Boolean = true, pl: Boolean = true, angle: Float = 90f): List<Element> {
         fun pt(i: Int) = (ins[i] as Input.Point).p
         fun ln(i: Int) = (ins[i] as Input.Ln).l
         fun cir(i: Int) = (ins[i] as Input.Circ).c
@@ -197,7 +211,16 @@ object GeoTool {
                 ConstructOps.ops(listOf(tr), names, pl).firstOrNull { it.id == id }?.build?.invoke(col, w) ?: emptyList()
             }
             Kind.REFLECT -> listOf((ins[1] as Input.Obj).el.transformed(ConstructOps.reflection(ln(0))).withId(Ids.next()))
-            Kind.ROTATE -> { val c = pt(0); listOf((ins[1] as Input.Obj).el.transformed(Affine.rotation((PI / 2).toFloat(), c.x, c.y)).withId(Ids.next())) }
+            Kind.ROTATE -> { val c = pt(0); listOf((ins[1] as Input.Obj).el.transformed(Affine.rotation((angle * PI / 180).toFloat(), c.x, c.y)).withId(Ids.next())) }
+            Kind.PREFLECT -> { val c = pt(0); listOf((ins[1] as Input.Obj).el.transformed(Affine.scale(-1f, -1f, c.x, c.y)).withId(Ids.next())) }
+            Kind.TANGENTS -> {
+                val p = pt(0); val c = cir(1)
+                val ts = Construct.tangents(p, c)
+                if (ts.size < 2) emptyList() else ConstructOps.compose(col, w, names) {
+                    around(c)
+                    for ((i, t) in ts.withIndex()) { line(Line(p, p + (t - p) * 1.3f), false); dot(t, listOf("P", "Q")[i]) }
+                }
+            }
         }
     }
 }

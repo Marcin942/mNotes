@@ -51,7 +51,9 @@ class ConstructOpsTest {
         val lc = ConstructOps.ops(listOf(poly(-50f, 0f, 50f, 0f), circle(0f, 0f, 20f))).first { it.id == "xlc" }.build(0, 1f).filterIsInstance<Stroke>()
         assertEquals(2, lc.size)
         val cc = ConstructOps.ops(listOf(circle(0f, 0f, 20f), circle(30f, 0f, 20f))).first { it.id == "xcc" }.build(0, 1f).filterIsInstance<Stroke>()
-        assertEquals(2, cc.size)
+        // 2c-A8: dwie kropki i prosta przez nie (jak w narzędziu Geometria).
+        assertEquals(3, cc.size)
+        assertEquals(1, cc.count { it.poly && it.count == 2 })
     }
 
     @Test fun threePointsAndReflections() {

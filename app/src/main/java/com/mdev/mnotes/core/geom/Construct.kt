@@ -26,6 +26,24 @@ object Construct {
 
     private const val EPS = 1e-6
 
+    /**
+     * 2c-A8: próg „prawie równoległe / prawie współliniowe” jako sinus kąta (ok. 0,03°), nie bezwzględne 1e-6 przy
+     * wielkościach rzędu 10⁴ pt² — dawniej przecięcie prostych pod 0,01° lądowało setki tysięcy pt dalej.
+     */
+    const val SIN_EPS = 5e-4
+
+    /** Najdalej tyle przekątnych strony od jej środka może wypaść wynik konstrukcji (dalej to szum, nie punkt). */
+    const val FAR_DIAGONALS = 3f
+
+    /** Czy [p] leży dalej niż [FAR_DIAGONALS] przekątnych od środka strony [w]×[h]. */
+    fun tooFar(p: P, w: Float, h: Float): Boolean = hypot(p.x - w / 2f, p.y - h / 2f) > FAR_DIAGONALS * hypot(w, h)
+
+    /** Czy trzy punkty są prawie współliniowe: wysokość trójkąta względem najdłuższego boku poniżej [SIN_EPS]. */
+    fun nearlyCollinear(a: P, b: P, c: P): Boolean {
+        val l = maxOf(a.dist(b), b.dist(c), c.dist(a)).toDouble()
+        return l < 1e-6 || abs(cross(b - a, c - a)) < SIN_EPS * l * l
+    }
+
     private fun cross(a: P, b: P) = a.x.toDouble() * b.y - a.y.toDouble() * b.x
 
     /** Okrąg przez trzy punkty; null, gdy są współliniowe. */
@@ -37,8 +55,8 @@ object Construct {
     /** Środek okręgu opisanego (przecięcie symetralnych). */
     fun circumcenter(a: P, b: P, c: P): P? {
         val ax = a.x.toDouble(); val ay = a.y.toDouble(); val bx = b.x.toDouble(); val by = b.y.toDouble(); val cx = c.x.toDouble(); val cy = c.y.toDouble()
+        if (nearlyCollinear(a, b, c)) return null
         val d = 2 * (ax * (by - cy) + bx * (cy - ay) + cx * (ay - by))
-        if (abs(d) < EPS) return null
         val a2 = ax * ax + ay * ay; val b2 = bx * bx + by * by; val c2 = cx * cx + cy * cy
         return P(((a2 * (by - cy) + b2 * (cy - ay) + c2 * (ay - by)) / d).toFloat(), ((a2 * (cx - bx) + b2 * (ax - cx) + c2 * (bx - ax)) / d).toFloat())
     }
@@ -56,7 +74,7 @@ object Construct {
         val la = b.dist(c); val lb = c.dist(a); val lc = a.dist(b)
         val per = la + lb + lc
         val area = abs(cross(b - a, c - a)).toFloat() / 2f
-        if (per < EPS || area < EPS) return null
+        if (per < EPS || nearlyCollinear(a, b, c)) return null
         val i = P((la * a.x + lb * b.x + lc * c.x) / per, (la * a.y + lb * b.y + lc * c.y) / per)
         return Circle(i, 2f * area / per)
     }
@@ -65,7 +83,7 @@ object Construct {
     fun intersect(l1: Line, l2: Line): P? {
         val r = l1.b - l1.a; val s = l2.b - l2.a
         val den = cross(r, s)
-        if (abs(den) < EPS) return null
+        if (abs(den) < SIN_EPS * hypot(r.x, r.y) * hypot(s.x, s.y) || abs(den) < EPS) return null
         val t = cross(l2.a - l1.a, s) / den
         return P((l1.a.x + r.x * t).toFloat(), (l1.a.y + r.y * t).toFloat())
     }
@@ -87,10 +105,20 @@ object Construct {
         return listOf(p1, P((l.a.x + d.x * t2).toFloat(), (l.a.y + d.y * t2).toFloat()))
     }
 
+    /** Punkty styczności stycznych z [p] do okręgu [c] (0 — punkt wewnątrz, 1 — na okręgu, 2 — na zewnątrz). */
+    fun tangents(p: P, c: Circle): List<P> {
+        val d = p.dist(c.c)
+        if (d < c.r - 1e-4f) return emptyList()
+        if (d <= c.r + 1e-4f) return listOf(p)
+        // Punkty styczności to przecięcie z okręgiem o średnicy PO (kąt prosty w punkcie styczności).
+        val m = midpoint(p, c.c)
+        return intersect(Circle(m, d / 2f), c)
+    }
+
     /** Przecięcia dwóch okręgów (0, 1 albo 2 punkty; współśrodkowe — brak). */
     fun intersect(c1: Circle, c2: Circle): List<P> {
         val d = c1.c.dist(c2.c).toDouble()
-        if (d < EPS || d > c1.r + c2.r + 1e-4 || d < abs(c1.r - c2.r) - 1e-4) return emptyList()
+        if (d < EPS * maxOf(1f, c1.r, c2.r) || d > c1.r + c2.r + 1e-4 || d < abs(c1.r - c2.r) - 1e-4) return emptyList()
         val a = (c1.r.toDouble() * c1.r - c2.r.toDouble() * c2.r + d * d) / (2 * d)
         val h = sqrt(maxOf(0.0, c1.r.toDouble() * c1.r - a * a))
         val ux = (c2.c.x - c1.c.x) / d; val uy = (c2.c.y - c1.c.y) / d

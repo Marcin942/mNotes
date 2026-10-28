@@ -105,9 +105,21 @@ object ConstructOps {
         if (i.lines.isNotEmpty() && i.circles.isNotEmpty()) out += Op("xlc", "Przecięcie prostej i okręgu", "Line–circle intersection", draw(given) {
             around(i.circles[0]); Construct.intersect(i.lines[0], i.circles[0]).forEachIndexed { k, p -> dot(p, PAIR[k]) }
         })
-        if (i.circles.size >= 2) out += Op("xcc", "Przecięcie okręgów", "Circle intersection", draw(emptyList()) {
-            around(i.circles[0]); around(i.circles[1]); Construct.intersect(i.circles[0], i.circles[1]).forEachIndexed { k, p -> dot(p, PAIR[k]) }
+        if (i.circles.size >= 2) out += Op("xcc", "Przecięcie okręgów i prosta przez punkty", "Circle intersection and the line through it", draw(emptyList()) {
+            around(i.circles[0]); around(i.circles[1])
+            val ps = Construct.intersect(i.circles[0], i.circles[1])
+            // 2c-A8: jak narzędzie — prosta przez oba punkty (oś potęgowa), wysunięta poza nie.
+            if (ps.size == 2) { val d = ps[1] - ps[0]; line(Line(ps[0] - d * 0.35f, ps[1] + d * 0.35f), false) }
+            ps.forEachIndexed { k, p -> dot(p, PAIR[k]) }
         })
+        if (i.points.size == 1 && i.circles.size == 1 && i.lines.isEmpty()) {
+            val p = i.points[0]; val c = i.circles[0]
+            val ts = Construct.tangents(p, c)
+            if (ts.size == 2) out += Op("tangents", "Styczne z punktu", "Tangents from the point", draw(emptyList()) {
+                around(c)
+                for ((k, t) in ts.withIndex()) { line(Line(p, p + (t - p) * 1.3f), false); dot(t, PAIR[k]) }
+            })
+        }
         if (i.lines.size == 1 && i.points.isEmpty() && i.circles.isEmpty() && i.triangles.isEmpty() && i.others.isEmpty()) {
             val l = i.lines[0]
             out += Op("mid", "Środek i symetralna odcinka", "Midpoint and bisector", draw(listOf(l)) {
@@ -136,6 +148,44 @@ object ConstructOps {
      * Czy zamiast konstrukcji pokazać wskazówkę: zaznaczenie nie daje żadnej, ale są w nim odręczne kreski — pewnie
      * kształt narysowany bez przytrzymania, którego narzędzie nie rozpoznaje jako trójkąta, prostej ani okręgu (A2-9).
      */
+    /** Dlaczego konstrukcja mogła nie dać wyniku albo dać go daleko poza stroną (do dymku, 2c-A8). */
+    enum class Fail { NONE, PARALLEL, COLLINEAR }
+
+    /** Powód dla konstrukcji z menu o identyfikatorze [id]. */
+    fun failOf(id: String): Fail = when (id) {
+        "xll" -> Fail.PARALLEL
+        "circum", "in", "altitudes", "circle3" -> Fail.COLLINEAR
+        else -> Fail.NONE
+    }
+
+    /** Czy któryś element wyniku leży dalej niż [Construct.FAR_DIAGONALS] przekątnych od środka strony [w]×[h]. */
+    fun tooFar(out: List<Element>, w: Float, h: Float): Boolean = out.any { Construct.tooFar(P(it.bounds.cx, it.bounds.cy), w, h) }
+
+    private fun isName(s: String) = s.length == 1 && s[0] in 'A'..'Z'
+
+    /** Nazwy punktów stojące już na stronie: pola tekstu z jedną wielką literą (także części „A=H”). */
+    fun pageNames(els: List<Element>): Set<String> =
+        els.flatMapTo(HashSet()) { e -> (e as? TextBox)?.text?.trim()?.split('=')?.filter(::isName) ?: emptyList() }
+
+    /**
+     * 2c-A8: nazwy z wyniku [out] zajęte już na stronie ([taken]) dostają kolejną wolną literę (P → Q → R …); dawniej
+     * druga konstrukcja stawiała drugie „P”. Nazwy w obrębie jednego wyniku też się nie powtarzają.
+     */
+    fun renameTaken(out: List<Element>, taken: Set<String>): List<Element> {
+        if (taken.isEmpty()) return out
+        val used = HashSet(taken)
+        fun free(n: String): String {
+            if (!isName(n) || n !in used) return n.also { used += it }
+            for (k in 1 until 26) { val c = ('A' + (n[0] - 'A' + k) % 26).toString(); if (c !in used) return c.also { used += it } }
+            return n
+        }
+        return out.map { e ->
+            val t = (e as? TextBox)?.text ?: return@map e
+            val parts = t.split('=')
+            if (parts.none(::isName)) e else e.copy(text = parts.joinToString("=") { free(it) })
+        }
+    }
+
     fun needsHint(els: List<Element>): Boolean =
         ops(els, names = false).isEmpty() && els.any { it is Stroke && !it.poly && !it.ellipse && it.ctrl == null && it.count > 2 }
 

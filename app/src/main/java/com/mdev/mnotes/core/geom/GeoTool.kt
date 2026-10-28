@@ -135,6 +135,13 @@ object GeoTool {
         return (d1 >= 0 && d2 >= 0 && d3 >= 0) || (d1 <= 0 && d2 <= 0 && d3 <= 0)
     }
 
+    /** Powód braku wyniku (albo wyniku daleko poza stroną) dla dymku, jak [ConstructOps.failOf] (2c-A8). */
+    fun failOf(k: Kind): ConstructOps.Fail = when (k) {
+        Kind.XLL -> ConstructOps.Fail.PARALLEL
+        Kind.CIRCLE3, Kind.CIRCUM, Kind.INCIRCLE, Kind.ORTHO -> ConstructOps.Fail.COLLINEAR
+        else -> ConstructOps.Fail.NONE
+    }
+
     /** Wynik konstrukcji [k] z wejść [ins] w kolorze [col] i grubości [w]; pusta lista — konstrukcja nie ma rozwiązania. */
     fun build(k: Kind, ins: List<Input>, col: Int, w: Float, names: Boolean = true, pl: Boolean = true): List<Element> {
         fun pt(i: Int) = (ins[i] as Input.Point).p

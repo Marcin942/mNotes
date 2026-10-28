@@ -874,12 +874,31 @@ class Editor(val ctx: Context, val nbId: String) {
     /** Zaznaczenie nie daje konstrukcji, ale ma odręczne kreski — menu podpowiada, jak narysować kształt (A2-9). */
     fun constructionHint(): Boolean = !readOnly && ConstructOps.needsHint(selElements())
 
+    /**
+     * 2c-A8: wynik konstrukcji gotowy do wstawienia na [page] — nazwy punktów zajęte na stronie dostają kolejne litery.
+     * Brak wyniku albo wynik daleko poza stroną (proste prawie równoległe, punkty prawie współliniowe) mówi dymkiem,
+     * czemu, i zwraca pustą listę; null — brak rozwiązania bez znanego powodu (dymek ogólny u wołającego).
+     */
+    private fun constructed(page: PageState, els: List<Element>, why: ConstructOps.Fail): List<Element>? {
+        val bad = els.isEmpty() || ConstructOps.tooFar(els, page.spec.w, page.spec.h)
+        if (bad) {
+            when (why) {
+                ConstructOps.Fail.PARALLEL -> say(T.t("Proste prawie równoległe — przecięcie wypada daleko poza stroną", "The lines are almost parallel — the intersection is far off the page"))
+                ConstructOps.Fail.COLLINEAR -> say(T.t("Punkty prawie współliniowe — okrąg byłby ogromny", "The points are almost collinear — the circle would be huge"))
+                ConstructOps.Fail.NONE -> return if (els.isEmpty()) null else emptyList<Element>().also { say(T.t("Wynik wypada daleko poza stroną", "The result is far off the page")) }
+            }
+            return emptyList()
+        }
+        return ConstructOps.renameTaken(els, ConstructOps.pageNames(doc.content(page).elements))
+    }
+
     /** Dopisuje wynik konstrukcji w kolorze i grubości aktywnego pióra; zaznacza wynik (jedno cofnięcie). */
     fun applyConstruction(op: ConstructOps.Op) {
         val p = selPage() ?: return
         val ink = (if (pen.kind == PenKind.HIGHLIGHTER) 0xFF37474F.toInt() else pen.color) or (0xFF shl 24)
-        val els = op.build(ink, pen.width.coerceIn(0.6f, 3f))
-        if (els.isEmpty()) { say(T.t("Ta konstrukcja nie ma rozwiązania dla zaznaczonych kształtów", "This construction has no solution for the selected shapes")); return }
+        val els = constructed(p, op.build(ink, pen.width.coerceIn(0.6f, 3f)), ConstructOps.failOf(op.id))
+            ?: return say(T.t("Ta konstrukcja nie ma rozwiązania dla zaznaczonych kształtów", "This construction has no solution for the selected shapes"))
+        if (els.isEmpty()) return
         exec(DocEdit.Elements(p.id, ElementsEdit.add(doc.content(p), els)))
         select(p.id, els.map { it.id }.toSet())
     }
@@ -912,9 +931,12 @@ class Editor(val ctx: Context, val nbId: String) {
         geoInputs += input
         if (geoInputs.size < geoKind.inputs.size) { view?.invalidate(); return }
         val ink = (if (pen.kind == PenKind.HIGHLIGHTER) 0xFF37474F.toInt() else pen.color) or (0xFF shl 24)
-        val els = GeoTool.build(geoKind, geoInputs.toList(), ink, pen.width.coerceIn(0.6f, 3f), settings.constructNames, T.pl)
+        val kind = geoKind
+        val built = GeoTool.build(kind, geoInputs.toList(), ink, pen.width.coerceIn(0.6f, 3f), settings.constructNames, T.pl)
         geoReset()
-        if (els.isEmpty()) { say(T.t("Ta konstrukcja nie ma rozwiązania dla wskazanych kształtów", "This construction has no solution for the picked shapes")); return }
+        val els = constructed(page, built, GeoTool.failOf(kind))
+            ?: return say(T.t("Ta konstrukcja nie ma rozwiązania dla wskazanych kształtów", "This construction has no solution for the picked shapes"))
+        if (els.isEmpty()) return
         exec(DocEdit.Elements(page.id, ElementsEdit.add(doc.content(page), els)))
     }
 

@@ -65,15 +65,19 @@ internal fun EditorCanvas(st: Station, onTouch: () -> Unit) {
         AndroidView(
             factory = { c -> WorkspaceView(c, st).also { host = it; st.view = it } },
             update = { v -> v.sync(rows, m.accent.toArgb(), m.canvasBg.toArgb(), m.dark) },
-            onRelease = { if (st.view === it) st.view = null },
+            onRelease = { it.release(); if (st.view === it) st.view = null },
             modifier = Modifier.fillMaxSize().pointerInput(Unit) { awaitEachGesture { awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial); onTouch() } },
         )
         val h = host
-        if (st.on && h != null) {
-            h.tick
-            rows.forEachIndexed { i, e -> h.laneRect(i)?.let { r -> RowChip(st, e, r[0], r[1]) } }
-        }
+        if (st.on && h != null) LaneChips(st, h, rows)
     }
+}
+
+/** Nagłówki idą za modelem co klatkę ruchu — osobny zakres, żeby licznik nie przebudowywał płótna. */
+@Composable
+private fun LaneChips(st: Station, h: WorkspaceView, rows: List<Editor>) {
+    h.tick
+    rows.forEachIndexed { i, e -> h.laneRect(i)?.let { r -> RowChip(st, e, r[0], r[1]) } }
 }
 
 /** Nagłówek dokumentu w lewym górnym rogu jego pasa: tytuł zeszytu (aktywny w akcencie) i ✕ dla dołożonych. */

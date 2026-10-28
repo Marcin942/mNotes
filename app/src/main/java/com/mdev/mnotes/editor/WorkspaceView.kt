@@ -335,6 +335,13 @@ class WorkspaceView(ctx: Context, private val st: Station) : ViewGroup(ctx), Lan
         if (m != null) { m.resize(w.toFloat(), h.toFloat()); push() } else ensure()
     }
 
+    /** Płótno zdjęte z kompozycji: widoki dołożonych dokumentów zwalniają kafelki i wątki (główny zamyka edytor). */
+    fun release() {
+        stop()
+        removeCallbacks(trimCheck)
+        for (v in lanes) if (v.ed !== st.main) v.dispose()
+    }
+
     override fun onDetachedFromWindow() {
         stop()
         removeCallbacks(trimCheck)

@@ -15,6 +15,7 @@ Cele atakującego: odczyt notatek, podrzucenie treści, awaria aplikacji albo ut
 |----|------|-------|------------|------|
 | S-01 | średnie | paczka instalacyjna (wersja debug) | Instalowany APK jest w wersji debug (`debuggable=true`): z włączonym debugowaniem USB `run-as` daje pełny odczyt danych aplikacji, także zeszytów zablokowanych biometrią. | do decyzji (wymaga klucza wydania, D13/D14) |
 | S-03 | średnie | `core/codec/PageCodec.kt` (`inflate`) | Strona we wrogim zeszycie (`.mnotes`) ma ~20 bajtów skompresowanych i deklaruje 256 MB po rozpakowaniu; dekoder przydzielał bufor z góry → brak pamięci przy otwieraniu. | naprawione `ebe9629` (limit z ilorazu deflate; test `HostileInputTest`) |
+| S-04 | średnie | `data/Repository.kt` (`pageFile`, `assetFile`), `data/StickerStore.kt` | Importowany zeszyt z identyfikatorem strony albo nazwą obrazu typu `../../../shared_prefs/…`: edycja strony zapisywała plik `.mnp` poza katalogiem zeszytu, obraz czytał dowolny plik aplikacji (np. klucze pary łącza), a zapis takiego elementu jako naklejki kopiował plik na samego siebie, czyli usuwał go (np. indeks biblioteki). | naprawione `a8b1f5d` (`LocalName`; test `HostileInputTest`) |
 | S-02 | niskie | manifest wersji debug (`PreviewActivity` z narzędzi Compose) | Wyeksportowana aktywność podglądu Compose w wersji debug: inna aplikacja może ją uruchomić z nazwą funkcji `@Composable`. | w analizie |
 
 ## Sprawdzone bez problemów

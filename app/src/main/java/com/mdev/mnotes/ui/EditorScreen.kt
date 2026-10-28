@@ -1788,8 +1788,8 @@ private fun SelectionButtons(ed: Editor, panel: Panel?, toggle: (Panel) -> Unit,
             // sam obraz nie ma koloru do zmiany: dostaje własny panel efektów zamiast wyboru koloru
             if (hasColorable) IconBtn(Icons.Rounded.Palette, T.t("Kolor, grubość i styl linii", "Color, width & line style"), { toggle(Panel.SELCOLOR) }, selected = panel == Panel.SELCOLOR, size = 36.dp, iconSize = 20.dp)
             if (hasImage) IconBtn(Icons.Rounded.Tune, T.t("Efekty obrazu", "Image effects"), { toggle(Panel.IMAGEFX) }, selected = panel == Panel.IMAGEFX, size = 36.dp, iconSize = 20.dp)
-            // wariant lab: kreda (zdjęcie tablicy → sama kreda na przezroczystym tle); w core Flavor.lab == null
-            if (Flavor.lab != null && !locked && els.all { it is ImageEl } && els.size <= 6 && !ed.readOnly) IconBtn(
+            // kreda (zdjęcie tablicy → sama kreda na przezroczystym tle) tylko w kompilacji z gałęzi kreda
+            if (Flavor.lab?.board == true && !locked && els.all { it is ImageEl } && els.size <= 6 && !ed.readOnly) IconBtn(
                 Icons.Rounded.AutoFixHigh,
                 if (els.size == 1) T.t("Oczyść tablicę", "Clean up the board") else T.t("Połącz zdjęcia tablicy (bez osób)", "Merge board photos (without people)"),
                 { toggle(Panel.BOARD) }, selected = panel == Panel.BOARD, size = 36.dp, iconSize = 20.dp,

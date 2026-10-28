@@ -16,7 +16,7 @@ object GuideMaker {
         repo.io.execute {
             val id = newId()
             // Pomiar czcionką urządzenia, tą samą co przy rysowaniu pól: akapity mają dokładnie swoją wysokość (2c-A14).
-            val pages = Guide.pages(pl, lab = com.mdev.mnotes.app.Flavor.lab != null, m = com.mdev.mnotes.render.PageRenderer(null).textMeasure)
+            val pages = Guide.pages(pl, lab = com.mdev.mnotes.app.Flavor.lab?.board == true, m = com.mdev.mnotes.render.PageRenderer(null).textMeasure)
             val metas = pages.map { PageMeta(newId(), it.spec) }
             for ((m, p) in metas.zip(pages)) repo.writePage(id, m.id, PageCodec.encode(PageContent.of(p.elements)))
             val now = System.currentTimeMillis()

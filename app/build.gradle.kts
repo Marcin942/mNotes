@@ -19,13 +19,19 @@ android {
         versionName = "0.1.0"
     }
 
-    // Dwa warianty z jednego kodu: `core` to otwarta aplikacja bez AI i bez przetwarzania zdjęć tablicy, `lab` dokłada
-    // kredę, rozpoznawanie i Nearby z własnego katalogu `src/lab/`. Ten sam applicationId: to jedna aplikacja w dwóch
-    // odmianach, nie dwie instalacje obok siebie.
+    // Dwa warianty z jednego kodu: `foss` bez żadnej niewolnej biblioteki (F-Droid), `gms` dokłada łącze z telefonem
+    // przez Nearby z Usług Google Play (`src/gms/`). Ten sam applicationId: to jedna aplikacja w dwóch odmianach.
     flavorDimensions += "wariant"
     productFlavors {
-        create("core") { dimension = "wariant" }
-        create("lab") { dimension = "wariant" }
+        create("foss") { dimension = "wariant" }
+        create("gms") { dimension = "wariant" }
+    }
+
+    // Gałąź `kreda` dokłada wyłącznie katalogi `src/kreda` i `src/testKreda` (żadnego pliku z main nie zmienia, więc
+    // scalanie main → kreda nie ma konfliktów); bez nich aplikacja kompiluje się bez kredy.
+    sourceSets {
+        getByName("main") { if (file("src/kreda/java").isDirectory) kotlin.srcDir("src/kreda/java") }
+        getByName("test") { if (file("src/testKreda/java").isDirectory) kotlin.srcDir("src/testKreda/java") }
     }
 
     buildTypes {
@@ -67,9 +73,9 @@ dependencies {
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.androidx.profileinstaller)
     implementation(libs.kotlinx.coroutines.android)
-    // Jedyna nowa zależność nocy (uzgodniony wyjątek, powód w docs/NOTATKI-NOC.md): łącze Nearby tylko w wariancie lab,
-    // za przełącznikiem w ustawieniach; wariant core jej nie ma.
-    "labImplementation"(libs.play.services.nearby)
+    // Jedyna niewolna zależność (powód w docs/OPEN-SOURCE.md §2): łącze Nearby tylko w wariancie gms, za przełącznikiem
+    // w ustawieniach; wariant foss jej nie ma.
+    "gmsImplementation"(libs.play.services.nearby)
     testImplementation(libs.junit)
     testImplementation(libs.org.json)
     debugImplementation(libs.androidx.compose.ui.tooling)

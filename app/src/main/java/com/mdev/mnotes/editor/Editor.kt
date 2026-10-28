@@ -271,6 +271,13 @@ class Editor(val ctx: Context, val nbId: String) {
 
     fun say(msg: String) { toast = msg }
 
+    /** Przyciski pod dymkiem (np. „Cofnij do oryginału”, 2c-B4): ważne tylko dla komunikatu, z którym przyszły. */
+    var toastActions by mutableStateOf<Pair<String, List<Pair<String, () -> Unit>>>?>(null)
+        private set
+
+    /** Dymek z przyciskami; wisi dłużej niż zwykły, przycisk zamyka go i robi swoje. */
+    fun say(msg: String, actions: List<Pair<String, () -> Unit>>) { toast = msg; toastActions = msg to actions }
+
     // — Cofanie —
     fun undo() { commitSelPreview(); cancelCut(); cancelCrop(); clearSel(); val e = doc.doUndo(); undoTick++; e?.pageIds?.firstOrNull()?.let { view?.ensureVisible(it) } }
     fun redo() { commitSelPreview(); cancelCut(); cancelCrop(); clearSel(); val e = doc.doRedo(); undoTick++; e?.pageIds?.firstOrNull()?.let { view?.ensureVisible(it) } }

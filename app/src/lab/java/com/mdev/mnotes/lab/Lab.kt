@@ -52,6 +52,7 @@ import com.mdev.mnotes.core.image.BoardGeometry
 import com.mdev.mnotes.core.image.BoardOptions
 import com.mdev.mnotes.core.image.BoardPipeline
 import com.mdev.mnotes.core.image.BoardSource
+import com.mdev.mnotes.core.image.ChalkInk
 import com.mdev.mnotes.core.image.ChalkStrokes
 import com.mdev.mnotes.core.image.DecodePlan
 import com.mdev.mnotes.core.image.Quad
@@ -103,7 +104,8 @@ object Lab : LabFeatures {
         val set = LabSettings.of(LocalContext.current)
         val files = remember(imgs.map { it.asset }) { imgs.map { ed.repo.assetFile(ed.nbId, it.asset) } }
         val many = imgs.size > 1
-        var opt by remember { mutableStateOf(set.options()) }
+        // 2c-B4: kolor kreski wg papieru strony, na której leży zdjęcie (biała kreda na białej kartce znikała)
+        var opt by remember { mutableStateOf(set.options().copy(paper = paperOf(ed, imgs[0]))) }
         var asStrokes by remember { mutableStateOf(false) }
         var mode by remember { mutableStateOf(SHOW_RESULT) }
         // Narożniki ustawione ręcznie, w ułamkach zdjęcia (lewy górny, prawy górny, prawy dolny, lewy dolny); null = zgadnięte.
@@ -170,8 +172,9 @@ object Lab : LabFeatures {
                     }
                     when {
                         strokes -> {
-                            val els = if (chosen.curves) ChalkStrokes.toCurves(res.image, src, imgs[src.ref], chosen.tint ?: GRAPHITE)
-                            else ChalkStrokes.toStrokes(res.image, src, imgs[src.ref], chosen.tint ?: GRAPHITE)
+                            val ink = strokeInk(chosen)
+                            val els = if (chosen.curves) ChalkStrokes.toCurves(res.image, src, imgs[src.ref], ink)
+                            else ChalkStrokes.toStrokes(res.image, src, imgs[src.ref], ink)
                             post {
                                 busy = false
                                 if (els.isEmpty()) ed.say(T.t("Nie znaleziono kredy do zamiany na kreski", "No chalk found to turn into strokes"))
@@ -237,6 +240,13 @@ object Lab : LabFeatures {
             }
         }
     }
+
+    /** Papier strony, na której leży [img] (do koloru kredy, 2c-B4); null, gdy obrazu nie ma na żadnej stronie. */
+    private fun paperOf(ed: Editor, img: ImageEl): Int? =
+        ed.doc.pages.firstOrNull { p -> ed.doc.content(p).elements.any { it.id == img.id } }?.spec?.paper
+
+    /** Kolor „Edytowalnych kresek”: wybrany albo grafit, z kontrastem ≥ 3:1 do papieru strony (grafit na ciemnej jaśnieje). */
+    private fun strokeInk(opt: BoardOptions): Int = (opt.tint ?: GRAPHITE).let { c -> opt.paper?.let { ChalkInk.fit(c, it) } ?: c }
 
     /** Przełączniki kroków i suwaki progu; te same kontrolki co w ustawieniach. */
     @Composable
@@ -417,7 +427,7 @@ object Lab : LabFeatures {
         val set = LabSettings.of(ed.view?.context ?: return)
         if (!set.lecture) return
         val file = ed.repo.assetFile(ed.nbId, image.asset)
-        val opt = set.options()
+        val opt = set.options().copy(paper = ed.doc.page(pageId)?.spec?.paper)
         work.launch {
             val photo = loadRaster(file, opt.maxSide) ?: return@launch
             if (!BoardGeometry.looksLikeDarkBoard(photo)) return@launch
@@ -433,10 +443,27 @@ object Lab : LabFeatures {
                     if (el.asset != image.asset) return@post
                     val clean = el.copy(asset = name, h = el.w * out.h / out.w, crop = com.mdev.mnotes.core.model.ImageCrop.FULL, fx = com.mdev.mnotes.core.model.ImageFx.NONE)
                     ed.exec(com.mdev.mnotes.core.model.DocEdit.Elements(page.id, com.mdev.mnotes.core.model.ElementsEdit.replace(cur, mapOf(el.id to clean))))
-                    ed.say(T.t("Tablica oczyszczona: sama kreda. Cofnij (↶), żeby wrócić do zdjęcia.", "Board cleaned: chalk only. Undo (↶) to get the photo back."))
+                    // 2c-B4: przycisk zamiast samego ↶ — działa także po innych zmianach (podmienia tylko to zdjęcie z powrotem)
+                    ed.say(
+                        T.t("Tablica oczyszczona: sama kreda.", "Board cleaned: chalk only."),
+                        listOf(T.t("Cofnij do oryginału", "Back to the original") to { restorePhoto(ed, pageId, el, name) }),
+                    )
                 }
             }
         }
+    }
+
+    /**
+     * „Cofnij do oryginału” po oczyszczeniu: obraz [orig] wraca w miejscu i szerokości, które ma teraz (użytkownik mógł
+     * go przesunąć); nic się nie dzieje, gdy na stronie nie ma już oczyszczonej wersji [cleanAsset].
+     */
+    private fun restorePhoto(ed: Editor, pageId: String, orig: ImageEl, cleanAsset: String) {
+        val page = ed.doc.page(pageId) ?: return
+        val cur = ed.doc.content(page)
+        val now = cur.elements.firstOrNull { it.id == orig.id } as? ImageEl ?: return
+        if (now.asset != cleanAsset) return
+        val back = orig.copy(cx = now.cx, cy = now.cy, w = now.w, h = now.w * orig.h / orig.w, rot = now.rot)
+        ed.exec(com.mdev.mnotes.core.model.DocEdit.Elements(page.id, com.mdev.mnotes.core.model.ElementsEdit.replace(cur, mapOf(orig.id to back))))
     }
 
     /** Po wstawieniu zdjęcia ciemnej tablicy raz podpowiada „Oczyść tablicę”; sprawdzenie na 320 px w tle. */

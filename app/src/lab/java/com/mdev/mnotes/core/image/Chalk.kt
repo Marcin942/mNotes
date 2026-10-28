@@ -285,6 +285,8 @@ data class BoardOptions(
     val specks: Boolean = true,
     /** „Edytowalne kreski” jako gładkie krzywe Béziera; wyłączone — łamane po pikselach szkieletu jak dawniej (2b-B4). */
     val curves: Boolean = true,
+    /** Papier strony, na którą trafi wynik (ARGB); kreski dostają do niego kontrast ≥ 3:1 ([ChalkInk], 2c-B4). null: bez zmian. */
+    val paper: Int? = null,
 )
 
 /**
@@ -367,6 +369,7 @@ object BoardPipeline {
         if (opt.frames) out = Chalk.dropThick(out, Chalk.thickLimit(out.w))
         if (opt.specks) out = Chalk.despeckle(out, Chalk.speckArea(out.w))
         if (erase.isNotEmpty()) out = Chalk.erase(out, erase)
+        opt.paper?.let { out = ChalkInk.fitImage(out, it) }
         return BoardResult(out, src.quad, src.black, cut, src)
     }
 

@@ -94,6 +94,35 @@ class RealPhotoTest {
         }
     }
 
+    /** Reguła sprzed 2c-B4 (tylko tło < 0,42), do porównania z [BoardGeometry.looksLikeDarkBoard]. */
+    private fun oldDarkBoard(src: Raster): Boolean {
+        val s = src.fit(160)
+        val bg = BoardFilters.open(s.plane { Raster.maxRgb(it) }, s.w, s.h, max(1, s.w / 60))
+        var dark = 0; var total = 0
+        for (y in s.h / 5 until s.h * 4 / 5) for (x in s.w / 5 until s.w * 4 / 5) {
+            val c = s[x, y]
+            total++
+            if (bg[y * s.w + x] < 0.42f && Raster.maxRgb(c) - Raster.minRgb(c) < 0.3f) dark++
+        }
+        return total > 0 && dark >= 0.55 * total
+    }
+
+    @Test
+    fun grayBoardRuleKeepsEveryRealBoardTheOldRuleFound() {
+        val dir = System.getenv("KREDA_DIR")?.let(::File)?.takeIf { it.isDirectory }
+        val all = dir?.listFiles { f -> f.extension.lowercase() in setOf("jpg", "jpeg", "png") }.orEmpty().sortedBy { it.name }
+        assumeTrue("brak KREDA_DIR (katalog ze zdjęciami tablicy)", all.isNotEmpty())
+        var old = 0; var now = 0
+        for (f in all) {
+            val small = load(f, 320)  // jak podpowiedź po wstawieniu zdjęcia
+            val o = oldDarkBoard(small); val n = BoardGeometry.looksLikeDarkBoard(small)
+            if (o) old++
+            if (n) now++
+            assertTrue("${f.name}: stara reguła rozpoznała tablicę, nowa nie", !o || n)
+        }
+        println("tablica rozpoznana: dawniej $old, teraz $now z ${all.size} zdjęć")
+    }
+
     private companion object {
         const val SIDE = 1000
         const val MAX_PHOTOS = 4

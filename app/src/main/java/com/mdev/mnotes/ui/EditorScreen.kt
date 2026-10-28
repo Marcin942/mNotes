@@ -1989,12 +1989,18 @@ internal fun CtxMenuOverlay(ed: Editor, openStyle: (() -> Unit)?, tools: Editor 
 @Composable
 internal fun androidx.compose.foundation.layout.BoxScope.EdToast(ed: Editor, bottom: androidx.compose.ui.unit.Dp = 28.dp) {
     val msg = ed.toast
-    LaunchedEffect(msg) { if (msg != null) { delay(2200); if (ed.toast == msg) ed.toast = null } }
+    val actions = ed.toastActions?.takeIf { it.first == msg }?.second.orEmpty()
+    LaunchedEffect(msg) { if (msg != null) { delay(if (actions.isEmpty()) 2200 else 8000); if (ed.toast == msg) ed.toast = null } }
     if (msg == null) return
-    Text(
-        msg, color = Color.White, style = MaterialTheme.typography.bodyMedium,
-        modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = bottom).clip(RoundedCornerShape(10.dp)).background(Color(0xE6222428)).padding(horizontal = 16.dp, vertical = 10.dp),
-    )
+    val box = Modifier.align(Alignment.BottomCenter).padding(bottom = bottom).clip(RoundedCornerShape(10.dp)).background(Color(0xE6222428))
+    if (actions.isEmpty()) {
+        Text(msg, color = Color.White, style = MaterialTheme.typography.bodyMedium, modifier = box.padding(horizontal = 16.dp, vertical = 10.dp))
+        return
+    }
+    Row(box.padding(start = 16.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+        Text(msg, color = Color.White, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f, fill = false).padding(vertical = 10.dp))
+        for ((label, run) in actions) androidx.compose.material3.TextButton(onClick = { ed.toast = null; run() }) { Text(label, color = Color(0xFF8FE3C0)) }
+    }
 }
 
 // ─────────────────────────────── Menu „Więcej”, styl strony ───────────────────────────────

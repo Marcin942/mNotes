@@ -331,17 +331,40 @@ object BoardGeometry {
 
     /**
      * Czy to zdjęcie ciemnej tablicy (propozycja „Oczyść tablicę”): w środkowej części obrazu przeważa ciemne, mało
-     * nasycone tło. Zrzuty ekranu i kartki dają false.
+     * nasycone tło. Zrzuty ekranu i kartki dają false. Szara tablica (tło do [GRAY_BOARD], okładka „Do poprawy w mNotes
+     * pt2”, 2c-B4) liczy się tylko wtedy, gdy pismo jest jaśniejsze od tła (kreda), a nie ciemniejsze: tak samo szara
+     * jest kartka w słabym świetle, ale pismo ma ciemne.
      */
     fun looksLikeDarkBoard(src: Raster): Boolean {
         val s = src.fit(160)
-        val bg = BoardFilters.open(s.plane { Raster.maxRgb(it) }, s.w, s.h, max(1, s.w / 60))
-        var dark = 0; var total = 0
+        val v = s.plane { Raster.maxRgb(it) }
+        val r = max(1, s.w / 60)
+        val bg = BoardFilters.open(v, s.w, s.h, r)
+        var dark = 0; var gray = 0; var total = 0
         for (y in s.h / 5 until s.h * 4 / 5) for (x in s.w / 5 until s.w * 4 / 5) {
             val c = s[x, y]
             total++
-            if (bg[y * s.w + x] < 0.42f && Raster.maxRgb(c) - Raster.minRgb(c) < 0.3f) dark++
+            if (Raster.maxRgb(c) - Raster.minRgb(c) >= 0.3f) continue
+            val b = bg[y * s.w + x]
+            if (b < 0.42f) dark++ else if (b < GRAY_BOARD) gray++
         }
-        return total > 0 && dark >= 0.55 * total
+        if (total == 0) return false
+        if (dark >= 0.55 * total) return true
+        if (dark + gray < 0.55 * total) return false
+        // Pismo względem mediany środka (to tło): jaśniejsze (kreda) albo ciemniejsze (długopis). Nie z domknięcia:
+        // szczeliny między gęstą kredą wyglądałyby wtedy jak ciemne pismo (okładka PDF).
+        val mid = ArrayList<Float>(total)
+        for (y in s.h / 5 until s.h * 4 / 5) for (x in s.w / 5 until s.w * 4 / 5) mid += v[y * s.w + x]
+        val median = mid.sorted()[mid.size / 2]
+        val light = mid.count { it > median + INK_STEP }
+        val ink = mid.count { it < median - INK_STEP }
+        return light >= GRAY_INK * total && light > 2 * ink
     }
+
+    /** Najjaśniejsze tło szarej tablicy (maks. RGB po otwarciu); kartka w zwykłym świetle jest jaśniejsza. */
+    const val GRAY_BOARD = 0.62f
+    /** Pismo różni się od tła o co najmniej tyle (kreda na szarym: ok. 0,4). */
+    private const val INK_STEP = 0.15f
+    /** Szara tablica bez kredy nie dostaje podpowiedzi: pismo na co najmniej 0,3 % środka obrazu. */
+    private const val GRAY_INK = 0.003
 }

@@ -87,4 +87,34 @@ class PageDropTest {
         assertEquals(docY - vertical.top(2), m.mapY(0f, 700f), 1e-3f)
         assertEquals(vertical.left(0) + 10f + 30f - vertical.left(2), m.mapX(10f, 700f), 1e-3f)
     }
+
+    /** 3c-A2: przeniesione na inną stronę wystawało poza nią i strona je przycinała — „obiekt pod stroną”. */
+    @Test
+    fun movedToAnotherPageLandsWhollyOnIt() {
+        // Ramka 200×120 z dołu strony 0, przesunięta tak, że środek jest już na stronie 1, a góra jeszcze w przerwie/na 0.
+        val b = Bounds(100f, 700f, 300f, 820f)
+        // Środek (y = 760) trafia 50 pt pod górny brzeg strony 1, góra ramki 10 pt nad nim.
+        val dy = vertical.top(1) - vertical.top(0) - 710f
+        val m = Affine.translation(0f, dy)
+        assertEquals(1, PageDrop.target(vertical, 0, m.mapBounds(b)))
+        val plain = PageDrop.inTarget(vertical, 0, 1, m).mapBounds(b)
+        assertEquals(true, plain.t < 0f)
+        val r = PageDrop.intoTarget(vertical, 0, 1, m, b).mapBounds(b)
+        assertEquals(0f, r.t, 1e-3f)
+        assertEquals(120f, r.h, 1e-3f)
+        assertEquals(plain.l, r.l, 1e-3f)
+        // Wystające za prawy brzeg dosuwa do niego; większe od strony przylega do lewego brzegu.
+        val wide = PageDrop.intoTarget(vertical, 0, 1, Affine.translation(vertical.width(1) - 50f, dy + 100f), b).mapBounds(b)
+        assertEquals(vertical.width(1), wide.r, 1e-3f)
+        val huge = Bounds(0f, 0f, 2000f, 50f)
+        assertEquals(0f, PageDrop.intoTarget(vertical, 0, 1, Affine.translation(-300f, dy + 100f), huge).mapBounds(huge).l, 1e-3f)
+    }
+
+    @Test
+    fun withinThePageNothingIsPushed() {
+        // Na tej samej stronie wolno wysunąć obiekt za brzeg (jak dotąd).
+        val b = Bounds(500f, 100f, 700f, 200f)
+        val m = Affine.translation(50f, 0f)
+        assertEquals(m.mapBounds(b).r, PageDrop.intoTarget(vertical, 0, 0, m, b).mapBounds(b).r, 1e-3f)
+    }
 }

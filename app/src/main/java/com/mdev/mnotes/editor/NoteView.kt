@@ -855,8 +855,8 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
             val s2 = c.save()
             c.translate(layout.left(tgt), layout.top(tgt))
             if (clip) c.clipRect(0f, 0f, spec.w, spec.h)
-            c.translate(layout.left(lPage) - layout.left(tgt), layout.top(lPage) - layout.top(tgt))
-            c.concat(matrixOf(lM))
+            // 3c-A2: podgląd stoi tam, gdzie zaznaczenie wyląduje (na innej stronie dosunięte w całości na nią).
+            c.concat(matrixOf(PageDrop.intoTarget(layout, lPage, tgt, lM, lBounds)))
             val z = zoom * lM.scaleFactor
             renderer.theme = themeFor(spec); renderer.themePhotos = settings.pageThemePhotos
             for (el in lEls) renderer.drawElement(c, doc.id, el, z, false, spec.darkPaper)
@@ -3593,7 +3593,8 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
             doc.applyElements(page.id, ElementsEdit.diff(lifted, orig))
         } else if (tgt != lPage) {
             val target = doc.pages[tgt]
-            val moved = lEls.map { it.transformed(PageDrop.inTarget(layout, lPage, tgt, m)) }
+            val into = PageDrop.intoTarget(layout, lPage, tgt, m, lBounds)
+            val moved = lEls.map { it.transformed(into) }
             val remove = DocEdit.Elements(page.id, ElementsEdit.remove(orig, lIds))
             val add = DocEdit.Elements(target.id, ElementsEdit.add(doc.content(target), moved))
             applyInBackground(tgt, moved) { add.apply(doc) }

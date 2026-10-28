@@ -32,10 +32,19 @@ sealed interface LinkState {
     data class Securing(val peer: String) : LinkState
     data class ConfirmDigits(val sas: String, val peer: String) : LinkState
     data class Ready(val peer: String, val sent: Int, val received: Int) : LinkState
-    /** Bieżące zdjęcie: potwierdzone części [part] z [parts], [progress] ∈ [0, 1], ile zdjęć jeszcze w kolejce. */
-    data class Sending(val peer: String, val part: Int, val parts: Int, val progress: Float, val queued: Int) : LinkState
-    /** [retrying]: łącze samo spróbuje ponownie; inaczej trzeba coś włączyć albo nacisnąć „Spróbuj ponownie”. */
-    data class Problem(val problem: LinkProblem, val retrying: Boolean) : LinkState
+    /**
+     * Bieżące zdjęcie: potwierdzone części [part] z [parts], [progress] ∈ [0, 1], ile zdjęć jeszcze w kolejce; w partii
+     * (zdjęcia dodane, zanim kolejka się opróżniła) to zdjęcie [photo] z [photos], a [batchProgress] liczy bajty całej partii.
+     */
+    data class Sending(
+        val peer: String, val part: Int, val parts: Int, val progress: Float, val queued: Int,
+        val photo: Int = 1, val photos: Int = 1, val batchProgress: Float = progress,
+    ) : LinkState
+    /**
+     * [retrying]: łącze samo spróbuje ponownie; inaczej trzeba coś włączyć albo nacisnąć „Spróbuj ponownie”.
+     * [cause]: ostatni wpis dziennika (krótka przyczyna do głównego okna, obok kodu z [problem]).
+     */
+    data class Problem(val problem: LinkProblem, val retrying: Boolean, val cause: String = "") : LinkState
 }
 
 /**
@@ -55,11 +64,17 @@ class LinkMachine(
     private val peerLabel: String = "",
     private val clock: () -> Long = System::currentTimeMillis,
     private val listener: Listener = object : Listener {},
+    /** Gdzie składać odbierane pliki: w aplikacji katalog w cache ([LinkFiles.disk]), w testach pamięć. */
+    files: LinkFiles = LinkFiles.MEMORY,
 ) {
     interface Listener {
         fun changed(state: LinkState) {}
         fun photo(p: SyncMsg.Photo) {}
+        /** Odebrany i sprawdzony plik; domyślnie trafia w całości do [photo] i jest usuwany (UI zeszytów czyta go strumieniem). */
+        fun file(f: LinkReceived) { photo(f.toPhoto()); f.file.delete() }
         fun sent(id: String) {}
+        /** To urządzenie odrzuciło połączenie od [peer] (zajęte innym albo obce); UI pokazuje to zdaniem. */
+        fun rejected(peer: String) {}
     }
 
     init { require(mode == LinkMode.PAIR || pairKey != null) { "praca po parowaniu wymaga klucza pary" } }
@@ -85,15 +100,26 @@ class LinkMachine(
     private var helloSent = false
     private val outbox = ArrayDeque<PhotoSender>()
     private var current: PhotoSender? = null
-    private val receiver = PhotoReceiver(FILE_MAX)
+    /** Zdjęcie utknęło: wysyłanie czeka na „Spróbuj ponownie” albo nowe połączenie (inaczej następne by je wyprzedziło). */
+    private var held = false
+    private val receiver = PhotoReceiver(FILE_MAX, files)
+    /** Najwięcej bajtów odbieranych plików naraz w pamięci (poza plikiem w cache); do testu pamięci. */
+    val receivePeak: Long get() = receiver.peak
     private var sentCount = 0
     private var receivedCount = 0
+    /** Partia: zdjęcia dodane od chwili, gdy kolejka była pusta (do „zdjęcie 2 z 3” i paska bajtów całości). */
+    private var batchCount = 0
+    private var batchDone = 0
+    private var batchBytes = 0L
+    private var batchDoneBytes = 0L
     private var photoSeq = 0
     private var running = false
     private var searchStart = 0L
     private var linkStart = 0L
     private var retryAt = 0L
     private var autoPickAt = 0L
+    /** Po 8002 szukanie zaczęte od nowa już raz w tym [search] (drugi raz nie, żeby nie krążyć). */
+    private var rediscovered = false
 
     fun start() {
         running = true
@@ -106,6 +132,7 @@ class LinkMachine(
         endpoint?.let(transport::disconnect)
         transport.stopSearch()
         drop()
+        receiver.clear()
         set(LinkState.Idle)
     }
 
@@ -115,18 +142,36 @@ class LinkMachine(
         connect(id)
     }
 
-    /** „Spróbuj ponownie” po problemie z ustawieniami albo uprawnieniami. */
-    fun retry() { if (running) search() }
+    /**
+     * „Spróbuj ponownie”: przy gotowym łączu wznawia wysyłkę utkniętego zdjęcia (bez szukania, które przy otwartym
+     * łączu wisiałoby na „Szukam…”); w trakcie łączenia zaczyna od nowa; bez łącza szuka.
+     */
+    fun retry() {
+        if (!running) return
+        val c = codec
+        when {
+            endpoint != null && c != null && c.ready && helloSent -> { held = false; record("ponawiam wysyłkę"); ready() }
+            endpoint != null -> restart("ponowienie na prośbę")
+            else -> search()
+        }
+    }
 
     /**
      * Kolejka plików do wysłania (zdjęcia z telefonu, zeszyty `.mnotes`); wychodzą po kolei, gdy łącze jest gotowe.
-     * Odbiorca dostaje każdy przez [Listener.photo] z tym samym [mime] i sam decyduje, co z nim zrobić.
+     * Odbiorca dostaje każdy przez [Listener.file] z tym samym [mime] i sam decyduje, co z nim zrobić.
      */
-    fun sendPhoto(name: String, mime: String, bytes: ByteArray): String {
-        require(bytes.size <= FILE_MAX) { "plik ponad ${FILE_MAX shr 20} MB" }
+    fun sendPhoto(name: String, mime: String, bytes: ByteArray): String = sendFile(name, mime, LinkFile.Memory(bytes))
+
+    /** Jak [sendPhoto], ale części czytane z [file] w trakcie wysyłania (zeszyt z pliku w cache nie trafia do pamięci). */
+    fun sendFile(name: String, mime: String, file: LinkFile): String {
+        require(file.length <= FILE_MAX) { "plik ponad ${FILE_MAX shr 20} MB" }
         val id = "${clock()}-${++photoSeq}"
-        outbox.addLast(PhotoSender(id, name, mime, bytes))
-        record("zdjęcie w kolejce: ${bytes.size / 1024} KB")
+        if (current == null && outbox.isEmpty()) { batchCount = 0; batchDone = 0; batchBytes = 0; batchDoneBytes = 0 }
+        val s = PhotoSender(id, name, mime, file)
+        batchCount++
+        batchBytes += s.length
+        outbox.addLast(s)
+        record("zdjęcie w kolejce: ${s.length / 1024} KB")
         pump()
         return id
     }
@@ -135,7 +180,7 @@ class LinkMachine(
     fun tick() {
         if (!running) return
         val now = clock()
-        if (retryAt in 1..now) { retryAt = 0; search(); return }
+        if (retryAt in 1..now) { retryAt = 0; if (endpoint == null) search(); return }
         val s = state
         when {
             s is LinkState.Searching && !s.slow && now - searchStart > SEARCH_MS -> set(s.copy(slow = true))
@@ -168,7 +213,15 @@ class LinkMachine(
     }
 
     fun onInitiated(id: String, name: String) {
-        if (!running || !accepts(name) || (endpoint != null && endpoint != id)) { transport.reject(id); return }
+        if (!running || !accepts(name) || (endpoint != null && endpoint != id)) {
+            transport.reject(id)
+            if (running) {
+                val who = if (accepts(name)) label(name) else "?"
+                record(if (accepts(name)) "odrzucono: $who (zajęte innym połączeniem)" else "odrzucono obce urządzenie")
+                listener.rejected(who)
+            }
+            return
+        }
         endpoint = id
         peerName = label(name)
         joiner = ChunkJoiner()
@@ -193,7 +246,15 @@ class LinkMachine(
         if (id != endpoint) return
         record("połączenie nieudane", code)
         endpoint = null
-        if (LinkErrors.isSetup(code)) problem(code) else search()
+        // Punkt, który odmówił, nie jest „znany”: szukanie zgłosi go znowu, jeśli żyje. Ponowienie po chwili, bo
+        // zajęta druga strona odrzuca od razu i bez przerwy kręcilibyśmy się w kółko.
+        found.remove(id)
+        if (LinkErrors.isSetup(code)) problem(code)
+        else {
+            retryAt = clock() + RETRY_MS
+            // Odmowę widać („Drugie urządzenie odrzuciło…”, ponowienie samo); inne błędy łączenia to zwykłe szukanie.
+            if (code == LinkErrors.REJECTED) set(problemState(code, retrying = true)) else showSearching()
+        }
     }
 
     fun onDisconnected(id: String) {
@@ -219,11 +280,19 @@ class LinkMachine(
 
     /** Błąd startu ogłaszania/szukania. Ustawienia i uprawnienia → czekamy na użytkownika; reszta → ponowienie. */
     fun onFailed(code: Int) {
+        // 8002: Nearby nie zacznie drugiego szukania i nie zgłosi znanych punktów drugi raz. Raz: stop i od nowa.
+        if (code == LinkErrors.ALREADY_DISCOVERING && running && endpoint == null && !rediscovered) {
+            rediscovered = true
+            record("szukanie od nowa", code)
+            transport.stopSearch()
+            transport.discover()
+            return
+        }
         if (code in LinkErrors.HARMLESS) return
         record("Nearby: błąd", code)
         transport.stopSearch()
         if (LinkErrors.isSetup(code)) problem(code)
-        else { retryAt = clock() + RETRY_MS; set(LinkState.Problem(LinkErrors.explain(code), retrying = true)) }
+        else { retryAt = clock() + RETRY_MS; set(problemState(code, retrying = true)) }
     }
 
     // --- środek ------------------------------------------------------------------------------------------------
@@ -250,13 +319,15 @@ class LinkMachine(
                 val r = receiver.accept(m)
                 for (m2 in r.reply) send(c.seal(m2))
                 if (r.bad) record("zdjęcie odrzucone: zła suma kontrolna")
-                r.photo?.let { receivedCount++; record("odebrano zdjęcie: ${it.bytes.size / 1024} KB"); listener.photo(it); ready() }
+                r.file?.let { receivedCount++; record("odebrano plik: ${it.file.length / 1024} KB"); listener.file(it); ready() }
             }
             is SyncMsg.PhotoAck -> { current?.ack(m.index); pump() }
             is SyncMsg.PhotoDone -> {
                 val s = current
                 if (s != null && s.id == m.id) {
                     current = null
+                    batchDone++
+                    batchDoneBytes += s.length
                     if (m.ok) { sentCount++; record("zdjęcie wstawione na tablecie"); listener.sent(m.id) }
                     else record("tablet odrzucił zdjęcie")
                 }
@@ -276,7 +347,7 @@ class LinkMachine(
     /** Wysyła należne części bieżącego zdjęcia i aktualizuje postęp; bierze następne zdjęcie z kolejki. */
     private fun pump() {
         val c = codec ?: return
-        if (!c.ready || !helloSent || endpoint == null) return
+        if (!c.ready || !helloSent || endpoint == null || held) return
         if (current == null) current = outbox.removeFirstOrNull()
         val s = current
         if (s == null) {
@@ -285,19 +356,30 @@ class LinkMachine(
         }
         for (p in s.due(clock())) send(c.seal(p))
         if (s.failed) {
+            // Nie porzucamy: zdjęcie wraca na początek kolejki, potwierdzone części zostają u odbiorcy.
+            s.rearm()
             current = null
-            record("zdjęcie nie doszło po ${PhotoSender.MAX_TRIES} próbach")
-            set(LinkState.Problem(LinkErrors.explain(LinkErrors.ENDPOINT_IO), retrying = false))
+            outbox.addFirst(s)
+            held = true
+            record("zdjęcie nie doszło po ${PhotoSender.MAX_TRIES} próbach (runda ${s.rounds})")
+            set(problemState(LinkErrors.ENDPOINT_IO, retrying = false))
             return
         }
-        set(LinkState.Sending(peerName, s.confirmed, s.count, s.progress, outbox.size))
+        val batch = if (batchBytes > 0) ((batchDoneBytes + s.progress * s.length) / batchBytes).coerceIn(0f, 1f) else s.progress
+        set(LinkState.Sending(peerName, s.confirmed, s.count, s.progress, outbox.size, batchDone + 1, maxOf(batchCount, batchDone + 1), batch))
     }
 
     private fun search() {
         retryAt = 0
+        rediscovered = false
         searchStart = clock()
         showSearching()
+        // Zawsze od czystego startu: Nearby na drugie startDiscovery odpowiada 8002 i nie zgłasza znanego punktu
+        // ponownie, a telefon (SEND) łączy się tylko po onFound, więc bez tego wisiałby na „Szukam…”.
+        transport.stopSearch()
         if (role == SyncRole.HOST) transport.advertise(ownName) else transport.discover()
+        // Punkt znany z poprzedniego szukania (np. po zerwaniu łącza): próba od razu, bez czekania na onFound.
+        if (role == SyncRole.CLIENT && mode != LinkMode.PAIR) found.keys.firstOrNull()?.let(::connect)
     }
 
     private fun connect(id: String) {
@@ -305,6 +387,7 @@ class LinkMachine(
         peerName = found[id] ?: peerLabel
         linkStart = clock()
         autoPickAt = 0
+        retryAt = 0
         record("łączę z: $peerName")
         set(LinkState.Connecting(peerName))
         transport.request(id, ownName)
@@ -312,7 +395,7 @@ class LinkMachine(
 
     private fun restart(why: String) {
         record(why)
-        endpoint?.let(transport::disconnect)
+        endpoint?.let { transport.disconnect(it); found.remove(it) }  // milczący punkt nie jest „znany”
         drop()
         search()
     }
@@ -322,6 +405,7 @@ class LinkMachine(
         endpoint = null
         codec = null
         helloSent = false
+        held = false
         pairing = null
         joiner = ChunkJoiner()
         current?.reset()
@@ -329,8 +413,11 @@ class LinkMachine(
 
     private fun problem(code: Int) {
         transport.stopSearch()
-        set(LinkState.Problem(LinkErrors.explain(code), retrying = false))
+        set(problemState(code, retrying = false))
     }
+
+    private fun problemState(code: Int, retrying: Boolean) =
+        LinkState.Problem(LinkErrors.explain(code), retrying, events.lastOrNull()?.text.orEmpty())
 
     private fun showSearching() = set(LinkState.Searching(found.map { LinkPeer(it.key, it.value) }, clock() - searchStart > SEARCH_MS))
 
@@ -360,7 +447,7 @@ class LinkMachine(
         const val AUTO_PICK_MS = 1_000L
         const val LOG_SIZE = 20
 
-        /** Największy plik przez łącze (zeszyt z PDF-em bywa duży; całość mieści się w pamięci po obu stronach). */
+        /** Największy plik przez łącze (zeszyt z PDF-em bywa duży); w aplikacji idzie przez plik w cache, nie przez pamięć. */
         const val FILE_MAX = 64 shl 20
     }
 }

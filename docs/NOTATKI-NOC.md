@@ -345,6 +345,42 @@ Na starcie (`noc/wszystko` @ `471ed08`): lab 696 testów, 0 porażek.
   **Nauka:** wzór z tablicy w notatce wygląda jak napisany, da się go poprawić uchwytami.
   **Tablet:** zdjęcie z blackboard/ → różdżka → „Edytowalne kreski” → zoom 4×: brak zębów i kółeczek, uchwyty działają.
 
+### FAZA 2c — agent B (28.10 od 11:55, lista 2c-B* w `plan/PLAN-NOCY.md`, przegląd `dzienniki/PRZEGLAD-FABLE-2.md`)
+
+- **2c-B1 utknięte zdjęcie nie przepada** (`74bbf92`): po 4 próbach części bez potwierdzenia `LinkMachine` porzucał zdjęcie
+  (`current = null`), następne je wyprzedzało, a „Spróbuj ponownie” przy otwartym łączu szukał od nowa (mógł wisieć na
+  „Szukam…”). Teraz zdjęcie wraca na początek kolejki (`PhotoSender.rearm`, licznik rund w dzienniku), wysyłanie czeka na
+  użytkownika, a „Spróbuj ponownie” przy gotowym łączu tylko wznawia wysyłkę; nowe połączenie też ją wznawia. Test
+  `stuckPhotoStaysFirstInTheQueue…` (eter milknie w połowie zdjęcia 2 z 3) **nie przechodził przed poprawką** (odbiorca
+  miał 1 z 3); drugi test: zerwanie w połowie zdjęcia 2 z 3 → 3 zdjęcia, każde raz (hash).
+  **Tablet:** 3 zdjęcia z telefonu, w połowie drugiego odsuń telefon za ścianę, aż pojawi się „Połączenie się urwało…” →
+  wróć → „Spróbuj ponownie” → na tablecie 3 zdjęcia, żadne podwójnie.
+- **2c-B2 szukanie bez zawieszenia** (`29514d2`): `stopSearch()` przed każdym `advertise/discover`, po 8002 jeden stop i
+  start od nowa, punkt znany z poprzedniego szukania próbowany od razu, po odmowie (8004) ponowienie po 3 s.
+  `FakeAir` zachowuje się jak Nearby (8002/8001, jedno `onFound` na szukanie, odmowa, zamknięty transport bez
+  powiadomienia drugiej strony). Trzy testy **czerwone przed poprawką**: tablet odrzuca pierwsze połączenie; zamknięcie
+  okna telefonu w trakcie „Łączę…” i ponowne otwarcie; 8002 przy starcie.
+  **Tablet:** na tablecie otwórz „Odbierz zdjęcia”, na telefonie „Wyślij” → w trakcie „Łączę…” zamknij okno na
+  telefonie i otwórz znowu → łączy się samo (najdalej ok. 20 s, gdy tablet czeka na swój limit).
+- **2c-B3 część 1** (`bd6515c`): `LinkState.Sending` ma `photo`/`photos` i `batchProgress` (bajty całej partii; partia =
+  zdjęcia dodane, zanim kolejka się opróżniła); okno pisze „Wysyłam zdjęcie 2 z 3 · 47 %”, części bieżącego pliku w drugiej
+  linii. `LinkState.Problem.cause` = ostatni wpis dziennika: w oknie „Kod 8012: zdjęcie nie doszło po 4 próbach (runda 1)”.
+  Telefon po 8004 pokazuje „Drugie urządzenie odrzuciło…” i sam ponawia po 3 s; tablet zgłasza odrzucone prośby
+  (`Listener.rejected`, zdanie w oknie). `PhotoReceiver`: `count` ponad limit pliku → odrzucone (wcześniej
+  `arrayOfNulls(Int.MAX_VALUE)` = brak pamięci; tego testu nie uruchamiałem na starym kodzie, wynik z zachowania JVM),
+  najwyżej 4 składania naraz (najstarsze wypada). „Limit liczby zdjęć w partii (`count`)” z planu rozumiem jako ten limit
+  pola `count`; osobnego limitu długości kolejki nadawcy nie dodawałem (UI dodaje zdjęcia po jednym).
+  **Tablet:** 3 zdjęcia → jeden pasek dla całości i „zdjęcie 2 z 3”; problem → kod i przyczyna pod zdaniem.
+- **2c-B3 część 2** (`ce9dcfc`): `core/nearby/LinkFile.kt` — plik w łączu w pamięci albo na dysku. Odbiorca zapisuje
+  każdą część od razu pod `index × długość części` (ostatnia, która przyszła pierwsza, czeka w pamięci), SHA-256 liczy
+  strumieniem; nadawca czyta części z pliku w chwili wysyłki. Lab: „Wyślij zeszyt” eksportuje do `cache/nearby/`, odbiór
+  importuje z pliku; pliki znikają po imporcie, po zamknięciu okna, a resztki starsze niż godzina przy otwarciu.
+  Test `sixtyFourMegabyteNotebookGoesThroughCacheFilesWithAtMostTwoPartsInMemory`: na starym odbiorcy (z tym samym
+  licznikiem) szczyt 134 217 728 B, po poprawce ≤ 2 × 256 KB. Licznik liczy pamięć samego odbiorcy (część w ręku,
+  odłożone ostatnie części, bufor sumy), nie ramek w Nearby ani szyfrowania.
+  **Tablet:** „Wyślij zeszyt” z dużym zeszytem (z PDF-em, kilkadziesiąt MB) → na drugim urządzeniu nowy zeszyt, który
+  się otwiera; w trakcie odbioru aplikacja nie zamyka się z braku pamięci.
+
 ### Co Marcin ma sprawdzić na tablecie — wariant lab, po fazie 2 (kolejność)
 
 Instalacja: `labDebug` z `noc/lab2` (albo `noc/wszystko` po scaleniu przez A) na tablecie **i** na telefonie (Nearby).

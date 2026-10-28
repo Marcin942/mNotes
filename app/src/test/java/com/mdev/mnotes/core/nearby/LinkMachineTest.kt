@@ -5,11 +5,15 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.io.File
+import java.nio.file.Files
 import java.util.Random
 
 /**
  * Symulowane powietrze dla [LinkMachine]: urządzenia ogłaszają się i szukają, połączenie wymaga akceptacji po obu
  * stronach (jak Nearby), ramki idą w kolejności przez kolejkę zdarzeń. [drop] gubi wybrane ramki, [cut] zrywa łącze.
+ * Jak prawdziwe Nearby: drugie `discover` bez `stopSearch` → 8002 i zero ponownych `onFound`, drugie `advertise` →
+ * 8001, a jedno szukanie zgłasza dany punkt raz (znowu dopiero, gdy ten przestał się ogłaszać i zaczął od nowa).
  */
 class FakeAir {
     private val queue = ArrayDeque<() -> Unit>()
@@ -18,35 +22,51 @@ class FakeAir {
 
     fun end(id: String) = End(id).also { ends += it }
 
+    /** Zdarzenie dla maszyny punktu [e]; zamknięty transport ([End.close]) już nic nie dostaje. */
+    private fun to(e: End, call: LinkMachine.() -> Unit) { queue += { if (!e.closed) e.machine.call() } }
+
     inner class End(val id: String) : LinkTransport {
         lateinit var machine: LinkMachine
         var advertising: String? = null
         var discovering = false
         var peer: End? = null
+        /** Ile najbliższych próśb o połączenie ten punkt odrzuci (druga strona zajęta albo „Odrzuć”). */
+        var refuse = 0
+        var closed = false
+            private set
         private var acceptedFor: String? = null
         private var pendingWith: String? = null
+        /** Punkty zgłoszone już w bieżącym szukaniu. */
+        private val seen = HashSet<String>()
 
         private fun other(id: String) = ends.first { it.id == id }
 
         override fun advertise(name: String) {
+            if (advertising != null) { to(this) { onFailed(LinkErrors.ALREADY_ADVERTISING) }; return }
             advertising = name
-            for (e in ends) if (e !== this && e.discovering) queue += { e.machine.onFound(id, name) }
+            for (e in ends) if (e !== this && e.discovering && e.seen.add(id)) to(e) { onFound(id, name) }
         }
 
         override fun discover() {
+            if (discovering) { to(this) { onFailed(LinkErrors.ALREADY_DISCOVERING) }; return }
             discovering = true
-            for (e in ends) if (e !== this) e.advertising?.let { n -> queue += { machine.onFound(e.id, n) } }
+            seen.clear()
+            for (e in ends) if (e !== this) e.advertising?.let { n -> seen += e.id; to(this) { onFound(e.id, n) } }
         }
 
-        override fun stopSearch() { advertising = null; discovering = false }
+        override fun stopSearch() {
+            if (advertising != null) for (e in ends) e.seen.remove(id)
+            advertising = null; discovering = false
+        }
 
         override fun request(endpoint: String, name: String) {
             val o = ends.firstOrNull { it.id == endpoint } ?: return  // punkt, który nigdy nie odpowie
+            if (o.refuse > 0) { o.refuse--; to(this) { onConnectFailed(endpoint, LinkErrors.REJECTED) }; return }
             val adv = o.advertising
-            if (adv == null) { queue += { machine.onConnectFailed(endpoint, 8011) }; return }
+            if (adv == null) { to(this) { onConnectFailed(endpoint, 8011) }; return }
             pendingWith = endpoint; o.pendingWith = id
-            queue += { o.machine.onInitiated(id, name) }
-            queue += { machine.onInitiated(endpoint, adv) }
+            to(o) { onInitiated(id, name) }
+            to(this) { onInitiated(endpoint, adv) }
         }
 
         override fun accept(endpoint: String) {
@@ -54,27 +74,34 @@ class FakeAir {
             val o = other(endpoint)
             if (o.acceptedFor == id) {
                 peer = o; o.peer = this
-                queue += { machine.onConnected(endpoint) }
-                queue += { o.machine.onConnected(id) }
+                to(this) { onConnected(endpoint) }
+                to(o) { onConnected(id) }
             }
         }
 
         override fun reject(endpoint: String) {
             val o = other(endpoint)
-            if (o.pendingWith == id) queue += { o.machine.onConnectFailed(id, LinkErrors.REJECTED) }
+            if (o.pendingWith == id) to(o) { onConnectFailed(id, LinkErrors.REJECTED) }
         }
 
         override fun send(endpoint: String, bytes: ByteArray) {
             val o = peer ?: return
             if (drop(this, bytes)) return
-            queue += { if (o.peer === this) o.machine.onReceived(id, bytes) }
+            val from = this
+            to(o) { if (o.peer === from) onReceived(id, bytes) }
         }
 
         override fun disconnect(endpoint: String) {
             val o = peer ?: return
             unlink(o)
-            queue += { o.machine.onDisconnected(id) }
+            to(o) { onDisconnected(id) }
         }
+
+        /**
+         * Okno zamknięte (`NearbyTransport.close`): maszyna nic już nie dostaje, a druga strona połączenia w toku
+         * nie dowiaduje się o tym (czeka do własnego limitu czasu), tak jak przy przerwanym `requestConnection`.
+         */
+        fun close() { stopSearch(); closed = true }
 
         fun unlink(o: End) { peer = null; o.peer = null; acceptedFor = null; o.acceptedFor = null; pendingWith = null; o.pendingWith = null }
     }
@@ -83,8 +110,8 @@ class FakeAir {
     fun cut(a: End) {
         val b = a.peer ?: return
         a.unlink(b)
-        queue += { a.machine.onDisconnected(b.id) }
-        queue += { b.machine.onDisconnected(a.id) }
+        to(a) { onDisconnected(b.id) }
+        to(b) { onDisconnected(a.id) }
     }
 
     fun pump(max: Int = 100_000) {
@@ -98,17 +125,22 @@ class LinkMachineTest {
     private val air = FakeAir()
     private val photo = ByteArray(700_000).also { Random(3).nextBytes(it) }
 
-    private class Seen : LinkMachine.Listener {
+    /** [keep]: odebrane pliki zostają jako pliki ([files]) zamiast trafiać w całości do [photos]. */
+    private class Seen(val keep: Boolean = false) : LinkMachine.Listener {
         val states = ArrayList<LinkState>()
         val photos = ArrayList<SyncMsg.Photo>()
+        val files = ArrayList<LinkReceived>()
         val sent = ArrayList<String>()
+        val rejected = ArrayList<String>()
         override fun changed(state: LinkState) { states += state }
         override fun photo(p: SyncMsg.Photo) { photos += p }
+        override fun file(f: LinkReceived) { if (keep) files += f else super.file(f) }
         override fun sent(id: String) { sent += id }
+        override fun rejected(peer: String) { rejected += peer }
     }
 
-    private fun machine(end: FakeAir.End, mode: LinkMode, role: SyncRole, name: String, key: ByteArray?, seen: Seen = Seen()) =
-        LinkMachine(end, mode, role, name, key, peerLabel = "druga strona", clock = { now }, listener = seen).also { end.machine = it }
+    private fun machine(end: FakeAir.End, mode: LinkMode, role: SyncRole, name: String, key: ByteArray?, seen: Seen = Seen(), files: LinkFiles = LinkFiles.MEMORY) =
+        LinkMachine(end, mode, role, name, key, peerLabel = "druga strona", clock = { now }, listener = seen, files = files).also { end.machine = it }
 
     /** Pompuje zdarzenia i tyka zegarem po [step] ms, aż [done] albo [limit] kroków. */
     private fun run(vararg ms: LinkMachine, step: Long = 500, limit: Int = 400, done: () -> Boolean) {
@@ -187,6 +219,36 @@ class LinkMachineTest {
     }
 
     @Test
+    fun sixtyFourMegabyteNotebookGoesThroughCacheFilesWithAtMostTwoPartsInMemory() {
+        val dir = Files.createTempDirectory("mnotes-lacze").toFile()
+        try {
+            val key = pairKey()
+            val tSeen = Seen(keep = true)
+            val tablet = machine(air.end("tablet"), LinkMode.RECEIVE, SyncRole.HOST, "T", key, tSeen, LinkFiles.disk(File(dir, "odbior")))
+            val phone = machine(air.end("telefon"), LinkMode.SEND, SyncRole.CLIENT, "P", key)
+            // Zeszyt 64 MB pisany po 1 MB: po stronie telefonu też nie ma go w pamięci w całości.
+            val src = File(dir, "Duzy.mnotes")
+            val rnd = Random(5)
+            src.outputStream().use { o -> repeat(64) { o.write(ByteArray(1 shl 20).also(rnd::nextBytes)) } }
+            tablet.start(); phone.start()
+            phone.sendFile(src.name, "application/x-mnotes", LinkFile.Disk(src))
+            run(tablet, phone, limit = 2000) { tSeen.files.isNotEmpty() }
+            val got = tSeen.files.single()
+            assertEquals("application/x-mnotes", got.mime)
+            assertTrue(got.file is LinkFile.Disk)
+            assertEquals(64L shl 20, got.file.length)
+            assertArrayEquals(LinkFile.Disk(src).sha256(), got.file.sha256())
+            // Przed 2c-B3 odbiorca trzymał wszystkie części i drugą kopię całości: 134 217 728 B.
+            assertTrue("szczyt ${tablet.receivePeak} B", tablet.receivePeak <= 2L * PhotoSender.PART)
+            got.file.delete()
+            tablet.stop()
+            assertEquals(emptyList<String>(), File(dir, "odbior").list()!!.toList())
+        } finally {
+            dir.deleteRecursively()
+        }
+    }
+
+    @Test
     fun lostPartIsResentAfterTheTimeout() {
         val key = pairKey()
         val tSeen = Seen()
@@ -218,6 +280,146 @@ class LinkMachineTest {
         assertArrayEquals(photo, tSeen.photos.single().bytes)
         assertTrue(phone.log.any { it.text.startsWith("rozłączono") })
         assertEquals(2, phone.log.count { it.text.startsWith("połączono") })
+    }
+
+    private fun threePhotos() = (1..3).map { n -> ByteArray(700_000).also { Random(10L + n).nextBytes(it) } }
+
+    private fun hashes(b: List<ByteArray>) = b.map { SyncCrypto.sha256(it).toList() }
+
+    @Test
+    fun stuckPhotoStaysFirstInTheQueueAndTryAgainResendsOverTheOpenLink() {
+        val key = pairKey()
+        val tSeen = Seen(); val pSeen = Seen()
+        val tablet = machine(air.end("tablet"), LinkMode.RECEIVE, SyncRole.HOST, "T", key, tSeen)
+        val phone = machine(air.end("telefon"), LinkMode.SEND, SyncRole.CLIENT, "P", key, pSeen)
+        val photos = threePhotos()
+        // W połowie zdjęcia 2 z 3 eter milknie: po 4 częściach (3 zdjęcia 1 + pierwsza zdjęcia 2) części z telefonu
+        // giną, a łącze formalnie trwa. Tak wygląda zawieszone Nearby: brak potwierdzeń, brak onDisconnected.
+        var parts = 0
+        var silent = true
+        air.drop = { from, bytes -> from.id == "telefon" && bytes.size > 100_000 && ++parts > 4 && silent }
+        tablet.start(); phone.start()
+        photos.forEachIndexed { i, b -> phone.sendPhoto("t$i.jpg", "image/jpeg", b) }
+        run(tablet, phone, step = 2_000) { phone.state is LinkState.Problem }
+        assertTrue(!(phone.state as LinkState.Problem).retrying)
+        assertEquals(1, tSeen.photos.size)
+        // bez „Spróbuj ponownie” nic nie rusza: zdjęcie 3 nie wyprzedza utkniętego 2
+        now += 60_000; phone.tick(); tablet.tick(); air.pump()
+        assertTrue(phone.state is LinkState.Problem)
+        silent = false
+        phone.retry()
+        assertTrue(phone.state !is LinkState.Searching)
+        run(tablet, phone) { pSeen.sent.size == 3 }
+        assertEquals(hashes(photos), hashes(tSeen.photos.map { it.bytes }))
+        assertEquals(1, phone.log.count { it.text.startsWith("połączono") })  // ta sama sesja, bez szukania
+        assertTrue(phone.log.any { it.text.contains("runda 1") })
+    }
+
+    @Test
+    fun cutInTheMiddleOfPhotoTwoOfThreeDeliversEachPhotoOnce() {
+        val key = pairKey()
+        val tSeen = Seen(); val pSeen = Seen()
+        val tEnd = air.end("tablet")
+        val tablet = machine(tEnd, LinkMode.RECEIVE, SyncRole.HOST, "T", key, tSeen)
+        val phone = machine(air.end("telefon"), LinkMode.SEND, SyncRole.CLIENT, "P", key, pSeen)
+        val photos = threePhotos()
+        var parts = 0
+        air.drop = { from, bytes -> if (from.id == "telefon" && bytes.size > 100_000 && ++parts == 5) air.cut(tEnd); false }
+        tablet.start(); phone.start()
+        photos.forEachIndexed { i, b -> phone.sendPhoto("t$i.jpg", "image/jpeg", b) }
+        run(tablet, phone) { pSeen.sent.size == 3 }
+        assertEquals(hashes(photos), hashes(tSeen.photos.map { it.bytes }))
+        assertEquals(2, phone.log.count { it.text.startsWith("połączono") })
+    }
+
+    @Test
+    fun tabletRejectsTheFirstConnectionAndThePhoneConnectsByItselfOnTheSecond() {
+        val key = pairKey()
+        val tEnd = air.end("tablet")
+        val tablet = machine(tEnd, LinkMode.RECEIVE, SyncRole.HOST, "T", key)
+        val phone = machine(air.end("telefon"), LinkMode.SEND, SyncRole.CLIENT, "P", key)
+        tEnd.refuse = 1
+        tablet.start(); phone.start()
+        run(tablet, phone) { phone.state is LinkState.Ready && tablet.state is LinkState.Ready }
+        assertTrue(phone.state is LinkState.Ready)
+        assertEquals(LinkErrors.REJECTED, phone.log.mapNotNull { it.code }.first())
+    }
+
+    @Test
+    fun closingThePhoneWindowWhileConnectingAndOpeningItAgainConnects() {
+        val key = pairKey()
+        val tablet = machine(air.end("tablet"), LinkMode.RECEIVE, SyncRole.HOST, "T", key)
+        val firstEnd = air.end("telefon")
+        val first = machine(firstEnd, LinkMode.SEND, SyncRole.CLIENT, "P", key)
+        tablet.start(); first.start()
+        air.pump(max = 2)  // telefon znalazł tablet i poprosił; tablet przyjął prośbę
+        assertTrue(first.state is LinkState.Connecting)
+        assertTrue(tablet.state is LinkState.Connecting)
+        first.stop(); firstEnd.close()  // okno zamknięte w trakcie „Łączę…”
+        // ponowne otwarcie: nowy transport, nowy identyfikator punktu (jak po stopAllEndpoints)
+        val second = machine(air.end("telefon-2"), LinkMode.SEND, SyncRole.CLIENT, "P", key)
+        second.start()
+        run(tablet, second) { second.state is LinkState.Ready && tablet.state is LinkState.Ready }
+        assertTrue(second.state is LinkState.Ready)
+    }
+
+    @Test
+    fun alreadyDiscoveringStartsTheSearchOverOnce() {
+        val key = pairKey()
+        val tablet = machine(air.end("tablet"), LinkMode.RECEIVE, SyncRole.HOST, "T", key)
+        val pEnd = air.end("telefon")
+        val phone = machine(pEnd, LinkMode.SEND, SyncRole.CLIENT, "P", key)
+        // Szukanie włączone wcześniej (np. przez poprzednie okno) zgłosiło tablet, zanim maszyna ruszyła; drugi raz go
+        // nie zgłosi, a drugie discover dostaje 8002.
+        pEnd.discover()
+        tablet.start(); air.pump()
+        phone.start()
+        run(tablet, phone) { phone.state is LinkState.Ready }
+        assertTrue(phone.state is LinkState.Ready)
+    }
+
+    @Test
+    fun progressCountsPhotosOfTheBatchNotPartsOfOnePhoto() {
+        val key = pairKey()
+        val pSeen = Seen()
+        val tablet = machine(air.end("tablet"), LinkMode.RECEIVE, SyncRole.HOST, "T", key)
+        val phone = machine(air.end("telefon"), LinkMode.SEND, SyncRole.CLIENT, "P", key, pSeen)
+        tablet.start(); phone.start()
+        threePhotos().forEachIndexed { i, b -> phone.sendPhoto("t$i.jpg", "image/jpeg", b) }
+        run(tablet, phone) { pSeen.sent.size == 3 }
+        val sending = pSeen.states.filterIsInstance<LinkState.Sending>()
+        assertEquals(setOf(1, 2, 3), sending.map { it.photo }.toSet())
+        assertTrue(sending.all { it.photos == 3 })
+        val bar = sending.map { it.batchProgress }
+        assertEquals(bar.sorted(), bar)  // pasek całej partii nie cofa się przy następnym zdjęciu
+        assertTrue(sending.any { it.photo == 2 && it.batchProgress in 0.33f..0.67f })
+        // następna partia liczy się od nowa
+        phone.sendPhoto("d.jpg", "image/jpeg", photo)
+        run(tablet, phone) { pSeen.sent.size == 4 }
+        assertTrue(pSeen.states.filterIsInstance<LinkState.Sending>().last().photos == 1)
+    }
+
+    @Test
+    fun rejectionIsVisibleOnBothSides() {
+        val key = pairKey()
+        val tSeen = Seen(); val pSeen = Seen()
+        val tEnd = air.end("tablet")
+        val tablet = machine(tEnd, LinkMode.RECEIVE, SyncRole.HOST, "T", key, tSeen)
+        val phone = machine(air.end("telefon"), LinkMode.SEND, SyncRole.CLIENT, "P", key, pSeen)
+        tEnd.refuse = 1
+        tablet.start(); phone.start()
+        run(tablet, phone) { phone.state is LinkState.Ready && tablet.state is LinkState.Ready }
+        // telefon: zdanie o odmowie z kodem i przyczyną, potem ponowienie samo
+        val p = pSeen.states.filterIsInstance<LinkState.Problem>().single()
+        assertEquals(LinkErrors.REJECTED, p.problem.code)
+        assertTrue(p.retrying)
+        assertTrue(p.cause, p.cause.startsWith("połączenie nieudane"))
+        // tablet: zajęty połączeniem odrzuca drugą prośbę i mówi o tym; obce urządzenie też
+        air.end("telefon-2"); air.end("obcy")
+        tablet.onInitiated("telefon-2", SyncCrypto.nearbyName(key))
+        tablet.onInitiated("obcy", "ktoś inny")
+        assertEquals(listOf("druga strona", "?"), tSeen.rejected)
+        assertTrue(tablet.state is LinkState.Ready)
     }
 
     @Test

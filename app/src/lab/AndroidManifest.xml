@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Wariant lab: uprawnienia łącza Nearby (Bluetooth / Wi-Fi Direct, bez sieci). Prosimy o nie w chwili użycia. -->
+<!-- Wariant lab: uprawnienia łącza Nearby (Bluetooth / Wi-Fi Direct, bez sieci) i Bluetooth RFCOMM (2e-B1; te same
+     uprawnienia Bluetooth, BLUETOOTH_SCAN bez neverForLocation, bo Nearby skanuje BLE). Prosimy o nie w chwili użycia. -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
@@ -13,6 +14,7 @@
     <uses-permission android:name="android.permission.CHANGE_WIFI_STATE" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-feature android:name="android.hardware.bluetooth" android:required="false" />
 
     <!-- mNotes nie łączy się z siecią: gdyby któraś biblioteka Usług Google dopisała INTERNET, usuwamy go. -->
     <uses-permission android:name="android.permission.INTERNET" tools:node="remove" />

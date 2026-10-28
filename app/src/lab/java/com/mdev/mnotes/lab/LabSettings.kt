@@ -44,9 +44,17 @@ class LabSettings(ctx: Context) {
     private val specksP = B("board.specks", true)
     private val curvesP = B("board.curves", true)
     private val lectureP = B("board.lecture", true)
+    private val bluetoothP = B("link.bluetooth", false)
+    private val fullPhotoP = B("link.photo.full", false)
 
-    /** Łącze Nearby (zdjęcie z telefonu); domyślnie wyłączone, bo wymaga Usług Google Play i uprawnień radia. */
+    /** Łącze z telefonem (zdjęcie z telefonu, zeszyty); domyślnie wyłączone, bo wymaga uprawnień radia. */
     var nearby: Boolean get() = nearbyP.value; set(v) = nearbyP.set(v)
+
+    /** Transport łącza (2e-B1): Bluetooth RFCOMM zamiast Nearby (Usługi Google). Oba zostają, Marcin porównuje. */
+    var bluetooth: Boolean get() = bluetoothP.value; set(v) = bluetoothP.set(v)
+
+    /** Zdjęcia z telefonu w pełnej rozdzielczości; domyślnie dłuższy bok 2400 px (przez Bluetooth kilka razy szybciej). */
+    var fullPhoto: Boolean get() = fullPhotoP.value; set(v) = fullPhotoP.set(v)
 
     var straighten: Boolean get() = straightenP.value; set(v) = straightenP.set(v)
     var crop: Boolean get() = cropP.value; set(v) = cropP.set(v)

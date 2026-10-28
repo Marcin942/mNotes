@@ -533,17 +533,27 @@ object Lab : LabFeatures {
         var dialog by remember { mutableStateOf(0) }
         var tick by remember { mutableStateOf(0) }
         var outgoing by remember { mutableStateOf<com.mdev.mnotes.lab.nearby.Outgoing?>(null) }
-        Group(T.t("Telefon i tablet (Nearby)", "Phone and tablet (Nearby)"), keys = "nearby telefon tablet zdjęcie bluetooth parowanie połącz wyślij diagnostyka łącze phone pair connect send diagnostics link") {
+        Group(T.t("Telefon i tablet (Nearby / Bluetooth)", "Phone and tablet (Nearby / Bluetooth)"), keys = "nearby telefon tablet zdjęcie bluetooth rfcomm parowanie połącz wyślij diagnostyka łącze jakość phone pair connect send diagnostics link quality") {
             Text(
                 T.t(
-                    "Zdjęcie zrobione telefonem trafia od razu na stronę na tablecie, przez Bluetooth albo Wi-Fi Direct, bez internetu i bez wspólnej sieci. Wymaga Usług Google Play na obu urządzeniach; każda ramka jest szyfrowana kluczem pary. Android każe pytać o lokalizację, bo szukanie urządzeń przez Bluetooth mogłoby ją zdradzić; mNotes położenia nie odczytuje.",
-                    "A photo taken with the phone lands right on the tablet page, over Bluetooth or Wi-Fi Direct, without internet or a shared network. Needs Google Play services on both devices; every frame is encrypted with the pair key. Android requires the location permission because scanning for Bluetooth devices could reveal it; mNotes never reads your location.",
+                    "Zdjęcie zrobione telefonem trafia od razu na stronę na tablecie, bez internetu i bez wspólnej sieci; każda ramka jest szyfrowana kluczem pary. Gdy Android pyta o lokalizację, to dlatego, że szukanie urządzeń mogłoby ją zdradzić; mNotes położenia nie odczytuje. Jedno zdjęcie bez parowania: Udostępnij → Quick Share na tablet i wstaw obraz.",
+                    "A photo taken with the phone lands right on the tablet page, without internet or a shared network; every frame is encrypted with the pair key. When Android asks for location, it is because scanning for devices could reveal it; mNotes never reads your location. A single photo without pairing: Share → Quick Share to the tablet and insert the image.",
                 ),
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(vertical = 6.dp),
             )
             ToggleRow(T.t("Włącz łącze z telefonem", "Enable the phone link"), set.nearby) { set.nearby = it }
             if (set.nearby) {
                 tick
+                // 2e-B1: Bluetooth RFCOMM obok Nearby; para (klucz) wspólna, zmiana nie wymaga parowania od nowa.
+                ToggleRow(T.t("Łącze przez Bluetooth (bez Usług Google Play)", "Link over Bluetooth (no Google Play services)"), set.bluetooth) { set.bluetooth = it }
+                Text(
+                    if (set.bluetooth) T.t(
+                        "Bluetooth: tablet najłatwiej znaleźć, gdy jest sparowany w ustawieniach Bluetooth obu urządzeń; inaczej „Szukaj w pobliżu” przy parowaniu. Bez lokalizacji do Androida 11 i bez Wi-Fi Direct; zdjęcie 1 MB idzie kilka sekund.",
+                        "Bluetooth: the tablet is easiest to find when it is paired in the Bluetooth settings of both devices; otherwise “Search nearby” while pairing. No location up to Android 11 and no Wi-Fi Direct; a 1 MB photo takes a few seconds.",
+                    ) else T.t("Nearby: Bluetooth albo Wi-Fi Direct, wymaga Usług Google Play.", "Nearby: Bluetooth or Wi-Fi Direct, needs Google Play services."),
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(bottom = 4.dp),
+                )
+                ToggleRow(T.t("Zdjęcia z telefonu w pełnej jakości (wolniej)", "Photos from the phone in full quality (slower)"), set.fullPhoto) { set.fullPhoto = it }
                 Text(
                     if (store.paired) T.t("Sparowano z „${store.peerName}”.", "Paired with “${store.peerName}”.") else T.t("Brak sparowanego urządzenia.", "No paired device."),
                     style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(vertical = 4.dp),

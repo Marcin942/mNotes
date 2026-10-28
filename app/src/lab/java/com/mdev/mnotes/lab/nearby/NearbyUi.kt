@@ -7,7 +7,10 @@ import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.net.Uri
+import android.bluetooth.BluetoothAdapter
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
@@ -49,6 +52,8 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.mdev.mnotes.app.MNotesApp
+import com.mdev.mnotes.core.nearby.BtLimits
+import com.mdev.mnotes.core.nearby.LinkErrors
 import com.mdev.mnotes.core.nearby.LinkFile
 import com.mdev.mnotes.core.nearby.LinkFiles
 import com.mdev.mnotes.core.nearby.LinkMachine
@@ -56,6 +61,9 @@ import com.mdev.mnotes.core.nearby.LinkMode
 import com.mdev.mnotes.core.nearby.LinkPermissions
 import com.mdev.mnotes.core.nearby.LinkReceived
 import com.mdev.mnotes.core.nearby.LinkState
+import com.mdev.mnotes.core.nearby.LinkTransport
+import com.mdev.mnotes.core.nearby.PhotoScale
+import com.mdev.mnotes.core.nearby.RfcommTransport
 import com.mdev.mnotes.core.nearby.SyncMsg
 import com.mdev.mnotes.core.nearby.SyncRole
 import com.mdev.mnotes.data.ExportFormat
@@ -80,7 +88,19 @@ private fun deviceName(ctx: Context): String =
     runCatching { Settings.Global.getString(ctx.contentResolver, Settings.Global.DEVICE_NAME) }.getOrNull()?.takeIf { it.isNotBlank() }?.take(40)
         ?: "${Build.MANUFACTURER} ${Build.MODEL}".trim().take(40)
 
-private fun missing(ctx: Context) = LinkPermissions.missing(Build.VERSION.SDK_INT) { LinkDiagnostics.has(ctx, it) }
+/** Zgody dla transportu: Nearby albo Bluetooth RFCOMM ([bt]); szukanie i widoczność tylko na żądanie (2e-B1). */
+private fun required(bt: Boolean, discovery: Boolean = false, visible: Boolean = false) =
+    if (bt) LinkPermissions.rfcomm(Build.VERSION.SDK_INT, discovery, visible, scanForLocation = true) else LinkPermissions.required(Build.VERSION.SDK_INT)
+
+private fun missing(ctx: Context, bt: Boolean, discovery: Boolean = false, visible: Boolean = false) =
+    LinkPermissions.missing(required(bt, discovery, visible)) { LinkDiagnostics.has(ctx, it) }
+
+private val mainThread = Handler(Looper.getMainLooper())
+
+/** Systemowe okno „Widoczność” na 2 min: telefon znajdzie tablet przez „Szukaj w pobliżu”. */
+private fun showTablet(ctx: Context) = runCatching {
+    ctx.startActivity(Intent(BluetoothAdapter.ACTION_REQUEST_DISCOVERABLE).putExtra(BluetoothAdapter.EXTRA_DISCOVERABLE_DURATION, 120).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+}.isSuccess
 
 /** Plik do wysłania przez łącze: zdjęcie z galerii w pamięci albo zeszyt `.mnotes` w pliku w cache (2c-B3). */
 class Outgoing(val name: String, val mime: String, val file: LinkFile)
@@ -106,13 +126,17 @@ fun PhoneLinkDialog(start: LinkMode, ed: Editor?, files: List<Outgoing>? = null,
     val notebooks = if (start == LinkMode.SEND) files != null else ed == null
     var imported by remember { mutableIntStateOf(0) }
     val store = remember { PairStore(ctx) }
+    val bt = remember { com.mdev.mnotes.lab.LabSettings.of(ctx).bluetooth }
+    val fullPhoto = remember { com.mdev.mnotes.lab.LabSettings.of(ctx).fullPhoto }
     val me = remember { deviceName(ctx) }
     var key by remember { mutableStateOf(if (start == LinkMode.PAIR) null else store.loadOrForget()) }
     val expired = remember { start != LinkMode.PAIR && key == null && store.peerName.isNotEmpty() }
     var mode by remember { mutableStateOf(if (start != LinkMode.PAIR && key == null) LinkMode.PAIR else start) }
     var role by remember(mode) { mutableStateOf(when (mode) { LinkMode.PAIR -> defaultRole(ctx); LinkMode.RECEIVE -> SyncRole.HOST; LinkMode.SEND -> SyncRole.CLIENT }) }
-    var allowed by remember { mutableStateOf(missing(ctx).isEmpty()) }
+    var allowed by remember { mutableStateOf(missing(ctx, bt).isEmpty()) }
     var refused by remember { mutableStateOf(false) }
+    // Zgoda na żądanie (Bluetooth): 1 = „Szukaj w pobliżu”, 2 = „Pokaż tablet”; po zgodzie robimy to od razu.
+    var extra by remember { mutableIntStateOf(0) }
     var generation by remember { mutableIntStateOf(0) }
     var state by remember { mutableStateOf<LinkState>(LinkState.Idle) }
     var received by remember { mutableIntStateOf(0) }
@@ -137,16 +161,28 @@ fun PhoneLinkDialog(start: LinkMode, ed: Editor?, files: List<Outgoing>? = null,
         }
     }
 
+    var link: Pair<LinkMachine, LinkTransport>? = null
     val ask = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
-        allowed = missing(ctx).isEmpty()
+        allowed = missing(ctx, bt).isEmpty()
         refused = !allowed
+        val rt = link?.second as? RfcommTransport
+        when {
+            extra == 1 && missing(ctx, bt, discovery = true).isEmpty() -> rt?.searchNearby()
+            extra == 2 && missing(ctx, bt, visible = true).isEmpty() -> showTablet(ctx)
+            extra != 0 -> note = T.t("Bez tej zgody Android nie pozwala szukać urządzeń.", "Without this permission Android does not allow searching for devices.")
+        }
+        extra = 0
     }
     val ready = allowed && (mode == LinkMode.PAIR || key != null) && (mode != LinkMode.SEND || picked)
-    val link = remember(mode, role, generation, ready, key?.contentHashCode()) {
+    link = remember(mode, role, generation, ready, key?.contentHashCode()) {
         if (!ready) null else {
-            val t = NearbyTransport(ctx)
+            val t: LinkTransport = if (bt) RfcommTransport(AndroidBtPort(ctx), { mainThread.post(it) }, store.peerAddress.ifEmpty { null }) else NearbyTransport(ctx)
             val m = LinkMachine(t, mode, role, me, if (mode == LinkMode.PAIR) null else key, store.peerName, files = LinkFiles.disk(linkDir(ctx)), listener = object : LinkMachine.Listener {
-                override fun changed(s: LinkState) { state = s }
+                override fun changed(s: LinkState) {
+                    state = s
+                    // para zrobiona przez Nearby albo tablet z nowym adresem: zapamiętaj, z kim połączył Bluetooth
+                    if (s is LinkState.Ready && mode != LinkMode.PAIR) (t as? RfcommTransport)?.lastPeer?.let { store.peerAddress = it.address }
+                }
                 override fun rejected(peer: String) {
                     note = if (peer == "?") T.t("Odrzucono połączenie od obcego urządzenia (inna para).", "Rejected a connection from an unknown device (another pairing).")
                     else T.t("Odrzucono drugie połączenie od „$peer”: to okno ma już połączenie.", "Rejected a second connection from “$peer”: this window is already connected.")
@@ -163,7 +199,7 @@ fun PhoneLinkDialog(start: LinkMode, ed: Editor?, files: List<Outgoing>? = null,
                     received++
                 }
             })
-            t.machine = m
+            when (t) { is RfcommTransport -> t.machine = m; is NearbyTransport -> t.machine = m }
             m to t
         }
     }
@@ -173,7 +209,7 @@ fun PhoneLinkDialog(start: LinkMode, ed: Editor?, files: List<Outgoing>? = null,
             for (p in waiting) m.sendFile(p.name, p.mime, p.file)
             waiting.clear()
         }
-        onDispose { link?.let { (m, t) -> m.stop(); t.close() } }
+        onDispose { link?.let { (m, t) -> m.stop(); (t as? NearbyTransport)?.close(); (t as? RfcommTransport)?.close() } }
     }
     LaunchedEffect(link) {
         val m = link?.first ?: return@LaunchedEffect
@@ -182,7 +218,7 @@ fun PhoneLinkDialog(start: LinkMode, ed: Editor?, files: List<Outgoing>? = null,
 
     val pick = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
         if (uri == null) { if (!picked) close(); return@rememberLauncherForActivityResult }
-        val photo = readPhoto(ctx, uri)
+        val photo = readPhoto(ctx, uri, fullPhoto)
         if (photo == null) { note = T.t("Nie udało się wczytać zdjęcia.", "Could not read the photo."); return@rememberLauncherForActivityResult }
         note = null
         picked = true
@@ -209,7 +245,7 @@ fun PhoneLinkDialog(start: LinkMode, ed: Editor?, files: List<Outgoing>? = null,
             val result = link?.first?.pairResult
             if (digits != null && result != null) {
                 when {
-                    !store.save(result.pairKey, result.peerName) -> note = T.t("Nie udało się zapisać pary w magazynie kluczy urządzenia.", "Could not store the pairing in the device keystore.")
+                    !store.save(result.pairKey, result.peerName, (link?.second as? RfcommTransport)?.lastPeer?.address) -> note = T.t("Nie udało się zapisać pary w magazynie kluczy urządzenia.", "Could not store the pairing in the device keystore.")
                     start == LinkMode.PAIR -> close()
                     else -> { key = result.pairKey; mode = start; note = null }
                 }
@@ -218,7 +254,7 @@ fun PhoneLinkDialog(start: LinkMode, ed: Editor?, files: List<Outgoing>? = null,
         dismissText = if (received > 0 || imported > 0 || sentSome) T.t("Gotowe", "Done") else T.t("Zamknij", "Close"),
     ) {
         Column(Modifier.heightIn(max = 520.dp).verticalScroll(rememberScrollState())) {
-            if (!allowed) PermissionsPart(ctx, refused) { ask.launch(LinkPermissions.required(Build.VERSION.SDK_INT).toTypedArray()) }
+            if (!allowed) PermissionsPart(ctx, refused, missing(ctx, bt)) { ask.launch(required(bt).toTypedArray()) }
             else {
                 if (expired && mode == LinkMode.PAIR) Line(T.t("Para wygasła (np. po przywróceniu kopii zapasowej): połącz urządzenia jeszcze raz.", "The pairing expired (e.g. after restoring a backup): connect the devices again."))
                 else if (mode == LinkMode.PAIR && start != LinkMode.PAIR) Line(T.t("Najpierw połącz telefon z tabletem (raz).", "First connect the phone and the tablet (once)."))
@@ -229,6 +265,21 @@ fun PhoneLinkDialog(start: LinkMode, ed: Editor?, files: List<Outgoing>? = null,
                     }
                 }
                 if (digits != null) TextButton(onClick = { generation++ }) { Text(T.t("Inne cyfry? Połącz od nowa", "Different digits? Start over")) }
+                val rt = link?.second as? RfcommTransport
+                if (rt != null && mode == LinkMode.PAIR && digits == null) {
+                    if (role == SyncRole.CLIENT) {
+                        Line(T.t("Tablet sparowany w ustawieniach Bluetooth jest na liście od razu. Nie ma go? Na tablecie „Pokaż tablet”, tu „Szukaj w pobliżu”.", "A tablet paired in the Bluetooth settings is on the list right away. Not there? Tap “Make visible” on the tablet and “Search nearby” here."))
+                        TextButton(onClick = {
+                            if (missing(ctx, bt, discovery = true).isEmpty()) { if (!rt.searchNearby()) note = T.t("Szukanie nie ruszyło: włącz Bluetooth.", "Search did not start: turn on Bluetooth.") }
+                            else { extra = 1; ask.launch(required(bt, discovery = true).toTypedArray()) }
+                        }) { Text(T.t("Szukaj w pobliżu", "Search nearby")) }
+                    } else TextButton(onClick = {
+                        if (missing(ctx, bt, visible = true).isEmpty()) showTablet(ctx) else { extra = 2; ask.launch(required(bt, visible = true).toTypedArray()) }
+                    }) { Text(T.t("Pokaż tablet na 2 min", "Make the tablet visible for 2 min")) }
+                }
+                if (rt != null && (state as? LinkState.Problem)?.problem?.code == LinkErrors.BT_OFF) TextButton(onClick = {
+                    runCatching { ctx.startActivity(Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
+                }) { Text(T.t("Włącz Bluetooth", "Turn on Bluetooth")) }
             }
             note?.let { Line(it) }
             TextButton(onClick = { diagnostics = true }) { Text(T.t("Diagnostyka", "Diagnostics")) }
@@ -239,9 +290,9 @@ fun PhoneLinkDialog(start: LinkMode, ed: Editor?, files: List<Outgoing>? = null,
 
 /** Ekran „Dlaczego” przed prośbą systemową; po odmowie droga do ustawień aplikacji. */
 @Composable
-private fun PermissionsPart(ctx: Context, refused: Boolean, ask: () -> Unit) {
+private fun PermissionsPart(ctx: Context, refused: Boolean, missing: List<String>, ask: () -> Unit) {
     Status(Icons.Rounded.Lock, if (refused) T.t("Bez tych zgód urządzenia się nie znajdą.", "Without these permissions the devices cannot find each other.") else T.t("Łącze potrzebuje zgód Androida:", "The link needs Android permissions:"))
-    for (w in missing(ctx).map { LinkDiagnostics.why(it) }.distinct()) Line("• $w")
+    for (w in missing.map { LinkDiagnostics.why(it) }.distinct()) Line("• $w")
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         TextButton(onClick = ask) { Text(T.t("Pozwól", "Allow")) }
         if (refused) TextButton(onClick = {
@@ -342,6 +393,10 @@ fun NotebookSendDialog(close: () -> Unit, send: (Outgoing) -> Unit) {
     val scope = rememberCoroutineScope()
     var busy by remember { mutableStateOf<String?>(null) }
     var note by remember { mutableStateOf<String?>(null) }
+    val bt = remember { com.mdev.mnotes.lab.LabSettings.of(ctx).bluetooth }
+    // Bluetooth: najpierw rozmiar i czas, wysyłka po drugim stuknięciu (2e-B1).
+    var waiting by remember { mutableStateOf<Outgoing?>(null) }
+    DisposableEffect(Unit) { onDispose { waiting?.file?.delete() } }
     val list = app.repo.notebooks.filter { it.trashedAt == 0L }.sortedByDescending { it.modified }
     MDialog(T.t("Wyślij zeszyt", "Send a notebook"), close, dismissText = T.t("Anuluj", "Cancel")) {
         Column(Modifier.heightIn(max = 460.dp).verticalScroll(rememberScrollState())) {
@@ -350,8 +405,12 @@ fun NotebookSendDialog(close: () -> Unit, send: (Outgoing) -> Unit) {
                 else T.t("Wybierz zeszyt. Drugie urządzenie doda go jako nowy zeszyt (nic nie nadpisuje).", "Choose a notebook. The other device adds it as a new notebook (nothing is overwritten)."),
             )
             if (list.isEmpty()) Line(T.t("Nie ma jeszcze żadnego zeszytu.", "There are no notebooks yet."))
+            waiting?.let { w ->
+                TextButton(onClick = { waiting = null; send(w) }) { Text(T.t("Wyślij przez Bluetooth", "Send over Bluetooth")) }
+            }
             for (m in list) TextButton(onClick = {
                 if (busy != null) return@TextButton
+                waiting?.file?.delete(); waiting = null
                 busy = m.title
                 scope.launch {
                     val out = withContext(Dispatchers.IO) {
@@ -368,6 +427,12 @@ fun NotebookSendDialog(close: () -> Unit, send: (Outgoing) -> Unit) {
                     val size = out?.length() ?: 0L
                     when {
                         out == null || size == 0L -> { out?.delete(); note = T.t("Nie udało się przygotować zeszytu.", "Could not prepare the notebook.") }
+                        bt && size > BtLimits.NOTEBOOK_MAX -> { out.delete(); note = T.t("Zeszyt ma ${size shr 20} MB: przez Bluetooth to ok. ${BtLimits.seconds(size) / 60} min, łącze przyjmuje do ${BtLimits.NOTEBOOK_MAX shr 20} MB. Przełącz łącze na Nearby albo wyślij plik przez „Eksport i udostępnianie” (Quick Share).", "The notebook is ${size shr 20} MB: over Bluetooth that is about ${BtLimits.seconds(size) / 60} min; the link takes up to ${BtLimits.NOTEBOOK_MAX shr 20} MB. Switch the link to Nearby or send the file via “Export & share” (Quick Share).") }
+                        bt -> {
+                            waiting = Outgoing(m.title.take(60) + "." + ExportFormat.MNOTES.ext, ExportFormat.MNOTES.mime, LinkFile.Disk(out))
+                            val mb = "%.1f".format(size / 1048576.0)
+                            note = T.t("„${m.title}”: $mb MB, przez Bluetooth ok. ${BtLimits.seconds(size)} s.", "“${m.title}”: $mb MB, about ${BtLimits.seconds(size)} s over Bluetooth.")
+                        }
                         size > LinkMachine.FILE_MAX -> { out.delete(); note = T.t("Zeszyt ma ${size shr 20} MB, łącze przyjmuje do ${LinkMachine.FILE_MAX shr 20} MB. Wyślij go przez „Eksport i udostępnianie”.", "The notebook is ${size shr 20} MB; the link takes up to ${LinkMachine.FILE_MAX shr 20} MB. Send it via “Export & share”.") }
                         else -> send(Outgoing(m.title.take(60) + "." + ExportFormat.MNOTES.ext, ExportFormat.MNOTES.mime, LinkFile.Disk(out)))
                     }
@@ -405,18 +470,24 @@ fun DiagnosticsDialog(machine: LinkMachine?, close: () -> Unit) {
     }
 }
 
-/** Zdjęcie z galerii jako wiadomość: duże zmniejszone do 3000 px i JPEG 88 (szybciej przez Bluetooth). */
-private fun readPhoto(ctx: Context, uri: Uri): Outgoing? = runCatching {
+/**
+ * Zdjęcie z galerii jako wiadomość: dłuższy bok do [PhotoScale.LONGEST] px i JPEG 88 (przez Bluetooth kilka razy
+ * szybciej; wcześniej „do 3000 px” samym `inSampleSize`, więc 4000×3000 szło w pełnym rozmiarze). [full]: bez
+ * zmniejszania (przełącznik „pełna jakość”); JPEG i PNG idą wtedy bez przekodowania.
+ */
+private fun readPhoto(ctx: Context, uri: Uri, full: Boolean): Outgoing? = runCatching {
     val cr = ctx.contentResolver
     val mime = cr.getType(uri).orEmpty().ifEmpty { "image/jpeg" }
     val raw = cr.openInputStream(uri)?.use { it.readBytes() } ?: return null
     val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
     BitmapFactory.decodeByteArray(raw, 0, raw.size, bounds)
-    val small = raw.size <= 4 shl 20 && maxOf(bounds.outWidth, bounds.outHeight) <= 3000 && ("jpeg" in mime || "png" in mime)
-    if (small) return Outgoing(uri.lastPathSegment ?: "zdjecie", mime, LinkFile.Memory(raw))
-    var sample = 1
-    while (maxOf(bounds.outWidth, bounds.outHeight) / (sample * 2) >= 3000) sample *= 2
-    val bmp = BitmapFactory.decodeByteArray(raw, 0, raw.size, BitmapFactory.Options().apply { inSampleSize = sample }) ?: return null
+    val longest = if (full) Int.MAX_VALUE else PhotoScale.LONGEST
+    val plain = ("jpeg" in mime || "png" in mime) && (full || raw.size <= 4 shl 20 && maxOf(bounds.outWidth, bounds.outHeight) <= longest)
+    if (plain) return Outgoing(uri.lastPathSegment ?: "zdjecie", mime, LinkFile.Memory(raw))
+    val opts = BitmapFactory.Options().apply { inSampleSize = PhotoScale.sample(bounds.outWidth, bounds.outHeight, longest) }
+    var bmp = BitmapFactory.decodeByteArray(raw, 0, raw.size, opts) ?: return null
+    val (w, h) = PhotoScale.size(bmp.width, bmp.height, longest)
+    if (w != bmp.width || h != bmp.height) Bitmap.createScaledBitmap(bmp, w, h, true).let { if (it !== bmp) { bmp.recycle(); bmp = it } }
     val out = ByteArrayOutputStream()
     bmp.compress(Bitmap.CompressFormat.JPEG, 88, out)
     bmp.recycle()

@@ -260,3 +260,14 @@ class RfcommTransport(
 
     private companion object { val STOP = ByteArray(0) }
 }
+
+/**
+ * Zeszyty przez Bluetooth (2e-B1, założenie z decyzji Marcina): do [NOTEBOOK_MAX], z czasem podanym przed wysłaniem.
+ * [BYTES_PER_S]: środek 80–250 KB/s z analizy (§4.2) — **do zmierzenia na tablecie**.
+ */
+object BtLimits {
+    const val NOTEBOOK_MAX = 15L shl 20
+    const val BYTES_PER_S = 150_000L
+
+    fun seconds(bytes: Long): Long = maxOf(1L, (bytes + BYTES_PER_S - 1) / BYTES_PER_S)
+}

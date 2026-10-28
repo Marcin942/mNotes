@@ -36,12 +36,15 @@ object LinkPermissions {
      * 11 łączenie i nasłuch biorą `BLUETOOTH` z instalacji (bez pytania); lokalizacja tylko przy [discovery] („Szukaj w
      * pobliżu”): przybliżona do 9, dokładna 10–11. Od 12 jedno „Urządzenia w pobliżu”: CONNECT, SCAN przy szukaniu
      * (w manifeście `neverForLocation`, więc bez lokalizacji), ADVERTISE przy [visible] („Pokaż tablet na 2 min”).
+     * [scanForLocation]: manifest bez `neverForLocation` (wariant lab, bo Nearby skanuje BLE) — wtedy szukanie na 12+
+     * też potrzebuje dokładnej lokalizacji.
      */
-    fun rfcomm(sdk: Int, discovery: Boolean = false, visible: Boolean = false): List<String> = buildList {
+    fun rfcomm(sdk: Int, discovery: Boolean = false, visible: Boolean = false, scanForLocation: Boolean = false): List<String> = buildList {
         if (sdk >= 31) {
             add("android.permission.BLUETOOTH_CONNECT")
             if (discovery) add("android.permission.BLUETOOTH_SCAN")
             if (visible) add("android.permission.BLUETOOTH_ADVERTISE")
+            if (discovery && scanForLocation) { add(FINE); add(COARSE) }
         } else if (discovery) {
             if (sdk >= 29) add(FINE)
             add(COARSE)

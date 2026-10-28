@@ -40,7 +40,9 @@ class MathTextTest {
         assertEquals("10¹²·", c("10^12·"))
         assertEquals("x²y ", c("x^2y "))         // po „^” litera kończy wykładnik
         assertEquals("plik_2a.txt", c("plik_2a.txt"))   // po „_” nie — nazwy plików
-        assertEquals("img₂₀.jpg", c("img_20.jpg"))      // jak dotąd: indeks przed kropką
+        assertEquals("img_20.jpg", c("img_20.jpg"))     // 2c-A15: „_cyfry” przed „.litera” to nazwa pliku
+        assertEquals("img_20.", c("img_20."))           // kropka na końcu jeszcze czeka na następny znak
+        assertEquals("a₁₂. ", c("a_12. "))              // kropka kończąca zdanie: indeks
         assertEquals("a₁₀+b₂₃=", c("a_10+b_23="))
     }
 

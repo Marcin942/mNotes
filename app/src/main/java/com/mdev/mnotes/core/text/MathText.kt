@@ -83,7 +83,14 @@ object MathText {
                         if (n !in '0'..'9') j++
                         while (j < s.length && s[j] in '0'..'9') j++
                         val stop = s.getOrNull(j)
-                        val closed = if (stop == null) atEnd else c == '^' || !stop.isLetter()
+                        // 2c-A15: po „_” kropka z literą za nią to rozszerzenie pliku („img_20.jpg”), kropka na końcu jeszcze czeka.
+                        val dotThen = if (c == '_' && stop == '.') s.getOrNull(j + 1) else null
+                        val closed = when {
+                            stop == null -> atEnd
+                            c == '^' -> true
+                            stop == '.' -> if (dotThen == null) atEnd else !dotThen.isLetter()
+                            else -> !stop.isLetter()
+                        }
                         if (closed) { for (k in i + 1 until j) out.append(map(s[k]) ?: s[k]); i = j; continue }
                     } else if (n != null) {
                         val m = map(n)

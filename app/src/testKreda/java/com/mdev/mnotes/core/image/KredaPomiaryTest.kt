@@ -31,7 +31,7 @@ class KredaPomiaryTest {
 
     @Test
     fun measure() {
-        val dir = System.getenv("KREDA_DIR")?.let(::File)?.takeIf { it.isDirectory }
+        val dir = kredaEnv("KREDA_DIR")?.let(::File)?.takeIf { it.isDirectory }
         assumeTrue("brak KREDA_DIR", dir != null)
         val photos = dir!!.listFiles { f -> f.extension.lowercase() in setOf("jpg", "jpeg", "png") }.orEmpty().sortedBy { it.name }
         println("| zdjęcie | wynik px | próg | kreda % | kresek | śr. długość px | fragmenty < 10 px % | czas ms | maska bez ściany −% |")
@@ -49,14 +49,14 @@ class KredaPomiaryTest {
             val lens = lines.map { it.length() }
             val mean = if (lens.isEmpty()) 0.0 else lens.average()
             val frag = if (lens.isEmpty()) 0.0 else lens.count { it < 10f }.toDouble() / lens.size
-            System.getenv("KREDA_OUT")?.let { out -> dump(File(out, f.nameWithoutExtension + ".png"), photo, res.image, res.quad) }
+            kredaEnv("KREDA_OUT")?.let { out -> dump(File(out, f.nameWithoutExtension + ".png"), photo, res.image, res.quad) }
             // Ile maski tablicy odcięło przycięcie do zakresu pisma (BoardGeometry.clipToContent); 0, gdy nie zadziałało.
             val small = photo.fit(BoardGeometry.WORK)
             val clipped = BoardGeometry.boardMask(small, true)?.let { m ->
                 BoardGeometry.clipToContent(small, m, true)?.let { c -> 100.0 * (m.count { it } - c.count { it }) / m.count { it } }
             } ?: 0.0
             // Mapa śladów pisma na podglądzie (biało) w masce tablicy (granat) i granice przycięcia (czerwono).
-            System.getenv("KREDA_OUT")?.let { out ->
+            kredaEnv("KREDA_OUT")?.let { out ->
                 val m = BoardGeometry.boardMask(small, true) ?: return@let
                 val ink = BoardGeometry.inkMap(small, m, true)
                 val edges = BoardGeometry.clipEdges(small, m, true)
@@ -82,7 +82,7 @@ class KredaPomiaryTest {
      */
     @Test
     fun measureLocalCut() {
-        val dir = System.getenv("KREDA_DIR")?.let(::File)?.takeIf { it.isDirectory }
+        val dir = kredaEnv("KREDA_DIR")?.let(::File)?.takeIf { it.isDirectory }
         assumeTrue("brak KREDA_DIR", dir != null)
         val photos = dir!!.listFiles { f -> f.extension.lowercase() in setOf("jpg", "jpeg", "png") }.orEmpty().sortedBy { it.name }
         println("| zdjęcie | próg | niżej % | kreda % bez → z | widoczne % bez → z | kresek bez → z | śr. długość px bez → z | fragmenty % bez → z | Δ fragm. p.p. | czas ms bez → z |")
@@ -114,7 +114,7 @@ class KredaPomiaryTest {
             anyOff += a[5]; anyOn += b[5]
             println("| ${f.name} | ${"%.2f".format(src.autoCut)} | ${"%.0f".format(lowered)} | ${"%.1f → %.1f".format(a[0], b[0])} | ${"%.1f → %.1f".format(a[5], b[5])} | ${a[1].toInt()} → ${b[1].toInt()} | " +
                 "${"%.1f → %.1f".format(a[2], b[2])} | ${"%.0f → %.0f".format(a[3], b[3])} | ${"%+.1f".format(d)} | ${a[4].toInt()} → ${b[4].toInt()} |")
-            System.getenv("KREDA_OUT")?.let { out -> dumpLocal(File(out, f.nameWithoutExtension + "-lokalny.png"), row[0].second, row[1].second) }
+            kredaEnv("KREDA_OUT")?.let { out -> dumpLocal(File(out, f.nameWithoutExtension + "-lokalny.png"), row[0].second, row[1].second) }
         }
         val n = max(1, photos.size)
         println("| **średnio (${photos.size})** | | ${"%.0f".format(sumLowered / n)} | ${"%.1f → %.1f".format(sum[0] / n, sum[4] / n)} | ${"%.1f → %.1f".format(anyOff / n, anyOn / n)} | ${"%.0f → %.0f".format(sum[1] / n, sum[5] / n)} | " +

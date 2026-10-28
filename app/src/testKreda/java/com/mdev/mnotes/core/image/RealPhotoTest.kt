@@ -18,7 +18,7 @@ import kotlin.math.max
  */
 class RealPhotoTest {
     private val photos: List<File> by lazy {
-        val dir = System.getenv("KREDA_DIR")?.let(::File)?.takeIf { it.isDirectory } ?: return@lazy emptyList()
+        val dir = kredaEnv("KREDA_DIR")?.let(::File)?.takeIf { it.isDirectory } ?: return@lazy emptyList()
         dir.listFiles { f -> f.extension.lowercase() in setOf("jpg", "jpeg", "png") }.orEmpty().sortedBy { it.name }.take(MAX_PHOTOS)
     }
 
@@ -111,7 +111,7 @@ class RealPhotoTest {
 
     @Test
     fun grayBoardRuleKeepsEveryRealBoardTheOldRuleFound() {
-        val dir = System.getenv("KREDA_DIR")?.let(::File)?.takeIf { it.isDirectory }
+        val dir = kredaEnv("KREDA_DIR")?.let(::File)?.takeIf { it.isDirectory }
         val all = dir?.listFiles { f -> f.extension.lowercase() in setOf("jpg", "jpeg", "png") }.orEmpty().sortedBy { it.name }
         assumeTrue("brak KREDA_DIR (katalog ze zdjęciami tablicy)", all.isNotEmpty())
         var old = 0; var now = 0

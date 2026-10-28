@@ -117,7 +117,7 @@ class ChalkPaperTest {
      */
     @Test
     fun pdfCoverIsABoardAndReadableOnWhitePaper() {
-        val files = System.getenv("KREDA_EXTRA")?.split(':')?.map(::File)?.filter { it.isFile }.orEmpty()
+        val files = kredaEnv("KREDA_EXTRA")?.split(':')?.map(::File)?.filter { it.isFile }.orEmpty()
         assumeTrue("brak KREDA_EXTRA (okładka PDF)", files.isNotEmpty())
         val out = File("build/kreda-papier").apply { mkdirs() }
         for (f in files) {

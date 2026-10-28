@@ -184,9 +184,93 @@ object BoardGeometry {
         var i = 0
         for (p in mask.indices) if (mask[p]) { xs[i] = p % small.w; ys[i] = p / small.w; i++ }
         // Skrajne piksele plamy leżą na samej krawędzi tablicy; wcięcie o 1.5 piksela podglądu odcina pasek ściany,
-        // który po prostowaniu dawałby jasną ramkę dookoła kredy.
-        val q = Quad.ofExtremes(xs, ys, n).inset(1.5f).scaled(k)
+        // który po prostowaniu dawałby jasną ramkę dookoła kredy. Boki dopasowane prostymi ([fitSides]), bo skrajne
+        // punkty ciągnie każdy wybrzuszony kawałek maski (osoba przy tablicy, głowy).
+        val rough = Quad.ofExtremes(xs, ys, n)
+        // Drugi przebieg od dopasowanego czworokąta: punkty brzegu dzielą się między boki już bez wpływu wybrzuszenia.
+        val fitted = fitSides(mask, small.w, small.h, rough)?.let { fitSides(mask, small.w, small.h, it) ?: it }
+        val q = (fitted ?: rough).inset(1.5f).scaled(k)
         return if (q.isConvex()) q else Quad.full(src.w, src.h)
+    }
+
+    /** Punkt brzegu maski leży na prostej boku, gdy jest od niej najwyżej o tyle pikseli podglądu. */
+    const val SIDE_TOL = 1.5f
+
+    /** Prosta boku liczy się, gdy leży na niej co najmniej tyle długości boku (inaczej bok zostaje z [Quad.ofExtremes]). */
+    const val SIDE_SUPPORT = 0.35f
+
+    /** Bok dopasowany może odchylić się od zgrubnego najwyżej o tyle stopni. */
+    const val SIDE_TURN = 35.0
+
+    /**
+     * Narożniki z prostych boków (3c-B1): brzeg maski dzielony między boki zgrubnego czworokąta [rough] (najbliższy bok),
+     * dla każdego boku prosta z największą liczbą punktów brzegu w paśmie [SIDE_TOL] (RANSAC, losowanie powtarzalne),
+     * narożniki z przecięć sąsiednich prostych. Wybrzuszenie maski (osoba, głowy, kawałek ściany) ma mniej punktów na
+     * jednej prostej niż prawdziwa krawędź tablicy, więc go nie ciągnie. `null`, gdy wynik jest niewiarygodny.
+     */
+    fun fitSides(mask: BooleanArray, w: Int, h: Int, rough: Quad): Quad? {
+        val bx = ArrayList<Int>(); val by = ArrayList<Int>()
+        for (y in 0 until h) for (x in 0 until w) {
+            val i = y * w + x
+            if (!mask[i]) continue
+            if (x == 0 || y == 0 || x == w - 1 || y == h - 1 || !mask[i - 1] || !mask[i + 1] || !mask[i - w] || !mask[i + w]) { bx += x; by += y }
+        }
+        if (bx.size < 20) return null
+        val side = Array(4) { ArrayList<Int>() }
+        for (p in bx.indices) {
+            var best = 0; var bestD = Float.MAX_VALUE
+            for (s in 0 until 4) {
+                val d = segDist(rough, s, bx[p].toFloat(), by[p].toFloat())
+                if (d < bestD) { bestD = d; best = s }
+            }
+            side[best] += p
+        }
+        val rnd = java.util.Random(7)
+        val lines = Array(4) { s ->
+            val ax = rough.x(s); val ay = rough.y(s); val cx = rough.x((s + 1) % 4); val cy = rough.y((s + 1) % 4)
+            val len = hypot(cx - ax, cy - ay)
+            val dir = Math.atan2((cy - ay).toDouble(), (cx - ax).toDouble())
+            val pts = side[s]
+            var best: FloatArray? = null; var bestN = 0
+            if (pts.size >= 2) repeat(300) {
+                val p = pts[rnd.nextInt(pts.size)]; val q = pts[rnd.nextInt(pts.size)]
+                val dx = (bx[q] - bx[p]).toFloat(); val dy = (by[q] - by[p]).toFloat()
+                val l = hypot(dx, dy)
+                if (l < 0.15f * len) return@repeat
+                var turn = abs(Math.toDegrees(Math.atan2(dy.toDouble(), dx.toDouble()) - dir)) % 180.0
+                if (turn > 90) turn = 180 - turn
+                if (turn > SIDE_TURN) return@repeat
+                // Prosta a·x + b·y = c z normalną jednostkową.
+                val a = -dy / l; val b = dx / l; val c = a * bx[p] + b * by[p]
+                var n = 0
+                for (r in pts) if (abs(a * bx[r] + b * by[r] - c) <= SIDE_TOL) n++
+                if (n > bestN) { bestN = n; best = floatArrayOf(a, b, c) }
+            }
+            if (best != null && bestN >= SIDE_SUPPORT * len) best
+            else { val dx = cx - ax; val dy = cy - ay; val a = -dy / len; val b = dx / len; floatArrayOf(a, b, a * ax + b * ay) }
+        }
+        val out = FloatArray(8)
+        for (i in 0 until 4) {
+            val p = cross(lines[(i + 3) % 4], lines[i]) ?: return null
+            if (p[0] < -0.1f * w || p[0] > 1.1f * w || p[1] < -0.1f * h || p[1] > 1.1f * h) return null
+            out[2 * i] = p[0]; out[2 * i + 1] = p[1]
+        }
+        return Quad(out).takeIf { it.isConvex() }
+    }
+
+    /** Odległość punktu od odcinka boku [s] czworokąta [q]. */
+    private fun segDist(q: Quad, s: Int, x: Float, y: Float): Float {
+        val ax = q.x(s); val ay = q.y(s); val bx = q.x((s + 1) % 4); val by = q.y((s + 1) % 4)
+        val dx = bx - ax; val dy = by - ay
+        val t = (((x - ax) * dx + (y - ay) * dy) / (dx * dx + dy * dy).coerceAtLeast(1e-6f)).coerceIn(0f, 1f)
+        return hypot(ax + t * dx - x, ay + t * dy - y)
+    }
+
+    /** Przecięcie prostych a·x + b·y = c; null dla równoległych. */
+    private fun cross(l: FloatArray, m: FloatArray): FloatArray? {
+        val det = l[0] * m[1] - l[1] * m[0]
+        if (abs(det) < 1e-6f) return null
+        return floatArrayOf((l[2] * m[1] - l[1] * m[2]) / det, (l[0] * m[2] - l[2] * m[0]) / det)
     }
 
     /** Wiersz (kolumna) „ma pismo”, gdy ma co najmniej tyle śladów co typowy zapisany wiersz (75. percentyl). */

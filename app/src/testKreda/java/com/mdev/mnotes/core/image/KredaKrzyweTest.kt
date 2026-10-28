@@ -47,12 +47,12 @@ class KredaKrzyweTest {
         fun images(f: File): List<File> =
             if (f.isDirectory) f.listFiles { x -> x.extension.lowercase() in setOf("jpg", "jpeg", "png") }.orEmpty().sortedBy { it.name }
             else if (f.isFile) listOf(f) else emptyList()
-        val dir = System.getenv("KREDA_DIR")?.let { images(File(it)) }.orEmpty()
-        val extra = System.getenv("KREDA_EXTRA")?.split(File.pathSeparator)?.filter { it.isNotBlank() }?.flatMap { images(File(it)) }.orEmpty()
+        val dir = kredaEnv("KREDA_DIR")?.let { images(File(it)) }.orEmpty()
+        val extra = kredaEnv("KREDA_EXTRA")?.split(File.pathSeparator)?.filter { it.isNotBlank() }?.flatMap { images(File(it)) }.orEmpty()
         return dir + extra
     }
 
-    private fun outDir(): File = File(System.getenv("KREDA_OUT")?.let { "$it/krzywe" } ?: "build/kreda-krzywe")
+    private fun outDir(): File = File(kredaEnv("KREDA_OUT")?.let { "$it/krzywe" } ?: "build/kreda-krzywe")
 
     /** Łamane i krzywe jednego obrazu kredy: miary obu i czasy (ms) liczenia samej geometrii. */
     private class Both(val lines: List<ChalkLine>, val polys: List<FloatArray>, val curves: List<FloatArray?>) {

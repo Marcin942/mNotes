@@ -263,4 +263,22 @@ class BoardPipelineTest {
         assertEquals(261, res.image.w)
         assertEquals(0, res.image.px.count { Raster.alpha(it) > 0 })
     }
+
+    /** 3c-B1: wybrzuszenie maski (osoba przy tablicy) nie ciągnie narożnika; boki idą po prostych krawędziach tablicy. */
+    @Test
+    fun bulgeOnTheSideDoesNotPullTheCorner() {
+        val w = 400; val h = 225
+        val mask = BooleanArray(w * h) { i ->
+            val x = i % w; val y = i / w
+            val board = x in 60..330 && y in 10..180
+            val person = x in 300..395 && y in 120..220 && (x - 345) * (x - 345) + (y - 170) * (y - 170) < 2500
+            board || person
+        }
+        val rough = Quad.ofExtremes(IntArray(mask.count { it }).also { a -> var j = 0; for (i in mask.indices) if (mask[i]) a[j++] = i % w },
+            IntArray(mask.count { it }).also { a -> var j = 0; for (i in mask.indices) if (mask[i]) a[j++] = i / w }, mask.count { it })
+        assertTrue("zgrubny narożnik ciągnie osoba", rough.x(2) > 345f)
+        val q = BoardGeometry.fitSides(mask, w, h, rough)!!
+        val want = floatArrayOf(60f, 10f, 330f, 10f, 330f, 180f, 60f, 180f)
+        for (k in 0 until 8) assertEquals("współrzędna $k", want[k], q.pts[k], 2f)
+    }
 }

@@ -22,6 +22,25 @@ import com.mdev.mnotes.core.search.SettingsQuery
  */
 internal val LocalSettingsQuery = staticCompositionLocalOf<SettingsQuery?> { null }
 
+/** 3c-A6: dokąd wiersz zgłasza swój wynik ([SettingsQuery.score]) — kolejność kategorii w wynikach wyszukiwania. */
+internal val LocalScoreSink = staticCompositionLocalOf<((Int) -> Unit)?> { null }
+
+/**
+ * 3c-A6: słowa ekranu Ustawień (etykiety, klucze, tytuły grup) do poprawiania literówek. Zbierane z samych wierszy przy
+ * wyszukiwaniu — osobna lista rozjechałaby się z ekranem, a tak zawiera dokładnie to, co da się znaleźć.
+ */
+internal object SearchVocab {
+    private val seen = HashSet<String>()
+    private var cached: List<Pair<String, String>> = emptyList()
+    private var dirty = false
+    val size: Int get() = seen.size
+    fun note(vararg texts: String) { for (t in texts) if (t.isNotBlank() && seen.add(t)) dirty = true }
+    fun words(): List<Pair<String, String>> {
+        if (dirty) { cached = com.mdev.mnotes.core.search.SettingsPhrases.vocabulary(seen); dirty = false }
+        return cached
+    }
+}
+
 /** Tytuł bieżącej grupy z synonimami: dopasowanie wiersza liczy się razem z nim („gumka rozmiar”). */
 private val LocalGroupTitle = compositionLocalOf { "" }
 
@@ -31,9 +50,12 @@ private val LocalGroupHit = compositionLocalOf { false }
 @Composable
 internal fun GroupSearchScope(title: String, keys: String, content: @Composable () -> Unit) {
     val q = LocalSettingsQuery.current
+    if (q != null) SearchVocab.note(title, keys)
+    val s = q?.score(title, keys) ?: 0
+    if (s > 0) LocalScoreSink.current?.invoke(s)
     androidx.compose.runtime.CompositionLocalProvider(
         LocalGroupTitle provides "$title $keys",
-        LocalGroupHit provides (q != null && q.matches(title, keys)),
+        LocalGroupHit provides (s > 0),
         content = content,
     )
 }
@@ -42,7 +64,10 @@ internal fun GroupSearchScope(title: String, keys: String, content: @Composable 
 @Composable
 internal fun rowVisible(label: String, keys: String = ""): Boolean {
     val q = LocalSettingsQuery.current ?: return true
-    return q.matches(LocalGroupTitle.current, label, keys)
+    SearchVocab.note(label, keys)
+    val s = q.score(LocalGroupTitle.current, label, keys)
+    if (s > 0) LocalScoreSink.current?.invoke(s)
+    return s > 0
 }
 
 /** Etykieta z podświetlonymi trafieniami (bez zapytania: zwykły tekst). */

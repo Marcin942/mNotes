@@ -3111,11 +3111,17 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
         c.scale(z, z)
         c.translate(-zw.x, -zw.y)
         c.clipRect(0f, 0f, spec.w, spec.h)
+        // 3c-A1: okno powiększenia pokazuje stronę w tym samym trybie (ciemny/jasny) co główny widok.
+        val th = themeFor(spec)
+        renderer.theme = th; renderer.themePhotos = settings.pageThemePhotos
         renderer.drawPaper(c, spec, z, cache.backdrop(page))
         renderer.drawElements(c, doc.id, doc.content(page), 0, Bounds(zw.x, zw.y, zw.x + rw, zw.y + rh), z, false, spec.darkPaper)
+        renderer.theme = null
         if (liveActive && livePage == zwPage) {
-            if (shapeSnapped) renderer.drawStrokeData(c, builder.penKind, builder.penColor, builder.width, shapePts, shapePts.size / 3, z, spec.darkPaper, shapePoly, builder.line, true)
-            else renderer.drawStrokeData(c, builder.penKind, builder.penColor, builder.width, builder.pts, builder.count, z, spec.darkPaper, line = builder.line)
+            val col = if (th == null) builder.penColor else if (builder.penKind == PenKind.HIGHLIGHTER) th.highlighter(builder.penColor) else th.ink(builder.penColor)
+            val dk = th?.toDark ?: spec.darkPaper
+            if (shapeSnapped) renderer.drawStrokeData(c, builder.penKind, col, builder.width, shapePts, shapePts.size / 3, z, dk, shapePoly, builder.line, true)
+            else renderer.drawStrokeData(c, builder.penKind, col, builder.width, builder.pts, builder.count, z, dk, line = builder.line)
         }
         c.restore()
 
@@ -3406,7 +3412,10 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
         c.save()
         c.translate(layout.left(ghostPage), layout.top(ghostPage))
         c.clipRect(0f, 0f, spec.w, spec.h)
+        // 3c-A1: duch zasłania stare kafelki — bez przekształcenia trybu ciemnego biały obiekt błyskał tu na biało.
+        renderer.theme = themeFor(spec); renderer.themePhotos = settings.pageThemePhotos
         for (el in ghostEls) renderer.drawElement(c, doc.id, el, zoom, false, spec.darkPaper)
+        renderer.theme = null
         c.restore()
         postInvalidateOnAnimation()
     }

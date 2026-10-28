@@ -438,6 +438,14 @@ Na starcie (`noc/wszystko` @ `471ed08`): lab 696 testów, 0 porażek.
   6. Zeszyt 5 MB: przed wysłaniem „ok. 35 s”; prawdziwy czas do porównania. Zeszyt > 15 MB → odmowa.
   7. Para zrobiona przez Nearby, potem przełącznik na Bluetooth → zdjęcie dochodzi (telefon próbuje sparowanych).
   8. Android ≤ 11, jeśli jest: „Szukaj w pobliżu” pyta o lokalizację, lista sparowanych bez pytania.
+- **2c-B9 próg lokalny kredy** (`c2bfdbd`): `Chalk.localCut` (średnia + 2σ w oknie 1/16 szerokości, 0,6…1 × próg
+  globalny, tylko obniża), za przełącznikiem „Próg lokalny (blade litery w spokojnych miejscach)”, **domyślnie
+  wyłączony**. Powód: na 24 zdjęciach prawie bez zysku (widoczne piksele 5,2 → 5,6 %, kreda % i kreski bez zmian, żadna
+  nowa litera na podglądzie), a jedno zdjęcie +1,1 p.p. fragmentów (> 1 p.p. z planu). Tabela i warianty K w
+  `docs/KREDA-POMIARY.md`. Test `FaintAndFramesTest.localCutBringsBackFaintLetterOnlyWhereTheBoardIsQuiet`. Pełne testy:
+  core 806, lab 890, 0 porażek, oba APK. **Na tablecie:** zdjęcie szarej tablicy z bladym pismem (jak okładka) →
+  panel kredy → włączyć „Próg lokalny” → czy wracają blade litery, czy tylko szum; czas podglądu po przełączeniu.
+- **Lista 2c-B wyczerpana** (B1–B11; B7, B8, B10, B11 w mLabs na `noc/wszystko`, opis w `mLabs/docs/NOTATKI-NOC.md`).
 
 ### Co Marcin ma sprawdzić na tablecie — wariant lab, po fazie 2 (kolejność)
 

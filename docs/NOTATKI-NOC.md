@@ -764,3 +764,14 @@ zablokowane uprawnieniami, więc kodu nie zbudowano ani nie przetestowano. Do zr
 „Nauka: …”. Punkty (1) i (2) wymagają Gradle, którego ta sesja nie może uruchomić (odmowa uprawnień) — niewykonalne tutaj.
 W katalogu są obce, niezacommitowane zmiany w `ui/EditorDialogs.kt`, `ui/Keymap.kt`, `ui/PagesPanel.kt` (nie moje,
 zostawione). Dysk 12 GB wolne, RAM 24 GB.
+
+**28.10, 11:36 (Agent A, po restarcie) — FB7 statystyki zeszytu** — `noc/f2c-statystyki` (od `wip/f2c-statystyki`, logika
+z poprzedniej sesji poprawiona: format tygodnia i czasu w `Locale.ROOT`, nowe `ActiveTime.recent`). `NotebookStatsTest` (9):
+liczenie pisma/kształtów/słów/obrazów i długości atramentu, czas z odstępów (przerwa > 2 min i cofnięty zegar → 5 s),
+klucze tygodni ISO przez przełom roku (1.01.2027 = 2026-W53), limit 12 tygodni, zapis/odczyt z pominięciem uszkodzeń.
+Testy: core 802, lab 869, 0 porażek, oba APK debug. **Nie sprawdzone:** okno tylko kompilacja (bez tabletu).
+**Wygląd:** `MDialog` „Statystyki zeszytu” z tytułem zeszytu, sekcje „Treść” i „Czas pisania” (wiersze etykieta → wartość
+w kolorze akcentu) i 8 słupków tygodni podpisanych datą poniedziałku, bieżący tydzień pełnym akcentem.
+**Tablet:** otwórz zeszyt z pismem → „⋮” → Widok → „Statystyki zeszytu…” → liczby stron, kresek, słów; popisz 2–3 minuty
+bez dłuższych przerw → zamknij i otwórz okno jeszcze raz → „Ten tydzień” ok. 2–3 min, prawy słupek urósł; przerwa 5 min
+i jedna kreska → czas rośnie najwyżej o kilka sekund. Ctrl+K → „statystyki” też otwiera okno.

@@ -2717,6 +2717,7 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
         if (stroke == null || pi !in doc.pages.indices) return
         val page = doc.pages[pi]
         ed.exec(DocEdit.Elements(page.id, ElementsEdit.add(doc.content(page), listOf(stroke))))
+        ed.noteWriting()
         // Kształt (i krzywa) z uchwytami od razu zaznaczony — niebieskie punkty pozwalają go przekształcić.
         if (snapped && !quiet) ed.select(page.id, setOf(stroke.id))
     }

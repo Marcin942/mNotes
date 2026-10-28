@@ -6,6 +6,7 @@ import com.mdev.mnotes.core.model.Stroke
 import com.mdev.mnotes.core.model.TextBox
 import java.time.LocalDate
 import java.time.temporal.IsoFields
+import java.util.Locale
 import kotlin.math.hypot
 
 /**
@@ -66,11 +67,15 @@ object ActiveTime {
 
     /** Ile doliczyć za kreskę skończoną w [now], gdy poprzednia była w [last] (0 — pierwsza w tym otwarciu). */
     fun credit(last: Long, now: Long): Long =
-        if (last <= 0L || now < last || now - last > IDLE_MS) FIRST_MS else maxOf(now - last, 0L)
+        if (last <= 0L || now < last || now - last > IDLE_MS) FIRST_MS else now - last
 
-    /** Tydzień ISO jako klucz „2026-W44”; zero wiodące, żeby klucze sortowały się jak daty. */
+    /** Tydzień ISO jako klucz „2026-W44”; zero wiodące, żeby klucze sortowały się jak daty (Locale.ROOT: cyfry ASCII). */
     fun weekKey(d: LocalDate): String =
-        "%d-W%02d".format(d.get(IsoFields.WEEK_BASED_YEAR), d.get(IsoFields.WEEK_OF_WEEK_BASED_YEAR))
+        String.format(Locale.ROOT, "%d-W%02d", d.get(IsoFields.WEEK_BASED_YEAR), d.get(IsoFields.WEEK_OF_WEEK_BASED_YEAR))
+
+    /** [n] ostatnich tygodni do [today] włącznie, od najstarszego; tydzień bez pisania ma 0 (słupek w oknie jest pusty). */
+    fun recent(weeks: Map<String, Long>, today: LocalDate, n: Int): List<Pair<String, Long>> =
+        (n - 1 downTo 0).map { weekKey(today.minusWeeks(it.toLong())) }.map { it to (weeks[it] ?: 0L) }
 
     /** Dolicza [ms] do tygodnia [week] i zostawia [keep] najnowszych tygodni. */
     fun add(weeks: Map<String, Long>, week: String, ms: Long, keep: Int = KEEP_WEEKS): Map<String, Long> {
@@ -104,12 +109,12 @@ object ActiveTime {
     }
 
     /** „1 h 05 min”, „12 min”, „< 1 min” — do okna statystyk. */
-    fun format(ms: Long, pl: Boolean = true): String {
+    fun format(ms: Long): String {
         val min = ms / 60_000L
         return when {
-            min < 1 -> if (pl) "< 1 min" else "< 1 min"
+            min < 1 -> "< 1 min"
             min < 60 -> "$min min"
-            else -> "${min / 60} h %02d min".format(min % 60)
+            else -> String.format(Locale.ROOT, "%d h %02d min", min / 60, min % 60)
         }
     }
 }

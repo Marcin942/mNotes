@@ -139,6 +139,7 @@ object CmdDefs {
         CmdDef("addPage", 3, "Dodaj stronę", "Add page", "Ctrl+Shift+N"),
         CmdDef("bookmark", 3, "Przełącz zakładkę strony", "Toggle page bookmark", "Ctrl+B"),
         CmdDef("pageTags", 3, "Tagi tej strony… (#definicja, #zadanie)", "Tags of this page… (#definition, #exercise)", ""),
+        CmdDef("notebookStats", 3, "Statystyki zeszytu… (strony, słowa, czas pisania)", "Notebook statistics… (pages, words, writing time)", ""),
         CmdDef("copyPage", 3, "Kopiuj stronę", "Copy page", "Ctrl+Shift+C"),
         CmdDef("copyPageImage", 3, "Kopiuj stronę jako obraz (do schowka)", "Copy page as image (to clipboard)", ""),
         CmdDef("cutPage", 3, "Wytnij stronę", "Cut page"),

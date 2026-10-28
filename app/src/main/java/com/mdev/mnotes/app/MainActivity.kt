@@ -272,6 +272,7 @@ open class MainActivity : FragmentActivity() {
     override fun onStop() {
         super.onStop()
         ui.editor?.doc?.flush()
+        ui.editor?.flushWriting()
         if (!isChangingConfigurations) app.sync.auto()
         if (!isChangingConfigurations && app.settings.appLock) ui.locked = true
     }

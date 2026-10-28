@@ -54,6 +54,7 @@ import com.mdev.mnotes.core.model.Ids
 import com.mdev.mnotes.core.model.TapeEl
 import com.mdev.mnotes.data.Bookmark
 import com.mdev.mnotes.core.search.TextSearch
+import com.mdev.mnotes.core.stats.ActiveTime
 import com.mdev.mnotes.data.NotebookDoc
 import com.mdev.mnotes.data.PageState
 import com.mdev.mnotes.data.newId
@@ -1420,7 +1421,25 @@ class Editor(val ctx: Context, val nbId: String) {
     /** Strona do okna tagów (z menu miniatury albo „⋮” edytora); null = okno zamknięte. */
     var tagsFor by mutableStateOf<String?>(null)
 
+    // — Statystyki zeszytu (FB7) —
+    var statsOpen by mutableStateOf(false)
+    private var lastInkAt = 0L
+    private var writingPending = 0L
+
+    /** Kreska skończona: dolicza czas pisania; do preferencji co minutę i przy zamknięciu, nie przy każdej kresce. */
+    fun noteWriting(now: Long = System.currentTimeMillis()) {
+        writingPending += ActiveTime.credit(lastInkAt, now)
+        lastInkAt = now
+        if (writingPending >= 60_000L) flushWriting()
+    }
+
+    fun flushWriting() {
+        settings.addWriting(nbId, ActiveTime.weekKey(java.time.LocalDate.now()), writingPending)
+        writingPending = 0L
+    }
+
     fun close() {
+        flushWriting()
         doc.flush()
         doc.setLastPage(pageIndex)
         view?.dispose()

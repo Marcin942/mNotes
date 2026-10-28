@@ -220,6 +220,56 @@ class LinkMachineTest {
         assertEquals(2, phone.log.count { it.text.startsWith("połączono") })
     }
 
+    private fun threePhotos() = (1..3).map { n -> ByteArray(700_000).also { Random(10L + n).nextBytes(it) } }
+
+    private fun hashes(b: List<ByteArray>) = b.map { SyncCrypto.sha256(it).toList() }
+
+    @Test
+    fun stuckPhotoStaysFirstInTheQueueAndTryAgainResendsOverTheOpenLink() {
+        val key = pairKey()
+        val tSeen = Seen(); val pSeen = Seen()
+        val tablet = machine(air.end("tablet"), LinkMode.RECEIVE, SyncRole.HOST, "T", key, tSeen)
+        val phone = machine(air.end("telefon"), LinkMode.SEND, SyncRole.CLIENT, "P", key, pSeen)
+        val photos = threePhotos()
+        // W połowie zdjęcia 2 z 3 eter milknie: po 4 częściach (3 zdjęcia 1 + pierwsza zdjęcia 2) części z telefonu
+        // giną, a łącze formalnie trwa. Tak wygląda zawieszone Nearby: brak potwierdzeń, brak onDisconnected.
+        var parts = 0
+        var silent = true
+        air.drop = { from, bytes -> from.id == "telefon" && bytes.size > 100_000 && ++parts > 4 && silent }
+        tablet.start(); phone.start()
+        photos.forEachIndexed { i, b -> phone.sendPhoto("t$i.jpg", "image/jpeg", b) }
+        run(tablet, phone, step = 2_000) { phone.state is LinkState.Problem }
+        assertTrue(!(phone.state as LinkState.Problem).retrying)
+        assertEquals(1, tSeen.photos.size)
+        // bez „Spróbuj ponownie” nic nie rusza: zdjęcie 3 nie wyprzedza utkniętego 2
+        now += 60_000; phone.tick(); tablet.tick(); air.pump()
+        assertTrue(phone.state is LinkState.Problem)
+        silent = false
+        phone.retry()
+        assertTrue(phone.state !is LinkState.Searching)
+        run(tablet, phone) { pSeen.sent.size == 3 }
+        assertEquals(hashes(photos), hashes(tSeen.photos.map { it.bytes }))
+        assertEquals(1, phone.log.count { it.text.startsWith("połączono") })  // ta sama sesja, bez szukania
+        assertTrue(phone.log.any { it.text.contains("runda 1") })
+    }
+
+    @Test
+    fun cutInTheMiddleOfPhotoTwoOfThreeDeliversEachPhotoOnce() {
+        val key = pairKey()
+        val tSeen = Seen(); val pSeen = Seen()
+        val tEnd = air.end("tablet")
+        val tablet = machine(tEnd, LinkMode.RECEIVE, SyncRole.HOST, "T", key, tSeen)
+        val phone = machine(air.end("telefon"), LinkMode.SEND, SyncRole.CLIENT, "P", key, pSeen)
+        val photos = threePhotos()
+        var parts = 0
+        air.drop = { from, bytes -> if (from.id == "telefon" && bytes.size > 100_000 && ++parts == 5) air.cut(tEnd); false }
+        tablet.start(); phone.start()
+        photos.forEachIndexed { i, b -> phone.sendPhoto("t$i.jpg", "image/jpeg", b) }
+        run(tablet, phone) { pSeen.sent.size == 3 }
+        assertEquals(hashes(photos), hashes(tSeen.photos.map { it.bytes }))
+        assertEquals(2, phone.log.count { it.text.startsWith("połączono") })
+    }
+
     @Test
     fun locationServiceOffIsASetupProblemNotARetryLoop() {
         val phone = machine(air.end("telefon"), LinkMode.SEND, SyncRole.CLIENT, "P", ByteArray(32))

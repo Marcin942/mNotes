@@ -70,6 +70,17 @@ class PhotoSender(
         for (i in 0 until count) if (!acked[i]) { sentAt[i] = -1L; tries[i] = 0 }
     }
 
+    /** Ile razy zdjęcie utknęło ([failed]) i wróciło do kolejki. */
+    var rounds = 0
+        private set
+
+    /** Zdjęcie po [failed] wraca do gry: niepotwierdzone części dostają znów [MAX_TRIES] prób, potwierdzone zostają. */
+    fun rearm() {
+        failed = false
+        rounds++
+        reset()
+    }
+
     companion object {
         /** 256 KB: z zapasem pod `ConnectionsClient.MAX_BYTES_DATA_SIZE` (1 047 552 B) po szyfrowaniu i nagłówku. */
         const val PART = 256 * 1024

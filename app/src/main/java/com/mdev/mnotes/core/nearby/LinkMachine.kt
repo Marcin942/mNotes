@@ -85,6 +85,8 @@ class LinkMachine(
     private var helloSent = false
     private val outbox = ArrayDeque<PhotoSender>()
     private var current: PhotoSender? = null
+    /** Zdjęcie utknęło: wysyłanie czeka na „Spróbuj ponownie” albo nowe połączenie (inaczej następne by je wyprzedziło). */
+    private var held = false
     private val receiver = PhotoReceiver(FILE_MAX)
     private var sentCount = 0
     private var receivedCount = 0
@@ -115,8 +117,19 @@ class LinkMachine(
         connect(id)
     }
 
-    /** „Spróbuj ponownie” po problemie z ustawieniami albo uprawnieniami. */
-    fun retry() { if (running) search() }
+    /**
+     * „Spróbuj ponownie”: przy gotowym łączu wznawia wysyłkę utkniętego zdjęcia (bez szukania, które przy otwartym
+     * łączu wisiałoby na „Szukam…”); w trakcie łączenia zaczyna od nowa; bez łącza szuka.
+     */
+    fun retry() {
+        if (!running) return
+        val c = codec
+        when {
+            endpoint != null && c != null && c.ready && helloSent -> { held = false; record("ponawiam wysyłkę"); ready() }
+            endpoint != null -> restart("ponowienie na prośbę")
+            else -> search()
+        }
+    }
 
     /**
      * Kolejka plików do wysłania (zdjęcia z telefonu, zeszyty `.mnotes`); wychodzą po kolei, gdy łącze jest gotowe.
@@ -276,7 +289,7 @@ class LinkMachine(
     /** Wysyła należne części bieżącego zdjęcia i aktualizuje postęp; bierze następne zdjęcie z kolejki. */
     private fun pump() {
         val c = codec ?: return
-        if (!c.ready || !helloSent || endpoint == null) return
+        if (!c.ready || !helloSent || endpoint == null || held) return
         if (current == null) current = outbox.removeFirstOrNull()
         val s = current
         if (s == null) {
@@ -285,8 +298,12 @@ class LinkMachine(
         }
         for (p in s.due(clock())) send(c.seal(p))
         if (s.failed) {
+            // Nie porzucamy: zdjęcie wraca na początek kolejki, potwierdzone części zostają u odbiorcy.
+            s.rearm()
             current = null
-            record("zdjęcie nie doszło po ${PhotoSender.MAX_TRIES} próbach")
+            outbox.addFirst(s)
+            held = true
+            record("zdjęcie nie doszło po ${PhotoSender.MAX_TRIES} próbach (runda ${s.rounds})")
             set(LinkState.Problem(LinkErrors.explain(LinkErrors.ENDPOINT_IO), retrying = false))
             return
         }
@@ -322,6 +339,7 @@ class LinkMachine(
         endpoint = null
         codec = null
         helloSent = false
+        held = false
         pairing = null
         joiner = ChunkJoiner()
         current?.reset()

@@ -54,4 +54,57 @@ class HoldGestureTest {
         assertTrue(g.due(g.anchorT + hold, hold))
         assertFalse(g.due(g.anchorT + hold - 50, hold))
     }
+
+    // — 2c-A4: kształt po przytrzymaniu nie ucina końca kreski —
+
+    /** Kreska przez [corners] (px) co [step] px, potem [dwell] próbek w miejscu wg [wobble]; próbki co 8 ms przez [HoldGesture]. */
+    private fun heldStroke(corners: List<Pair<Float, Float>>, step: Float, dwell: Int, wobble: (Int) -> Pair<Float, Float>): FloatArray {
+        val pts = ArrayList<Float>()
+        for (k in 0 until corners.size - 1) {
+            val (ax, ay) = corners[k]; val (bx, by) = corners[k + 1]
+            val n = (hypot(bx - ax, by - ay) / step).toInt().coerceAtLeast(1)
+            for (i in 0 until n) { pts += ax + (bx - ax) * i / n; pts += ay + (by - ay) * i / n }
+        }
+        val (ex, ey) = corners.last()
+        for (i in 0 until dwell) { val (dx, dy) = wobble(i); pts += ex + dx; pts += ey + dy }
+        val raw = pts.toFloatArray()
+        val g = HoldGesture(dp)
+        g.start(0, raw[0], raw[1])
+        var holdIdx = 0
+        for (i in 1 until raw.size / 2) if (g.move(8L * i, raw[2 * i], raw[2 * i + 1])) holdIdx = i + 1
+        lastHoldIdx = holdIdx
+        return HoldGesture.shapePoints(raw, holdIdx, raw.size / 2, HoldGesture.DRIFT_DP * dp)
+    }
+    private var lastHoldIdx = 0
+
+    @Test fun heldLineKeepsItsFullLength() {
+        val len = 300f * dp
+        // Drżenie 1,5 dp w miejscu: ostatnie zerowanie licznika wypada ok. 14 dp przed końcem — dawniej tu ucinało.
+        val tremor = heldStroke(listOf(0f to 0f, len to 0f), 2f * dp, 120) { i -> 1.5f * dp * sin(i * 0.7f) to 1.5f * dp * cos(i * 0.9f) }
+        val line = com.mdev.mnotes.core.shapes.ShapeRecognizer.recognize(tremor)!!
+        assertEquals(com.mdev.mnotes.core.shapes.ShapeKind.LINE, line.kind)
+        assertTrue("długość ${hypot(line.xy[2] - line.xy[0], line.xy[3] - line.xy[1]) / len}", hypot(line.xy[2] - line.xy[0], line.xy[3] - line.xy[1]) >= 0.98f * len)
+        assertTrue("licznik zerował się przed końcem", lastHoldIdx in 3 until (len / (2f * dp)).toInt())
+        // Dryf 15 dp (rysik powoli się zsuwa i wraca): koniec nadal na swoim miejscu.
+        val drift = heldStroke(listOf(0f to 0f, len to 0f), 2f * dp, 150) { i -> val a = i / 150f * 6.283f; 7.5f * dp * (1f - cos(a)) to 7.5f * dp * sin(a) }
+        val l2 = com.mdev.mnotes.core.shapes.ShapeRecognizer.recognize(drift)!!
+        assertEquals(com.mdev.mnotes.core.shapes.ShapeKind.LINE, l2.kind)
+        val d2 = hypot(l2.xy[2] - l2.xy[0], l2.xy[3] - l2.xy[1])
+        assertTrue("długość ${d2 / len}", d2 >= 0.98f * len && d2 <= 1.06f * len)
+    }
+
+    @Test fun heldRectangleKeepsItsSides() {
+        val w = 200f * dp; val h = 100f * dp
+        val pts = heldStroke(listOf(0f to 0f, w to 0f, w to h, 0f to h, 0f to 0f), 2f * dp, 120) { i -> 1.5f * dp * sin(i * 0.7f) to 1.5f * dp * cos(i * 0.9f) }
+        val r = com.mdev.mnotes.core.shapes.ShapeRecognizer.recognize(pts)!!
+        assertEquals(com.mdev.mnotes.core.shapes.ShapeKind.RECT, r.kind)
+        val xs = (0 until r.xy.size / 2).map { r.xy[2 * it] }; val ys = (0 until r.xy.size / 2).map { r.xy[2 * it + 1] }
+        assertEquals(w, xs.max() - xs.min(), 0.02f * w)
+        assertEquals(h, ys.max() - ys.min(), 0.02f * h)
+    }
+
+    @Test fun strokeWithoutHoldIsUntouched() {
+        val raw = floatArrayOf(0f, 0f, 1f, 1f, 2f, 2f, 3f, 3f)
+        assertTrue(raw.contentEquals(HoldGesture.shapePoints(raw, 0, 4, 40f)))
+    }
 }

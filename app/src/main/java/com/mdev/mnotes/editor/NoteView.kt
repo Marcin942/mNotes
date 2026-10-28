@@ -2580,12 +2580,12 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
     /** F18: kreska trzymana dalej po nieudanym rozpoznaniu kształtu staje się gładką krzywą z uchwytami. */
     private val curveHold = Runnable {
         if (mode != Mode.TOOL || !liveActive || shapeSnapped || (activeTool != Tool.PEN && activeTool != Tool.CURVE)) return@Runnable
-        val total = builder.rawCount
-        val n = if (holdRaw >= 3) holdRaw.coerceAtMost(total) else total
+        val pts = heldPoints()
+        val n = pts.size / 2
         if (n < 3) return@Runnable
         // A2-3: kreski z ostrym narożnikiem (litery, kąty) zostają pismem — wygładzamy tylko łuki i fale.
-        if (Bezier.sharpCorner(builder.raw, n)) return@Runnable
-        val c = Bezier.fit(builder.raw.copyOf(2 * n), max(1.2f, 3f * dp / zoom)) ?: return@Runnable
+        if (Bezier.sharpCorner(pts, n)) return@Runnable
+        val c = Bezier.fit(pts, max(1.2f, 3f * dp / zoom)) ?: return@Runnable
         shapeCtrl = c; shapePts = Bezier.sample(c); shapePoly = false; shapeKind = ShapeKind.POLYLINE
         shapeSnapped = true; predN = 0; shapeLabel = null; heldCurve = true
         performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
@@ -2604,13 +2604,17 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
         if (settings.holdToShape && rulerSide == 0 && !shapeSnapped && toolType != MotionEvent.TOOL_TYPE_FINGER) postDelayed(holdRunnable, settings.holdMs.toLong())
     }
 
+    /** 2c-A4: surowe próbki do rozpoznania — z końcem kreski, a drżenie po osiadnięciu pióra jako jeden punkt. */
+    private fun heldPoints(): FloatArray = HoldGesture.shapePoints(builder.raw, holdRaw, builder.rawCount, HoldGesture.DRIFT_DP * dp / zoom)
+
     private fun trySnapShape() {
         // Rozpoznajemy z surowych próbek (wygładzony filtr zaokrągla rogi) i bez ogona dryfu po osiadnięciu pióra.
         val total = builder.rawCount
         if (total < 3) return
-        val n = if (holdRaw >= 3) holdRaw.coerceAtMost(total) else total
+        val pts = heldPoints()
+        val n = pts.size / 2
         // F28: włączone kafelki „auto popraw” mają pierwszeństwo: odręczny √ / ∑ / ∫ staje się równym symbolem tej samej wielkości.
-        val glyph = MathGlyphs.recognize(builder.raw, n, settings.mathRoot, settings.mathSum, settings.mathIntegral)
+        val glyph = MathGlyphs.recognize(pts, n, settings.mathRoot, settings.mathSum, settings.mathIntegral)
         if (glyph != null && !settings.mathHinted) {
             // A2-4: zamiana pisma w symbol bez zapowiedzi zaskakuje — raz mówimy, gdzie ją wyłączyć.
             settings.mathHinted = true
@@ -2624,7 +2628,7 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
             invalidate()
             return
         }
-        val shape = if (glyph != null) Shape(ShapeKind.POLYLINE, glyph.xy) else ShapeRecognizer.recognize(builder.raw, n, ShapeRecognizer.minLineFor(builder.width, dp / zoom))
+        val shape = if (glyph != null) Shape(ShapeKind.POLYLINE, glyph.xy) else ShapeRecognizer.recognize(pts, n, ShapeRecognizer.minLineFor(builder.width, dp / zoom))
         if (shape == null) {
             // F18: nierozpoznana kreska — dalsze trzymanie przez osobny czas wygładza ją w krzywą Béziera.
             if (settings.holdToCurve) postDelayed(curveHold, settings.curveHoldMs.toLong())

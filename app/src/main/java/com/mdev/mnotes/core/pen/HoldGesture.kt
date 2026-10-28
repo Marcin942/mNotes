@@ -52,6 +52,37 @@ class HoldGesture(private val dp: Float) {
     }
 
     companion object {
+        /**
+         * 2c-A4: punkty kreski do rozpoznania kształtu po przytrzymaniu. Dawniej brano próbki tylko do ostatniego
+         * zerowania licznika ([holdIdx]), a ono wypada do [radius] przed końcem — prosta i bok prostokąta wychodziły
+         * krótsze. Teraz koniec kreski zostaje, a drżenie w miejscu (próbki od końca, które leżą w promieniu dryfu od
+         * środka spoczynku) zastępuje jeden punkt: ich średnia.
+         *
+         * [raw] = x, y kolejnych próbek ([count] próbek), [radius] — promień dryfu w tych samych jednostkach. [holdIdx] < 3
+         * znaczy, że licznik nie zerował się od początku kreski (cała mieści się w promieniu) — wtedy wszystkie próbki.
+         */
+        fun shapePoints(raw: FloatArray, holdIdx: Int, count: Int, radius: Float): FloatArray {
+            val n = count.coerceAtMost(raw.size / 2)
+            if (holdIdx < 3 || n < 4) return raw.copyOf(2 * n)
+            val tail = minOf(5, n)
+            var cx = 0f; var cy = 0f
+            for (i in n - tail until n) { cx += raw[2 * i]; cy += raw[2 * i + 1] }
+            cx /= tail; cy /= tail
+            var j = n
+            // Dwa przejścia: skupisko wokół średniej ostatnich próbek, potem wokół średniej samego skupiska.
+            repeat(2) {
+                j = n
+                while (j > 0 && hypot(raw[2 * (j - 1)] - cx, raw[2 * (j - 1) + 1] - cy) <= radius) j--
+                var sx = 0f; var sy = 0f
+                for (i in j until n) { sx += raw[2 * i]; sy += raw[2 * i + 1] }
+                if (j < n) { cx = sx / (n - j); cy = sy / (n - j) }
+            }
+            if (j < 2) return raw.copyOf(2 * n)
+            val out = raw.copyOf(2 * (j + 1))
+            out[2 * j] = cx; out[2 * j + 1] = cy
+            return out
+        }
+
         const val DRIFT_DP = 20f
         const val STILL_WINDOW_MS = 100L
         const val STILL_DP = 6f

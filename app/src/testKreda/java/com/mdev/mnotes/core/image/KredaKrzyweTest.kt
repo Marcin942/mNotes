@@ -98,7 +98,7 @@ class KredaKrzyweTest {
             }
             lines += b.lines.size; msOld += b.msOld; msNew += b.msNew; worstSmooth = max(worstSmooth, n.maxSmooth)
             if (f.nameWithoutExtension in previews) render(File(outDir(), f.nameWithoutExtension + ".png"), res.image, b, window(res.image, b))
-            // cały wzór z okładki PDF (przykład Marcina) bez powiększenia
+            // cały wzór z okładki PDF (przykład użytkownika) bez powiększenia
             if (f.nameWithoutExtension == "okladka-wzor") render(File(outDir(), "okladka-wzor-calosc.png"), res.image, b, intArrayOf(0, 0, res.image.w, res.image.h), zoom = 1)
         }
         val k = files.size

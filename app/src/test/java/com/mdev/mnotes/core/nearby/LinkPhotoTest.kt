@@ -131,6 +131,36 @@ class LinkPhotoTest {
     }
 
     @Test
+    fun partsInReverseOrderLandInTheRightPlaceOfTheFile() {
+        val dir = java.nio.file.Files.createTempDirectory("mnotes-czesci").toFile()
+        try {
+            val bytes = ByteArray(2500) { (it * 7).toByte() }
+            val s = PhotoSender("w", "Z.mnotes", "application/x-mnotes", bytes, partSize = 1000)
+            val r = PhotoReceiver(files = LinkFiles.disk(dir))
+            assertNull(r.accept(s.part(2)).file)  // ostatnia (500 B) pierwsza: czeka, aż wiadomo, gdzie ją zapisać
+            assertNull(r.accept(s.part(1)).file)
+            val done = r.accept(s.part(0)).file!!
+            assertTrue(done.file is LinkFile.Disk)
+            assertArrayEquals(bytes, done.bytes())
+            done.file.delete()
+            assertEquals(0, dir.list()!!.size)
+        } finally {
+            dir.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun partOfAnotherLengthIsRefused() {
+        val s = PhotoSender("w", "a.jpg", "image/jpeg", ByteArray(3000), partSize = 1000)
+        val r = PhotoReceiver()
+        assertFalse(r.accept(s.part(0)).bad)
+        val odd = s.part(1).run { SyncMsg.PhotoPart(id, index, count, sha, name, mime, ByteArray(700)) }
+        val res = r.accept(odd)
+        assertTrue(res.bad)
+        assertTrue(res.reply.any { it is SyncMsg.PhotoDone && !it.ok })
+    }
+
+    @Test
     fun newMessagesRoundTrip() {
         val ack = SyncMsg.decode(SyncMsg.encode(SyncMsg.PhotoAck("x", 4)))
         assertEquals(SyncMsg.PhotoAck("x", 4), ack)

@@ -49,9 +49,12 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.mdev.mnotes.app.MNotesApp
+import com.mdev.mnotes.core.nearby.LinkFile
+import com.mdev.mnotes.core.nearby.LinkFiles
 import com.mdev.mnotes.core.nearby.LinkMachine
 import com.mdev.mnotes.core.nearby.LinkMode
 import com.mdev.mnotes.core.nearby.LinkPermissions
+import com.mdev.mnotes.core.nearby.LinkReceived
 import com.mdev.mnotes.core.nearby.LinkState
 import com.mdev.mnotes.core.nearby.SyncMsg
 import com.mdev.mnotes.core.nearby.SyncRole
@@ -67,6 +70,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.ByteArrayOutputStream
+import java.io.File
 
 /** Rola w parowaniu z ekranu: duży (≥ 600 dp) to tablet i się ogłasza, mniejszy to telefon i szuka (§3.2). */
 private fun defaultRole(ctx: Context) = if (ctx.resources.configuration.smallestScreenWidthDp >= 600) SyncRole.HOST else SyncRole.CLIENT
@@ -77,6 +81,12 @@ private fun deviceName(ctx: Context): String =
         ?: "${Build.MANUFACTURER} ${Build.MODEL}".trim().take(40)
 
 private fun missing(ctx: Context) = LinkPermissions.missing(Build.VERSION.SDK_INT) { LinkDiagnostics.has(ctx, it) }
+
+/** Plik do wysłania przez łącze: zdjęcie z galerii w pamięci albo zeszyt `.mnotes` w pliku w cache (2c-B3). */
+class Outgoing(val name: String, val mime: String, val file: LinkFile)
+
+/** Katalog łącza w cache: odbierane części i zeszyty do wysłania (resztki starsze niż godzina znikają przy otwarciu). */
+private fun linkDir(ctx: Context) = File(ctx.cacheDir, "nearby")
 
 /** Schodki kolejnych zdjęć z telefonu: przesunięcie w pt i po ilu zdjęciach od nowa. */
 private const val CASCADE_STEP = 24f
@@ -90,7 +100,7 @@ private const val CASCADE = 6
  * parują w tym samym oknie. Logika w `core/nearby/LinkMachine`, tu tylko pokazywanie i uprawnienia.
  */
 @Composable
-fun PhoneLinkDialog(start: LinkMode, ed: Editor?, files: List<SyncMsg.Photo>? = null, close: () -> Unit) {
+fun PhoneLinkDialog(start: LinkMode, ed: Editor?, files: List<Outgoing>? = null, close: () -> Unit) {
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
     val notebooks = if (start == LinkMode.SEND) files != null else ed == null
@@ -109,7 +119,23 @@ fun PhoneLinkDialog(start: LinkMode, ed: Editor?, files: List<SyncMsg.Photo>? = 
     var picked by remember { mutableStateOf(files != null) }
     var note by remember { mutableStateOf<String?>(null) }
     var diagnostics by remember { mutableStateOf(false) }
-    val waiting = remember { ArrayList<SyncMsg.Photo>(files.orEmpty()) }
+    val waiting = remember { ArrayList<Outgoing>(files.orEmpty()) }
+    // Zeszyt do wysłania leży w cache tylko na czas okna.
+    DisposableEffect(Unit) { onDispose { files?.forEach { it.file.delete() } } }
+
+    /** Zeszyt z drugiego urządzenia: kopia jako nowy zeszyt w bibliotece (nic nie jest nadpisywane), czytany strumieniem. */
+    fun importNotebook(f: LinkReceived) {
+        val app = ctx.applicationContext as MNotesApp
+        scope.launch {
+            val meta = withContext(Dispatchers.IO) {
+                try { runCatching { f.file.input().use { Importer(app.repo, app.pdf).importMnotes(it, null) } }.getOrNull() } finally { f.file.delete() }
+            }
+            if (meta == null) { note = T.t("Nie udało się dodać zeszytu z drugiego urządzenia.", "Could not add the notebook from the other device."); return@launch }
+            app.repo.addNotebook(meta)
+            imported++
+            note = T.t("Dodano zeszyt „${meta.title}” do biblioteki.", "Added the notebook “${meta.title}” to the library.")
+        }
+    }
 
     val ask = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
         allowed = missing(ctx).isEmpty()
@@ -119,25 +145,18 @@ fun PhoneLinkDialog(start: LinkMode, ed: Editor?, files: List<SyncMsg.Photo>? = 
     val link = remember(mode, role, generation, ready, key?.contentHashCode()) {
         if (!ready) null else {
             val t = NearbyTransport(ctx)
-            val m = LinkMachine(t, mode, role, me, if (mode == LinkMode.PAIR) null else key, store.peerName, listener = object : LinkMachine.Listener {
+            val m = LinkMachine(t, mode, role, me, if (mode == LinkMode.PAIR) null else key, store.peerName, files = LinkFiles.disk(linkDir(ctx)), listener = object : LinkMachine.Listener {
                 override fun changed(s: LinkState) { state = s }
                 override fun rejected(peer: String) {
                     note = if (peer == "?") T.t("Odrzucono połączenie od obcego urządzenia (inna para).", "Rejected a connection from an unknown device (another pairing).")
                     else T.t("Odrzucono drugie połączenie od „$peer”: to okno ma już połączenie.", "Rejected a second connection from “$peer”: this window is already connected.")
                 }
+                override fun file(f: LinkReceived) {
+                    if (f.mime == ExportFormat.MNOTES.mime) importNotebook(f) else super.file(f)
+                }
                 override fun photo(p: SyncMsg.Photo) {
-                    if (p.mime == ExportFormat.MNOTES.mime) {
-                        // zeszyt z drugiego urządzenia: kopia jako nowy zeszyt w bibliotece (nic nie jest nadpisywane)
-                        val app = ctx.applicationContext as MNotesApp
-                        scope.launch {
-                            val meta = withContext(Dispatchers.IO) { runCatching { Importer(app.repo, app.pdf).importMnotes(p.bytes.inputStream(), null) }.getOrNull() }
-                            if (meta == null) { note = T.t("Nie udało się dodać zeszytu z drugiego urządzenia.", "Could not add the notebook from the other device."); return@launch }
-                            app.repo.addNotebook(meta)
-                            imported++
-                            note = T.t("Dodano zeszyt „${meta.title}” do biblioteki.", "Added the notebook “${meta.title}” to the library.")
-                        }
-                        return
-                    }
+                    // starszy telefon wysyła zeszyt jedną wiadomością (w pamięci)
+                    if (p.mime == ExportFormat.MNOTES.mime) { importNotebook(LinkReceived(p.name, p.mime, LinkFile.Memory(p.bytes))); return }
                     val e = ed ?: run { note = T.t("Przyszło zdjęcie, ale to okno nie jest otwarte w zeszycie.", "A photo arrived, but this window is not open in a notebook."); return }
                     val k = received % CASCADE
                     e.insertImage(p.bytes.inputStream(), if ("png" in p.mime) "png" else "jpg") { if (k > 0) e.nudgeSel(k * CASCADE_STEP, k * CASCADE_STEP) }
@@ -151,7 +170,7 @@ fun PhoneLinkDialog(start: LinkMode, ed: Editor?, files: List<SyncMsg.Photo>? = 
     DisposableEffect(link) {
         link?.first?.let { m ->
             m.start()
-            for (p in waiting) m.sendPhoto(p.name, p.mime, p.bytes)
+            for (p in waiting) m.sendFile(p.name, p.mime, p.file)
             waiting.clear()
         }
         onDispose { link?.let { (m, t) -> m.stop(); t.close() } }
@@ -167,7 +186,7 @@ fun PhoneLinkDialog(start: LinkMode, ed: Editor?, files: List<SyncMsg.Photo>? = 
         if (photo == null) { note = T.t("Nie udało się wczytać zdjęcia.", "Could not read the photo."); return@rememberLauncherForActivityResult }
         note = null
         picked = true
-        link?.first?.sendPhoto(photo.name, photo.mime, photo.bytes) ?: waiting.add(photo)
+        link?.first?.sendFile(photo.name, photo.mime, photo.file) ?: waiting.add(photo)
     }
     fun pickPhoto() = pick.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
     LaunchedEffect(mode, allowed) { if (mode == LinkMode.SEND && allowed && !picked && files == null) pickPhoto() }
@@ -312,11 +331,12 @@ private fun Status(icon: ImageVector, text: String) = Row(verticalAlignment = Al
 private fun Line(text: String) = Text(text, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(vertical = 2.dp))
 
 /**
- * Wybór zeszytu do wysłania (wersja 1 synchronizacji): eksport `.mnotes` tym samym kodem co „Eksport i udostępnianie”,
- * potem [send] z gotowym plikiem. Odbiorca dodaje go jako nowy zeszyt — nic po żadnej stronie nie jest nadpisywane.
+ * Wybór zeszytu do wysłania (wersja 1 synchronizacji): eksport `.mnotes` tym samym kodem co „Eksport i udostępnianie”
+ * do pliku w cache, potem [send] z gotowym plikiem (części czytane z dysku w trakcie wysyłania). Odbiorca dodaje go jako
+ * nowy zeszyt — nic po żadnej stronie nie jest nadpisywane.
  */
 @Composable
-fun NotebookSendDialog(close: () -> Unit, send: (SyncMsg.Photo) -> Unit) {
+fun NotebookSendDialog(close: () -> Unit, send: (Outgoing) -> Unit) {
     val ctx = LocalContext.current
     val app = ctx.applicationContext as MNotesApp
     val scope = rememberCoroutineScope()
@@ -334,18 +354,22 @@ fun NotebookSendDialog(close: () -> Unit, send: (SyncMsg.Photo) -> Unit) {
                 if (busy != null) return@TextButton
                 busy = m.title
                 scope.launch {
-                    val bytes = withContext(Dispatchers.IO) {
+                    val out = withContext(Dispatchers.IO) {
+                        var f: File? = null
                         runCatching {
                             val exporter = Exporter(app.repo, app.assets, app.pdf)
                             exporter.awaitWrites()
-                            ByteArrayOutputStream().also { exporter.write(m.id, ExportFormat.MNOTES, null, it) }.toByteArray()
-                        }.getOrNull()
+                            f = File.createTempFile("wyslij-", "." + ExportFormat.MNOTES.ext, linkDir(ctx).apply { mkdirs() })
+                            check(f!!.outputStream().use { exporter.write(m.id, ExportFormat.MNOTES, null, it) })
+                            f!!
+                        }.onFailure { f?.delete() }.getOrNull()
                     }
                     busy = null
+                    val size = out?.length() ?: 0L
                     when {
-                        bytes == null || bytes.isEmpty() -> note = T.t("Nie udało się przygotować zeszytu.", "Could not prepare the notebook.")
-                        bytes.size > LinkMachine.FILE_MAX -> note = T.t("Zeszyt ma ${bytes.size shr 20} MB, łącze przyjmuje do ${LinkMachine.FILE_MAX shr 20} MB. Wyślij go przez „Eksport i udostępnianie”.", "The notebook is ${bytes.size shr 20} MB; the link takes up to ${LinkMachine.FILE_MAX shr 20} MB. Send it via “Export & share”.")
-                        else -> send(SyncMsg.Photo(m.title.take(60) + "." + ExportFormat.MNOTES.ext, ExportFormat.MNOTES.mime, bytes))
+                        out == null || size == 0L -> { out?.delete(); note = T.t("Nie udało się przygotować zeszytu.", "Could not prepare the notebook.") }
+                        size > LinkMachine.FILE_MAX -> { out.delete(); note = T.t("Zeszyt ma ${size shr 20} MB, łącze przyjmuje do ${LinkMachine.FILE_MAX shr 20} MB. Wyślij go przez „Eksport i udostępnianie”.", "The notebook is ${size shr 20} MB; the link takes up to ${LinkMachine.FILE_MAX shr 20} MB. Send it via “Export & share”.") }
+                        else -> send(Outgoing(m.title.take(60) + "." + ExportFormat.MNOTES.ext, ExportFormat.MNOTES.mime, LinkFile.Disk(out)))
                     }
                 }
             }) { Text(m.title, modifier = Modifier.fillMaxWidth()) }
@@ -382,19 +406,19 @@ fun DiagnosticsDialog(machine: LinkMachine?, close: () -> Unit) {
 }
 
 /** Zdjęcie z galerii jako wiadomość: duże zmniejszone do 3000 px i JPEG 88 (szybciej przez Bluetooth). */
-private fun readPhoto(ctx: Context, uri: Uri): SyncMsg.Photo? = runCatching {
+private fun readPhoto(ctx: Context, uri: Uri): Outgoing? = runCatching {
     val cr = ctx.contentResolver
     val mime = cr.getType(uri).orEmpty().ifEmpty { "image/jpeg" }
     val raw = cr.openInputStream(uri)?.use { it.readBytes() } ?: return null
     val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
     BitmapFactory.decodeByteArray(raw, 0, raw.size, bounds)
     val small = raw.size <= 4 shl 20 && maxOf(bounds.outWidth, bounds.outHeight) <= 3000 && ("jpeg" in mime || "png" in mime)
-    if (small) return SyncMsg.Photo(uri.lastPathSegment ?: "zdjecie", mime, raw)
+    if (small) return Outgoing(uri.lastPathSegment ?: "zdjecie", mime, LinkFile.Memory(raw))
     var sample = 1
     while (maxOf(bounds.outWidth, bounds.outHeight) / (sample * 2) >= 3000) sample *= 2
     val bmp = BitmapFactory.decodeByteArray(raw, 0, raw.size, BitmapFactory.Options().apply { inSampleSize = sample }) ?: return null
     val out = ByteArrayOutputStream()
     bmp.compress(Bitmap.CompressFormat.JPEG, 88, out)
     bmp.recycle()
-    SyncMsg.Photo((uri.lastPathSegment ?: "zdjecie") + ".jpg", "image/jpeg", out.toByteArray())
+    Outgoing((uri.lastPathSegment ?: "zdjecie") + ".jpg", "image/jpeg", LinkFile.Memory(out.toByteArray()))
 }.getOrNull()

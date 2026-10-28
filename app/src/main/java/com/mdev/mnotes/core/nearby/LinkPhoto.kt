@@ -4,20 +4,23 @@ package com.mdev.mnotes.core.nearby
  * Zdjęcie przez łącze w częściach z potwierdzeniami (`docs/NEARBY-PRZEBUDOWA.md` §3.4): nadawca wie, ile doszło
  * („2 z 3 · 64 %”), część bez potwierdzenia wraca po [TIMEOUT_MS], a po zerwaniu wysyłanie wznawia się od pierwszej
  * niepotwierdzonej. Każda część niesie nagłówek całości (nazwa, typ, liczba części, SHA-256), więc odbiorca może
- * zacząć składać od dowolnej. Szyfrowanie robi [SyncCodec], tu tylko porządek części.
+ * zacząć składać od dowolnej. Szyfrowanie robi [SyncCodec], tu tylko porządek części. Części czyta się z [source]
+ * dopiero przy wysyłaniu, więc zeszyt z pliku nie trafia w całości do pamięci.
  */
 class PhotoSender(
     val id: String,
     private val name: String,
     private val mime: String,
-    private val bytes: ByteArray,
+    private val source: LinkFile,
     partSize: Int = PART,
 ) {
-    val count: Int = maxOf(1, (bytes.size + partSize - 1) / partSize)
+    constructor(id: String, name: String, mime: String, bytes: ByteArray, partSize: Int = PART) : this(id, name, mime, LinkFile.Memory(bytes), partSize)
+
     /** Długość całego pliku w bajtach (do paska partii). */
-    val length: Int get() = bytes.size
+    val length: Long = source.length
+    val count: Int = maxOf(1L, (length + partSize - 1) / partSize).toInt()
     private val size = partSize
-    private val sha = SyncCrypto.sha256(bytes)
+    private val sha = source.sha256()
     private val acked = BooleanArray(count)
     private val sentAt = LongArray(count) { -1L }
     private val tries = IntArray(count)
@@ -29,15 +32,15 @@ class PhotoSender(
         private set
 
     /** Ułamek bajtów potwierdzonych przez odbiorcę. */
-    val progress: Float get() = if (bytes.isEmpty()) (if (done) 1f else 0f) else (0 until count).filter { acked[it] }.sumOf { partLength(it) }.toFloat() / bytes.size
+    val progress: Float get() = if (length == 0L) (if (done) 1f else 0f) else (0 until count).filter { acked[it] }.sumOf { partLength(it).toLong() }.toFloat() / length
 
     /** Ile części już potwierdzono (do zdania „część 2 z 3”). */
     val confirmed: Int get() = acked.count { it }
 
-    private fun partLength(i: Int) = minOf(size, bytes.size - i * size).coerceAtLeast(0)
+    private fun partLength(i: Int): Int = minOf(size.toLong(), length - i.toLong() * size).coerceAtLeast(0).toInt()
 
     fun part(i: Int): SyncMsg.PhotoPart =
-        SyncMsg.PhotoPart(id, i, count, sha, name, mime, bytes.copyOfRange(i * size, i * size + partLength(i)))
+        SyncMsg.PhotoPart(id, i, count, sha, name, mime, source.read(i.toLong() * size, partLength(i)))
 
     /**
      * Części do wysłania w chwili [now]: najwyżej [WINDOW] w drodze; niepotwierdzona po [TIMEOUT_MS] idzie jeszcze raz.
@@ -95,14 +98,23 @@ class PhotoSender(
 /**
  * Składa części od [PhotoSender]: każdą potwierdza (także powtórzoną), a po ostatniej sprawdza SHA-256. Zdjęcie już
  * złożone nie wraca drugi raz (nadawca, który nie dostał `PhotoDone`, dostaje je ponownie, bez drugiego wstawienia).
+ * Części idą od razu do pliku z [files] pod przesunięciem `index × długość części`; w pamięci zostaje najwyżej ostatnia
+ * część, która przyszła przed pozostałymi (jej przesunięcie wynika z długości innej części).
  */
-class PhotoReceiver(private val maxBytes: Int = LinkChunks.MAX_MESSAGE) {
-    /** [reply]: wiadomości do odesłania; [photo]: gotowe zdjęcie do wstawienia (raz); [bad]: suma kontrolna się nie zgadza. */
-    class Result(val reply: List<SyncMsg>, val photo: SyncMsg.Photo? = null, val bad: Boolean = false)
+class PhotoReceiver(private val maxBytes: Int = LinkChunks.MAX_MESSAGE, private val files: LinkFiles = LinkFiles.MEMORY) {
+    /** [reply]: wiadomości do odesłania; [file]: gotowy plik do wstawienia (raz); [bad]: suma kontrolna się nie zgadza. */
+    class Result(val reply: List<SyncMsg>, val file: LinkReceived? = null, val bad: Boolean = false) {
+        /** Cały plik w pamięci (testy, małe zdjęcia). */
+        val photo: SyncMsg.Photo? by lazy { file?.toPhoto() }
+    }
 
-    private class Assembly(val count: Int, val sha: ByteArray, val name: String, val mime: String) {
-        val parts = arrayOfNulls<ByteArray>(count)
+    private class Assembly(val count: Int, val sha: ByteArray, val name: String, val mime: String, val file: LinkFile) {
+        val got = BooleanArray(count)
+        var left = count
         var bytes = 0L
+        /** Długość części (z dowolnej poza ostatnią); bez niej ostatnia czeka w [tail]. */
+        var step = 0
+        var tail: ByteArray? = null
     }
 
     private val open = LinkedHashMap<String, Assembly>()
@@ -110,29 +122,64 @@ class PhotoReceiver(private val maxBytes: Int = LinkChunks.MAX_MESSAGE) {
     /** Więcej części nie zmieści się w [maxBytes] przy części [PhotoSender.PART]; `count` z ramki nie przydziela tablic na ślepo. */
     private val maxParts = maxBytes / PhotoSender.PART + 1
 
+    /** Najwięcej bajtów zdjęć naraz w pamięci odbiorcy poza plikiem z [files]: bieżąca część, odłożone ostatnie, bufor sumy. */
+    var peak = 0L
+        private set
+
     fun accept(p: SyncMsg.PhotoPart): Result {
         val ack = SyncMsg.PhotoAck(p.id, p.index)
         if (p.id in finished) return Result(listOf(ack, SyncMsg.PhotoDone(p.id, true)))
         if (p.count <= 0 || p.count > maxParts || p.index !in 0 until p.count) return Result(emptyList(), bad = true)
         // Najwyżej OPEN_MAX zdjęć składanych naraz (nadawca wysyła po kolei): najstarsze porzucone składanie wypada.
-        if (p.id !in open && open.size >= OPEN_MAX) open.remove(open.keys.first())
-        val a = open.getOrPut(p.id) { Assembly(p.count, p.sha, p.name, p.mime) }
+        if (p.id !in open && open.size >= OPEN_MAX) open.remove(open.keys.first())?.file?.delete()
+        val a = open.getOrPut(p.id) { Assembly(p.count, p.sha, p.name, p.mime, files.create()) }
         if (a.count != p.count || !SyncCrypto.same(a.sha, p.sha)) return Result(emptyList(), bad = true)
-        if (a.parts[p.index] == null) {
+        held(p.bytes.size)
+        if (!a.got[p.index]) {
             a.bytes += p.bytes.size
-            if (a.bytes > maxBytes) { open.remove(p.id); return Result(listOf(SyncMsg.PhotoDone(p.id, false)), bad = true) }
-            a.parts[p.index] = p.bytes
+            if (a.bytes > maxBytes || !place(a, p)) {
+                open.remove(p.id); a.file.delete()
+                return Result(listOf(SyncMsg.PhotoDone(p.id, false)), bad = true)
+            }
+            a.got[p.index] = true
+            a.left--
         }
-        if (a.parts.any { it == null }) return Result(listOf(ack))
+        if (a.left > 0) return Result(listOf(ack))
         open.remove(p.id)
-        val all = ByteArray(a.bytes.toInt())
-        var at = 0
-        for (b in a.parts) { b!!.copyInto(all, at); at += b.size }
-        if (!SyncCrypto.same(SyncCrypto.sha256(all), a.sha)) return Result(listOf(ack, SyncMsg.PhotoDone(p.id, false)), bad = true)
+        held(p.bytes.size + HASH_BUFFER)
+        if (!SyncCrypto.same(a.file.sha256(), a.sha)) { a.file.delete(); return Result(listOf(ack, SyncMsg.PhotoDone(p.id, false)), bad = true) }
         finished += p.id
         while (finished.size > 64) finished.remove(finished.first())
-        return Result(listOf(ack, SyncMsg.PhotoDone(p.id, true)), SyncMsg.Photo(a.name, a.mime, all))
+        return Result(listOf(ack, SyncMsg.PhotoDone(p.id, true)), LinkReceived(a.name, a.mime, a.file))
     }
+
+    /** Porzuca składane pliki (okno zamknięte): pliki w cache nie zostają. */
+    fun clear() {
+        open.values.forEach { it.file.delete() }
+        open.clear()
+    }
+
+    /** Zapis części pod przesunięciem; false, gdy długość nie pasuje do pozostałych części (ramka niezgodna z resztą). */
+    private fun place(a: Assembly, p: SyncMsg.PhotoPart): Boolean {
+        val last = p.index == a.count - 1
+        when {
+            a.count == 1 -> a.file.write(0, p.bytes)
+            !last -> {
+                if (a.step == 0) {
+                    if (p.bytes.isEmpty()) return false
+                    a.step = p.bytes.size
+                    a.tail?.let { t -> if (t.size > a.step) return false; a.file.write((a.count - 1).toLong() * a.step, t); a.tail = null }
+                } else if (p.bytes.size != a.step) return false
+                a.file.write(p.index.toLong() * a.step, p.bytes)
+            }
+            a.step == 0 -> a.tail = p.bytes
+            p.bytes.size > a.step -> return false
+            else -> a.file.write(p.index.toLong() * a.step, p.bytes)
+        }
+        return true
+    }
+
+    private fun held(now: Int) { peak = maxOf(peak, now + open.values.sumOf { (it.tail?.size ?: 0).toLong() }) }
 
     companion object {
         /** Nadawca kończy zdjęcie przed następnym (utknięte wraca na początek kolejki), więc 4 składania to zapas. */

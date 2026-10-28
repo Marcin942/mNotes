@@ -487,7 +487,7 @@ object Lab : LabFeatures {
         val store = remember { com.mdev.mnotes.lab.nearby.PairStore(ctx) }
         var dialog by remember { mutableStateOf(0) }
         var tick by remember { mutableStateOf(0) }
-        var outgoing by remember { mutableStateOf<com.mdev.mnotes.core.nearby.SyncMsg.Photo?>(null) }
+        var outgoing by remember { mutableStateOf<com.mdev.mnotes.lab.nearby.Outgoing?>(null) }
         Group(T.t("Telefon i tablet (Nearby)", "Phone and tablet (Nearby)"), keys = "nearby telefon tablet zdjęcie bluetooth parowanie połącz wyślij diagnostyka łącze phone pair connect send diagnostics link") {
             Text(
                 T.t(

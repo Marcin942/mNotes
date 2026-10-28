@@ -5,6 +5,8 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.io.File
+import java.nio.file.Files
 import java.util.Random
 
 /**
@@ -123,19 +125,22 @@ class LinkMachineTest {
     private val air = FakeAir()
     private val photo = ByteArray(700_000).also { Random(3).nextBytes(it) }
 
-    private class Seen : LinkMachine.Listener {
+    /** [keep]: odebrane pliki zostają jako pliki ([files]) zamiast trafiać w całości do [photos]. */
+    private class Seen(val keep: Boolean = false) : LinkMachine.Listener {
         val states = ArrayList<LinkState>()
         val photos = ArrayList<SyncMsg.Photo>()
+        val files = ArrayList<LinkReceived>()
         val sent = ArrayList<String>()
         val rejected = ArrayList<String>()
         override fun changed(state: LinkState) { states += state }
         override fun photo(p: SyncMsg.Photo) { photos += p }
+        override fun file(f: LinkReceived) { if (keep) files += f else super.file(f) }
         override fun sent(id: String) { sent += id }
         override fun rejected(peer: String) { rejected += peer }
     }
 
-    private fun machine(end: FakeAir.End, mode: LinkMode, role: SyncRole, name: String, key: ByteArray?, seen: Seen = Seen()) =
-        LinkMachine(end, mode, role, name, key, peerLabel = "druga strona", clock = { now }, listener = seen).also { end.machine = it }
+    private fun machine(end: FakeAir.End, mode: LinkMode, role: SyncRole, name: String, key: ByteArray?, seen: Seen = Seen(), files: LinkFiles = LinkFiles.MEMORY) =
+        LinkMachine(end, mode, role, name, key, peerLabel = "druga strona", clock = { now }, listener = seen, files = files).also { end.machine = it }
 
     /** Pompuje zdarzenia i tyka zegarem po [step] ms, aż [done] albo [limit] kroków. */
     private fun run(vararg ms: LinkMachine, step: Long = 500, limit: Int = 400, done: () -> Boolean) {
@@ -211,6 +216,36 @@ class LinkMachineTest {
         val got = tSeen.photos.single()
         assertEquals("application/x-mnotes", got.mime)
         assertArrayEquals(notebook, got.bytes)
+    }
+
+    @Test
+    fun sixtyFourMegabyteNotebookGoesThroughCacheFilesWithAtMostTwoPartsInMemory() {
+        val dir = Files.createTempDirectory("mnotes-lacze").toFile()
+        try {
+            val key = pairKey()
+            val tSeen = Seen(keep = true)
+            val tablet = machine(air.end("tablet"), LinkMode.RECEIVE, SyncRole.HOST, "T", key, tSeen, LinkFiles.disk(File(dir, "odbior")))
+            val phone = machine(air.end("telefon"), LinkMode.SEND, SyncRole.CLIENT, "P", key)
+            // Zeszyt 64 MB pisany po 1 MB: po stronie telefonu też nie ma go w pamięci w całości.
+            val src = File(dir, "Duzy.mnotes")
+            val rnd = Random(5)
+            src.outputStream().use { o -> repeat(64) { o.write(ByteArray(1 shl 20).also(rnd::nextBytes)) } }
+            tablet.start(); phone.start()
+            phone.sendFile(src.name, "application/x-mnotes", LinkFile.Disk(src))
+            run(tablet, phone, limit = 2000) { tSeen.files.isNotEmpty() }
+            val got = tSeen.files.single()
+            assertEquals("application/x-mnotes", got.mime)
+            assertTrue(got.file is LinkFile.Disk)
+            assertEquals(64L shl 20, got.file.length)
+            assertArrayEquals(LinkFile.Disk(src).sha256(), got.file.sha256())
+            // Przed 2c-B3 odbiorca trzymał wszystkie części i drugą kopię całości: 134 217 728 B.
+            assertTrue("szczyt ${tablet.receivePeak} B", tablet.receivePeak <= 2L * PhotoSender.PART)
+            got.file.delete()
+            tablet.stop()
+            assertEquals(emptyList<String>(), File(dir, "odbior").list()!!.toList())
+        } finally {
+            dir.deleteRecursively()
+        }
     }
 
     @Test

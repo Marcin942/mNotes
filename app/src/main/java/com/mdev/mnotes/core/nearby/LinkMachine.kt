@@ -64,10 +64,14 @@ class LinkMachine(
     private val peerLabel: String = "",
     private val clock: () -> Long = System::currentTimeMillis,
     private val listener: Listener = object : Listener {},
+    /** Gdzie składać odbierane pliki: w aplikacji katalog w cache ([LinkFiles.disk]), w testach pamięć. */
+    files: LinkFiles = LinkFiles.MEMORY,
 ) {
     interface Listener {
         fun changed(state: LinkState) {}
         fun photo(p: SyncMsg.Photo) {}
+        /** Odebrany i sprawdzony plik; domyślnie trafia w całości do [photo] i jest usuwany (UI zeszytów czyta go strumieniem). */
+        fun file(f: LinkReceived) { photo(f.toPhoto()); f.file.delete() }
         fun sent(id: String) {}
         /** To urządzenie odrzuciło połączenie od [peer] (zajęte innym albo obce); UI pokazuje to zdaniem. */
         fun rejected(peer: String) {}
@@ -98,7 +102,9 @@ class LinkMachine(
     private var current: PhotoSender? = null
     /** Zdjęcie utknęło: wysyłanie czeka na „Spróbuj ponownie” albo nowe połączenie (inaczej następne by je wyprzedziło). */
     private var held = false
-    private val receiver = PhotoReceiver(FILE_MAX)
+    private val receiver = PhotoReceiver(FILE_MAX, files)
+    /** Najwięcej bajtów odbieranych plików naraz w pamięci (poza plikiem w cache); do testu pamięci. */
+    val receivePeak: Long get() = receiver.peak
     private var sentCount = 0
     private var receivedCount = 0
     /** Partia: zdjęcia dodane od chwili, gdy kolejka była pusta (do „zdjęcie 2 z 3” i paska bajtów całości). */
@@ -126,6 +132,7 @@ class LinkMachine(
         endpoint?.let(transport::disconnect)
         transport.stopSearch()
         drop()
+        receiver.clear()
         set(LinkState.Idle)
     }
 
@@ -151,16 +158,20 @@ class LinkMachine(
 
     /**
      * Kolejka plików do wysłania (zdjęcia z telefonu, zeszyty `.mnotes`); wychodzą po kolei, gdy łącze jest gotowe.
-     * Odbiorca dostaje każdy przez [Listener.photo] z tym samym [mime] i sam decyduje, co z nim zrobić.
+     * Odbiorca dostaje każdy przez [Listener.file] z tym samym [mime] i sam decyduje, co z nim zrobić.
      */
-    fun sendPhoto(name: String, mime: String, bytes: ByteArray): String {
-        require(bytes.size <= FILE_MAX) { "plik ponad ${FILE_MAX shr 20} MB" }
+    fun sendPhoto(name: String, mime: String, bytes: ByteArray): String = sendFile(name, mime, LinkFile.Memory(bytes))
+
+    /** Jak [sendPhoto], ale części czytane z [file] w trakcie wysyłania (zeszyt z pliku w cache nie trafia do pamięci). */
+    fun sendFile(name: String, mime: String, file: LinkFile): String {
+        require(file.length <= FILE_MAX) { "plik ponad ${FILE_MAX shr 20} MB" }
         val id = "${clock()}-${++photoSeq}"
         if (current == null && outbox.isEmpty()) { batchCount = 0; batchDone = 0; batchBytes = 0; batchDoneBytes = 0 }
+        val s = PhotoSender(id, name, mime, file)
         batchCount++
-        batchBytes += bytes.size
-        outbox.addLast(PhotoSender(id, name, mime, bytes))
-        record("zdjęcie w kolejce: ${bytes.size / 1024} KB")
+        batchBytes += s.length
+        outbox.addLast(s)
+        record("zdjęcie w kolejce: ${s.length / 1024} KB")
         pump()
         return id
     }
@@ -308,7 +319,7 @@ class LinkMachine(
                 val r = receiver.accept(m)
                 for (m2 in r.reply) send(c.seal(m2))
                 if (r.bad) record("zdjęcie odrzucone: zła suma kontrolna")
-                r.photo?.let { receivedCount++; record("odebrano zdjęcie: ${it.bytes.size / 1024} KB"); listener.photo(it); ready() }
+                r.file?.let { receivedCount++; record("odebrano plik: ${it.file.length / 1024} KB"); listener.file(it); ready() }
             }
             is SyncMsg.PhotoAck -> { current?.ack(m.index); pump() }
             is SyncMsg.PhotoDone -> {
@@ -436,7 +447,7 @@ class LinkMachine(
         const val AUTO_PICK_MS = 1_000L
         const val LOG_SIZE = 20
 
-        /** Największy plik przez łącze (zeszyt z PDF-em bywa duży; całość mieści się w pamięci po obu stronach). */
+        /** Największy plik przez łącze (zeszyt z PDF-em bywa duży); w aplikacji idzie przez plik w cache, nie przez pamięć. */
         const val FILE_MAX = 64 shl 20
     }
 }

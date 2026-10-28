@@ -36,6 +36,19 @@ class HostileInputTest {
     }
 
     @Test
+    fun pageAndAssetNamesFromFileCannotLeaveNotebookFolder() {
+        // Identyfikator strony z meta.json i nazwa obrazu z rekordu strony stają się ścieżką w katalogu zeszytu.
+        val hostile = listOf("../../../../shared_prefs/x.xml", "..", ".", "", "a/b", "a\\b", "/data/x", "x\u0000.png")
+        for (n in hostile) {
+            val p = LocalName.plain(n)
+            assertTrue(n, LocalName.isPlain(p))
+            assertTrue(n, p.startsWith("invalid-"))
+        }
+        // zwykłe nazwy (w tym z kropkami) bez zmian: stare zeszyty otwierają się jak dawniej
+        for (n in listOf("3f9a01b2c4d5", "3f9a01b2c4d5.webp", "img-1.webp", "a..b.png")) assertTrue(LocalName.plain(n) == n)
+    }
+
+    @Test
     fun highlyCompressiblePageStillDecodes() {
         // Prawdziwa strona dobrze się kompresuje (np. 0 elementów + dopełnienie): limit z ilorazu deflate jej nie odcina.
         val raw = ByteArray(200_000).also { it[0] = 0 }

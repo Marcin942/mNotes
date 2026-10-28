@@ -9,6 +9,7 @@ import android.os.Looper
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import com.mdev.mnotes.core.codec.LocalName
 import com.mdev.mnotes.core.codec.PageCodec
 import com.mdev.mnotes.core.model.PageContent
 import com.mdev.mnotes.core.model.PageSpec
@@ -80,8 +81,9 @@ class Repository(ctx: Context) {
     fun folder(id: String?): Folder? = if (id == null) null else folders.firstOrNull { it.id == id }
 
     fun dir(id: String) = File(nbRoot, id)
-    fun pageFile(nb: String, page: String) = File(dir(nb), "p/$page.mnp")
-    fun assetFile(nb: String, name: String) = File(dir(nb), "assets/$name")
+    // Identyfikator strony i nazwa zasobu przychodzą z pliku zeszytu (także importowanego): bez `../` w ścieżce.
+    fun pageFile(nb: String, page: String) = File(dir(nb), "p/${LocalName.plain(page)}.mnp")
+    fun assetFile(nb: String, name: String) = File(dir(nb), "assets/${LocalName.plain(name)}")
     fun thumbFile(nb: String) = File(dir(nb), "thumb.png")
 
     // — Notatniki —

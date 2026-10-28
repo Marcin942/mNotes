@@ -9,7 +9,7 @@ import java.util.UUID
 import java.util.concurrent.LinkedBlockingQueue
 
 /**
- * Identyfikatory usług Bluetooth RFCOMM (2e-B1, `plan/NEARBY-OPEN-SOURCE.md` §4.2). W parowaniu stały [PAIR]; po
+ * Identyfikatory usług Bluetooth RFCOMM (2e-B1). W parowaniu stały [PAIR]; po
  * parowaniu UUID z nazwy łącza ([SyncCrypto.nearbyName], skrót klucza pary), więc obcy telefon nie trafi w nasłuch
  * tabletu — to odpowiednik nazwy punktu w Nearby.
  */
@@ -262,7 +262,7 @@ class RfcommTransport(
 }
 
 /**
- * Zeszyty przez Bluetooth (2e-B1, założenie z decyzji Marcina): do [NOTEBOOK_MAX], z czasem podanym przed wysłaniem.
+ * Zeszyty przez Bluetooth (2e-B1, założenie z decyzji autora): do [NOTEBOOK_MAX], z czasem podanym przed wysłaniem.
  * [BYTES_PER_S]: środek 80–250 KB/s z analizy (§4.2) — **do zmierzenia na tablecie**.
  */
 object BtLimits {

@@ -1,8 +1,7 @@
 # Licencja: do decyzji
 
-Projekt nie ma jeszcze licencji. Wybór należy do autora i jest opisany w `docs/OPEN-SOURCE.md` (§3.1, decyzja D1).
-Do tego czasu kod **nie jest** udostępniony na żadnej licencji otwartej. Ten plik zostanie zastąpiony plikiem
-`LICENSE`.
+Projekt nie ma jeszcze licencji. Wybór należy do autora. Do tego czasu kod **nie jest** udostępniony na żadnej
+licencji otwartej. Ten plik zostanie zastąpiony plikiem `LICENSE`.
 
 | Licencja | Co oznacza dla mNotes |
 |---|---|

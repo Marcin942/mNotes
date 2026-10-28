@@ -31,7 +31,7 @@ interface LabFeatures {
     @Composable
     fun PhonePanel(ed: Editor, close: () -> Unit) {}
 
-    /** Sekcje w kategorii „Laboratorium” w ustawieniach. */
+    /** Sekcje w kategorii „Rozszerzenia” w ustawieniach. */
     @Composable
     fun SettingsSection() {}
 

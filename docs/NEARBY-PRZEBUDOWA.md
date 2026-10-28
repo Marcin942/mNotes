@@ -1,7 +1,7 @@
 # Nearby: przebudowa łącza telefon ↔ tablet (FAZA 2b, 2b-B1)
 
-Agent B, 27.10.2026. Marcin: „nie działa: urządzenia się nie widzą, parowanie nie przechodzi, zdjęcie nie dociera; UI
-beznadziejne po obu stronach”. Ten dokument powstał **przed** kodem: najpierw diagnoza z kodu `noc/lab2` i ze źródeł
+27.10.2026, uwaga użytkownika: „nie działa: urządzenia się nie widzą, parowanie nie przechodzi, zdjęcie nie dociera; UI
+beznadziejne po obu stronach”. Ten dokument powstał **przed** kodem: najpierw diagnoza z ówczesnego kodu i ze źródeł
 (AAR `play-services-nearby:19.3.0` z cache Gradle, notatka z innej działającej aplikacji Nearby),
 potem projekt. Czego nie da się sprawdzić bez dwóch urządzeń, jest oznaczone **[tablet]**.
 
@@ -51,7 +51,7 @@ Androidach; na 16 bez niej błąd 8034”.
    kody błędów bez tłumaczenia.
 8. Drobne już poprawione w B2-9: „Następne zdjęcie” nie wysyłało; para nie do odczytu wisiała jako „Czekam…”.
 
-Czego nie wiem bez urządzeń **[tablet]**: czy Usługi Google na Tab S10+ i telefonie Marcina są aktualne; czy Wi‑Fi Direct
+Czego nie wiem bez urządzeń **[tablet]**: czy Usługi Google na Tab S10+ i telefonie użytkownika są aktualne; czy Wi‑Fi Direct
 się podnosi (ma wpływ tylko na szybkość); czy telefon ma włączoną lokalizację. Diagnostyka (§3.6) pokaże to na ekranie.
 
 ## 3. Projekt
@@ -157,4 +157,4 @@ szyfrowaniem; nowe typy wiadomości mają nowe kody bajtu typu (stara wersja dos
 3. Wyłącz lokalizację na telefonie → „Wyślij zdjęcie” → zdanie „Włącz lokalizację…” (nie „Usługi Google?”).
 4. Tablet: „Zdjęcie z telefonu”; telefon: wybierz 3 zdjęcia po kolei → postęp „2 z 3 · %”, wstawione schodkami.
 5. W połowie wysyłania wyłącz Bluetooth na tablecie na 5 s → po włączeniu wysyłanie wznawia się i zdjęcie dochodzi.
-6. „Diagnostyka” → wszystko ✓; „Kopiuj raport” → wklej Marcinowi, jeśli coś nie działa.
+6. „Diagnostyka” → wszystko ✓; „Kopiuj raport” → dołącz do zgłoszenia błędu, jeśli coś nie działa.

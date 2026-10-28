@@ -1,6 +1,6 @@
 # Integracja mNotes (wariant lab) z mLabs: rozpoznawanie i wymiana stron (K4)
 
-Agent B, noc 26/27.10.2026. Para do `mLabs/docs/INTEGRACJA-MNOTES-KREDA.md` (strona mLabs: jak model korzysta ze strony).
+27.10.2026. Para do `mLabs/docs/INTEGRACJA-MNOTES-KREDA.md` (strona mLabs: jak model korzysta ze strony).
 Tu strona mNotes: co jest w kodzie gałęzi `noc/lab` (od fazy 2 `noc/lab2`) i jak dojść do działającego rozpoznawania.
 Kopia w repozytorium mNotes: `docs/INTEGRACJA-MLABS.md` (odsyła do niej `Recognizer.kt`).
 
@@ -19,7 +19,7 @@ a stronę wysłać jako obraz + JSON.
 | `core/image/*` | kreda (K1–K3): na wyjściu obraz kredy albo kreski pióra | `BoardTest`, `ChalkVectorTest` |
 
 Celowo **bez modeli** i bez nowych zależności: TrOCR i TAMER są w mLabs (ONNX, ok. 100 MB), a decyzja, gdzie mają
-działać, należy do Marcina.
+działać, należy do autora.
 
 ## Droga do rozpoznawania (propozycja)
 

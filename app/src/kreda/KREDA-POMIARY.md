@@ -1,26 +1,26 @@
 # Kreda: pomiary na prawdziwych zdjęciach (FAZA 2b, 2b-B2)
 
-Agent B, 27.10.2026. Marcin: „kreda jest dalej do poprawy”. Zamiast poprawiać na oko — pomiar na wszystkich 24
+27.10.2026, uwaga użytkownika: „kreda jest dalej do poprawy”. Zamiast poprawiać na oko — pomiar na wszystkich 24
 zdjęciach z `kreda/blackboard/` (czytanych przez `KREDA_DIR`, do repozytorium nie trafiają), przed i po zmianach.
 
 ## Jak mierzone
 
-`KredaPomiaryTest` (testLab, pomijany bez `KREDA_DIR`): zdjęcie podpróbkowane przy czytaniu do 1600 px, cały potok
+`KredaPomiaryTest` (testKreda, pomijany bez `KREDA_DIR`): zdjęcie podpróbkowane przy czytaniu do 1600 px, cały potok
 (`BoardPipeline.run`, ustawienia domyślne) i wektoryzacja (`ChalkVector.vectorize`). Kolumny: próg auto (górna granica
 0,50), **kreda %** = kryjące piksele wyniku wśród widocznych (wynik jest przycięty do tablicy), **kresek**, **średnia
 długość kreski** w px wyniku, **fragmenty** = odsetek kresek krótszych niż 10 px, **czas** potoku + wektoryzacji na JVM
 (laptop; tablet będzie wolniejszy). Uruchomienie:
 
 ```
-KREDA_DIR=/home/piotr/Projects/Marcin/materialy/kreda/blackboard KREDA_OUT=/tmp/kreda ./gradlew --offline \
-  :app:testLabDebugUnitTest --tests '*KredaPomiaryTest*'
+KREDA_DIR=/ścieżka/do/kreda/blackboard KREDA_OUT=/tmp/kreda ./gradlew --offline \
+  :app:testGmsDebugUnitTest --tests '*KredaPomiaryTest*'
 ```
 
 (`KREDA_OUT` zapisuje podgląd: zdjęcie z narożnikami tablicy i przyciemnionym „nie-tablicą” obok krycia kredy, a w
 `*-slady.png` mapę pisma z granicami przycięcia; ostatnia kolumna tabeli to odsetek maski odcięty jako ściana.) Progi jakości pilnuje osobno `RealPhotoTest`
 (4 pierwsze zdjęcia: kreda 1–25 %, rozrzut tła < 0,2, ≥ 10 kresek, ≥ 70 % punktów kresek na jasnej kredzie zdjęcia).
 
-## Co zmienione (każdy krok do wyłączenia w panelu i w Ustawienia → Laboratorium)
+## Co zmienione (każdy krok do wyłączenia w panelu i w Ustawienia → Rozszerzenia)
 
 1. **Usuń listwy, ramy i ścianę** (`Chalk.dropThick`): jasny obszar, którego rdzeń jest dalej od tła niż 0,4 %
    szerokości obrazu **i** ma rozpiętość ≥ 8 % boku, znika razem z otoczką. Pierwsza wersja bez warunku rozpiętości
@@ -128,27 +128,27 @@ Wynik (zmienione zdjęcia; reszta identyczna): sprawdzone na podglądach, żaden
 
 ## Krzywe Béziera zamiast łamanych (2b-B4, 28.10)
 
-Marcin: „wzory po kredzie są postrzępione”. Kreski z „Edytowalnych kresek” są teraz krzywymi Béziera (`ChalkCurves`:
+Uwaga użytkownika: „wzory po kredzie są postrzępione”. Kreski z „Edytowalnych kresek” są teraz krzywymi Béziera (`ChalkCurves`:
 narożniki, wygładzenie 1‑4‑6‑4‑1, dopasowanie Schneidera z tolerancją 1,2 px przy 2400 px), a przed ścienianiem
 `ChalkVector.fillHoles` zamyka drobne dziury w masce (≤ 12 px albo szczelina grubości 1–2 px ≤ 48 px; wnętrza liter
 zostają). Dziury okazały się główną przyczyną zębów, które zostały po pierwszym etapie: porowata kreda ma dziurki 1–3 px,
 ścienianie obchodzi każdą pętlą, a krzywa robiła z tego kółeczka i ostrza.
 
-**Jak mierzone:** `KredaKrzyweTest` (testLab, pomijany bez `KREDA_DIR`/`KREDA_EXTRA`): zdjęcie w rozmiarze aplikacji
+**Jak mierzone:** `KredaKrzyweTest` (testKreda, pomijany bez `KREDA_DIR`/`KREDA_EXTRA`): zdjęcie w rozmiarze aplikacji
 (2400 px), cały potok, te same ścieżki szkieletu raz jako łamana (dawny wynik, Douglas-Peucker 1,2 px), raz jako krzywa.
 Miary (`CurveMetrics`): **węzły na 100 px** (wierzchołki łamanej / kotwice krzywej), **zęby na 100 px** (załamanie
 kierunku ≥ 25° między próbkami co 1 px poza narożnikami; dla łamanej 25–60°, bo ≥ 60° liczymy jej na korzyść jako
 narożnik), **błąd** (średnia odległość punktów szkieletu od rysowanej linii), **największy skręt na gładkim odcinku**.
-Wzór z okładki PDF (strona 1, obraz 2992×942) wyciągnięty poza repozytorium do `mNotes-lab/build/kreda-wejscie/`.
+Wzór z okładki PDF (strona 1, obraz 2992×942) wyciągnięty poza repozytorium.
 
 ```
-KREDA_DIR=/home/piotr/Projects/Marcin/materialy/kreda/blackboard \
-KREDA_EXTRA=/home/piotr/Projects/Marcin/projekty/mNotes-lab/build/kreda-wejscie/okladka-wzor.png \
-  ./gradlew --offline :app:testLabDebugUnitTest --tests '*KredaKrzyweTest*'
+KREDA_DIR=/ścieżka/do/kreda/blackboard \
+KREDA_EXTRA=/ścieżka/do/okladka-wzor.png \
+  ./gradlew --offline :app:testGmsDebugUnitTest --tests '*KredaKrzyweTest*'
 ```
 
 Podglądy PNG (z lewej łamana z wierzchołkami, z prawej krzywa z kotwicami i narożnikami na czerwono; u dołu te same
-kreski w pełnej grubości, jak w zeszycie): `mNotes-lab/app/build/kreda-krzywe/{syntetyczne,okladka-wzor,20260318_154119,20260326_140000}.png`
+kreski w pełnej grubości, jak w zeszycie): `app/build/kreda-krzywe/{syntetyczne,okladka-wzor,20260318_154119,20260326_140000}.png`
 (`build/` jest poza repozytorium; test tworzy je od nowa).
 
 | zdjęcie | wynik px | kresek | węzły / 100 px łamana → krzywa | zęby / 100 px łamana → krzywa | błąd px | maks. skręt ° |
@@ -229,7 +229,7 @@ globalnego, a „widoczne %” to piksele z jakimkolwiek kryciem (kreda % liczy 
 tylko bladych pikseli (krycie < 50 %) przy brzegach kresek. Na podglądzie najgorszego zdjęcia (`*-lokalny.png`, na czerwono
 to, co doszło z kryciem > 50 %) nie wróciła żadna nowa litera, są tylko pojedyncze punkty na brzegach. Przy K = 2 jedno
 zdjęcie przekracza próg planu (+1,1 p.p. fragmentów > 1 p.p.), więc zgodnie z planem próg lokalny jest **za przełącznikiem**
-(panel „Próg lokalny (blade litery w spokojnych miejscach)”, Ustawienia → Laboratorium, `board.localCut`) i
+(panel „Próg lokalny (blade litery w spokojnych miejscach)”, Ustawienia → Rozszerzenia, `board.localCut`) i
 **domyślnie wyłączony**. Strojenia K pod te 24 zdjęcia nie robiłem (to byłoby dopasowanie do zbioru). Zgadza się to z
 wcześniejszym wnioskiem przy wzorze z okładki: tam też progu lokalnego nie trzeba było. Czas `finish` rośnie z ok. 60 do
 ok. 110 ms (dwa rozmycia pełnego obrazu).

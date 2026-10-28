@@ -35,7 +35,7 @@ import kotlin.math.ceil
 import kotlin.math.max
 
 /**
- * „Wyślij stronę do mLabs” (K4, pierwszy krok z `docs/INTEGRACJA-MLABS.md`): strona jako PNG (dłuższy bok 1600 px) i
+ * „Wyślij stronę do mLabs” (K4, pierwszy krok z `app/src/kreda/INTEGRACJA-MLABS.md`): strona jako PNG (dłuższy bok 1600 px) i
  * JSON `mnotes-strona` v1 obok, udostępnione tak jak eksport (`FileProvider`, katalog `cache/share`). Bez intencji do
  * konkretnego pakietu: mLabs nie jest w tym repozytorium, więc wybiera użytkownik. Rozpoznawania pisma jeszcze nie
  * ma ([NoRecognizer]); tekst strony można dopisać ręcznie — trafia jako blok `silnik: uzytkownik`, pewność 1.

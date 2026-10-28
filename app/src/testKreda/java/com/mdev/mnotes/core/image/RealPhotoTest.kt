@@ -12,7 +12,7 @@ import kotlin.math.max
 /**
  * Prawdziwe zdjęcia tablicy (B2-6): jedyny test, który sprawdza port na tym, do czego służy. Zdjęcia nie trafiają do
  * repozytorium; test czyta je z katalogu w zmiennej `KREDA_DIR` (np. `kreda/blackboard/`), a bez niej jest pomijany:
- * `KREDA_DIR=/ścieżka/do/kreda/blackboard ./gradlew :app:testLabDebugUnitTest --tests '*RealPhotoTest*'`.
+ * `KREDA_DIR=/ścieżka/do/kreda/blackboard ./gradlew :app:testGmsDebugUnitTest --tests '*RealPhotoTest*'`.
  */
 class RealPhotoTest {
     private val photos: List<File> by lazy {

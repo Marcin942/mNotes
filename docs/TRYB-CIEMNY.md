@@ -1,6 +1,6 @@
 # Tryb ciemny i jasny stron (2b-A9, zastępuje i rozszerza F11)
 
-## Co chce Marcin
+## Czego chce użytkownik
 
 Pod „⋮” przełącznik **Jasne / Ciemne / Mieszane**. Każda strona pamięta, czy powstała jako jasna czy ciemna. „Ciemne”
 przyciemnia jasne strony, „Jasne” rozjaśnia ciemne, „Mieszane” pokazuje każdą tak, jak powstała. To **nie** ma być

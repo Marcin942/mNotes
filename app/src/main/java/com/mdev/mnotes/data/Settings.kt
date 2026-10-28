@@ -156,7 +156,7 @@ class Settings(ctx: Context) {
     var attach by Pref("snap.attach", false)         // F22: końce linii i przeciągane punkty przyczepiają się do innych figur
     var zoomMaxFactor by Pref("zoom.max_factor", 6f)     // F25: największe powiększenie = mnożnik „100 %” (6 = dawne)
     var returnToPen by Pref("tools.return_to_pen", false) // F26: ponowne dotknięcie lasera/ręki/lassa albo puste miejsce wraca do pisania
-    // F28: auto-korekta symboli po przytrzymaniu pióra (każdy osobno); w zeszycie Marcina wybrane pierwiastek i suma.
+    // F28: auto-korekta symboli po przytrzymaniu pióra (każdy osobno); w zeszycie autora wybrane pierwiastek i suma.
     var mathRoot by Pref("math.root", true)
     var mathSum by Pref("math.sum", true)
     var mathIntegral by Pref("math.integral", false)

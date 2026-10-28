@@ -188,11 +188,11 @@ class PairingTest {
     @Test
     fun offerRoundTripsAsBytesAndCode() {
         val k = SyncCrypto.generateKeys()
-        val o = Pairing.Offer(k.publicKey, nonce, "Tablet Marcina")
+        val o = Pairing.Offer(k.publicKey, nonce, "Tablet ucznia")
         val back = Pairing.decode(o.encode()) as Pairing.Offer
         assertArrayEquals(k.publicKey, back.publicKey)
         assertArrayEquals(nonce, back.nonce)
-        assertEquals("Tablet Marcina", back.deviceName)
+        assertEquals("Tablet ucznia", back.deviceName)
         val fromCode = Pairing.fromCode(o.toCode())!!
         assertArrayEquals(k.publicKey, fromCode.publicKey)
         assertArrayEquals(nonce, fromCode.nonce)

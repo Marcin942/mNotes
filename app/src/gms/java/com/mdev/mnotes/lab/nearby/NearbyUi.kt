@@ -126,8 +126,8 @@ fun PhoneLinkDialog(start: LinkMode, ed: Editor?, files: List<Outgoing>? = null,
     val notebooks = if (start == LinkMode.SEND) files != null else ed == null
     var imported by remember { mutableIntStateOf(0) }
     val store = remember { PairStore(ctx) }
-    val bt = remember { com.mdev.mnotes.lab.LabSettings.of(ctx).bluetooth }
-    val fullPhoto = remember { com.mdev.mnotes.lab.LabSettings.of(ctx).fullPhoto }
+    val bt = remember { com.mdev.mnotes.lab.LinkSettings.of(ctx).bluetooth }
+    val fullPhoto = remember { com.mdev.mnotes.lab.LinkSettings.of(ctx).fullPhoto }
     val me = remember { deviceName(ctx) }
     var key by remember { mutableStateOf(if (start == LinkMode.PAIR) null else store.loadOrForget()) }
     val expired = remember { start != LinkMode.PAIR && key == null && store.peerName.isNotEmpty() }
@@ -310,8 +310,8 @@ private fun StatePart(state: LinkState, mode: LinkMode, role: SyncRole, me: Stri
         is LinkState.Searching -> {
             val text = when {
                 host && mode == LinkMode.PAIR -> T.t("Widać mnie jako „$me”. Na telefonie otwórz „Połącz telefon z tabletem”.", "Visible as “$me”. On the phone open “Connect phone and tablet”.")
-                host && notebooks -> T.t("Czekam na „$peer”. Na drugim urządzeniu: Ustawienia → Laboratorium → „Wyślij zeszyt…”.", "Waiting for “$peer”. On the other device: Settings → Lab → “Send a notebook…”.")
-                host -> T.t("Czekam na telefon „$peer”. Na telefonie: Ustawienia → Laboratorium → „Wyślij zdjęcie na tablet”.", "Waiting for the phone “$peer”. On the phone: Settings → Lab → “Send photo to tablet”.")
+                host && notebooks -> T.t("Czekam na „$peer”. Na drugim urządzeniu: Ustawienia → Rozszerzenia → „Wyślij zeszyt…”.", "Waiting for “$peer”. On the other device: Settings → Extensions → “Send a notebook…”.")
+                host -> T.t("Czekam na telefon „$peer”. Na telefonie: Ustawienia → Rozszerzenia → „Wyślij zdjęcie na tablet”.", "Waiting for the phone “$peer”. On the phone: Settings → Extensions → “Send photo to tablet”.")
                 state.found.isNotEmpty() -> T.t("Znaleziono — stuknij tablet:", "Found — tap the tablet:")
                 mode == LinkMode.PAIR -> T.t("Szukam tabletu… Na tablecie otwórz „Połącz telefon z tabletem”.", "Looking for the tablet… On the tablet open “Connect phone and tablet”.")
                 notebooks -> T.t("Szukam „$peer”… Na drugim urządzeniu otwórz „Odbierz zeszyt”.", "Looking for “$peer”… On the other device open “Receive a notebook”.")
@@ -393,7 +393,7 @@ fun NotebookSendDialog(close: () -> Unit, send: (Outgoing) -> Unit) {
     val scope = rememberCoroutineScope()
     var busy by remember { mutableStateOf<String?>(null) }
     var note by remember { mutableStateOf<String?>(null) }
-    val bt = remember { com.mdev.mnotes.lab.LabSettings.of(ctx).bluetooth }
+    val bt = remember { com.mdev.mnotes.lab.LinkSettings.of(ctx).bluetooth }
     // Bluetooth: najpierw rozmiar i czas, wysyłka po drugim stuknięciu (2e-B1).
     var waiting by remember { mutableStateOf<Outgoing?>(null) }
     DisposableEffect(Unit) { onDispose { waiting?.file?.delete() } }

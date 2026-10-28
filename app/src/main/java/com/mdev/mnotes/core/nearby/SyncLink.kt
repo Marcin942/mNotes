@@ -32,7 +32,7 @@ object LinkPermissions {
     fun missing(required: List<String>, has: (String) -> Boolean): List<String> = required.filter { !has(it) && (it != COARSE || FINE !in required) }
 
     /**
-     * Uprawnienia pytane w czasie działania dla Bluetooth RFCOMM (2e-B1, `plan/NEARBY-OPEN-SOURCE.md` §3.2). Do Androida
+     * Uprawnienia pytane w czasie działania dla Bluetooth RFCOMM (2e-B1). Do Androida
      * 11 łączenie i nasłuch biorą `BLUETOOTH` z instalacji (bez pytania); lokalizacja tylko przy [discovery] („Szukaj w
      * pobliżu”): przybliżona do 9, dokładna 10–11. Od 12 jedno „Urządzenia w pobliżu”: CONNECT, SCAN przy szukaniu
      * (w manifeście `neverForLocation`, więc bez lokalizacji), ADVERTISE przy [visible] („Pokaż tablet na 2 min”).

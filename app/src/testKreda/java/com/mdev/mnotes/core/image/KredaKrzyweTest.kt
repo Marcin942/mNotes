@@ -19,12 +19,12 @@ import kotlin.math.min
 import kotlin.math.sin
 
 /**
- * Pomiar 2b-B4 do `docs/KREDA-POMIARY.md`: kreski kredy jako łamana (dawny wynik, [ChalkVector.simplify] z ε 1,2 px)
+ * Pomiar 2b-B4 do `app/src/kreda/KREDA-POMIARY.md`: kreski kredy jako łamana (dawny wynik, [ChalkVector.simplify] z ε 1,2 px)
  * i jako krzywe Béziera ([ChalkCurves]) na tych samych ścieżkach szkieletu, miary z [CurveMetrics]. Zdjęcia z
  * `KREDA_DIR` (katalog) i `KREDA_EXTRA` (pliki albo katalogi rozdzielone `:`, np. wzór z okładki PDF), w rozmiarze
  * aplikacji (2400 px). Podglądy PNG (4×: u góry linia środkowa z węzłami, u dołu kreska w pełnej grubości; z lewej
  * łamana, z prawej krzywa) idą do `KREDA_OUT` albo `build/kreda-krzywe/`.
- * `KREDA_DIR=… ./gradlew :app:testLabDebugUnitTest --tests '*KredaKrzyweTest*'`; tabela w system-out wyniku testu.
+ * `KREDA_DIR=… ./gradlew :app:testGmsDebugUnitTest --tests '*KredaKrzyweTest*'`; tabela w system-out wyniku testu.
  */
 class KredaKrzyweTest {
 
@@ -133,7 +133,7 @@ class KredaKrzyweTest {
             }
             return chalk
         }
-        // Wiersze tabeli w `docs/KREDA-POMIARY.md` dla każdego kształtu osobno (2c-B6).
+        // Wiersze tabeli w `app/src/kreda/KREDA-POMIARY.md` dla każdego kształtu osobno (2c-B6).
         for ((name, shape) in listOf("okrąg", "sinusoida", "S", "∑").zip(shapes)) {
             val s = both(draw(listOf(shape)))
             println("| $name | ${s.lines.size} | ${"%.1f".format(s.old.nodesPer100)} → ${"%.1f".format(s.new.nodesPer100)} | " +

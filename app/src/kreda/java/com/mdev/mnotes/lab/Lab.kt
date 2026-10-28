@@ -80,8 +80,13 @@ import java.io.File
 import kotlin.math.hypot
 import kotlin.math.min
 
-/** Funkcje wariantu lab widziane przez wspólny kod przez [LabFeatures]. */
+/**
+ * Kreda i „Wyślij do mLabs” (gałąź `kreda`) widziane przez wspólny kod przez [LabFeatures]; main ładuje ten obiekt po
+ * nazwie (`Extensions.KREDA`), więc zmiana nazwy lub pakietu wymaga zmiany tam.
+ */
 object Lab : LabFeatures {
+
+    override val board = true
 
     /** Rozmiar podglądu w panelu: szybki na tablecie, wystarczy do oceny progu. */
     private const val PREVIEW = 520
@@ -418,12 +423,6 @@ object Lab : LabFeatures {
         com.mdev.mnotes.lab.recognize.SendToMlabs.Dialog(ed, index, work) { sendPage = null }
     }
 
-    @Composable
-    override fun phoneButton(): Boolean = LabSettings.of(LocalContext.current).nearby
-
-    @Composable
-    override fun PhonePanel(ed: Editor, close: () -> Unit) = com.mdev.mnotes.lab.nearby.PhoneLinkDialog(com.mdev.mnotes.core.nearby.LinkMode.RECEIVE, ed, close = close)
-
     /**
      * Zdjęcie z trybu wykładu (2b-B3, hook A2-8): gdy to ciemna tablica, przechodzi przez kredę z krokami z Ustawień
      * i podmienia plik obrazu jako **osobna** edycja — zdjęcie na stronie to podgląd, a jedno cofnięcie wraca do
@@ -506,7 +505,6 @@ object Lab : LabFeatures {
     @Composable
     override fun SettingsSection() {
         val set = LabSettings.of(LocalContext.current)
-        NearbySection(set)
         Group(T.t("Kreda: zdjęcia tablicy", "Chalk: blackboard photos"), keys = "kreda tablica zdjęcie oczyść prostowanie próg narożniki gumka podpowiedź blada listwy ramy kreski krzywe gładkie bezier chalk board photo clean corners eraser hint faint ledge frame strokes curves smooth") {
             Text(
                 T.t(
@@ -523,61 +521,6 @@ object Lab : LabFeatures {
                 set.autoCut = o.autoCut; set.cut = o.cut; set.solid = o.solid
                 set.tint = listOf(null, LabSettings.tintColor(1), LabSettings.tintColor(2)).indexOf(o.tint).coerceAtLeast(0)
             }
-        }
-    }
-
-    /** Łącze z telefonem: przełącznik, parowanie, wysyłanie zdjęcia (to samo menu na tablecie i telefonie). */
-    @Composable
-    private fun NearbySection(set: LabSettings) {
-        val ctx = LocalContext.current
-        val store = remember { com.mdev.mnotes.lab.nearby.PairStore(ctx) }
-        var dialog by remember { mutableStateOf(0) }
-        var tick by remember { mutableStateOf(0) }
-        var outgoing by remember { mutableStateOf<com.mdev.mnotes.lab.nearby.Outgoing?>(null) }
-        Group(T.t("Telefon i tablet (Nearby / Bluetooth)", "Phone and tablet (Nearby / Bluetooth)"), keys = "nearby telefon tablet zdjęcie bluetooth rfcomm parowanie połącz wyślij diagnostyka łącze jakość phone pair connect send diagnostics link quality") {
-            Text(
-                T.t(
-                    "Zdjęcie zrobione telefonem trafia od razu na stronę na tablecie, bez internetu i bez wspólnej sieci; każda ramka jest szyfrowana kluczem pary. Gdy Android pyta o lokalizację, to dlatego, że szukanie urządzeń mogłoby ją zdradzić; mNotes położenia nie odczytuje. Jedno zdjęcie bez parowania: Udostępnij → Quick Share na tablet i wstaw obraz.",
-                    "A photo taken with the phone lands right on the tablet page, without internet or a shared network; every frame is encrypted with the pair key. When Android asks for location, it is because scanning for devices could reveal it; mNotes never reads your location. A single photo without pairing: Share → Quick Share to the tablet and insert the image.",
-                ),
-                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(vertical = 6.dp),
-            )
-            ToggleRow(T.t("Włącz łącze z telefonem", "Enable the phone link"), set.nearby) { set.nearby = it }
-            if (set.nearby) {
-                tick
-                // 2e-B1: Bluetooth RFCOMM obok Nearby; para (klucz) wspólna, zmiana nie wymaga parowania od nowa.
-                ToggleRow(T.t("Łącze przez Bluetooth (bez Usług Google Play)", "Link over Bluetooth (no Google Play services)"), set.bluetooth) { set.bluetooth = it }
-                Text(
-                    if (set.bluetooth) T.t(
-                        "Bluetooth: tablet najłatwiej znaleźć, gdy jest sparowany w ustawieniach Bluetooth obu urządzeń; inaczej „Szukaj w pobliżu” przy parowaniu. Bez lokalizacji do Androida 11 i bez Wi-Fi Direct; zdjęcie 1 MB idzie kilka sekund.",
-                        "Bluetooth: the tablet is easiest to find when it is paired in the Bluetooth settings of both devices; otherwise “Search nearby” while pairing. No location up to Android 11 and no Wi-Fi Direct; a 1 MB photo takes a few seconds.",
-                    ) else T.t("Nearby: Bluetooth albo Wi-Fi Direct, wymaga Usług Google Play.", "Nearby: Bluetooth or Wi-Fi Direct, needs Google Play services."),
-                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(bottom = 4.dp),
-                )
-                ToggleRow(T.t("Zdjęcia z telefonu w pełnej jakości (wolniej)", "Photos from the phone in full quality (slower)"), set.fullPhoto) { set.fullPhoto = it }
-                Text(
-                    if (store.paired) T.t("Sparowano z „${store.peerName}”.", "Paired with “${store.peerName}”.") else T.t("Brak sparowanego urządzenia.", "No paired device."),
-                    style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(vertical = 4.dp),
-                )
-                TextButton(onClick = { dialog = 1 }) { Text(T.t("Połącz telefon z tabletem", "Connect phone and tablet")) }
-                if (store.paired) {
-                    TextButton(onClick = { dialog = 2 }) { Text(T.t("Wyślij zdjęcie na tablet (na telefonie)", "Send a photo to the tablet (on the phone)")) }
-                    TextButton(onClick = { store.clear(); tick++ }) { Text(T.t("Usuń parę", "Forget the pair"), color = MaterialTheme.colorScheme.error) }
-                }
-                if (store.paired) {
-                    TextButton(onClick = { dialog = 4 }) { Text(T.t("Wyślij zeszyt na drugie urządzenie", "Send a notebook to the other device")) }
-                    TextButton(onClick = { dialog = 5 }) { Text(T.t("Odbierz zeszyt z drugiego urządzenia", "Receive a notebook from the other device")) }
-                }
-                TextButton(onClick = { dialog = 3 }) { Text(T.t("Diagnostyka łącza", "Link diagnostics")) }
-            }
-        }
-        when (dialog) {
-            1 -> com.mdev.mnotes.lab.nearby.PhoneLinkDialog(com.mdev.mnotes.core.nearby.LinkMode.PAIR, null) { dialog = 0; tick++ }
-            2 -> com.mdev.mnotes.lab.nearby.PhoneLinkDialog(com.mdev.mnotes.core.nearby.LinkMode.SEND, null) { dialog = 0; tick++ }
-            3 -> com.mdev.mnotes.lab.nearby.DiagnosticsDialog(null) { dialog = 0 }
-            4 -> com.mdev.mnotes.lab.nearby.NotebookSendDialog({ dialog = 0 }) { file -> outgoing = file; dialog = 6 }
-            5 -> com.mdev.mnotes.lab.nearby.PhoneLinkDialog(com.mdev.mnotes.core.nearby.LinkMode.RECEIVE, null) { dialog = 0 }
-            6 -> com.mdev.mnotes.lab.nearby.PhoneLinkDialog(com.mdev.mnotes.core.nearby.LinkMode.SEND, null, outgoing?.let { listOf(it) }) { dialog = 0; outgoing = null }
         }
     }
 

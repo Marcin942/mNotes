@@ -1,7 +1,7 @@
 package com.mdev.mnotes.core.layout
 
 /**
- * Listwa przy narzędziach pomocniczych — gumce, lassie i laserze (2b-A2, uwagi Marcina). Dwa tryby do wyboru w
+ * Listwa przy narzędziach pomocniczych — gumce, lassie i laserze (2b-A2, uwagi użytkownika). Dwa tryby do wyboru w
  * Ustawieniach:
  *  - [WRITE_AND_MENU] (domyślny): listwa zostaje przy pisaniu (kolory, grubości) — dotknięcie koloru wraca do ostatniego
  *    narzędzia pisania — a opcje gumki/lassa/lasera wyskakują w małym menu przy ikonie narzędzia, jak „Pobierz format”

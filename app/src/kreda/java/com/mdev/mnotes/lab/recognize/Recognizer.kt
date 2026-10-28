@@ -20,7 +20,7 @@ class RecognizedBlock(
 /**
  * Rozpoznawanie pisma i wzorów dla wariantu lab (K4). Bez modeli w tej aplikacji: dziś jest tylko [NoRecognizer],
  * a docelowo implementacja woła usługę mLabs (TrOCR dla linii tekstu, TAMER dla wzorów), patrz
- * `docs/INTEGRACJA-MLABS.md`. Interfejs jest celowo mały, żeby dało się go podmienić bez ruszania UI.
+ * `app/src/kreda/INTEGRACJA-MLABS.md`. Interfejs jest celowo mały, żeby dało się go podmienić bez ruszania UI.
  */
 interface Recognizer {
     val name: String

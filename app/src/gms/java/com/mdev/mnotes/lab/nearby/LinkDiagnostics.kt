@@ -31,7 +31,7 @@ object LinkDiagnostics {
         LocationManagerCompat.isLocationEnabled(ctx.getSystemService(Context.LOCATION_SERVICE) as LocationManager)
     }.getOrNull()
 
-    private fun bluetooth(ctx: Context) = com.mdev.mnotes.lab.LabSettings.of(ctx).bluetooth
+    private fun bluetooth(ctx: Context) = com.mdev.mnotes.lab.LinkSettings.of(ctx).bluetooth
 
     /** Bluetooth RFCOMM (2e-B1): zgody tego transportu, Bluetooth i zapamiętany adres; bez wierszy o Wi-Fi i Usługach Google. */
     fun checks(ctx: Context): List<Check> {

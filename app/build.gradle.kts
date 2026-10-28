@@ -73,7 +73,7 @@ dependencies {
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.androidx.profileinstaller)
     implementation(libs.kotlinx.coroutines.android)
-    // Jedyna niewolna zależność (powód w docs/OPEN-SOURCE.md §2): łącze Nearby tylko w wariancie gms, za przełącznikiem
+    // Jedyna niewolna zależność (licencje w NOTICE.md): łącze Nearby tylko w wariancie gms, za przełącznikiem
     // w ustawieniach; wariant foss jej nie ma.
     "gmsImplementation"(libs.play.services.nearby)
     testImplementation(libs.junit)

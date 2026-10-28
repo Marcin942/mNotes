@@ -17,7 +17,8 @@ class SettingsSynonymsTest {
 
     private val sources = listOf(
         "src/main/java/com/mdev/mnotes/ui/SettingsScreen.kt",
-        "src/lab/java/com/mdev/mnotes/lab/Lab.kt",
+        "src/gms/java/com/mdev/mnotes/lab/PhoneLink.kt",
+        "src/kreda/java/com/mdev/mnotes/lab/Lab.kt",
     )
 
     private val q = "(?:[^\"\\\\]|\\\\.)*"

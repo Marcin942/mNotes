@@ -7,11 +7,11 @@ import javax.imageio.ImageIO
 import kotlin.math.max
 
 /**
- * Pomiary kredy na prawdziwych zdjęciach (2b-B2) do `docs/KREDA-POMIARY.md`: dla każdego zdjęcia z `KREDA_DIR` udział
+ * Pomiary kredy na prawdziwych zdjęciach (2b-B2) do `app/src/kreda/KREDA-POMIARY.md`: dla każdego zdjęcia z `KREDA_DIR` udział
  * kredy, liczba kresek, średnia długość kreski, odsetek drobnych fragmentów (< 10 px), próg i czas. To nie jest test
  * z progami (te są w [RealPhotoTest]), tylko tabela do porównania przed/po; wypisuje ją na wyjście testu.
- * `KREDA_DIR=/ścieżka/kreda/blackboard ./gradlew :app:testLabDebugUnitTest --tests '*KredaPomiaryTest*'`;
- * wynik w `app/build/test-results/testLabDebugUnitTest/TEST-…KredaPomiaryTest.xml` (system-out).
+ * `KREDA_DIR=/ścieżka/kreda/blackboard ./gradlew :app:testGmsDebugUnitTest --tests '*KredaPomiaryTest*'`;
+ * wynik w `app/build/test-results/testGmsDebugUnitTest/TEST-…KredaPomiaryTest.xml` (system-out).
  */
 class KredaPomiaryTest {
     private fun load(f: File, longest: Int): Raster {

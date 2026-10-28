@@ -3,7 +3,7 @@
 
 Użycie: python3 tools/podobienstwo.py <katalog-materiału> [-v <plik-mNotes>]
 Identyfikatory są sprowadzane do małych liter bez podkreśleń, więc camelCase z Kotlina spotyka snake_case z Pythona;
-tłumaczenia linia po linii między językami i tak mogą umknąć (patrz docs/OPEN-SOURCE.md §3.3).
+tłumaczenia linia po linii między językami i tak mogą umknąć.
 """
 import os
 import re

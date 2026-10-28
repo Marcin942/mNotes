@@ -337,7 +337,7 @@ object Guide {
                         if (lab) t("Kilka zdjęć tej samej tablicy zaznacz razem → „Połącz zdjęcia tablicy (bez osób)” — zostaje tablica bez zasłaniających ją ludzi.", "Select several photos of the same board → “Merge board photos (without people)” — the board stays, without the people in front of it.") else null,
                         t("Pisz po zdjęciu albo obok — pismo kładzie się na nim.", "Write on the photo or next to it — the writing goes on top."),
                     ),
-                    if (lab) t("Kroki kredy (listwy, ramy, blada kreda) ustawisz w Ustawieniach → Laboratorium → Kreda.", "Chalk steps (ledges, frames, faint chalk) are in Settings → Lab → Chalk.")
+                    if (lab) t("Kroki kredy (listwy, ramy, blada kreda) ustawisz w Ustawieniach → Rozszerzenia → Kreda.", "Chalk steps (ledges, frames, faint chalk) are in Settings → Extensions → Chalk.")
                     else t("To ten sam aparat co w trybie wykładu, tylko bez kapsuły — na jedno zdjęcie w przerwie.", "It is the same camera as in lecture mode, just without the capsule — for a single photo in a break."),
                 ) { y ->
                     val parab = FloatArray(2 * 9) { k -> val i = k / 2; val x = -1f + i * 0.75f; if (k % 2 == 0) MARGIN + 150f + x * 34f else y + 128f - (x - 2f) * (x - 2f) * 8f }

@@ -1,6 +1,6 @@
 # Stanowisko od nowa (2d-A1) — projekt
 
-Polecenie Marcina (28.10, 12:15, po teście na tablecie): między dokumentami jest przestrzeń, zoom działa dziwnie
+Uwagi autora (28.10, po teście na tablecie): między dokumentami jest przestrzeń, zoom działa dziwnie
 (notatka lekko wibruje), ruch staje od razu po oderwaniu palca. **Stanowisko ma działać jak jeden dokument**, którego
 część stron leży w jednym rzędzie, a część w drugim.
 
@@ -108,7 +108,7 @@ Granica: oś, która dochodzi do końca (clamp z §2), staje na granicy, druga l
 z `Choreographer`), więc w testach JVM liczy się na sztucznym zegarze.
 
 Jeden dokument zostaje na `OverScroller` (bez ryzyka regresji); stanowisko liczy tym samym wzorem — ta sama droga
-i czas rzutu przy tej samej prędkości. Gdy Marcin potwierdzi, że stanowisko „czuje się” tak samo, jeden dokument też
+i czas rzutu przy tej samej prędkości. Gdy autor potwierdzi, że stanowisko „czuje się” tak samo, jeden dokument też
 może przejść na `Fling` (jedna ścieżka kodu).
 
 ## 6. Zoom
@@ -178,13 +178,13 @@ zapis stanowiska bez nowych pól.
 ## 14. Czego nie da się sprawdzić tutaj
 
 Bez tabletu: płynność, „feel” rzutu, wydajność kafelków dwóch PDF-ów, zachowanie przy szybkim szczypaniu na
-prawdziwym ekranie. Lista kontrolna w `docs/NOTATKI-NOC.md`.
+prawdziwym ekranie.
 
 ## Dlaczego kontener z pasami, a nie jeden `NoteView` na N dokumentów
 
 `NoteView` to ~3700 wierszy narzędzi (pióro, gumki, lasso, krzywe, kadrowanie, geometria, tablica), wszystkie
 zbudowane wokół jednego dokumentu i jednego `Editor`. Przepisanie ich na N dokumentów to ryzyko regresji w trybie
-jednego dokumentu, którego używa się najczęściej. Kontener daje to, czego wymaga Marcin — jeden stan widoku, jedną
+jednego dokumentu, którego używa się najczęściej. Kontener daje to, czego wymaga autor — jeden stan widoku, jedną
 macierz (powiększenie i przesunięcie wspólne wyliczane z jednego modelu w jednej klatce), odstęp jak między stronami,
 inercję w obu osiach — a każdy dokument zachowuje swoje narzędzia, cofanie i cache. Pas nie ma własnego stanu widoku:
 dostaje gotową macierz z modelu.

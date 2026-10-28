@@ -249,7 +249,7 @@ object LinkErrors {
 }
 
 /**
- * Zmniejszanie zdjęć z telefonu do dłuższego boku [LONGEST] (2e-B1, `plan/NEARBY-OPEN-SOURCE.md` §1.3): `inSampleSize`
+ * Zmniejszanie zdjęć z telefonu do dłuższego boku [LONGEST] (2e-B1): `inSampleSize`
  * daje tylko potęgi dwójki, więc najpierw [sample] (dekodowanie nie mniejsze niż cel), potem skalowanie do [size].
  * 2400 px to zwykle 0,6–1,2 MB w JPEG 88, a to wciąż dość dla zdjęcia tablicy.
  */

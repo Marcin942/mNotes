@@ -8,7 +8,8 @@ import androidx.compose.runtime.setValue
 import com.mdev.mnotes.core.image.BoardOptions
 
 /**
- * Ustawienia wariantu lab w osobnym pliku preferencji (`mnotes.lab`), żeby wariant core nie miał po nich śladu.
+ * Ustawienia kredy w osobnym pliku preferencji (`mnotes.lab`, wspólnym z ustawieniami łącza), żeby wersja bez kredy
+ * nie miała po nich śladu.
  * Każdy krok kredy da się wyłączyć (decyzja planu nocy: pełna customizacja); to są wartości domyślne panelu.
  */
 class LabSettings(ctx: Context) {
@@ -37,7 +38,6 @@ class LabSettings(ctx: Context) {
     private val cutP = F("board.cut", 0.25f)
     private val solidP = F("board.solid", 0.85f)
     private val tintP = I("board.tint", 0)
-    private val nearbyP = B("nearby.enabled", false)
     private val boardHintP = B("board.hint", true)
     private val faintP = B("board.faint", true)
     private val localCutP = B("board.localCut", false)
@@ -45,17 +45,6 @@ class LabSettings(ctx: Context) {
     private val specksP = B("board.specks", true)
     private val curvesP = B("board.curves", true)
     private val lectureP = B("board.lecture", true)
-    private val bluetoothP = B("link.bluetooth", false)
-    private val fullPhotoP = B("link.photo.full", false)
-
-    /** Łącze z telefonem (zdjęcie z telefonu, zeszyty); domyślnie wyłączone, bo wymaga uprawnień radia. */
-    var nearby: Boolean get() = nearbyP.value; set(v) = nearbyP.set(v)
-
-    /** Transport łącza (2e-B1): Bluetooth RFCOMM zamiast Nearby (Usługi Google). Oba zostają, Marcin porównuje. */
-    var bluetooth: Boolean get() = bluetoothP.value; set(v) = bluetoothP.set(v)
-
-    /** Zdjęcia z telefonu w pełnej rozdzielczości; domyślnie dłuższy bok 2400 px (przez Bluetooth kilka razy szybciej). */
-    var fullPhoto: Boolean get() = fullPhotoP.value; set(v) = fullPhotoP.set(v)
 
     var straighten: Boolean get() = straightenP.value; set(v) = straightenP.set(v)
     var crop: Boolean get() = cropP.value; set(v) = cropP.set(v)

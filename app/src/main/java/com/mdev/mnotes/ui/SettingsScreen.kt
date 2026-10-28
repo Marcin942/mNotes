@@ -36,7 +36,7 @@ import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.ColorLens
-import androidx.compose.material.icons.rounded.Science
+import androidx.compose.material.icons.rounded.Extension
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.Keyboard
@@ -113,7 +113,7 @@ fun SettingsScreen(onBack: () -> Unit, startCat: Int = 0, startQuery: String = "
         Cat(Icons.Rounded.Lock, T.t("Prywatność i kopie", "Privacy & backup")),
         Cat(Icons.Rounded.Keyboard, T.t("Skróty klawiszowe", "Keyboard shortcuts")),
     ) + listOfNotNull(
-        Flavor.lab?.let { Cat(Icons.Rounded.Science, T.t("Laboratorium", "Lab")) },
+        Flavor.lab?.let { Cat(Icons.Rounded.Extension, T.t("Rozszerzenia", "Extensions")) },
         Cat(Icons.Rounded.Info, T.t("O aplikacji", "About")),
     )
     fun open(i: Int) { query = ""; cat = i }

@@ -1,6 +1,6 @@
 # Pomysły dydaktyczne (2c-A-ost): szkic do decyzji
 
-Stan: **tylko szkic, bez kodu.** Wdrożenie dopiero po decyzji Marcina. Wpisy NAU-1 … NAU-5 są w
+Stan: **tylko szkic, bez kodu.** Wdrożenie dopiero po decyzji autora. Wpisy NAU-1 … NAU-5 są w
 `docs/features/BACKLOG.md`.
 Wspólne zasady: logika w `core/` z testami JVM. Format zeszytu się nie zmienia, wolno dopisać najwyżej pole w meta
 (jak `ptag`), które stara wersja pominie. Wszystko działa offline.

@@ -941,3 +941,27 @@ Nearby nie zmieniam do odpowiedzi Marcina na pytania z `plan/NEARBY-OPEN-SOURCE.
      miejscu ekranu; cofnij w każdym dokumencie osobno.
   7. Dwa duże PDF-y: przewiń jeden daleko poza ekran, odczekaj kilka sekund, wróć — strony odrysowują się, aplikacja
      nie zwalnia. Zapisz stanowisko („Stanowiska”), zamknij i otwórz zapisane: wraca powiększenie, przesunięcia i aktywny dokument.
+- **2c-A16 (część 2, 12:55):** `noc/lab2` (2c-B4–B6, 2e-B2, 2e-B1 cz. 1) scalona do `noc/wszystko` (fb9a86f), bez
+  konfliktów; wzmianki o projekcie zewnętrznym usunięte też z `docs/NOTATKI-NOC.md` i `docs/OPEN-SOURCE.md` (87e70b9),
+  `git grep` pusty na `noc/wszystko`. `oss/main` i `oss/kreda` jeszcze ich nie mają usuniętych — odświeżenie z
+  `noc/wszystko` w 3a-2 (publikacja i tak tylko z czystą historią, `docs/OPEN-SOURCE.md` §4). Pełne testy z `KREDA_DIR`:
+  core 852 (2 pominięte), lab 934 (3 pominięte), 0 porażek, oba APK.
+
+### Na tablecie po FAZIE 2c/2d — kolejność (z `dzienniki/PRZEGLAD-FABLE-2.md` §5, szczegóły tam)
+Instalacja: `labDebug` z `noc/wszystko` (tablet i telefon), do pkt 16 też `coreDebug`. Przy punktach poprawionych
+w nocy — gdzie jest opis kroków.
+1. Zgodność: stary zeszyt z PDF-em i obrazami → pisanie → eksport PDF i `.mnotes` → import.
+2. 10 minut notatek z przytrzymaniami (nic samo nie zmienia się w √/∑/krzywą; prosta i prostokąt nie krótsze).
+3. Układ na kratce — **poprawione (2c-A3)**, kroki wyżej przy 2c-A3.
+4. Ikony gumki w pasku (36 dp).
+5. Tablica — **poprawione (2c-A1)**: panel stron bez „Dodaj stronę”, ↶ po wzroście bez skoku; kilkaset kresek, eksport PNG.
+6. Tryb ciemny — **pola tekstu i wypełnienia poprawione (2c-A2)**; reszta listy z przeglądu (granat, PDF ze slajdami,
+   zrzut, pipeta, biały pisak).
+7. Krzywe: 4 tryby, piórko od ostatniego węzła.
+8. Geometria: cyrkiel, „Przecięcie prostych” przy prawie równoległych, obrót, kąt, dwusieczna, kątomierz.
+9. Stanowiska — **przepisane (2d-A1)**, kroki 1–7 wyżej przy 2d-A1 (w tym pamięć z PDF-ami i zapis stanowiska).
+   Z przeglądu dodatkowo: Ctrl+Z w dokumencie docelowym po przeniesieniu (wspólne cofanie to jeszcze 2c-A5),
+   kadrowanie obrazu w drugim dokumencie (pasek powinien być już na miejscu — widoki leżą na całym oknie).
+10. Profile; 11. Przewodnik; 12. Wyszukiwarka ustawień; 13. „Zdjęcie tablicy” z przełączeniem aplikacji;
+14. Kreda (lab, w tym kolor kreski wg papieru 2c-B4); 15. Nearby na dwóch urządzeniach (wpisy 2c-B1–B3);
+16. Core bez funkcji lab; 17. mLabs (pomiary) — wg przeglądu.

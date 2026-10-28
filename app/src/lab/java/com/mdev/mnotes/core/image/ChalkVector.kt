@@ -38,9 +38,51 @@ object ChalkVector {
         val w = img.w; val h = img.h
         val mask = BooleanArray(w * h) { Raster.alpha(img.px[it]) >= alphaMin }
         if (mask.none { it }) return emptyList()
+        fillHoles(mask, w, h)
         val skel = thin(mask, w, h)
         val dist = distance(mask, w, h)
         return bridge(join(trace(skel, w, h), w, dist), w, dist).map { ChalkLine(it, widthOf(it, w, dist)) }
+    }
+
+    /** Największa dziura w kredzie (px), którą zamykamy przed ścienianiem, i największa szczelina grubości 1–2 px. */
+    const val HOLE_AREA = 12
+    const val SLIT_AREA = 48
+
+    /**
+     * Zamyka w [mask] drobne dziury (2b-B4): kreda jest porowata, a ścienianie obchodzi każdą dziurę pętlą, więc z jednej
+     * kreski robiły się kwadraciki na łamanej i kółeczka z ostrzami na krzywej. Dziura to składowa tła (sąsiedztwo 4)
+     * niedotykająca brzegu obrazu; zamykamy ją, gdy ma ≤ [HOLE_AREA] px albo gdy każdy jej piksel styka się z kredą
+     * (szczelina grubości 1–2 px, np. między dwiema nachodzącymi kreskami) i ma ≤ [SLIT_AREA] px. Wnętrza liter (o, e, φ)
+     * są większe i zostają.
+     */
+    fun fillHoles(mask: BooleanArray, w: Int, h: Int) {
+        val seen = BooleanArray(w * h)
+        val queue = IntArray(w * h)
+        for (start in mask.indices) {
+            if (mask[start] || seen[start]) continue
+            var head = 0; var tail = 0
+            queue[tail++] = start; seen[start] = true
+            var border = false; var thin = true
+            while (head < tail) {
+                val p = queue[head++]
+                val x = p % w; val y = p / w
+                if (x == 0 || y == 0 || x == w - 1 || y == h - 1) border = true
+                if (thin && !touchesInk(mask, w, h, x, y)) thin = false
+                if (x > 0 && !mask[p - 1] && !seen[p - 1]) { seen[p - 1] = true; queue[tail++] = p - 1 }
+                if (x < w - 1 && !mask[p + 1] && !seen[p + 1]) { seen[p + 1] = true; queue[tail++] = p + 1 }
+                if (y > 0 && !mask[p - w] && !seen[p - w]) { seen[p - w] = true; queue[tail++] = p - w }
+                if (y < h - 1 && !mask[p + w] && !seen[p + w]) { seen[p + w] = true; queue[tail++] = p + w }
+            }
+            if (!border && (tail <= HOLE_AREA || (thin && tail <= SLIT_AREA))) for (k in 0 until tail) mask[queue[k]] = true
+        }
+    }
+
+    private fun touchesInk(mask: BooleanArray, w: Int, h: Int, x: Int, y: Int): Boolean {
+        for (dy in -1..1) for (dx in -1..1) {
+            val nx = x + dx; val ny = y + dy
+            if ((dx != 0 || dy != 0) && nx in 0 until w && ny in 0 until h && mask[ny * w + nx]) return true
+        }
+        return false
     }
 
     /**

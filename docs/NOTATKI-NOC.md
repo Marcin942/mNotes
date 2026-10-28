@@ -329,10 +329,21 @@ Na starcie (`noc/wszystko` @ `471ed08`): lab 696 testów, 0 porażek.
   `ctrl` (edycja uchwytami jak F17). Przełącznik „Edytowalne kreski jako gładkie krzywe” (panel i Ustawienia →
   Laboratorium → Kreda, domyślnie włączony; wyłączony = dawne łamane). Testy: `ChalkCurvesTest` (okrąg, sinusoida, S, ∑,
   L/V, schodki prostej, łuki bez narożników, przycięcie pętli, krzywe na kredzie zdjęcia), miary w `CurveMetrics`;
-  testy kredy/tablicy/Béziera zielone. **Nie zrobione (limit):** tabela przed/po na 24 zdjęciach + okładka
-  (`KredaPomiaryTest`: węzły/100 px, zęby, błąd), 3 podglądy PNG do `build/`, wpis w `docs/KREDA-POMIARY.md`, pełne testy
-  obu wariantów i APK. Zdjęcie wzoru z okładki PDF wyciągnięte poza repo (strumień obrazu 2992×942), do podania testowi
-  przez `KREDA_DIR`. **Tablet:** zdjęcie z blackboard/ → różdżka → „Edytowalne kreski” → zoom 4×: brak zębów, uchwyty.
+  testy kredy/tablicy/Béziera zielone. Zdjęcie wzoru z okładki PDF wyciągnięte poza repo (strumień obrazu 2992×942,
+  `build/kreda-wejscie/okladka-wzor.png`), test dostaje je przez `KREDA_EXTRA`.
+- **2b-B4 c.d. (28.10, 11:30–12:30)**: (1) `KredaKrzyweTest` (`08160a2`): łamana i krzywa na tych samych ścieżkach, 24 zdjęcia
+  + okładka, tabela w system-out, 4 podglądy PNG w `app/build/kreda-krzywe/`. (2) Pomiar pokazał, że po etapie 1 zostały
+  pętelki i ostrza (najgorszy skręt 178°, na `20260326_140000` zębów więcej niż na łamanej). Przyczyna w szkielecie, nie w
+  dopasowaniu: porowata kreda ma dziurki 1–3 px, a ścienianie obchodzi każdą pętlą. `ChalkVector.fillHoles` (`3a82a26`)
+  zamyka przed ścienianiem dziury ≤ 12 px i szczeliny grubości 1–2 px ≤ 48 px; wnętrza liter (o, e, θ) zostają (test).
+  Wynik na 25 zdjęciach: węzły 11,1 → 6,9 na 100 px (łamana → krzywa), **zęby 2,94 → 0,30**, błąd 0,37 px, najgorszy
+  skręt 89°; syntetyczne 0 zębów. Tabela i uczciwe wnioski w `docs/KREDA-POMIARY.md` → „Krzywe Béziera”: kryterium
+  „≥ 3× mniej węzłów” nie do spełnienia na zdjęciach (średnia kreska 45 px, same końce to 4,5 kotwicy na 100 px), „skręt
+  < 25°” spełnione tylko na syntetycznych (zostaje 0,3 zęba na 100 px w węzłach grubych plam). Nowe testy:
+  `ChalkVectorTest.porousChalkHolesDoNotBecomeLoops` (bez poprawki: 20 wierzchołków zamiast 2) i `fillHolesKeeps…`.
+  Pełne testy z `KREDA_DIR`: lab 852, core 781, 0 porażek (po 1 pominiętym), oba APK.
+  **Nauka:** wzór z tablicy w notatce wygląda jak napisany, da się go poprawić uchwytami.
+  **Tablet:** zdjęcie z blackboard/ → różdżka → „Edytowalne kreski” → zoom 4×: brak zębów i kółeczek, uchwyty działają.
 
 ### Co Marcin ma sprawdzić na tablecie — wariant lab, po fazie 2 (kolejność)
 
@@ -345,7 +356,9 @@ Instalacja: `labDebug` z `noc/lab2` (albo `noc/wszystko` po scaleniu przez A) na
    „Dociągaj bladą kredę…”, „Usuń drobinki” i porównaj podgląd. Zdjęcie tablicy z kawałkiem ściany pod nią albo z boku
    (jak `20260525_*`) → „Narożniki” od razu na krawędziach tablicy, nie na ścianie; żaden wzór nie ucięty.
 3. **Kreski:** „Edytowalne kreski” → kreski leżą na kredzie także po przycięciu zdjęcia w zeszycie; litera O i krzyżyk to
-   1–2 kreski; grube i cienkie linie mają różną grubość.
+   1–2 kreski; grube i cienkie linie mają różną grubość. **Od 28.10 krzywe Béziera (2b-B4):** zoom 4× — łuki gładkie, bez
+   zębów i bez kółeczek w grubej kredzie; stuknięcie w kreskę → uchwyty jak przy narzędziu „Krzywa”; Ustawienia →
+   Laboratorium → Kreda → „Edytowalne kreski jako gładkie krzywe” wyłączone → dawne łamane.
 4. **Mediana:** 3 zdjęcia tej samej tablicy (+ jedno zdjęcie ściany) → „Połącz zdjęcia tablicy” → informacja o pominięciu,
    wykładowca znika, bez „duchów”.
 5. **Tryb wykładu:** zdjęcie tablicy → na nowej stronie po chwili sama kreda + dymek; ↶ → zdjęcie; zdjęcie kartki bez zmian.

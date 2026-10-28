@@ -57,6 +57,33 @@ class ChalkVectorTest {
     }
 
     @Test
+    fun porousChalkHolesDoNotBecomeLoops() {
+        // 2b-B4: gruba kreska z dziurkami 2×2, 1×3 i szczeliną 2×16 px; przedtem każda dawała pętlę szkieletu
+        val r = canvas(100, 40)
+        thick(r, 10, 20, 89, 20, 6)
+        for ((x, y) in listOf(25 to 19, 26 to 19, 25 to 20, 26 to 20, 50 to 18, 50 to 19, 50 to 20)) r[x, y] = 0
+        for (x in 60 until 76) for (y in 20..21) r[x, y] = 0
+        val lines = ChalkVector.vectorize(r)
+        assertEquals("łamane: ${lines.map { it.pts.toList() }}", 1, lines.size)
+        assertEquals(2, lines[0].size)
+    }
+
+    @Test
+    fun fillHolesKeepsLetterInteriorsAndOutside() {
+        val w = 40; val h = 40
+        val mask = BooleanArray(w * h)
+        fun ring(cx: Int, cy: Int, inner: Double, outer: Double) {
+            for (y in 0 until h) for (x in 0 until w) if (Math.hypot(x - cx.toDouble(), y - cy.toDouble()) in inner..outer) mask[y * w + x] = true
+        }
+        ring(10, 10, 3.5, 7.0)   // małe „o”: wnętrze ok. 37 px, środek 3 px od kredy
+        ring(28, 28, 1.0, 6.0)   // dziurka ok. 5 px w plamie kredy
+        ChalkVector.fillHoles(mask, w, h)
+        assertTrue("wnętrze „o” zamknięte", !mask[10 * w + 10])
+        assertTrue("dziurka zostawiona", mask[28 * w + 28])
+        assertTrue("tło przy brzegu zamknięte", !mask[0] && !mask[w * h - 1])
+    }
+
+    @Test
     fun emptyAndSpecksGiveNothing() {
         assertEquals(0, ChalkVector.vectorize(canvas(10, 10)).size)
         val r = canvas(20, 20); r[5, 5] = ink

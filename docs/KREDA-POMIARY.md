@@ -125,3 +125,80 @@ Wynik (zmienione zdjęcia; reszta identyczna): sprawdzone na podglądach, żaden
 
 Średnio (24): kreda 3,9 → 3,9 %, kresek 468 → 451 (mniej śmieci ze ściany), fragmenty 19 → 19 %. **Zostaje:** prawy bok
 `20260525_144320` (osoba przy tablicy) i głowy na `20260324_154544`: tam obejściem jest tryb „Narożniki”.
+
+## Krzywe Béziera zamiast łamanych (2b-B4, 28.10)
+
+Marcin: „wzory po kredzie są postrzępione”. Kreski z „Edytowalnych kresek” są teraz krzywymi Béziera (`ChalkCurves`:
+narożniki, wygładzenie 1‑4‑6‑4‑1, dopasowanie Schneidera z tolerancją 1,2 px przy 2400 px), a przed ścienianiem
+`ChalkVector.fillHoles` zamyka drobne dziury w masce (≤ 12 px albo szczelina grubości 1–2 px ≤ 48 px; wnętrza liter
+zostają). Dziury okazały się główną przyczyną zębów, które zostały po pierwszym etapie: porowata kreda ma dziurki 1–3 px,
+ścienianie obchodzi każdą pętlą, a krzywa robiła z tego kółeczka i ostrza.
+
+**Jak mierzone:** `KredaKrzyweTest` (testLab, pomijany bez `KREDA_DIR`/`KREDA_EXTRA`): zdjęcie w rozmiarze aplikacji
+(2400 px), cały potok, te same ścieżki szkieletu raz jako łamana (dawny wynik, Douglas-Peucker 1,2 px), raz jako krzywa.
+Miary (`CurveMetrics`): **węzły na 100 px** (wierzchołki łamanej / kotwice krzywej), **zęby na 100 px** (załamanie
+kierunku ≥ 25° między próbkami co 1 px poza narożnikami; dla łamanej 25–60°, bo ≥ 60° liczymy jej na korzyść jako
+narożnik), **błąd** (średnia odległość punktów szkieletu od rysowanej linii), **największy skręt na gładkim odcinku**.
+Wzór z okładki PDF (strona 1, obraz 2992×942) wyciągnięty poza repozytorium do `mNotes-lab/build/kreda-wejscie/`.
+
+```
+KREDA_DIR=/home/piotr/Projects/Marcin/materialy/kreda/blackboard \
+KREDA_EXTRA=/home/piotr/Projects/Marcin/projekty/mNotes-lab/build/kreda-wejscie/okladka-wzor.png \
+  ./gradlew --offline :app:testLabDebugUnitTest --tests '*KredaKrzyweTest*'
+```
+
+Podglądy PNG (z lewej łamana z wierzchołkami, z prawej krzywa z kotwicami i narożnikami na czerwono; u dołu te same
+kreski w pełnej grubości, jak w zeszycie): `mNotes-lab/app/build/kreda-krzywe/{syntetyczne,okladka-wzor,20260318_154119,20260326_140000}.png`
+(`build/` jest poza repozytorium; test tworzy je od nowa).
+
+| zdjęcie | wynik px | kresek | węzły / 100 px łamana → krzywa | zęby / 100 px łamana → krzywa | błąd px | maks. skręt ° |
+|---|---|---|---|---|---|---|
+| 20260317_142449 | 2252×1176 | 538 | 10.7 → 7.4 | 2.91 → 0.32 | 0.31 → 0.37 | 61 |
+| 20260318_152335 | 2211×1337 | 472 | 9.2 → 6.8 | 2.15 → 0.24 | 0.31 → 0.35 | 62 |
+| 20260318_152745 | 2181×1335 | 293 | 8.9 → 6.7 | 2.42 → 0.30 | 0.30 → 0.35 | 75 |
+| 20260318_152749 | 1404×1196 | 272 | 9.6 → 7.3 | 2.64 → 0.23 | 0.31 → 0.34 | 49 |
+| 20260318_153153 | 2144×1163 | 389 | 10.0 → 7.6 | 2.42 → 0.37 | 0.30 → 0.33 | 86 |
+| 20260318_153200 | 2384×965 | 435 | 10.9 → 6.8 | 3.38 → 0.13 | 0.31 → 0.38 | 60 |
+| 20260318_153635 | 2315×1194 | 389 | 12.1 → 7.7 | 3.54 → 0.36 | 0.32 → 0.39 | 79 |
+| 20260318_153647 | 2106×1242 | 631 | 10.8 → 7.5 | 3.04 → 0.32 | 0.30 → 0.34 | 83 |
+| 20260318_154119 | 2382×1049 | 566 | 10.7 → 6.5 | 3.24 → 0.17 | 0.32 → 0.38 | 72 |
+| 20260318_154441 | 2385×1281 | 437 | 10.4 → 6.4 | 2.74 → 0.20 | 0.31 → 0.39 | 77 |
+| 20260318_155207 | 2379×1266 | 520 | 10.6 → 6.6 | 3.13 → 0.28 | 0.32 → 0.40 | 81 |
+| 20260318_155215 | 2381×1007 | 445 | 11.4 → 7.2 | 3.54 → 0.29 | 0.30 → 0.37 | 53 |
+| 20260318_155221 | 2298×1001 | 435 | 11.0 → 6.9 | 3.25 → 0.24 | 0.32 → 0.38 | 65 |
+| 20260318_155524 | 2256×1353 | 377 | 6.9 → 5.5 | 1.43 → 0.17 | 0.32 → 0.35 | 48 |
+| 20260323_135040 | 2289×1407 | 681 | 10.4 → 6.7 | 3.44 → 0.25 | 0.32 → 0.39 | 63 |
+| 20260323_135048 | 2330×1333 | 784 | 9.4 → 6.1 | 3.09 → 0.18 | 0.31 → 0.37 | 72 |
+| 20260324_154544 | 2336×1027 | 440 | 12.7 → 8.0 | 4.12 → 0.49 | 0.30 → 0.41 | 67 |
+| 20260326_140000 | 1641×1185 | 606 | 14.0 → 10.0 | 4.57 → 1.19 | 0.29 → 0.37 | 89 |
+| 20260326_144419 | 2378×1224 | 451 | 8.5 → 5.5 | 2.73 → 0.09 | 0.30 → 0.38 | 43 |
+| 20260326_161035 | 2324×1196 | 503 | 7.6 → 5.7 | 1.69 → 0.17 | 0.32 → 0.37 | 45 |
+| 20260326_161039 | 2311×1028 | 445 | 8.1 → 5.9 | 1.89 → 0.14 | 0.31 → 0.37 | 44 |
+| 20260401_133044 | 1684×1272 | 391 | 10.0 → 7.1 | 2.77 → 0.16 | 0.29 → 0.33 | 76 |
+| 20260525_134500 | 1689×1131 | 665 | 11.4 → 8.0 | 3.16 → 0.40 | 0.30 → 0.34 | 68 |
+| 20260525_144320 | 2033×1143 | 872 | 11.7 → 8.4 | 3.07 → 0.54 | 0.31 → 0.35 | 84 |
+| okładka PDF (wzór Φ) | 2399×754 | 79 | 7.5 → 3.9 | 2.58 → 0.13 | 0.32 → 0.42 | 37 |
+| **razem (25)** | | 484 śr. | **10.2 → 6.9** | **2.95 → 0.30** | 0.31 → 0.37 | 89 |
+| syntetyczne (okrąg, sinusoida, S, ∑) | 360×130 | 4 | 6.0 → 2.7 | 2.01 → **0** | 0.33 → 0.37 | — |
+
+Etapy (średnie z 25): łamana 11,1 węzła i 2,94 zęba na 100 px → krzywe bez zamykania dziur 7,4 i 1,06 (najgorszy skręt
+178°, na `20260326_140000` zębów więcej niż na łamanej: 3,98 → 5,89) → krzywe z zamykaniem dziur 6,9 i 0,30 (najgorszy 89°).
+Zamykanie dziur zmienia też łamane (mniej kwadracików: 535 → 484 kresek na zdjęcie). Czas krzywych ok. 11 ms na zdjęcie (JVM).
+
+**Wnioski (uczciwie):**
+- Zębów jest 10× mniej, błąd dopasowania 0,37 px (tolerancja 1,2 px), kształty syntetyczne bez żadnego zęba.
+- **Kryterium „≥ 3× mniej węzłów” nie jest spełnione na zdjęciach (1,5×)** i nie da się go spełnić: średnia kreska ma
+  ok. 45 px, a dwa końce każdej kreski to już 4,5 kotwicy na 100 px. Sinusoida sama ma ≥ 3× (`ChalkCurvesTest`), cały
+  zestaw syntetyczny 2,2× (∑ to proste odcinki, łamana ma tam tyle samo węzłów).
+- **Kryterium „maks. skręt < 25° na gładkich odcinkach” spełnione na kształtach syntetycznych, nie na zdjęciach**: zostaje
+  0,3 zęba na 100 px. To miejsca, gdzie sam szkielet skręca ostro w grubej plamie kredy (połączenie dwóch kresek w węźle),
+  a wykrywacz narożników tego nie uznał za narożnik; na podglądach to drobne zagięcia, nie pętle.
+
+**Wzór z okładki PDF a próg lokalny (28.10):** prośba z 2b-B2 („dorzucić zdjęcie z okładki”) załatwiona wyciągnięciem
+obrazu z PDF. Obecny potok (wyrównanie oświetlenia, próg globalny, histereza) daje na tej szarej tablicy próg **0,21**
+(nie dobija do 0,50), kreda 3,4 %, 65 kresek po 80 px, 11 % fragmentów; cały wzór czytelny razem z indeksami `lm`, `l=0`,
+`m=-l` i wykładnikiem `-(l+1)`, zostają tylko rzadkie smugi po gąbce przy Φ. **Próg lokalny nie jest tu potrzebny**, więc
+go nie wprowadzam (w pustych miejscach wyciągałby smugi). Podglądy: `KREDA_DIR=…/build/kreda-wejscie KREDA_OUT=…` w
+`KredaPomiaryTest` (zdjęcie | krycie) i `app/build/kreda-krzywe/okladka-wzor-calosc.png` z `KredaKrzyweTest` (cały wzór:
+łamane z lewej, krzywe z prawej, u dołu w pełnej grubości). Do poprawy zostaje drobiazg: przy `Y_lm` kreseczka obok
+nóżki Y (to samo w łamanej i krzywej).

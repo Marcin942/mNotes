@@ -158,14 +158,29 @@ object ToolGlyphParts {
     private fun ring(role: GlyphRole, cx: Float, cy: Float, rx: Float, ry: Float = rx, n: Int = 18) =
         GlyphPart(role, FloatArray(2 * n) { k -> val a = 2 * Math.PI * (k / 2) / n; if (k % 2 == 0) cx + rx * kotlin.math.cos(a).toFloat() else cy + ry * kotlin.math.sin(a).toFloat() })
 
+    /** Część klocka gumki: pas osi od [s0] do [s1] (od dolnego końca w górę i w prawo), szerokość 2 × [ERASER_W]. */
+    private fun block(role: GlyphRole, s0: Float, s1: Float): GlyphPart {
+        val c = floatArrayOf(s0, -ERASER_W, s0, ERASER_W, s1, ERASER_W, s1, -ERASER_W)
+        return GlyphPart(role, FloatArray(8) { i -> val s = c[i - i % 2]; val w = c[i - i % 2 + 1]; if (i % 2 == 0) ERASER_CX + R * (s + w) else ERASER_CY + R * (w - s) })
+    }
+
+    private const val ERASER_CX = 10f
+    private const val ERASER_CY = 11.6f
+    private const val ERASER_L = 7.5f
+    private const val ERASER_W = 4.2f
+
+    /** Linia, na której stoi gumka (dół siatki, lewa część — prawy dolny róg zostaje na znak trybu). */
+    const val ERASER_LINE_Y = 21.1f
+
     /**
-     * Wspólna gumka: szeroki klocek gumy z fazowanym czubkiem i węższa oprawka. 2c-A15: dawniej prostokąt z opaską
-     * długości zakreślacza — na pasku oba wyglądały tak samo; teraz krótsza i szersza sylwetka (zakreślacz: długi, ścięty).
+     * Wspólna gumka (3c-A3): klasyczny klocek stojący ukośnie na linii, dolna część (guma) pełna, górna (oprawka) jasna —
+     * jak gumka w znanych ikonach. Dawniej leżała na przekątnej piór i mimo krótszej sylwetki (2c-A15) kojarzyła się
+     * z zakreślaczem; linia pod spodem mówi „ściera z kartki”.
      */
     val eraserBase: List<GlyphPart> = listOf(
-        uv(GlyphRole.BODY, 1.2f, -2.6f, 2.6f, -4.2f, 9.0f, -4.2f, 9.0f, 4.2f, 2.6f, 4.2f, 1.2f, 2.6f),
-        uv(GlyphRole.BODY, 9.0f, -3.0f, 17.5f, -3.0f, 17.5f, 3.0f, 9.0f, 3.0f),
-        uv(GlyphRole.DETAIL, 11.4f, -3.0f, 11.4f, 3.0f, closed = false),
+        block(GlyphRole.INK, -ERASER_L, -1.2f),
+        block(GlyphRole.BODY, -1.2f, ERASER_L),
+        xy(GlyphRole.MARK, 2.0f, ERASER_LINE_Y, 12.4f, ERASER_LINE_Y, closed = false),
     )
 
     /** Fala (cała kreska) w prawym dolnym rogu. */
@@ -182,7 +197,7 @@ object ToolGlyphParts {
             xy(GlyphRole.DOT, 17.1f, 15.6f, 19.2f, 15.6f, 19.2f, 17.7f, 17.1f, 17.7f),
             xy(GlyphRole.DOT, 19.4f, 19.6f, 21.5f, 19.6f, 21.5f, 21.7f, 19.4f, 21.7f),
         )
-        2 -> listOf(ring(GlyphRole.DASH, 17.7f, 18.6f, 4.0f, 3.2f, n = 24))
+        2 -> listOf(ring(GlyphRole.DASH, 18.5f, 19.0f, 3.8f, 3.0f, n = 24))
         else -> listOf(
             ring(GlyphRole.MARK, 15.5f, 20.6f, 1.5f, n = 12), ring(GlyphRole.MARK, 20.1f, 20.6f, 1.5f, n = 12),
             xy(GlyphRole.MARK, 16.4f, 19.4f, 20.2f, 14.6f, closed = false),

@@ -81,10 +81,6 @@ class PenGlyphsTest {
             sigs += mark.joinToString("|") { p -> p.role.name + p.pts.joinToString(",") { "%.1f".format(it) } }
         }
         assertEquals(4, sigs.size)
-        // Korpus gumki leży na tej samej przekątnej co pióra (czubek w lewym dolnym rogu).
-        val tip = ToolGlyphParts.eraserBase.first().pts   // pierwsza i ostatnia para to płaska krawędź czubka
-        val n = tip.size
-        assertTrue(hypot((tip[0] + tip[n - 2]) / 2f - 2.5f, (tip[1] + tip[n - 1]) / 2f - 21.5f) < 1.5f)
         inGrid(ToolGlyphParts.lasso(false), "lasso"); inGrid(ToolGlyphParts.lasso(true), "lasso prostokąt")
         assertTrue(ToolGlyphParts.lasso(false).any { it.role == GlyphRole.DASH })
     }
@@ -106,6 +102,32 @@ class PenGlyphsTest {
         val (hu, hv) = uv(PenGlyphs.parts(PenKind.HIGHLIGHTER))
         assertTrue("gumka nie szersza: $ev vs $hv", ev >= hv + 0.8f)
         assertTrue("gumka nie krótsza: $eu vs $hu", eu <= hu - 5f)
+    }
+
+    /**
+     * 3c-A3: gumka jak w znanych ikonach — klocek z pełną gumą u dołu stoi na linii; znak trybu leży obok klocka, nie na
+     * nim (dawniej zachodził na korpus i trudno go było odczytać).
+     */
+    @Test fun eraserStandsOnALineAndTheModeMarkIsBesideIt() {
+        val base = ToolGlyphParts.eraserBase
+        val line = base.single { it.role == GlyphRole.MARK }
+        assertEquals(line.pts[1], line.pts[3], 1e-4f)
+        assertEquals(ToolGlyphParts.ERASER_LINE_Y, line.pts[1], 1e-4f)
+        val rubber = base.single { it.role == GlyphRole.INK }
+        val lowest = (0 until rubber.pts.size / 2).maxOf { rubber.pts[2 * it + 1] }
+        assertTrue("guma nie dotyka linii: $lowest", ToolGlyphParts.ERASER_LINE_Y - lowest in 0.5f..1.8f)
+        val blocks = base.filter { it.role == GlyphRole.INK || it.role == GlyphRole.BODY }
+        fun inside(p: GlyphPart, x: Float, y: Float): Boolean {
+            var c = false; val n = p.pts.size / 2; var j = n - 1
+            for (i in 0 until n) {
+                val xi = p.pts[2 * i]; val yi = p.pts[2 * i + 1]; val xj = p.pts[2 * j]; val yj = p.pts[2 * j + 1]
+                if ((yi > y) != (yj > y) && x < (xj - xi) * (y - yi) / (yj - yi) + xi) c = !c
+                j = i
+            }
+            return c
+        }
+        for (mode in 0..3) for (p in ToolGlyphParts.eraserMark(mode)) for (i in 0 until p.pts.size / 2)
+            assertTrue("znak $mode na klocku", blocks.none { inside(it, p.pts[2 * i], p.pts[2 * i + 1]) })
     }
 
     /** Ciało funkcji `ToolBar` z `EditorScreen.kt` (do następnej funkcji najwyższego poziomu). */

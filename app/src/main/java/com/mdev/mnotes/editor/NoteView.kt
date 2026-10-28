@@ -1901,8 +1901,8 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
         val pi = doc.indexOf(ed.curvePage ?: return)
         if (pi < 0) return
         // Przeciągnięcie z pierwszego/ostatniego punktu to jednak nowy węzeł (np. uchwyt piórka), nie zakończenie.
-        if (curveTap != CurveDraft.Tap.ADD && toolMoved) { curveTap = CurveDraft.Tap.ADD; d.press(pgX(pi, downX), pgY(pi, downY)) }
-        if (curveTap == CurveDraft.Tap.ADD) d.drag(pgX(pi, curX), pgY(pi, curY))
+        if ((curveTap == CurveDraft.Tap.FINISH || curveTap == CurveDraft.Tap.CLOSE) && toolMoved) curveTap = d.dragFrom(curveTap, pgX(pi, downX), pgY(pi, downY))
+        if (curveTap == CurveDraft.Tap.ADD || curveTap == CurveDraft.Tap.GRAB) d.drag(pgX(pi, curX), pgY(pi, curY))
     }
 
     private fun curveUp(cancel: Boolean) {

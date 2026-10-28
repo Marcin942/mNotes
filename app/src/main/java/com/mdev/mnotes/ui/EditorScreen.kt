@@ -982,6 +982,7 @@ private fun androidx.compose.foundation.layout.BoxScope.CurveHint(ed: Editor) {
             Text(T.t(ed.curveMode.pl, ed.curveMode.en), style = MaterialTheme.typography.labelLarge, color = m.accentText)
             Text("·  " + ed.curveHint, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             if (started) {
+                IconBtn(Icons.AutoMirrored.Rounded.Undo, T.t("Cofnij węzeł (Backspace)", "Undo node (Backspace)"), { ed.curveUndoNode() }, size = 30.dp, iconSize = 16.dp)
                 if ((ed.curveDraft?.count ?: 0) >= 2) IconBtn(Icons.Rounded.Check, T.t("Zakończ krzywą", "Finish curve"), { ed.curveCommit() }, size = 30.dp, iconSize = 16.dp)
                 IconBtn(Icons.Rounded.Close, T.t("Porzuć krzywą", "Discard curve"), { ed.curveCancel() }, size = 30.dp, iconSize = 16.dp)
             } else Spacer(Modifier.width(10.dp))
@@ -2275,7 +2276,8 @@ private fun editorKey(e: androidx.compose.ui.input.key.KeyEvent, ed: Editor, cmd
         if (k == Key.P && shift) { openPalette(); return true }
     } else if (!fieldFocused) {
         when (k) {
-            Key.Backspace -> if (ed.sel != null && !ed.readOnly && ed.cut == null && ed.crop == null) { ed.deleteSel(); return true }
+            Key.Backspace -> if (ed.curveDraft?.isEmpty == false) { ed.curveUndoNode(); return true }
+                else if (ed.sel != null && !ed.readOnly && ed.cut == null && ed.crop == null) { ed.deleteSel(); return true }
             // 2b-A10: Enter kończy krzywą stawianą punktami, Esc ją porzuca.
             Key.Enter -> if (ed.curveDraft?.isEmpty == false) { ed.curveCommit(); return true }
             Key.Escape -> {

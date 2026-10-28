@@ -966,6 +966,13 @@ class Editor(val ctx: Context, val nbId: String) {
 
     fun curveCancel() { curveDraft = null; curvePage = null; curveTick++; view?.invalidate() }
 
+    /** Cofa ostatni postawiony węzeł szkicu (2c-A10: ↶ w kapsule i Backspace); ostatni węzeł — porzuca szkic. */
+    fun curveUndoNode() {
+        val d = curveDraft ?: return
+        d.dropLast()
+        if (d.isEmpty) curveCancel() else { curveTick++; view?.invalidate() }
+    }
+
     /** Zapisuje rozpoczętą krzywą jako kreskę z uchwytami (zaznaczoną, jak po F17); [close] = domknij (kontur zawsze). */
     fun curveCommit(close: Boolean = false) {
         val d = curveDraft
@@ -1526,6 +1533,8 @@ class Editor(val ctx: Context, val nbId: String) {
     }
 
     fun close() {
+        // 2c-A10: szkic krzywej przy zamknięciu zeszytu staje się krzywą, zamiast zniknąć.
+        if (curveDraft != null) curveCommit()
         flushWriting()
         doc.flush()
         doc.setLastPage(pageIndex)

@@ -132,8 +132,11 @@ class CurveDraft(val mode: CurveMode) {
     /** Czy węzeł [i] ma wyciągnięty uchwyt (piórko). */
     fun hasHandle(i: Int) = hypot(hx(i) - x(i), hy(i) - y(i)) > 0.01f
 
-    /** Co zrobi dotknięcie w (x, y) przy promieniu trafienia [r]: domknięcie, zakończenie albo nowy węzeł. */
-    enum class Tap { ADD, CLOSE, FINISH }
+    /**
+     * Co zrobi dotknięcie w (x, y) przy promieniu trafienia [r]: domknięcie, zakończenie albo nowy węzeł. [GRAB] —
+     * przeciągnięcie zaczęte na ostatnim węźle: zmienia jego uchwyt (piórko) albo położenie, nie dokłada węzła.
+     */
+    enum class Tap { ADD, CLOSE, FINISH, GRAB }
 
     fun tapKind(x: Float, y: Float, r: Float): Tap = when {
         count >= 3 && hypot(x - x(0), y - y(0)) <= r -> Tap.CLOSE
@@ -158,7 +161,17 @@ class CurveDraft(val mode: CurveMode) {
 
     fun release() { pressing = false }
 
-    /** Cofa ostatni węzeł (np. dotyk przerwany albo stuknięcie, które okazało się zakończeniem). */
+    /**
+     * 2c-A10: dotyk zaczęty jako [tap] w ([x], [y]) ruszył się. Z ostatniego węzła (FINISH) chwytamy ten węzeł —
+     * dawniej powstawał drugi węzeł w tym samym miejscu; z pierwszego (CLOSE) zaczyna się nowy węzeł jak dotąd.
+     */
+    fun dragFrom(tap: Tap, x: Float, y: Float): Tap = when (tap) {
+        Tap.FINISH -> { pressing = true; Tap.GRAB }
+        Tap.CLOSE -> { press(x, y); Tap.ADD }
+        else -> tap
+    }
+
+    /** Cofa ostatni węzeł (dotyk przerwany, „cofnij węzeł” ↶ i Backspace w trakcie szkicu). */
     fun dropLast() { if (!isEmpty) nodes.size -= 4; pressing = false }
 
     fun clear() { nodes.size = 0; pressing = false }

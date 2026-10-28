@@ -156,4 +156,49 @@ class CurveDraftTest {
         assertTrue(CurveMode.entries.all { CurveMode.of(it.ordinal) == it })
         assertEquals(CurveMode.FREEHAND, CurveMode.of(99))
     }
+
+    // — 2c-A10: piórko —
+
+    /** Dotyk jak w NoteView: tapKind przy dotknięciu, press dla ADD, dragFrom przy pierwszym ruchu, drag, release. */
+    private fun gesture(d: CurveDraft, x0: Float, y0: Float, x1: Float, y1: Float): CurveDraft.Tap {
+        var tap = d.tapKind(x0, y0, 5f)
+        if (tap == CurveDraft.Tap.ADD) d.press(x0, y0)
+        if (tap == CurveDraft.Tap.FINISH || tap == CurveDraft.Tap.CLOSE) tap = d.dragFrom(tap, x0, y0)
+        if (tap == CurveDraft.Tap.ADD || tap == CurveDraft.Tap.GRAB) d.drag(x1, y1)
+        d.release()
+        return tap
+    }
+
+    @Test fun dragFromTheLastNodeChangesItsHandle() {
+        val d = CurveDraft(CurveMode.PEN)
+        gesture(d, 0f, 0f, 0f, 0f); gesture(d, 100f, 0f, 100f, 0f)
+        assertEquals(2, d.count)
+        // Dawniej: trzeci węzeł w (100, 0) z uchwytem.
+        assertEquals(CurveDraft.Tap.GRAB, gesture(d, 100f, 0f, 140f, 30f))
+        assertEquals(2, d.count)
+        assertEquals(140f, d.hx(1), 0f); assertEquals(30f, d.hy(1), 0f)
+        assertTrue(d.hasHandle(1))
+    }
+
+    @Test fun throughPointsDragFromTheLastNodeMovesIt() {
+        val d = CurveDraft(CurveMode.THROUGH)
+        gesture(d, 0f, 0f, 0f, 0f); gesture(d, 100f, 0f, 100f, 0f)
+        gesture(d, 100f, 0f, 120f, 10f)
+        assertEquals(2, d.count)
+        assertEquals(120f, d.x(1), 0f)
+    }
+
+    @Test fun undoNodeDownToZero() {
+        val d = CurveDraft(CurveMode.PEN)
+        for (i in 0 until 3) gesture(d, i * 50f, 0f, i * 50f, 0f)
+        d.dropLast(); assertEquals(2, d.count)
+        d.dropLast(); d.dropLast(); assertTrue(d.isEmpty)
+        d.dropLast(); assertTrue(d.isEmpty)
+    }
+
+    @Test fun draftWithTwoNodesHasACurveToCommitOnClose() {
+        val d = CurveDraft(CurveMode.PEN)
+        gesture(d, 0f, 0f, 0f, 0f); gesture(d, 100f, 0f, 130f, 20f)
+        assertTrue(d.ctrl() != null)
+    }
 }

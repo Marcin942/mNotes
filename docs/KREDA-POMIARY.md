@@ -193,3 +193,12 @@ Zamykanie dziur zmienia też łamane (mniej kwadracików: 535 → 484 kresek na 
 - **Kryterium „maks. skręt < 25° na gładkich odcinkach” spełnione na kształtach syntetycznych, nie na zdjęciach**: zostaje
   0,3 zęba na 100 px. To miejsca, gdzie sam szkielet skręca ostro w grubej plamie kredy (połączenie dwóch kresek w węźle),
   a wykrywacz narożników tego nie uznał za narożnik; na podglądach to drobne zagięcia, nie pętle.
+
+**Wzór z okładki PDF a próg lokalny (28.10):** prośba z 2b-B2 („dorzucić zdjęcie z okładki”) załatwiona wyciągnięciem
+obrazu z PDF. Obecny potok (wyrównanie oświetlenia, próg globalny, histereza) daje na tej szarej tablicy próg **0,21**
+(nie dobija do 0,50), kreda 3,4 %, 65 kresek po 80 px, 11 % fragmentów; cały wzór czytelny razem z indeksami `lm`, `l=0`,
+`m=-l` i wykładnikiem `-(l+1)`, zostają tylko rzadkie smugi po gąbce przy Φ. **Próg lokalny nie jest tu potrzebny**, więc
+go nie wprowadzam (w pustych miejscach wyciągałby smugi). Podglądy: `KREDA_DIR=…/build/kreda-wejscie KREDA_OUT=…` w
+`KredaPomiaryTest` (zdjęcie | krycie) i `app/build/kreda-krzywe/okladka-wzor-calosc.png` z `KredaKrzyweTest` (cały wzór:
+łamane z lewej, krzywe z prawej, u dołu w pełnej grubości). Do poprawy zostaje drobiazg: przy `Y_lm` kreseczka obok
+nóżki Y (to samo w łamanej i krzywej).

@@ -54,6 +54,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -101,7 +102,10 @@ fun SettingsScreen(onBack: () -> Unit, startCat: Int = 0, startQuery: String = "
     val m = mint
     var cat by remember { mutableIntStateOf(startCat) }
     var query by remember { mutableStateOf(startQuery) }
-    val q = remember(query) { SettingsQuery.of(query) }
+    // 3c-A6: słownik literówek zbiera się z wierszy przy pierwszym wyszukiwaniu; gdy urośnie, zapytanie liczy się od nowa.
+    var vocabN by remember { mutableIntStateOf(SearchVocab.size) }
+    val q = remember(query, vocabN) { SettingsQuery.of(query, SearchVocab.words()) }
+    SideEffect { if (q != null && SearchVocab.size != vocabN) vocabN = SearchVocab.size }
     val searchFocus = remember { FocusRequester() }
     val rootFocus = remember { FocusRequester() }
     val cats = listOf(
@@ -167,7 +171,7 @@ fun SettingsScreen(onBack: () -> Unit, startCat: Int = 0, startQuery: String = "
                     }
                     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = if (wide) 32.dp else 16.dp, vertical = 12.dp)) {
                         Column(Modifier.widthIn(max = 720.dp).fillMaxWidth()) {
-                            if (q != null) SearchResults(q, query, set, cats.map { it.icon to it.title }, ::open) else {
+                            if (q != null) SearchResults(q, query, set, cats.map { it.icon to it.title }, ::open) { query = it } else {
                                 Text(cats[cat].title, style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(bottom = 4.dp))
                                 when (cat) {
                                     0 -> Appearance(set)
@@ -195,11 +199,24 @@ private val SEARCHABLE_CATS = SettingsQuery.searchableCats(Flavor.lab != null)
 
 /** Wyniki wyszukiwania: te same kontrolki co w kategoriach, odfiltrowane i pogrupowane pod nagłówkami kategorii. */
 @Composable
-private fun SearchResults(q: SettingsQuery, raw: String, set: Settings, cats: List<Pair<ImageVector, String>>, open: (Int) -> Unit) {
+private fun SearchResults(q: SettingsQuery, raw: String, set: Settings, cats: List<Pair<ImageVector, String>>, open: (Int) -> Unit, retry: (String) -> Unit) {
     val m = mint
+    // 3c-A6: kategoria z najpewniejszym trafieniem idzie pierwsza; wyniki zgłaszają wiersze w trakcie rysowania.
+    val best = remember(q) { HashMap<Int, Int>() }
+    var order by remember(q) { mutableStateOf(SEARCHABLE_CATS) }
+    SideEffect { SEARCHABLE_CATS.sortedByDescending { best[it] ?: 0 }.let { if (it != order) order = it } }
+    q.suggestion?.let { s ->
+        Row(
+            Modifier.padding(top = 8.dp).clip(RoundedCornerShape(8.dp)).clickable { retry(s) }.padding(horizontal = 4.dp, vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            Icon(Icons.Rounded.Search, null, Modifier.size(18.dp), tint = m.accentText)
+            Text(T.t("Czy chodziło o: „$s”?", "Did you mean: “$s”?"), style = MaterialTheme.typography.bodyMedium, color = m.accentText)
+        }
+    }
     CompositionLocalProvider(LocalSettingsQuery provides q) {
         IfAny(fallback = { NoResults(raw) }) {
-            for (i in SEARCHABLE_CATS) IfAny(
+            for (i in order) CompositionLocalProvider(LocalScoreSink provides { s: Int -> if (s > (best[i] ?: 0)) best[i] = s }) { IfAny(
                 top = 18.dp,
                 header = {
                     Row(
@@ -222,7 +239,7 @@ private fun SearchResults(q: SettingsQuery, raw: String, set: Settings, cats: Li
                     6 -> ShortcutsTable(set)
                     else -> Flavor.lab?.SettingsSection()
                 }
-            }
+            } }
         }
     }
 }

@@ -31,6 +31,11 @@ object ThemeMap {
     private const val NEUTRAL_C = 0.04
     private const val HL_DARK_MAX = 0.6
     private const val HL_LIGHT_MIN = 0.8
+    private const val SURFACE_C = 0.12
+    /** Kontrast tekstu na wypełnieniu po zamianie (WCAG AA dla zwykłego tekstu). */
+    const val TEXT_CONTRAST = 4.5
+    private const val WHITE = -0x1
+    private const val BLACK = -0x1000000
 
     /** Przekształcenie strony o papierze [srcPaper] do ciemnego ([toDark]) albo do jasnego wyglądu. Bezpieczne wątkowo. */
     class Transform(val toDark: Boolean, val srcPaper: Int) {
@@ -40,6 +45,12 @@ object ThemeMap {
 
         fun ink(argb: Int): Int = inks.getOrPut(argb) { mapInk(argb, srcPaper, dstPaper, toDark) }
         fun highlighter(argb: Int): Int = hls.getOrPut(argb) { mapHighlighter(argb, toDark) }
+        /** Kryte wypełnienie (tło pola tekstu, wiaderko): zachowuje się jak papier, nie jak atrament (2c-A2). */
+        fun surface(argb: Int): Int = surfaces.getOrPut(argb) { mapSurface(argb, srcPaper, dstPaper, toDark) }
+        /** Tekst [argb] na wypełnieniu [fill] (oba w oryginale): po zamianie czytelny względem [surface] wypełnienia. */
+        fun textOn(argb: Int, fill: Int): Int =
+            mapTextOn(argb, over(fill, srcPaper), ink(argb), over(surface(fill), dstPaper))
+        private val surfaces = ConcurrentHashMap<Int, Int>()
 
         /** Macierz 4×5 (`ColorMatrix`) dla tła PDF i obrazów: odwrócenie jasności z odcieniem, biel → nowy papier. */
         val imageMatrix: FloatArray by lazy { imageMatrix(toDark, dstPaper) }
@@ -126,6 +137,54 @@ object ThemeMap {
             if (neutral) lq - d * (lq - INK_MIN) / max(1.0 - lp, 0.05) else min(L, lq - d).coerceAtLeast(INK_MIN - 0.04)
         }
         return fromOklab(nl, o[1], o[2], argb ushr 24)
+    }
+
+    /**
+     * Wypełnienie przy przejściu z papieru [src] na [dst]: jasność odwrócona jak u papieru i szarości (pastel na białym
+     * → ciemny pastel na ciemnym), odcień zostaje, nasycenie najwyżej [SURFACE_C], żeby duża plama nie świeciła.
+     * [mapInk] tu nie pasuje: nasycony kolor zachowuje w nim jasność, więc jasne tło zostawało jasne pod jaśniejącym tekstem.
+     */
+    fun mapSurface(argb: Int, src: Int, dst: Int, toDark: Boolean): Int {
+        val o = oklab(argb)
+        val lp = oklab(src)[0]; val lq = oklab(dst)[0]
+        val nl = if (toDark) lq + max(0.0, lp - o[0]) * (INK_MAX - lq) / max(lp, 0.05)
+            else lq - max(0.0, o[0] - lp) * (lq - INK_MIN) / max(1.0 - lp, 0.05)
+        val c = hypot(o[1], o[2])
+        val k = if (c > SURFACE_C) SURFACE_C / c else 1.0
+        return fromOklab(nl, o[1] * k, o[2] * k, argb ushr 24)
+    }
+
+    /**
+     * Tekst po zamianie [mapped] na tle [bg] (oba już zamienione, kryte): gdy kontrast WCAG spadł poniżej
+     * min([TEXT_CONTRAST], kontrast oryginału [srcText] na [srcBg]), jasność tekstu odsuwa się od tła tylko o tyle,
+     * ile trzeba; odcień zostaje.
+     */
+    fun mapTextOn(srcText: Int, srcBg: Int, mapped: Int, bg: Int): Int {
+        val need = min(TEXT_CONTRAST, contrastWcag(opaque(srcText), srcBg))
+        if (contrastWcag(opaque(mapped), bg) >= need - 1e-3) return mapped
+        val o = oklab(mapped)
+        val target = if (contrastWcag(WHITE, bg) >= contrastWcag(BLACK, bg)) 1.0 else 0.0
+        fun at(t: Double) = fromOklab(o[0] + (target - o[0]) * t, o[1], o[2], mapped ushr 24)
+        if (contrastWcag(opaque(at(1.0)), bg) < need) return at(1.0)
+        var lo = 0.0; var hi = 1.0
+        repeat(20) { val mid = (lo + hi) / 2; if (contrastWcag(opaque(at(mid)), bg) >= need) hi = mid else lo = mid }
+        return at(hi)
+    }
+
+    /** Kontrast WCAG 2 (1–21) dwóch kolorów; krycie pomijane. */
+    fun contrastWcag(a: Int, b: Int): Double {
+        val la = luminance(a); val lb = luminance(b)
+        return (max(la, lb) + 0.05) / (min(la, lb) + 0.05)
+    }
+
+    private fun luminance(c: Int): Double = 0.2126 * lin(c shr 16 and 255) + 0.7152 * lin(c shr 8 and 255) + 0.0722 * lin(c and 255)
+    private fun opaque(c: Int) = c or (0xFF shl 24)
+
+    /** [fg] nałożony na kryty [bg] (zwykłe mieszanie w sRGB, jak Canvas). */
+    fun over(fg: Int, bg: Int): Int {
+        val a = (fg ushr 24) / 255.0
+        fun ch(sh: Int) = ((fg shr sh and 255) * a + (bg shr sh and 255) * (1 - a)).roundToInt().coerceIn(0, 255)
+        return (0xFF shl 24) or (ch(16) shl 16) or (ch(8) shl 8) or ch(0)
     }
 
     /** Zakreślacz: na ciemnym papierze ciemniejszy i nasycony (nie świeci na biało), na jasnym — pastel. */

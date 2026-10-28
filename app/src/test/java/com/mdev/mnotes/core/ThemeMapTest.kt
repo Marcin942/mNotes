@@ -94,4 +94,36 @@ class ThemeMapTest {
         assertTrue(hueDiff(red, back) < 4.0)
         assertNotNull(toDark.reverse())
     }
+
+    /** 2c-A2: pole tekstu z pastelowym tłem — po zamianie na ciemne i z powrotem tekst dalej czytelny. */
+    @Test fun textOnPastelFillStaysReadable() {
+        val pastels = listOf(0xFFFFF59D, 0xFFF8BBD0, 0xFFBBDEFB, 0xFFC8E6C9, 0xFFD1C4E9, 0xFFFFE0B2, 0xFFB2EBF2, 0xFFFFCDD2).map { it.toInt() }
+        // czarny, granat, czerwony, zielony, niebieski, fioletowy
+        val inks = listOf(0xFF000000, 0xFF1A237E, 0xFFD32F2F, 0xFF2E7D32, 0xFF1976D2, 0xFF7B1FA2).map { it.toInt() }
+        val back = toDark.reverse()
+        var oldWorst = 21.0
+        for (bg in pastels) for (ink in inks) {
+            val need = minOf(ThemeMap.TEXT_CONTRAST, ThemeMap.contrastWcag(ink, bg))
+            val dBg = toDark.surface(bg); val dInk = toDark.textOn(ink, bg)
+            val dark = ThemeMap.contrastWcag(dInk, dBg)
+            assertTrue("ciemne: tło %08x, tekst %08x, kontrast %.2f".format(bg, ink, dark), dark >= need - 0.01)
+            assertTrue("tło pola ciemne jak papier: ${L(dBg)}", L(dBg) < 0.45)
+            assertTrue("odcień tła zostaje", hueDiff(bg, dBg) < 12.0)
+            val lBg = back.surface(dBg); val lInk = back.textOn(dInk, dBg)
+            val light = ThemeMap.contrastWcag(lInk, lBg)
+            assertTrue("z powrotem: tło %08x, tekst %08x, kontrast %.2f".format(bg, ink, light), light >= need - 0.01)
+            assertTrue("tło po powrocie jasne: ${L(lBg)}", L(lBg) > 0.8)
+            oldWorst = minOf(oldWorst, ThemeMap.contrastWcag(toDark.ink(ink), toDark.ink(bg)))
+        }
+        // Przed poprawką tło szło przez ink(): pastel zostawał jasny, a tekst na nim jaśniał.
+        assertTrue("dawny najgorszy kontrast %.2f".format(oldWorst), oldWorst < 2.0)
+    }
+
+    @Test fun wcagContrastMatchesReference() {
+        assertEquals(21.0, ThemeMap.contrastWcag(0xFF000000.toInt(), 0xFFFFFFFF.toInt()), 0.01)
+        assertEquals(1.0, ThemeMap.contrastWcag(0xFF777777.toInt(), 0xFF777777.toInt()), 1e-9)
+        // #767676 na białym to znana granica AA (4,54:1).
+        assertEquals(4.54, ThemeMap.contrastWcag(0xFF767676.toInt(), 0xFFFFFFFF.toInt()), 0.01)
+        assertEquals(ThemeMap.contrastWcag(0xFF1976D2.toInt(), 0xFFFFF59D.toInt()), ThemeMap.contrastWcag(0xFFFFF59D.toInt(), 0xFF1976D2.toInt()), 1e-12)
+    }
 }

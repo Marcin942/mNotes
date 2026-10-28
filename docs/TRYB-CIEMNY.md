@@ -54,6 +54,12 @@ przekształcenia do ciemnego; symetrycznie do jasnego).
   Gdy nowy kolor wychodzi poza sRGB, nasycenie spada, aż się zmieści (odcień zostaje).
 - **Zakreślacz**: do ciemnego jasność najwyżej 0,6 (żółty robi się nasyconym, ciemniejszym żółtym — po nałożeniu „screen”
   na ciemny papier daje widoczną, ale nie białą plamę); do jasnego co najmniej 0,8 (pastel pod „multiply”). Krycie bez zmian.
+- **Kryte wypełnienia** (tło pola tekstu, wiaderko bez zakreślacza; 2c-A2): zachowują się jak papier, nie jak atrament —
+  jasność odwrócona jak u szarości, odcień zostaje, chroma najwyżej 0,12 (`ThemeMap.surface`). Wcześniej szły przez regułę
+  „Kolory”, więc pastelowe tło zostawało jasne, a tekst na nim jaśniał (kontrast ok. 1,1:1). **Tekst na wypełnieniu**
+  (`textOn`): po zamianie kontrast WCAG do zamienionego tła co najmniej 4,5:1 (albo tyle, ile miał oryginał, jeśli mniej);
+  jasność tekstu odsuwa się od tła tylko o tyle, ile trzeba. Wypełnienie zamkniętej krzywej zostaje przy regule zakreślacza
+  (jest półprzezroczyste i mieszane jak zakreślacz, nie jest tłem dla tekstu).
 - **Tło PDF i obrazy**: jedna macierz koloru (liniowa, więc działa na kafelku bez kosztu na piksel): odwrócenie jasności
   z obrotem barwy (jak F11), ściśnięte tak, by biel szła w kolor nowego papieru, a czerń w L ≈ 0,9 — strona PDF zlewa się
   z resztą zeszytu zamiast mieć smolisto czarne tło. **Zdjęcia** (obrazy wstawione na stronę) domyślnie bez zmian —

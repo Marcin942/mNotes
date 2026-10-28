@@ -147,10 +147,11 @@ class PageRenderer(private val assets: Assets?) {
                 val col = if (t == null) e.color else if (e.pen == PenKind.HIGHLIGHTER) t.highlighter(e.color) else t.ink(e.color)
                 drawStrokeData(c, e.pen, col, e.width, e.pts, e.count, scale, dk, e.poly, e.line, e.poly || e.ellipse)
             }
-            is TextBox -> drawText(c, if (t == null) e else e.copy(color = t.ink(e.color), fill = if (e.fill == 0) 0 else t.ink(e.fill)))
+            is TextBox -> drawText(c, if (t == null) e else if (e.fill == 0) e.copy(color = t.ink(e.color))
+                else e.copy(color = t.textOn(e.color, e.fill), fill = t.surface(e.fill)))
             is ImageEl -> drawImage(c, nb, e, decodeImages)
             is TapeEl -> drawTape(c, e)
-            is FillEl -> drawFill(c, if (t == null) e else e.copy(color = if (e.hl) t.highlighter(e.color) else t.ink(e.color)), dk)
+            is FillEl -> drawFill(c, if (t == null) e else e.copy(color = if (e.hl) t.highlighter(e.color) else t.surface(e.color)), dk)
         }
     }
 

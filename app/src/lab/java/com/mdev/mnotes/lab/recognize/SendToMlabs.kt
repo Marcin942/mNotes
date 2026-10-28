@@ -5,6 +5,8 @@ import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.RectF
+import android.os.Handler
+import android.os.Looper
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -44,6 +46,8 @@ object SendToMlabs {
     /** Dodatek intencji z nazwą pliku JSON (dla mLabs, gdy kiedyś zacznie przyjmować strony). */
     const val EXTRA_PAGE = "com.mdev.mnotes.extra.PAGE"
 
+    private val main = Handler(Looper.getMainLooper())
+
     @Composable
     fun Dialog(ed: Editor, index: Int, work: CoroutineScope, close: () -> Unit) {
         val page = remember(index) { ed.doc.pages.getOrNull(index) }
@@ -61,11 +65,17 @@ object SendToMlabs {
                 val content = ed.doc.content(p)
                 val note = text
                 work.launch {
-                    val sent = runCatching { share(ed, title, index + 1, spec, content, note) }.getOrDefault(false)
-                    ed.view?.post {
-                        busy = false
-                        if (!sent) ed.say(T.t("Nie udało się przygotować strony", "Could not prepare the page"))
-                        close()
+                    var sent = false
+                    try {
+                        sent = runCatching { share(ed, title, index + 1, spec, content, note) }.getOrDefault(false)
+                    } finally {
+                        // Zawsze przez główny wątek, nie przez `ed.view`: bez widoku (obrót, zamknięty zeszyt) okno
+                        // zostawało na zawsze w „Przygotowuję…” (2c-B5).
+                        main.post {
+                            busy = false
+                            if (!sent) ed.say(T.t("Nie udało się przygotować strony", "Could not prepare the page"))
+                            close()
+                        }
                     }
                 }
             },

@@ -307,7 +307,10 @@ Na starcie (`noc/wszystko` @ `471ed08`): lab 696 testów, 0 porażek.
   różne grubości, przerwy); (3) IoU z wynikami `kreda.py` — **niewykonalne tutaj**: w `kreda/` nie ma PNG wyników dla
   zdjęć z `blackboard/`, a `kreda.py` wymaga OpenCV/numpy, których w tym środowisku nie ma (bez pip). Zamiast tego
   `KredaPomiaryTest` (24 zdjęcia, podglądy do oczu). Przegląd §3.5: K0 wyszukiwanie „Laboratorium” zrobił A (A2-10); K1–K5
-  — wszystkie pozycje „Co poprawić” zamknięte w B2-5…B2-9 i 2b-B1…B3 (poza scalaniem stron w synchronizacji).
+  — większość pozycji „Co poprawić” zamknięta w B2-5…B2-9 i 2b-B1…B3. *Poprawka 28.10 (2c-B5):* wtedy **nie** wszystkie:
+  zostały podpowiedź po wstawieniu zdjęcia bez przycisków (sam dymek), gumka niezerowana po zmianie narożników i
+  `busy = true` na zawsze w „Wyślij do mLabs” bez widoku; zamknięte w 2c-B5 (niżej). Otwarte dalej: scalanie stron w
+  synchronizacji.
 
 - **2b-B2 c.d., narożniki bez ściany** (`a7d983a`): `guessQuad` obejmował ścianę, ekran projektora i głowy, bo mają kolor
   tablicy i łączą się z nią w jedną plamę maski. `BoardGeometry.clipToContent`: mapa pisma (top-hat, bez listew i ram,

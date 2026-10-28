@@ -48,6 +48,7 @@ import androidx.compose.ui.unit.dp
 import androidx.exifinterface.media.ExifInterface
 import com.mdev.mnotes.app.LabCommand
 import com.mdev.mnotes.app.LabFeatures
+import com.mdev.mnotes.core.image.BoardEdits
 import com.mdev.mnotes.core.image.BoardGeometry
 import com.mdev.mnotes.core.image.BoardOptions
 import com.mdev.mnotes.core.image.BoardPipeline
@@ -108,10 +109,11 @@ object Lab : LabFeatures {
         var opt by remember { mutableStateOf(set.options().copy(paper = paperOf(ed, imgs[0]))) }
         var asStrokes by remember { mutableStateOf(false) }
         var mode by remember { mutableStateOf(SHOW_RESULT) }
-        // Narożniki ustawione ręcznie, w ułamkach zdjęcia (lewy górny, prawy górny, prawy dolny, lewy dolny); null = zgadnięte.
-        var corners by remember { mutableStateOf<FloatArray?>(null) }
-        // Wielokąty gumki w ułamkach wyniku: ten sam kształt na podglądzie i w pełnym rozmiarze.
-        var erase by remember { mutableStateOf(listOf<FloatArray>()) }
+        // Narożniki (ułamki zdjęcia, null = zgadnięte) i wielokąty gumki (ułamki wyniku: ten sam kształt na podglądzie i
+        // w pełnym rozmiarze). Zmiana narożników, prostowania albo kadru zeruje gumkę (2c-B5, [BoardEdits]).
+        var edits by remember { mutableStateOf(BoardEdits(opt.straighten, opt.crop)) }
+        val corners = edits.corners
+        val erase = edits.erase
         var prep by remember { mutableStateOf<BoardSource?>(null) }
         var preview by remember { mutableStateOf<Bitmap?>(null) }
         var info by remember { mutableStateOf("") }
@@ -204,8 +206,8 @@ object Lab : LabFeatures {
                 val auto = prep?.quad?.let { normOf(it, prep!!) }
                 when {
                     mode == SHOW_CORNERS && photo != null && !many && opt.straighten ->
-                        CornerBox(photo, corners ?: auto ?: FULL) { corners = it }
-                    else -> ResultBox(preview, if (mode == SHOW_ERASER) erase else null) { erase = erase + listOf(it) }
+                        CornerBox(photo, corners ?: auto ?: FULL) { edits = edits.withGeometry(it) }
+                    else -> ResultBox(preview, if (mode == SHOW_ERASER) erase else null) { edits = edits.withLoop(it) }
                 }
                 val hint = when (mode) {
                     SHOW_CORNERS -> when {
@@ -218,12 +220,12 @@ object Lab : LabFeatures {
                 }
                 Text(hint, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 6.dp, bottom = 4.dp))
                 if (mode == SHOW_CORNERS && corners != null) {
-                    TextButton(onClick = { corners = null }) { Text(T.t("Narożniki automatycznie", "Automatic corners")) }
+                    TextButton(onClick = { edits = edits.withGeometry(null) }) { Text(T.t("Narożniki automatycznie", "Automatic corners")) }
                 }
                 if (mode == SHOW_ERASER && erase.isNotEmpty()) {
                     Row {
-                        TextButton(onClick = { erase = erase.dropLast(1) }) { Text(T.t("Cofnij gumkę", "Undo eraser")) }
-                        TextButton(onClick = { erase = emptyList() }) { Text(T.t("Wyczyść gumkę (${erase.size})", "Clear eraser (${erase.size})")) }
+                        TextButton(onClick = { edits = edits.undoLoop() }) { Text(T.t("Cofnij gumkę", "Undo eraser")) }
+                        TextButton(onClick = { edits = edits.clearLoops() }) { Text(T.t("Wyczyść gumkę (${erase.size})", "Clear eraser (${erase.size})")) }
                     }
                 }
                 SectionLabel(T.t("Wynik", "Result"))
@@ -236,7 +238,7 @@ object Lab : LabFeatures {
                     },
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(vertical = 4.dp),
                 )
-                Steps(opt) { opt = it }
+                Steps(opt) { opt = it; edits = edits.withGeometry(edits.corners, it.straighten, it.crop) }
             }
         }
     }
@@ -400,6 +402,8 @@ object Lab : LabFeatures {
 
     /** Okno „Wyślij stronę do mLabs”: edytor i indeks strony z chwili wywołania polecenia; null = zamknięte. */
     private var sendPage by mutableStateOf<Pair<Editor, Int>?>(null)
+    /** „Oczyścić?” w podpowiedzi po wstawieniu zdjęcia tablicy: panel kredy dla tego zdjęcia (2c-B5). */
+    private var cleanAsk by mutableStateOf<Pair<Editor, ImageEl>?>(null)
 
     override fun commands(ed: Editor): List<LabCommand> = listOf(
         LabCommand("labSendMlabs", 0, "Wyślij stronę do mLabs…", "Send page to mLabs…", { ed.doc.pages.isNotEmpty() }) { sendPage = ed to ed.pageIndex },
@@ -407,6 +411,7 @@ object Lab : LabFeatures {
 
     @Composable
     override fun Overlay(ed: Editor) {
+        cleanAsk?.let { (owner, img) -> if (owner === ed) BoardPanel(ed, listOf(img)) { cleanAsk = null } }
         val (owner, index) = sendPage ?: return
         if (owner !== ed) return
         com.mdev.mnotes.lab.recognize.SendToMlabs.Dialog(ed, index, work) { sendPage = null }
@@ -466,7 +471,10 @@ object Lab : LabFeatures {
         ed.exec(com.mdev.mnotes.core.model.DocEdit.Elements(page.id, com.mdev.mnotes.core.model.ElementsEdit.replace(cur, mapOf(orig.id to back))))
     }
 
-    /** Po wstawieniu zdjęcia ciemnej tablicy raz podpowiada „Oczyść tablicę”; sprawdzenie na 320 px w tle. */
+    /**
+     * Po wstawieniu zdjęcia ciemnej tablicy podpowiada „Oczyść tablicę” z przyciskami „Oczyścić?” (zaznacza zdjęcie
+     * i otwiera panel kredy) i „Nie pokazuj więcej” (2c-B5; wcześniej sam dymek, raz); sprawdzenie na 320 px w tle.
+     */
     override fun imageInserted(ed: Editor, el: ImageEl) {
         val set = LabSettings.of(ed.view?.context ?: return)
         if (!set.boardHint) return
@@ -475,13 +483,23 @@ object Lab : LabFeatures {
             val small = loadRaster(file, 320) ?: return@launch
             if (!BoardGeometry.looksLikeDarkBoard(small)) return@launch
             ed.view?.post {
-                set.boardHint = false
-                ed.say(T.t(
-                    "Wygląda jak tablica: różdżka „Oczyść tablicę” w menu zdjęcia zostawi samą kredę (podpowiedź raz; Ustawienia → Laboratorium)",
-                    "Looks like a blackboard: the “Clean up the board” wand in the photo menu keeps only the chalk (shown once; Settings → Lab)",
-                ))
+                ed.say(
+                    T.t("Wygląda jak tablica: zostawić samą kredę?", "Looks like a blackboard: keep only the chalk?"),
+                    listOf(
+                        T.t("Oczyścić?", "Clean up?") to { cleanPhoto(ed, el) },
+                        T.t("Nie pokazuj więcej", "Don't show again") to { set.boardHint = false },
+                    ),
+                )
             }
         }
+    }
+
+    /** Zaznacza zdjęcie [el] (jeśli wciąż jest na stronie) i otwiera dla niego panel kredy. */
+    private fun cleanPhoto(ed: Editor, el: ImageEl) {
+        val page = ed.doc.pages.firstOrNull { p -> ed.doc.content(p).elements.any { it.id == el.id } } ?: return
+        val now = ed.doc.content(page).elements.first { it.id == el.id } as? ImageEl ?: return
+        ed.select(page.id, setOf(now.id))
+        cleanAsk = ed to now
     }
 
     @Composable

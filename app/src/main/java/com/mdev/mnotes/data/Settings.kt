@@ -99,6 +99,16 @@ class Settings(ctx: Context) {
     init { com.mdev.mnotes.editor.T.mode = langPref }
 
     // — Wejście —
+    private var handPref by Pref("input.hand", com.mdev.mnotes.core.layout.Handedness.RIGHT)
+    /** 3c-A13: ręka, którą się pisze; zmiana odbija położenia pasków, kapsuły i mini-mapy ([Handedness.switch]). */
+    var hand: Int
+        get() = handPref
+        set(v) {
+            val s = com.mdev.mnotes.core.layout.Handedness.switch(
+                com.mdev.mnotes.core.layout.Handedness.Sides(toolbarPos, optionsPos, undoDock, miniMapCorner, scrollMargin), handPref, v)
+            toolbarPos = s.toolbar; optionsPos = s.options; undoDock = s.undoDock; miniMapCorner = s.miniMap; scrollMargin = s.scrollMargin
+            handPref = v
+        }
     var fingerMode by Pref("input.finger", 0)        // 0 przewijaj, 1 rysuj, 2 ignoruj
     var palmRejection by Pref("input.palm_rejection", true)
     var penButton by Pref("input.pen_button", 0)     // 0 gumka, 1 lasso, 2 cofnij, 3 laser, 4 brak

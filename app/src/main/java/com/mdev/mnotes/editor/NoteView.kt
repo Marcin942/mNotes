@@ -39,6 +39,7 @@ import com.mdev.mnotes.core.geom.Protractor
 import com.mdev.mnotes.core.geom.Ruler
 import com.mdev.mnotes.core.layout.CacheBudget
 import com.mdev.mnotes.core.layout.DocLayout
+import com.mdev.mnotes.core.layout.Handedness
 import com.mdev.mnotes.core.layout.LayoutMode
 import com.mdev.mnotes.core.layout.PageDrop
 import com.mdev.mnotes.core.layout.RenderProfile
@@ -156,6 +157,7 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
     private var toolMoved = false
     private var stylusNear = false
     private var lastStylusT = 0L
+    private var lastStylusX = Float.NaN; private var lastStylusY = 0f   // 3c-A13: dłoń po stronie ręki odrzucana dłużej
     private var hoverOn = false
     private var hoverX = 0f; private var hoverY = 0f
     private var hoverTool = Tool.PEN
@@ -1350,7 +1352,7 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
     /** Identyfikatory dotknięć, które nie są gestem: opierająca się dłoń albo palec poza stroną (np. na pasku narzędzi). */
     private val palm = HashSet<Int>()
 
-    private fun palmTouch(ev: MotionEvent, idx: Int) = ev.getToolType(idx) == MotionEvent.TOOL_TYPE_FINGER && rejectFinger(ev.eventTime)
+    private fun palmTouch(ev: MotionEvent, idx: Int) = ev.getToolType(idx) == MotionEvent.TOOL_TYPE_FINGER && rejectFinger(ev.eventTime, ev.getX(idx), ev.getY(idx))
 
     // Odrzucony palec, który okazał się szybkim dotknięciem (nie opartą dłonią), nadal może zaznaczyć lub odznaczyć.
     private var rescuePid = -1; private var rescueX = 0f; private var rescueY = 0f; private var rescueT = 0L
@@ -1381,7 +1383,12 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
         return 0
     }
 
-    private fun rejectFinger(now: Long) = settings.palmRejection && now - lastStylusT < (if (stylusNear) HOVER_STALE_MS else 450L)
+    private fun rejectFinger(now: Long, x: Float, y: Float): Boolean {
+        if (!settings.palmRejection) return false
+        val dt = now - lastStylusT
+        if (dt < (if (stylusNear) HOVER_STALE_MS else 450L)) return true
+        return dt < Handedness.PALM_SIDE_MS && !lastStylusX.isNaN() && Handedness.palmSide(settings.hand, x, y, lastStylusX, lastStylusY, dp)
+    }
 
     /** Narzędzie dla bieżącego gestu: gumka rysika, przycisk S Pen, albo wybrane w pasku. */
     private fun effectiveTool(ev: MotionEvent, idx: Int): Tool {
@@ -1459,8 +1466,8 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
             Mode.CUT -> if (t == MotionEvent.TOOL_TYPE_FINGER && cutPid != -1 && cutType == MotionEvent.TOOL_TYPE_FINGER) { cutAbort(); startNav(ev); removeCallbacks(longPress) }
             Mode.CROP -> if (t == MotionEvent.TOOL_TYPE_FINGER && cropPid != -1 && cropType == MotionEvent.TOOL_TYPE_FINGER) { cropAbort(); startNav(ev); removeCallbacks(longPress) }
             Mode.IGNORE, Mode.NONE -> {
-                if (isStylus(t) && !navOnly(ev, idx)) { stylusNear = true; lastStylusT = ev.eventTime; beginTool(ev, idx) }
-                else if (t == MotionEvent.TOOL_TYPE_FINGER && !rejectFinger(ev.eventTime)) {
+                if (isStylus(t) && !navOnly(ev, idx)) { stylusNear = true; lastStylusT = ev.eventTime; lastStylusX = ev.getX(idx); lastStylusY = ev.getY(idx); beginTool(ev, idx) }
+                else if (t == MotionEvent.TOOL_TYPE_FINGER && !rejectFinger(ev.eventTime, ev.getX(idx), ev.getY(idx))) {
                     // Palec obok opartej dłoni to zwykłe pojedyncze dotknięcie, a nie szczypanie.
                     if (liveCount(ev) >= 2) { if (settings.fingerMode != 1) startNav(ev) } else if (palm.isNotEmpty()) fingerDown(ev, idx)
                 }
@@ -1503,7 +1510,7 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
             Mode.CROP -> cropUp(ev, cancel)
             else -> {}
         }
-        if (isStylus(ev.getToolType(0))) lastStylusT = ev.eventTime
+        if (isStylus(ev.getToolType(0))) { lastStylusT = ev.eventTime; lastStylusX = ev.getX(0); lastStylusY = ev.getY(0) }
         mode = Mode.NONE; toolPid = -1; rulerGrab = 0; palm.clear()
         predictor?.let { predN = 0 }
         invalidate()

@@ -107,6 +107,9 @@ class PageCache(
     private val fadeNs get() = profile.fadeMs * 1_000_000L
     private var tileBytes = 0L
     private var baseBytes = 0L
+    /** Przydział pasa stanowiska (2c-A6); poza stanowiskiem bez ograniczeń ponad profil. */
+    private var tileLimit = Long.MAX_VALUE
+    private var baseLimit = Long.MAX_VALUE
     @Volatile private var closed = false
     @Volatile private var frame = 0L
     /** Jeden wątek renderuje łaty gumki; FIFO, więc widoczne kafelki (zlecane pierwsze) są gotowe najpierw. */
@@ -623,6 +626,18 @@ class PageCache(
     /** 2d-A1: dokument stanowiska poza ekranem — zwalnia kafelki powiększeń; bazy stron zostają, więc powrót nie jest pusty. */
     fun releaseTiles() { for (e in entries.values) { for (lv in e.levels) release(lv); e.levels.clear() } }
 
+    /**
+     * Przydział pasa ze wspólnego budżetu stanowiska (2c-A6). Przy 0 zwalnia od razu wszystko: pas poza ekranem nie
+     * rysuje klatek, więc [evict] uznałby jego ostatnie kafelki za wciąż używane.
+     */
+    fun budget(tiles: Long, bases: Long) {
+        if (tiles == tileLimit && bases == baseLimit) return
+        tileLimit = tiles; baseLimit = bases
+        if (tiles <= 0L) releaseTiles()
+        if (bases <= 0L) for (e in entries.values) if (e.base.bmp != null) drop(e.base)
+        trim()
+    }
+
     // ───────────────────────── odczyt pikseli i tła ─────────────────────────
 
     /** Kolor piksela strony w punkcie ([x], [y]) pt z najlepszej dostępnej bitmapy; 0, gdy brak. */
@@ -679,9 +694,12 @@ class PageCache(
         lv.tiles.clear()
     }
 
+    private val tileCap get() = min(profile.tileBytes, tileLimit)
+    private val baseCap get() = min(profile.baseBytes, baseLimit)
+
     private fun trim() {
-        if (tileBytes > profile.tileBytes) evict(false)
-        if (baseBytes > profile.baseBytes) evict(true)
+        if (tileBytes > tileCap) evict(false)
+        if (baseBytes > baseCap) evict(true)
     }
 
     /** Zwalnia najdawniej używane bitmapy (nie te z ostatniej klatki), aż suma zmieści się w budżecie profilu. */
@@ -693,7 +711,7 @@ class PageCache(
         }
         list.sortBy { it.stamp }
         for (t in list) {
-            if ((if (bases) baseBytes else tileBytes) <= (if (bases) profile.baseBytes else profile.tileBytes)) break
+            if ((if (bases) baseBytes else tileBytes) <= (if (bases) baseCap else tileCap)) break
             if (t.stamp >= frame - 1) break
             t.level?.tiles?.remove(key(t.ix, t.iy))
             drop(t)

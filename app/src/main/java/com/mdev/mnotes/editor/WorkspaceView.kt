@@ -12,6 +12,7 @@ import android.view.animation.DecelerateInterpolator
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.setValue
+import com.mdev.mnotes.core.layout.CacheBudget
 import com.mdev.mnotes.core.layout.Fling
 import com.mdev.mnotes.core.layout.Workspace
 import com.mdev.mnotes.core.model.DocEdit
@@ -129,7 +130,7 @@ class WorkspaceView(ctx: Context, private val st: Station) : ViewGroup(ctx), Lan
         val w = ws ?: return
         for ((i, v) in lanes.withIndex()) if (v.width > 0) v.setViewport(w.zoom, w.tx(i), w.ty(i))
         tick++
-        watchHidden()
+        share()
     }
 
     /** Zapisany stan otwieranego stanowiska, gdy pasy już stoją (te same dokumenty). */
@@ -251,31 +252,19 @@ class WorkspaceView(ctx: Context, private val st: Station) : ViewGroup(ctx), Lan
         if (flingPair != null) { flingPair = null; Choreographer.getInstance().removeFrameCallback(flingFrame) }
     }
 
-    // — pasy poza ekranem: po 2 s zwalniają kafelki (§8) —
+    // — wspólny budżet bitmap (2c-A6): podział wg widocznej części, pas poza ekranem po 2 s zwalnia wszystko —
 
-    private val hiddenSince = HashMap<NoteView, Long>()
-    private val released = HashSet<NoteView>()
-    private val trimCheck = Runnable { trimHidden() }
+    private val budget = CacheBudget(HIDDEN_MS)
+    private val trimCheck = Runnable { share() }
 
-    private fun watchHidden() {
+    private fun share() {
         val w = ws ?: return
+        val p = lanes.firstOrNull()?.renderProfile ?: return
         val now = SystemClock.uptimeMillis()
-        for ((i, v) in lanes.withIndex()) {
-            if (w.laneRect(i) != null) { hiddenSince.remove(v); released.remove(v) } else hiddenSince.putIfAbsent(v, now)
-        }
-        hiddenSince.keys.retainAll(lanes.toSet())
+        val vis = FloatArray(lanes.size) { i -> w.laneRect(i)?.let { r -> if (w.horizontal) r[3] - r[1] else r[2] - r[0] } ?: 0f }
+        for ((i, s) in budget.shares(p.tileBytes, p.baseBytes, vis, now).withIndex()) lanes[i].budget(s)
         removeCallbacks(trimCheck)
-        if (hiddenSince.keys.any { it !in released }) postDelayed(trimCheck, HIDDEN_MS + 100L)
-    }
-
-    private fun trimHidden() {
-        val now = SystemClock.uptimeMillis()
-        var waiting = false
-        for ((v, since) in hiddenSince) {
-            if (v in released) continue
-            if (now - since >= HIDDEN_MS) { v.releaseTiles(); released.add(v) } else waiting = true
-        }
-        if (waiting) postDelayed(trimCheck, HIDDEN_MS)
+        budget.nextRelease(now)?.let { postDelayed(trimCheck, it - now + 50L) }
     }
 
     // — dotyk: cały gest do pasa pod palcem —
@@ -356,7 +345,7 @@ class WorkspaceView(ctx: Context, private val st: Station) : ViewGroup(ctx), Lan
     }
 
     companion object {
-        /** Po tylu ms poza ekranem pas zwalnia kafelki powiększeń. */
+        /** Po tylu ms poza ekranem pas zwalnia kafelki i bazy stron. */
         const val HIDDEN_MS = 2000L
     }
 }

@@ -37,9 +37,11 @@ import com.mdev.mnotes.core.geom.AxesSnap
 import com.mdev.mnotes.core.geom.Instrument
 import com.mdev.mnotes.core.geom.Protractor
 import com.mdev.mnotes.core.geom.Ruler
+import com.mdev.mnotes.core.layout.CacheBudget
 import com.mdev.mnotes.core.layout.DocLayout
 import com.mdev.mnotes.core.layout.LayoutMode
 import com.mdev.mnotes.core.layout.PageDrop
+import com.mdev.mnotes.core.layout.RenderProfile
 import com.mdev.mnotes.core.layout.PageOverflow
 import com.mdev.mnotes.core.layout.PageShift
 import com.mdev.mnotes.core.layout.ZoomRegion
@@ -1247,13 +1249,22 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
 
     /** Kontener stanowiska; null — zwykły widok jednego dokumentu (własny stan widoku i `OverScroller`). */
     var lane: LaneHost? = null
-        set(v) { if (field === v) return; field = v; vpZoom = Float.NaN; invalidate() }
+        set(v) {
+            if (field === v) return
+            field = v; vpZoom = Float.NaN
+            // Sam dokument (stanowisko zamknięte) wraca do pełnego budżetu profilu.
+            if (v == null) cache.budget(Long.MAX_VALUE, Long.MAX_VALUE)
+            invalidate()
+        }
 
     /** Układ stron tego dokumentu (dla modelu stanowiska). */
     val docLayout: DocLayout get() = layout
 
-    /** Pas długo poza ekranem: kafelki powiększeń do zwolnienia (bazy stron zostają). */
-    fun releaseTiles() = cache.releaseTiles()
+    /** Budżet bitmap profilu jakości (do podziału między pasy stanowiska). */
+    val renderProfile: RenderProfile get() = RenderProfile.of(cache.quality)
+
+    /** Przydział pasa ze wspólnego budżetu stanowiska (2c-A6). */
+    fun budget(s: CacheBudget.Share) = cache.budget(s.tileBytes, s.baseBytes)
 
     /** Przyjmuje elementy z innego dokumentu stanowiska (zeszytu [fromNb]) środkiem w punkcie ekranu ([sx], [sy]). */
     fun dropIn(els: List<Element>, fromNb: String, sx: Float, sy: Float): DocEdit? {

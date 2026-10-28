@@ -94,41 +94,49 @@ object GeoTool {
      * Wejście typu [want] pod dotknięciem ([x], [y]) w tolerancji [tol] (pt) wśród elementów strony [els] (najwyżej leżące
      * pierwsze). Punkt: kropka albo wierzchołek w zasięgu, inaczej samo miejsce dotknięcia; null — nic pasującego.
      */
-    fun pick(els: List<Element>, x: Float, y: Float, tol: Float, want: In): Input? {
+    fun pick(els: List<Element>, x: Float, y: Float, tol: Float, want: In): Input? = pickFrom(els, x, y, tol, want)?.input
+
+    /**
+     * NAU-3: wskazane wejście razem z elementem, z którego je odczytano ([id]; null — wolne miejsce) i jego częścią
+     * ([part]: wierzchołek punktu, początek boku prostej; -1 — cały element). Z tego [resolve] odczyta wejście ponownie,
+     * gdy element się przesunie.
+     */
+    class Picked(val input: Input, val id: Int?, val part: Int)
+
+    fun pickFrom(els: List<Element>, x: Float, y: Float, tol: Float, want: In): Picked? {
         val t = P(x, y)
         val strokes = els.asReversed().filterIsInstance<Stroke>()
         when (want) {
             In.POINT -> {
-                var best: P? = null; var bd = tol
+                var best: P? = null; var bd = tol; var from: Stroke? = null; var part = -1
                 for (s in strokes) {
-                    if (isDot(s)) { val c = P(s.bounds.cx, s.bounds.cy); val d = c.dist(t); if (d <= bd) { bd = d; best = c } }
-                    else if (s.poly) for (i in 0 until s.count) { val v = P(s.pts[3 * i], s.pts[3 * i + 1]); val d = v.dist(t); if (d <= bd) { bd = d; best = v } }
+                    if (isDot(s)) { val c = P(s.bounds.cx, s.bounds.cy); val d = c.dist(t); if (d <= bd) { bd = d; best = c; from = s; part = -1 } }
+                    else if (s.poly) for (i in 0 until s.count) { val v = P(s.pts[3 * i], s.pts[3 * i + 1]); val d = v.dist(t); if (d <= bd) { bd = d; best = v; from = s; part = i } }
                 }
-                return Input.Point(best ?: t)
+                return Picked(Input.Point(best ?: t), from?.id, part)
             }
             In.LINE -> {
-                var best: Line? = null; var bd = tol
+                var best: Line? = null; var bd = tol; var from: Stroke? = null; var part = -1
                 for (s in strokes) if (s.poly && !s.ellipse && s.count >= 2) for (i in 0 until s.count - 1) {
                     val a = P(s.pts[3 * i], s.pts[3 * i + 1]); val b = P(s.pts[3 * i + 3], s.pts[3 * i + 4])
                     if (a.dist(b) < 1f) continue
                     val d = segDist(t, a, b)
-                    if (d <= bd) { bd = d; best = Line(a, b) }
+                    if (d <= bd) { bd = d; best = Line(a, b); from = s; part = i }
                 }
-                return best?.let { Input.Ln(it) }
+                return best?.let { Picked(Input.Ln(it), from?.id, part) }
             }
             In.CIRCLE -> {
-                var best: Circle? = null; var bd = tol
-                for (s in strokes) { val c = circleOf(s) ?: continue; val d = abs(c.c.dist(t) - c.r); if (d <= bd) { bd = d; best = c } }
+                var best: Stroke? = null; var bd = tol
+                for (s in strokes) { val c = circleOf(s) ?: continue; val d = abs(c.c.dist(t) - c.r); if (d <= bd) { bd = d; best = s } }
                 // Dotknięcie w środku okręgu też go wskazuje (najmniejszy, który zawiera punkt).
-                if (best == null) best = strokes.mapNotNull { circleOf(it) }.filter { it.c.dist(t) < it.r }.minByOrNull { it.r }
-                return best?.let { Input.Circ(it) }
+                if (best == null) best = strokes.filter { s -> circleOf(s)?.let { it.c.dist(t) < it.r } == true }.minByOrNull { circleOf(it)!!.r }
+                return best?.let { s -> Picked(Input.Circ(circleOf(s)!!), s.id, -1) }
             }
             In.TRIANGLE -> {
                 for (s in strokes) {
-                    if (!s.poly || s.ellipse || s.vertexCount != 3 || !s.closed) continue
-                    val a = P(s.pts[0], s.pts[1]); val b = P(s.pts[3], s.pts[4]); val c = P(s.pts[6], s.pts[7])
-                    val near = segDist(t, a, b) <= tol || segDist(t, b, c) <= tol || segDist(t, c, a) <= tol
-                    if (near || inside(t, a, b, c)) return Input.Tri(a, b, c)
+                    val tr = triangleOf(s) ?: continue
+                    val near = segDist(t, tr.a, tr.b) <= tol || segDist(t, tr.b, tr.c) <= tol || segDist(t, tr.c, tr.a) <= tol
+                    if (near || inside(t, tr.a, tr.b, tr.c)) return Picked(tr, s.id, -1)
                 }
                 return null
             }
@@ -136,10 +144,35 @@ object GeoTool {
                 for (e in els.asReversed()) {
                     if (e.locked || !e.bounds.inflate(tol).contains(x, y)) continue
                     val hit = if (e is BoxElement) e.containsPoint(x, y, tol) else EraseMath.hitsElement(e, x, y, tol)
-                    if (hit) return Input.Obj(e)
+                    if (hit) return Picked(Input.Obj(e), e.id, -1)
                 }
                 return null
             }
+        }
+    }
+
+    private fun triangleOf(s: Stroke): Input.Tri? {
+        if (!s.poly || s.ellipse || s.vertexCount != 3 || !s.closed) return null
+        return Input.Tri(P(s.pts[0], s.pts[1]), P(s.pts[3], s.pts[4]), P(s.pts[6], s.pts[7]))
+    }
+
+    /**
+     * NAU-3: wejście typu [want] odczytane na nowo z bieżącej wersji elementu [el] (część [part] jak w [Picked]);
+     * null — element nie jest już tym, czym był (okrąg rozciągnięty w elipsę, brak wierzchołka), zależność się zrywa.
+     */
+    fun resolve(want: In, el: Element, part: Int): Input? {
+        if (want == In.OBJECT) return Input.Obj(el)
+        val s = el as? Stroke ?: return null
+        return when (want) {
+            In.POINT -> when {
+                part < 0 -> if (isDot(s)) Input.Point(P(s.bounds.cx, s.bounds.cy)) else null
+                part < s.count -> Input.Point(P(s.pts[3 * part], s.pts[3 * part + 1]))
+                else -> null
+            }
+            In.LINE -> if (s.poly && !s.ellipse && part >= 0 && part + 1 < s.count) Input.Ln(Line(P(s.pts[3 * part], s.pts[3 * part + 1]), P(s.pts[3 * part + 3], s.pts[3 * part + 4]))) else null
+            In.CIRCLE -> circleOf(s)?.let { Input.Circ(it) }
+            In.TRIANGLE -> triangleOf(s)
+            In.OBJECT -> Input.Obj(el)
         }
     }
 

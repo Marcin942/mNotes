@@ -1045,6 +1045,16 @@ Nearby nie zmieniam do odpowiedzi Marcina na pytania z `plan/NEARBY-OPEN-SOURCE.
   `img_20.jpg` → bez indeksu dolnego; `a_12 ` → a₁₂. (3) Ustawienia → Edytor → Pióro: „Czas przytrzymania” tuż pod
   „Przytrzymaj, aby wyprostować”. (4) Narysuj dwa odcinki na krzyż, zaznacz je → Konstrukcja → kąt: ostry (np. 30°,
   nie 150°). (5) Gumka w ręku → stuknij kolor na listwie → wraca ostatnie narzędzie pisania.
+- **2c-A14 (f82985e, `noc/f2c-przewodnik`):** przewodnik ma 21 stron. „Sprawdź się” kończy każdy rozdział, a odpowiedzi
+  leżą pod zakrytą taśmą. Nowe lekcje: Profile pracy, Tablica oraz Zdjęcie tablicy (wydzielone z trybu wykładu).
+  Wysokość akapitu liczy `TextMeasure`: w aplikacji to StaticLayout `PageRenderer`, w teście Java2D (DejaVu, szersza od
+  Roboto). Tytuł zawinięty na dwa wiersze przesuwa resztę strony. Testy: rozdziały, taśmy, metryka; podgląd w
+  `docs/podglad/przewodnik-strony.png`. Nie sprawdzone: czcionka Samsunga. Liczy ją StaticLayout urządzenia, więc
+  wysokości powinny się zgadzać.
+  **Tablet:** (1) Biblioteka → „Nowy” → „Zeszyt-przewodnik (ćwiczenia z funkcji)”: na
+  okładce dwa rozdziały, każdy kończy się „Sprawdź się”. (2) Strona 8: żółte paski pod pytaniami. Weź Taśmę (K) i dotknij
+  paska → widać odpowiedź, drugie dotknięcie zakrywa. (3) Na żadnej stronie tekst nie wchodzi na rysunek ani na kartę
+  wskazówki. (4) Strony 13–14 (Profile pracy, Tablica) i 17 (Zdjęcie tablicy): polecenia zgadzają się z menu.
 
 ### Na tablecie po FAZIE 2c/2d — kolejność (z `dzienniki/PRZEGLAD-FABLE-2.md` §5, szczegóły tam)
 Instalacja: `labDebug` z `noc/wszystko` (tablet i telefon), do pkt 16 też `coreDebug`. Przy punktach poprawionych

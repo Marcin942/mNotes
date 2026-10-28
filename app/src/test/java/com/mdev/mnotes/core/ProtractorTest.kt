@@ -88,4 +88,18 @@ class ProtractorTest {
         assertEquals("36.9°", ConstructOps.deg(36.87f, pl = false))
         assertEquals("90°", ConstructOps.deg(89.98f))
     }
+
+    /** 2c-A15: odcinki przecinające się jak „X” — kąt ostry, a nie przypadkowy rozwarty z dalszych końców. */
+    @Test fun crossingSegmentsGiveTheAcuteAngle() {
+        fun L(ax: Float, ay: Float, bx: Float, by: Float) = Construct.Line(Construct.P(ax, ay), Construct.P(bx, by))
+        // Przecięcie w (0, 0); dalsze końce (100, 0) i (−70, −40,4) dają 150°, a kąt ostry to 30°.
+        val x = Construct.corner(L(-40f, 0f, 100f, 0f), L(50f, 28.87f, -70f, -40.41f))!!
+        assertEquals(30f, x.deg, 0.05f)
+        // Wspólny koniec („V”) — bez zmian, także rozwarty.
+        val v = Construct.corner(L(0f, 0f, 100f, 0f), L(0f, 0f, -60f, 34.64f))!!
+        assertEquals(150f, v.deg, 0.05f)
+        // Jeden odcinek kończy się na drugim („T” krzywo): ramię bez drugiej strony zostaje, ostry po stronie drugiego.
+        val t = Construct.corner(L(-80f, 0f, 100f, 0f), L(0f, 0f, -60f, -34.64f))!!
+        assertEquals(30f, t.deg, 0.05f)
+    }
 }

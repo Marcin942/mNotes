@@ -176,8 +176,21 @@ object Construct {
     fun corner(l1: Line, l2: Line): Corner? {
         val v = intersect(l1, l2) ?: return null
         fun far(l: Line) = if (l.a.dist(v) >= l.b.dist(v)) l.a else l.b
-        return Corner(v, far(l1), far(l2))
+        fun near(l: Line) = if (l.a.dist(v) >= l.b.dist(v)) l.b else l.a
+        // 2c-A15: odcinek przechodzi przez wierzchołek (wyraźnie po obu stronach) — przy „X” bierzemy kąt ostry,
+        // bo dalsze końce dają przypadkowo ostry albo rozwarty. Wspólny koniec („V”) zostaje jak był.
+        fun crosses(l: Line) = near(l).dist(v) > CROSS_SHARE * l.a.dist(l.b)
+        val c = Corner(v, far(l1), far(l2))
+        if (c.deg <= 90f) return c
+        return when {
+            crosses(l2) -> Corner(v, far(l1), near(l2))
+            crosses(l1) -> Corner(v, near(l1), far(l2))
+            else -> c
+        }
     }
+
+    /** Część długości odcinka po bliższej stronie wierzchołka, od której odcinek „przechodzi” przez wierzchołek. */
+    private const val CROSS_SHARE = 0.1f
 
     /** Dwusieczna kąta przy wierzchołku [v] między ramionami do [a] i [b] (półprosta długości [len]). */
     fun angleBisector(a: P, v: P, b: P, len: Float): Line {

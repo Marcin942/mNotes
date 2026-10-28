@@ -56,7 +56,7 @@ object Profiles {
         Key("input.pen_button", 1), Key("input.hold_to_shape", 1), Key("input.hold_curve", 1), Key("tools.return_to_pen", 1),
         Key("toolbar.order", 2), Key("toolbar.modes", 2), Key("toolbar.position", 2), Key("toolbar.size", 2), Key("toolbar.options", 2), Key("ui.undo_dock", 2),
         Key("toolbar.helper_strip", 3), Key("toolbar.helper_menu", 3),
-        Key("view.minimap", 4), Key("pages.theme", 4), Key("ui.compact", 4), Key("snap.attach", 4), Key("axes.snap", 4),
+        Key("view.minimap", 4), Key("view.scroll_margin", 4),Key("pages.theme", 4), Key("ui.compact", 4), Key("snap.attach", 4), Key("axes.snap", 4),
     )
 
     private val known = KEYS.map { it.key }.toSet()

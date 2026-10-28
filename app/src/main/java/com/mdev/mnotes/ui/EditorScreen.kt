@@ -1041,6 +1041,14 @@ private fun WriteBackBtn(ed: Editor, set: com.mdev.mnotes.data.Settings) {
     }
 }
 
+/** Krótka nazwa trybu gumki (podpis przy symbolu, 3c-A3): 0 obiektowa, 1 pikselowa, 2 lasso, 3 wycinanie. */
+private fun eraserModeName(mode: Int): String = when (mode) {
+    0 -> T.t("Obiektowa", "Object")
+    1 -> T.t("Pikselowa", "Pixel")
+    2 -> T.t("Lasso", "Lasso")
+    else -> T.t("Wycinanie", "Cut out")
+}
+
 /**
  * Opcje gumki (F7): tryby z ikonami, rozmiary, „Gumka pomija zakreślacz” i panel. [items] = grupy do pokazania (w menu
  * przy ikonie wybrane w Ustawieniach, na listwie wszystkie), [back] = przycisk powrotu do pisania na końcu (2b-A2).
@@ -1057,7 +1065,10 @@ private fun EraserStripItems(
             val names = listOf(T.t("Gumka obiektowa — usuwa całe kreski", "Object eraser — removes whole strokes"), T.t("Gumka pikselowa — ściera tylko to, nad czym przejdzie", "Pixel eraser — erases only what it passes over"), T.t("Lasso gumki — usuwa to, co obrysujesz", "Lasso eraser — removes what you circle"), T.t("Wycinanie — tnie kreski dokładnie na obrysie", "Cut out — cuts strokes exactly along the loop"))
             for (mode in 0..3) {
                 val on = set.eraserMode == mode
-                ToolBtn(names[mode], { if (on) toggle(Panel.ERASER) else set.eraserMode = mode }, selected = on, size = sz) { c -> EraserModeGlyph(mode, c, Modifier.size(isz + 2.dp)) }
+                val pick = { if (on) toggle(Panel.ERASER) else set.eraserMode = mode }
+                // 3c-A3: na poziomej listwie symbol z podpisem (sam znak w rogu bywał zagadką); pionowa zostaje wąska.
+                if (vertical) ToolBtn(names[mode], pick, selected = on, size = sz) { c -> EraserModeGlyph(mode, c, Modifier.size(isz + 2.dp)) }
+                else Chip(eraserModeName(mode), on, pick, Modifier.padding(horizontal = 2.dp), glyph = { c -> EraserModeGlyph(mode, c, Modifier.size(isz)) })
             }
             BarSep(vertical)
         }
@@ -1317,10 +1328,8 @@ private fun ToolPanel(ed: Editor, set: com.mdev.mnotes.data.Settings, panel: Pan
                 Panel.ERASER -> {
                     SectionLabel(T.t("Tryb gumki", "Eraser mode"))
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Chip(T.t("Obiektowa", "Object"), set.eraserMode == 0, { set.eraserMode = 0 })
-                        Chip(T.t("Pikselowa", "Pixel"), set.eraserMode == 1, { set.eraserMode = 1 })
-                        Chip(T.t("Lasso", "Lasso"), set.eraserMode == 2, { set.eraserMode = 2 })
-                        Chip(T.t("Wycinanie", "Cut out"), set.eraserMode == 3, { set.eraserMode = 3 })
+                        // 3c-A3: znak trybu z ikony gumki obok nazwy — ten sam symbol co na pasku, bez zgadywania.
+                        for (mode in 0..3) Chip(eraserModeName(mode), set.eraserMode == mode, { set.eraserMode = mode }, glyph = { c -> EraserModeGlyph(mode, c, Modifier.size(20.dp)) })
                     }
                     if (set.eraserMode == 3) Text(T.t("Obrysuj fragment: kreski zostaną przecięte dokładnie na obrysie, a to, co w środku, zniknie.", "Circle a part: strokes are cut exactly along the loop and everything inside is removed."), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Row(verticalAlignment = Alignment.CenterVertically) {

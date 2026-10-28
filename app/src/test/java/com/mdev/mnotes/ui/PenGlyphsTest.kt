@@ -90,8 +90,24 @@ class PenGlyphsTest {
     }
 
     /** 2b-A1: każda pozycja paska narzędzi ma ikonę (glif albo ikona Material). */
+    /** Ciało funkcji `ToolBar` z `EditorScreen.kt` (do następnej funkcji najwyższego poziomu). */
+    private fun toolBarSource(): String {
+        val src = java.io.File("src/main/java/com/mdev/mnotes/ui/EditorScreen.kt").readText()
+        val start = src.indexOf("private fun ToolBar(")
+        assertTrue(start > 0)
+        val end = Regex("\n(@Composable|private fun |fun |internal fun )").find(src, src.indexOf('\n', start))!!.range.first
+        return src.substring(start, end)
+    }
+
+    /** 2c-A15: pozycje brane z prawdziwego paska (BarItem/tool/icon i BAR_PENS), nie z listy, którą sprawdzamy. */
     @Test fun everyBarItemHasAnIcon() {
-        for (id in BarConfig.DEFAULT_ORDER) assertNotNull("brak ikony: $id", BarIcons.kind(id))
+        val body = toolBarSource()
+        val src = java.io.File("src/main/java/com/mdev/mnotes/ui/EditorScreen.kt").readText()
+        val pens = Regex("""PenKind\.([A-Z]+) to \d+""").findAll(src.lines().first { "val BAR_PENS" in it }).map { it.groupValues[1].lowercase() }.toList()
+        val ids = Regex("""(?:BarItem|\btool|\bicon)\("([a-z]+)"""").findAll(body).map { it.groupValues[1] }.toList() + pens
+        assertTrue("za mało pozycji: $ids", ids.size >= 15)
+        for (id in ids) assertNotNull("brak ikony: $id", BarIcons.kind(id))
+        assertEquals("pasek ≠ domyślny układ", BarConfig.DEFAULT_ORDER.toSet(), ids.toSet())
         assertNull(BarIcons.kind("nieznane"))
     }
 }

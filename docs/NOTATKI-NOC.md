@@ -666,6 +666,35 @@ Wygląd ikon sprawdzam rysunkiem Java2D z tej samej geometrii (`PreviewHarness`,
   z sekcjami Układ stron / Strony / Profil pracy / Widok / Wstaw / Stanowisko; ikony orientacji kartki `CropPortrait/
   CropLandscape` zamiast telefonu. **Zostaje na tablet / decyzję:** B1, B2, B9 (tylko pomiar), F21 czas podwójnego dotknięcia.
 
+### 28.10 rano — zaległości z przeglądu Fable (dopisek 04:55, przed FAZĄ 2c)
+
+Gałąź `noc/f2c-zaleglosci` od `noc/wszystko`. PRZEGLAD-FABLE §3.1–3.4 i §4 przejrzane jeszcze raz w kodzie; z kolumny
+„Co poprawić” zostały otwarte trzy rzeczy, teraz zamknięte:
+- **F21 przycisk „Punkty i uchwyty”** (gest podwójnego dotknięcia był niewidoczny): `PointEdit.offers` + test
+  `pointsButtonOnlyWhereItChangesSomething`. **Wygląd:** na pasku zaznaczenia, zaraz za „Skaluj i obracaj”, glif łamanej
+  (`Timeline`) w tym samym rozmiarze 36/20 dp; przy prostokącie świeci akcentem, gdy wierzchołki są pokazane. Nie ma go
+  dla odcinka, łamanej i krzywej (uchwyty są od razu) ani dla zablokowanej kreski.
+- **§3.2a menu zaznaczenia**: „Wycinek jako obraz”, „Kopiuj wycinek do schowka” i „Zapisz jako naklejkę…” w podmenu
+  „Zaznaczenie jako ▸” (ten sam wzór co „Konstrukcja ▸”: nagłówek z „‹” wraca). Pierwszy poziom menu z zaznaczeniem: do
+  18 zamiast 20 pozycji. Przewodnik (lekcje „Lasso”, „Naklejki”, „Wycinek strony”) mówi o nowej ścieżce.
+- **§3.2a kolor lasera w Ustawieniach**: Edytor i pióro → grupa „Laser” → „Kolor śladu lasera” (4 kropki jak przy kolorze
+  akcentu); wyszukiwarka zna „laser”, „wskaźnik”, „pointer” (`SettingsSynonymsTest`).
+- BACKLOG: dwa ostatnie wpisy NOC bez „Nauka: …” (F16, FB10) dostały to zdanie; wszystkie wpisy NOC/2b je mają.
+- Sprawdzone, że są już zamknięte: B5, F6 (180 ms, suwak 100–400), F7 (glify w oknie układu paska), F8, F12, F17, F18,
+  F19 (tło kafla, „Usunąć?” gaśnie po 3 s), F20, F22, F25, F26, F28, §3.2a (menu „⋮”, kategorie, ikony orientacji,
+  komentarze w `Settings.kt`), L1, L2, FB1, FB3 (cień i ramka mini-mapy jak strony). §3.5 (lab) i §3.6 (mLabs) robił B.
+- **Nie zrobione — zablokowane:** `dzienniki/DZIENNIK.md` znów ma 3 ucięte znaki UTF‑8 (wiersze ok. 901–903, wpisy
+  „ostatni commit: …” z 27.10 wieczorem). Przyczyna: `narzedzia/nadzor/nadzor.sh:198` tnie temat commita przez
+  `cut -c1-90`, a GNU `cut` liczy bajty, więc przecina „…” i „ł” w pół. Naprawy pliku skryptem nie dostałem (polecenie
+  odrzucone w trybie bez pytań), a skryptu nadzoru nie zmieniam w trakcie jego pracy (bash czyta plik w biegu). Propozycja
+  dla nadzoru: `commit=$(git … log -1 --format='%h %ar %s' | python3 -I -c 'import sys; print(sys.stdin.read().strip()[:90])')`
+  albo `awk '{print substr($0,1,90)}'` w locale UTF‑8; plik naprawić jednorazowo z `errors='replace'`.
+- Testy: core 782, lab 839, 0 porażek, oba APK debug.
+- **Tablet:** zaznacz lassem odręczną falę → na pasku zaznaczenia nowy glif łamanej → kreska zmienia się w krzywą z
+  kotwicami; zaznacz prostokąt z przytrzymaniem → glif → wierzchołki zamiast ramki, glif świeci, drugie dotknięcie wraca;
+  odcinek — glifu nie ma. Przytrzymaj zaznaczenie → „Zaznaczenie jako ▸” → trzy pozycje, „‹” wraca. Ustawienia → szukaj
+  „wskaźnik” → „Kolor śladu lasera”; zmień na zielony i sprawdź ślad lasera.
+
 ### Raport końcowy agenta A — faza 2 i 2b (27.10, lista wyczerpana)
 
 **Gałęzie** (każda od `noc/wszystko`, po punkcie przewinięta do `noc/wszystko`): fazy 2 `noc/f2-*` (A2-1…A2-15), fazy 2b

@@ -371,7 +371,15 @@ Na starcie (`noc/wszystko` @ `471ed08`): lab 696 testów, 0 porażek.
   najwyżej 4 składania naraz (najstarsze wypada). „Limit liczby zdjęć w partii (`count`)” z planu rozumiem jako ten limit
   pola `count`; osobnego limitu długości kolejki nadawcy nie dodawałem (UI dodaje zdjęcia po jednym).
   **Tablet:** 3 zdjęcia → jeden pasek dla całości i „zdjęcie 2 z 3”; problem → kod i przyczyna pod zdaniem.
-  **Zostaje z 2c-B3:** odbiór strumieniowo do pliku w cache (dziś zeszyt 64 MB ≈ 130 MB w heapie).
+- **2c-B3 część 2** (`ce9dcfc`): `core/nearby/LinkFile.kt` — plik w łączu w pamięci albo na dysku. Odbiorca zapisuje
+  każdą część od razu pod `index × długość części` (ostatnia, która przyszła pierwsza, czeka w pamięci), SHA-256 liczy
+  strumieniem; nadawca czyta części z pliku w chwili wysyłki. Lab: „Wyślij zeszyt” eksportuje do `cache/nearby/`, odbiór
+  importuje z pliku; pliki znikają po imporcie, po zamknięciu okna, a resztki starsze niż godzina przy otwarciu.
+  Test `sixtyFourMegabyteNotebookGoesThroughCacheFilesWithAtMostTwoPartsInMemory`: na starym odbiorcy (z tym samym
+  licznikiem) szczyt 134 217 728 B, po poprawce ≤ 2 × 256 KB. Licznik liczy pamięć samego odbiorcy (część w ręku,
+  odłożone ostatnie części, bufor sumy), nie ramek w Nearby ani szyfrowania.
+  **Tablet:** „Wyślij zeszyt” z dużym zeszytem (z PDF-em, kilkadziesiąt MB) → na drugim urządzeniu nowy zeszyt, który
+  się otwiera; w trakcie odbioru aplikacja nie zamyka się z braku pamięci.
 
 ### Co Marcin ma sprawdzić na tablecie — wariant lab, po fazie 2 (kolejność)
 

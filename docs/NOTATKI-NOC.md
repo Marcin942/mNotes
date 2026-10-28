@@ -380,6 +380,20 @@ Na starcie (`noc/wszystko` @ `471ed08`): lab 696 testów, 0 porażek.
   odłożone ostatnie części, bufor sumy), nie ramek w Nearby ani szyfrowania.
   **Tablet:** „Wyślij zeszyt” z dużym zeszytem (z PDF-em, kilkadziesiąt MB) → na drugim urządzeniu nowy zeszyt, który
   się otwiera; w trakcie odbioru aplikacja nie zamyka się z braku pamięci.
+- **2c-B4** (`c4ac106`): `core/image/ChalkInk.kt` — kontrast WCAG 2 do papieru strony, na którą trafia wynik
+  (`BoardOptions.paper`); za słaby kolor ciemnieje z zachowaniem odcienia, na ciemnym papierze jaśnieje. Cel 4,5:1, nie
+  3:1 z planu: szary 3:1 na okładce był blady (podglądy `app/build/kreda-papier/okladka-wzor-{przed,po}.png`, „przed” to
+  biel na bieli). `looksLikeDarkBoard`: tło 0,42–0,62 liczy się jako tablica, gdy pismo jest jaśniejsze od mediany tła;
+  prawdziwe zdjęcia: rozpoznane dawniej 19, teraz 24 z 24; okładka PDF rozpoznana (wcześniej nie). Po oczyszczeniu w
+  trybie wykładu dymek ma przycisk „Cofnij do oryginału” (wspólny `Editor.say(msg, actions)`, dymek z przyciskiem wisi
+  8 s). `pdftoppm` nie ma offline — okładka to obraz wyciągnięty z PDF wcześniej (`build/kreda-wejscie/okladka-wzor.png`),
+  pomiar: `KREDA_EXTRA=… --tests '*ChalkPaperTest*'`.
+  **Ograniczenie (pytanie do Marcina):** kolor dobierany do papieru zapisanego w zeszycie. W „Strony: ciemne” zdjęcia
+  nie są odwracane (domyślnie wyłączone „odwracaj zdjęcia”), więc kreda przyciemniona pod białą kartkę będzie ciemna na
+  ciemno pokazanej stronie. Edytowalne kreski tego problemu nie mają (tryb stron przelicza je jak atrament). Czy obraz
+  kredy ma się odwracać razem ze stroną (osobna flaga obrazu w rysowaniu, kod wspólny — agent A)?
+  **Tablet:** tryb wykładu na białej stronie → zdjęcie tablicy → kreda ciemnoszara, czytelna; „Cofnij do oryginału”
+  w dymku wraca do zdjęcia (także po przesunięciu go); zdjęcie szarej tablicy → podpowiedź „Wygląda jak tablica”.
 
 ### Co Marcin ma sprawdzić na tablecie — wariant lab, po fazie 2 (kolejność)
 

@@ -946,6 +946,30 @@ Nearby nie zmieniam do odpowiedzi Marcina na pytania z `plan/NEARBY-OPEN-SOURCE.
   `git grep` pusty na `noc/wszystko`. `oss/main` i `oss/kreda` jeszcze ich nie mają usuniętych — odświeżenie z
   `noc/wszystko` w 3a-2 (publikacja i tak tylko z czystą historią, `docs/OPEN-SOURCE.md` §4). Pełne testy z `KREDA_DIR`:
   core 852 (2 pominięte), lab 934 (3 pominięte), 0 porażek, oba APK.
+- **2c-A4 (21bb771):** przytrzymanie → kształt brał próbki tylko do ostatniego zerowania licznika (do 20 dp przed
+  końcem). Teraz `HoldGesture.shapePoints` zostawia koniec kreski, a drżenie w miejscu zastępuje jego średnią.
+  `HoldGestureTest`: przy starym cięciu prosta miała 0,953 długości (FAIL), teraz ≥ 0,98; prostokąt 200×100 ± 2 %.
+  **Tablet:** pióro, narysuj długą prostą i zatrzymaj pióro na końcu (lekko drżąc) do zamiany w prostą: koniec
+  prostej jest tam, gdzie stało pióro, nie kawałek wcześniej. To samo z prostokątem: prawy dolny róg na miejscu.
+- **2c-A5 (9bfe4e6):** przeniesienie między dokumentami stanowiska to teraz jeden krok cofania w obu (`LinkedUndo`
+  w `core/model`). Cofa oba, gdy druga połowa leży na wierzchu stosu partnera; gdy partner ma już późniejsze kroki —
+  tylko u siebie (cofnięcie cudzego kroku spod spodu rozjechałoby jego stos). `LinkedUndoTest` bez powiązania: 2/4 FAIL.
+  **Tablet:** stanowisko z dwoma zeszytami, lasso w górnym, przeciągnij nad dolny i puść. Ctrl+Z (albo ↶) w dolnym:
+  obiekt wraca do górnego i znika z dolnego. ↷: znów w dolnym. To samo zaczynając ↶ w górnym.
+- **2c-A6 (1b78912):** wspólny budżet bitmap stanowiska (`CacheBudget` w `core/layout`): budżet profilu dzielony wg
+  widocznej części pasa, pas poza ekranem po 2 s dostaje 0 (kafelki i bazy stron PDF); po zamknięciu stanowiska
+  główny dokument wraca do pełnego budżetu. **Nie zmierzone:** `dumpsys meminfo` na tablecie (bez `adb` w nocy).
+  **Tablet:** stanowisko z trzema dużymi PDF-ami, przewijaj i powiększaj — strony ostre jak w jednym zeszycie; przesuń
+  jeden pas za ekran, odczekaj 3 s, wróć — strony odrysowują się. Pomiar: `adb shell dumpsys meminfo com.mdev.mnotes`
+  (Graphics/Native) przy 3 PDF-ach przed i po tej zmianie.
+- **2c-A7 (3a9207f):** z listy zostały: autoprzewijanie dokumentu docelowego przy krawędzi okna (`EdgeScroll` w
+  `core/layout`, test). Reszta była już zrobiona w 2d-A1 (pasek kadrowania i styl strony na swoim miejscu — widoki
+  leżą na całym oknie; podgląd przeciąganego obiektu nad innym dokumentem; zapis przesunięć i aktywnego dokumentu +
+  test starego zapisu) i wcześniej (skróty klawiszowe działają na `st.active`, `EditorScreen.kt:286`).
+  **Tablet:** stanowisko z dwoma długimi zeszytami (rzędy), lasso w górnym, przeciągnij zaznaczenie nad dolny i
+  przytrzymaj palec przy prawej krawędzi okna: dolny zeszyt sam jedzie w prawo (szybciej im bliżej krawędzi), górny
+  stoi; odsuń palec od krawędzi — staje; puść na dalszej stronie — obiekt ląduje tam. W układzie „Pionowo” to samo
+  przy dolnej krawędzi.
 
 ### Na tablecie po FAZIE 2c/2d — kolejność (z `dzienniki/PRZEGLAD-FABLE-2.md` §5, szczegóły tam)
 Instalacja: `labDebug` z `noc/wszystko` (tablet i telefon), do pkt 16 też `coreDebug`. Przy punktach poprawionych
@@ -960,7 +984,7 @@ w nocy — gdzie jest opis kroków.
 7. Krzywe: 4 tryby, piórko od ostatniego węzła.
 8. Geometria: cyrkiel, „Przecięcie prostych” przy prawie równoległych, obrót, kąt, dwusieczna, kątomierz.
 9. Stanowiska — **przepisane (2d-A1)**, kroki 1–7 wyżej przy 2d-A1 (w tym pamięć z PDF-ami i zapis stanowiska).
-   Z przeglądu dodatkowo: Ctrl+Z w dokumencie docelowym po przeniesieniu (wspólne cofanie to jeszcze 2c-A5),
+   Z przeglądu dodatkowo: Ctrl+Z w dokumencie docelowym po przeniesieniu — **poprawione (2c-A5)**, kroki wyżej,
    kadrowanie obrazu w drugim dokumencie (pasek powinien być już na miejscu — widoki leżą na całym oknie).
 10. Profile; 11. Przewodnik; 12. Wyszukiwarka ustawień; 13. „Zdjęcie tablicy” z przełączeniem aplikacji;
 14. Kreda (lab, w tym kolor kreski wg papieru 2c-B4); 15. Nearby na dwóch urządzeniach (wpisy 2c-B1–B3);

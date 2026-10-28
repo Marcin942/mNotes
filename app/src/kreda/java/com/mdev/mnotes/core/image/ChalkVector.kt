@@ -1,3 +1,5 @@
+// Algorytmy kredy na podstawie programu kreda — autor i licencja do potwierdzenia przed publikacją (app/src/kreda/NOTICE.md).
+
 package com.mdev.mnotes.core.image
 
 import kotlin.math.hypot

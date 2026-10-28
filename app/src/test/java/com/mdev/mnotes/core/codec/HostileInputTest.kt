@@ -81,6 +81,25 @@ class HostileInputTest {
     }
 
     @Test
+    fun otherAppsCannotMakeUsImportOurOwnPrivateFiles() {
+        val pkg = "com.mdev.mnotes"
+        val roots = listOf("/data/user/0/com.mdev.mnotes", "/data/user_de/0/com.mdev.mnotes")
+        fun ok(scheme: String?, auth: String?, path: String?) = IncomingUris.allowed(scheme, auth, path, pkg, roots)
+        // prywatne: pliki aplikacji (ścieżka już po rozwinięciu `..` i dowiązania /data/data), własny FileProvider
+        assertTrue(!ok("file", "", "/data/user/0/com.mdev.mnotes/cache/share/Notatki.pdf"))
+        assertTrue(!ok("file", "", "/data/user/0/com.mdev.mnotes"))
+        assertTrue(!ok("file", "", null))
+        assertTrue(!ok("content", "com.mdev.mnotes.files", null))
+        assertTrue(!ok("content", "com.mdev.mnotes", null))
+        assertTrue(!ok("android.resource", pkg, null))
+        // cudze: zwykłe udostępnianie i stare menedżery plików działają jak dawniej
+        assertTrue(ok("content", "com.android.providers.media.documents", null))
+        assertTrue(ok("content", "com.mdev.mnotesx.files", null))
+        assertTrue(ok("file", "", "/storage/emulated/0/Download/zeszyt.mnotes"))
+        assertTrue(ok("file", "", "/data/user/0/com.mdev.mnotes2/x.pdf"))
+    }
+
+    @Test
     fun highlyCompressiblePageStillDecodes() {
         // Prawdziwa strona dobrze się kompresuje (np. 0 elementów + dopełnienie): limit z ilorazu deflate jej nie odcina.
         val raw = ByteArray(200_000).also { it[0] = 0 }

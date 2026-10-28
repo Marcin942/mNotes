@@ -759,3 +759,8 @@ oryginale; tablica: „100 %” = szerokość A4, eksport = kadr treści.
 w `SnipTest`) zacommitowane na `wip/f2c-strona-obraz` (07e5713), **nie na noc/** — w tej sesji uruchamianie Gradle zostało
 zablokowane uprawnieniami, więc kodu nie zbudowano ani nie przetestowano. Do zrobienia: `./gradlew :app:assembleDebug
 :app:testDebugUnitTest`, przy zielonym wyniku przenieść na `noc/f2c-strona-obraz`. Dysk: 13 GB wolne (87 %), RAM 26 GB wolne.
+
+**28.10, zatrzymanie nr 3 (Agent A):** punkt (3) z dopisku 04:55 sprawdzony — wszystkie wpisy `NOC`/`2b` w BACKLOG mają
+„Nauka: …”. Punkty (1) i (2) wymagają Gradle, którego ta sesja nie może uruchomić (odmowa uprawnień) — niewykonalne tutaj.
+W katalogu są obce, niezacommitowane zmiany w `ui/EditorDialogs.kt`, `ui/Keymap.kt`, `ui/PagesPanel.kt` (nie moje,
+zostawione). Dysk 12 GB wolne, RAM 24 GB.

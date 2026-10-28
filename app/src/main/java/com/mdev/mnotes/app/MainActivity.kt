@@ -216,6 +216,11 @@ open class MainActivity : FragmentActivity() {
                         if (on) window.addFlags(WindowManager.LayoutParams.FLAG_SECURE) else window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
                     }
                 }
+                // Przy blokadzie aplikacji podgląd w ostatnich pokazywał otwartą stronę: system robi zrzut przed onStop,
+                // czyli zanim ekran blokady ją zakryje. Zrzuty ekranu zostają (to robi FLAG_SECURE wyżej).
+                if (android.os.Build.VERSION.SDK_INT >= 33) LaunchedEffect(Unit) {
+                    snapshotFlow { settings.appLock }.collect { on -> setRecentsScreenshotEnabled(!on) }
+                }
                 Root(ui)
             }
         }

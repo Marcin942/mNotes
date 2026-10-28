@@ -138,12 +138,12 @@ class Workspace(val horizontal: Boolean, lanes: List<DocLayout>, viewW: Float, v
 
     /**
      * Cel widoku zgłoszony przez pas [i] w jego macierzy ([z], [tx], [ty]) — np. przejście do strony albo dopasowanie:
-     * ten pas i oś wspólna idą do celu, pozostałe pasy skalują się wokół środka okna.
+     * ten pas i oś wspólna idą do celu, pozostałe pasy skalują się wokół punktu [anchorMain] osi stron (domyślnie środek okna).
      */
-    fun poseFor(i: Int, z: Float, tx: Float, ty: Float): Pose {
+    fun poseFor(i: Int, z: Float, tx: Float, ty: Float, anchorMain: Float = viewMain / 2f): Pose {
         val nz = z.coerceIn(minZoom(), maxZoom())
         val k = nz / zoom
-        val cm = viewMain / 2f
+        val cm = anchorMain
         val m = FloatArray(size) { j -> if (j == i) (if (horizontal) tx else ty) else cm - (cm - main[j]) * k }
         val c = (if (horizontal) ty else tx) - (if (i in 0 until size) laneOffset(i) else 0f) * nz
         val save = pose()

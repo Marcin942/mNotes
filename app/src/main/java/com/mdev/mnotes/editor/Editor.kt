@@ -134,18 +134,23 @@ class Editor(val ctx: Context, val nbId: String) {
     private var rowSaved: Int? = null
 
     /**
-     * Rząd stron: na stanowisku strony leżą poziomo (każdy rząd przesuwa się w bok), ale wybór nie trafia do zeszytu —
-     * po zamknięciu dołożonych rzędów wraca układ sprzed.
+     * 2d-A1: na stanowisku wszystkie dokumenty mają jeden kierunek ([mode]: 0 kolumny, 1 rzędy), ale wybór nie trafia do
+     * zeszytu — po zamknięciu dołożonych dokumentów ([mode] = null) wraca układ sprzed.
      */
-    fun forceRowLayout(on: Boolean) {
-        if (on) { if (rowSaved == null) rowSaved = layoutMode; layoutMode = 1 }
+    fun forceLayout(mode: Int?) {
+        if (mode != null) { if (rowSaved == null) rowSaved = layoutMode; layoutMode = mode }
         else { rowSaved?.let { layoutMode = it }; rowSaved = null }
         view?.applyLayoutMode()
     }
 
+    /** Własny układ dokumentu (ten sprzed stanowiska). */
+    val ownLayoutMode: Int get() = rowSaved ?: layoutMode
+
     /** Zmiana układu przez użytkownika: pamiętana w tym dokumencie, więc przy następnym otwarciu wraca. */
     fun chooseLayoutMode(mode: Int) {
         if (!ViewMode.valid(mode)) return
+        // 2d-A1: na stanowisku menu „Układ” zmienia kierunek całego stanowiska (strona po stronie = rzędy), nie zeszyt.
+        station?.takeIf { it.on }?.let { it.setDirection(mode != 0); return }
         layoutMode = mode
         doc.setViewMode(mode)
         view?.applyLayoutMode()

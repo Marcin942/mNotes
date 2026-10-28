@@ -38,7 +38,6 @@ import com.mdev.mnotes.core.geom.Instrument
 import com.mdev.mnotes.core.geom.Protractor
 import com.mdev.mnotes.core.geom.Ruler
 import com.mdev.mnotes.core.layout.DocLayout
-import com.mdev.mnotes.core.layout.DualRows
 import com.mdev.mnotes.core.layout.LayoutMode
 import com.mdev.mnotes.core.layout.PageDrop
 import com.mdev.mnotes.core.layout.PageOverflow
@@ -276,7 +275,7 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
         val s = ed.sel ?: return@Runnable
         val id = s.ids.singleOrNull() ?: return@Runnable
         performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
-        ed.pointMenu = Editor.PointMenu(downX, downY + hostOffsetY, s.pageId, id, vIdx, vCtrl)
+        ed.pointMenu = Editor.PointMenu(downX, downY, s.pageId, id, vIdx, vCtrl)
         lm = LM.NONE; mode = Mode.IGNORE
         invalidate()
     }
@@ -311,6 +310,8 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
     /** Wołane po zmianie trybu układu w ustawieniach/menu. */
     fun applyLayoutMode() {
         rebuildLayout()
+        // 2d-A1: na stanowisku kierunek i powiększenie są wspólne — kontener przelicza model pasów.
+        lane?.let { it.structure(this); return }
         if (width == 0) return
         zoom = baseZoom()
         goToPage(ed.pageIndex, false)
@@ -324,8 +325,8 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
 
     /** „100%”: dopasowanie do szerokości (pion), wysokości (poziom) lub całej strony (pojedyncza). */
     fun baseZoom(): Float {
-        // 2b-A7: w rzędzie stanowiska wysokość widoku wynika z powiększenia, więc „100 %” podaje pole, nie widok.
-        baseZoomOverride?.let { return it }
+        // 2d-A1: na stanowisku „100 %” jest wspólne (pierwszy dokument wypełnia okno), więc podaje je model.
+        lane?.let { return it.baseZoom() }
         if (width == 0 || layout.count == 0) return 1f
         // 2b-A13: na tablicy „100 %” to szerokość kartki A4 — pisze się jak w zeszycie, a nie na całym płótnie.
         if (boardDoc) return width / Board.VIEW_W
@@ -340,18 +341,34 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
     private val boardDoc: Boolean get() = doc.pages.size == 1 && doc.pages[0].spec.board
 
     // Tablicę da się oddalić do całości (podgląd całego płótna), zwykłe strony — do 30 % „100 %”.
-    private fun minZoom() = if (boardDoc && width > 0 && layout.count > 0) min(baseZoom() * 0.3f, min(width / layout.docWidth, height / layout.docHeight)) else baseZoom() * 0.3f
-    private fun maxZoom() = ZoomLimits.maxZoom(baseZoom(), settings.zoomMaxFactor)
+    private fun minZoom() = if (lane != null) lane!!.minZoom() else if (boardDoc && width > 0 && layout.count > 0) min(baseZoom() * 0.3f, min(width / layout.docWidth, height / layout.docHeight)) else baseZoom() * 0.3f
+    private fun maxZoom() = lane?.maxZoom() ?: ZoomLimits.maxZoom(baseZoom(), settings.zoomMaxFactor)
 
-    private fun clampX(x: Float, z: Float): Float { val cw = layout.docWidth * z; return if (cw <= width) (width - cw) / 2 else x.coerceIn(width - cw, 0f) }
-    private fun clampY(y: Float, z: Float): Float { val ch = layout.docHeight * z; return if (ch <= height) (height - ch) / 2 else y.coerceIn(height - ch, 0f) }
+    // 2d-A1: w pasie stanowiska oś wspólna należy do modelu (widok ma wysokość okna, nie pasa) — tu tylko oś stron.
+    private fun clampX(x: Float, z: Float): Float { if (lane != null && ed.layoutMode != 1) return x; val cw = layout.docWidth * z; return if (cw <= width) (width - cw) / 2 else x.coerceIn(width - cw, 0f) }
+    private fun clampY(y: Float, z: Float): Float { if (lane != null && ed.layoutMode == 1) return y; val ch = layout.docHeight * z; return if (ch <= height) (height - ch) / 2 else y.coerceIn(height - ch, 0f) }
 
     private fun docX(sx: Float) = (sx - tx) / zoom
     private fun docY(sy: Float) = (sy - ty) / zoom
 
     private fun moved() {
         tx = clampX(tx, zoom); ty = clampY(ty, zoom)
-        if (zoom != reportedZoom) { reportedZoom = zoom; if (!following) onZoomChange?.invoke(zoom) }
+        // 2d-A1: pas stanowiska nie zmienia sam swojej macierzy — zgłasza cel, a model odsyła gotowe macierze wszystkim pasom.
+        val lh = lane
+        if (lh != null && (zoom != vpZoom || tx != vpX || ty != vpY)) { lh.propose(this, zoom, tx, ty); return }
+        viewChanged()
+    }
+
+    /** 2d-A1: macierz z modelu stanowiska (ta sama klatka dla wszystkich pasów, bez wywołań zwrotnych). */
+    fun setViewport(z: Float, x: Float, y: Float) {
+        zoom = z; tx = x; ty = y
+        vpZoom = z; vpX = x; vpY = y
+        viewChanged()
+    }
+
+    private var vpZoom = Float.NaN; private var vpX = Float.NaN; private var vpY = Float.NaN
+
+    private fun viewChanged() {
         if (layout.count > 0) {
             val i = layout.nearest(docX(width / 2f), docY(height / 2f))
             if (i != ed.pageIndex) ed.pageIndex = i
@@ -363,14 +380,17 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
     }
 
     private fun zoomAbout(px: Float, py: Float, f: Float) {
+        lane?.let { it.zoomAbout(this, px, py, f); return }
         val nz = (zoom * f).coerceIn(minZoom(), maxZoom())
         val k = nz / zoom
         tx = px - (px - tx) * k; ty = py - (py - ty) * k; zoom = nz
     }
 
-    private fun stopAnim() { anim?.cancel(); anim = null; scroller.forceFinished(true) }
+    private fun stopAnim() { anim?.cancel(); anim = null; scroller.forceFinished(true); lane?.stop() }
 
-    private fun animateView(zT: Float, xT: Float, yT: Float, dur: Long = 240L) {
+    /** [ax], [ay]: punkt, wokół którego zmienia się powiększenie — na stanowisku pozostałe pasy skalują się wokół niego. */
+    private fun animateView(zT: Float, xT: Float, yT: Float, dur: Long = 240L, ax: Float = width / 2f, ay: Float = height / 2f) {
+        lane?.let { it.animateTo(this, zT, xT, yT, dur, ax, ay); return }
         anim?.cancel()
         val z0 = zoom; val x0 = tx; val y0 = ty
         anim = ValueAnimator.ofFloat(0f, 1f).apply {
@@ -475,7 +495,7 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
         val base = baseZoom()
         val nz = if (zoom > base * 1.35f) base else min(base * 2.4f, maxZoom())
         val k = nz / zoom
-        animateView(nz, clampX(sx - (sx - tx) * k, nz), clampY(sy - (sy - ty) * k, nz), 200L)
+        animateView(nz, clampX(sx - (sx - tx) * k, nz), clampY(sy - (sy - ty) * k, nz), 200L, sx, sy)
     }
 
     /** Środek widoku jako (indeks strony, x, y) we współrzędnych strony — miejsce wklejania/wstawiania. */
@@ -499,8 +519,7 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
         val pi = doc.indexOf(s.pageId); if (pi < 0) return null
         val b = (if (lLifting) lM.mapBounds(lBounds) else selBounds()) ?: return null
         val ox = layout.left(pi); val oy = layout.top(pi)
-        val h = hostOffsetY
-        return RectF((ox + b.l) * zoom + tx, (oy + b.t) * zoom + ty + h, (ox + b.r) * zoom + tx, (oy + b.b) * zoom + ty + h)
+        return RectF((ox + b.l) * zoom + tx, (oy + b.t) * zoom + ty, (ox + b.r) * zoom + tx, (oy + b.b) * zoom + ty)
     }
 
     /** Prostokąt (w pikselach widoku) opisany na ramce przycinania; do ustawiania panelu tak, by jej nie zasłaniał. */
@@ -544,24 +563,6 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
         cache.dispose()
     }
 
-    val currentZoom: Float get() = zoom
-
-    /** F4: zgłasza zmianę powiększenia (wspólne powiększenie dwóch rzędów). */
-    var onZoomChange: ((Float) -> Unit)? = null
-    private var reportedZoom = 0f
-    private var following = false
-
-    /** F4: przyjmuje powiększenie drugiego rzędu (wokół środka widoku), bez odbijania go z powrotem. */
-    fun followZoom(z: Float) {
-        if (width == 0) return
-        val nz = DualRows.follow(z, zoom, minZoom(), maxZoom()) ?: return
-        following = true
-        stopAnim()
-        zoomAbout(width / 2f, height / 2f, nz / zoom)
-        moved()
-        following = false
-    }
-
     // ───────────────────────── DocListener ─────────────────────────
 
     override fun pageChanged(pageId: String, edit: ElementsEdit?) {
@@ -592,6 +593,8 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
         rebuildLayout()
         ed.structTick++
         if (ed.pageIndex >= layout.count) ed.pageIndex = max(0, layout.count - 1)
+        // 2d-A1: nowa strona zmienia długość pasa (i może szerokość pasa w osi wspólnej) — model liczy się od nowa.
+        lane?.structure(this)
         moved()
     }
 
@@ -599,10 +602,17 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
 
     override fun onSizeChanged(w: Int, h: Int, ow: Int, oh: Int) {
         if (w == 0 || h == 0) return
+        lane?.let {
+            // 2d-A1: rozmiar okna zna kontener; pas dostaje macierz z modelu i staje na ostatnio otwartej stronie.
+            val first = !inited
+            if (first) { inited = true; ed.pageIndex = doc.meta.lastPage.coerceIn(0, max(0, doc.pages.size - 1)) }
+            it.ready(this, first)
+            return
+        }
         if (!inited) {
             inited = true
             ed.pageIndex = doc.meta.lastPage.coerceIn(0, max(0, doc.pages.size - 1))
-            zoom = startZoom ?: baseZoom()
+            zoom = baseZoom()
             goToPage(ed.pageIndex, false)
         } else {
             val cx = docX(ow / 2f); val cy = docY(oh / 2f)
@@ -614,15 +624,17 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
     override fun onDraw(c: Canvas) {
         // Compose hostuje widok z clipChildren=false: bez własnego przycięcia tło zamalowałoby sąsiednie paski (nagłówek wyglądał na czarny).
         c.clipRect(0, 0, width, height)
-        c.drawColor(viewBg)
+        // 2d-A1: pas stanowiska rysuje tło, strony i kreskę tylko w swoim prostokącie (widoki leżą jeden na drugim);
+        // poza ekranem nie rysuje i nie zamawia kafelków. Nakładki narzędzi — bez przycięcia.
+        val lr = lane?.let { it.rect(this) ?: return }
+        val bl = lr?.get(0) ?: 0f; val bt = lr?.get(1) ?: 0f; val br = lr?.get(2) ?: width.toFloat(); val bb = lr?.get(3) ?: height.toFloat()
+        if (lr != null) { c.save(); c.clipRect(bl, bt, br, bb); c.drawColor(viewBg); c.restore() } else c.drawColor(viewBg)
         if (doc.pages.isEmpty() || layout.count == 0) return
         syncTheme()
-        // 2b-A7: rząd stanowiska widać tylko w pasie [band]; reszty nie rysujemy i nie zamawiamy dla niej kafelków.
-        val bt = band?.get(0) ?: 0f; val bb = band?.get(1) ?: height.toFloat()
-        val vb = Bounds(docX(0f), docY(bt), docX(width.toFloat()), docY(bb))
+        val vb = Bounds(docX(bl), docY(bt), docX(br), docY(bb))
         val range = layout.visibleRange(vb)
         // Kafelki przygotowujemy z zapasem poza ekranem (w kierunku przewijania), żeby brzeg nie był chwilowo miękki.
-        val mx = width * 0.3f / zoom; val my = (bb - bt) * 0.3f / zoom
+        val mx = (br - bl) * 0.3f / zoom; val my = (bb - bt) * 0.3f / zoom
         val rvb = Bounds(vb.l - mx, vb.t - my, vb.r + mx, vb.b + my)
         val reqRange = if (mode == Mode.NAV) range else layout.visibleRange(rvb)
         cache.configure(settings.renderQuality)
@@ -639,7 +651,9 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
         }
         val pullOff = pullOffset()
         if (pullOff > 0f) { c.save(); if (ed.layoutMode == 1) c.translate(-pullOff, 0f) else c.translate(0f, -pullOff) }
+        liftOut = lr != null && lLifting && lm == LM.MOVE && lane?.outside(this, curX, curY) == true
         c.save()
+        if (lr != null) c.clipRect(bl, bt, br, bb)
         c.translate(tx, ty); c.scale(zoom, zoom)
         for (i in range) drawPage(c, i, vb, rvb)
         if (reqRange.first < range.first || reqRange.last > range.last) {
@@ -647,6 +661,7 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
         }
         drawLive(c)
         c.restore()
+        if (liftOut && lPage in 0 until layout.count) { c.save(); c.translate(tx, ty); c.scale(zoom, zoom); drawLifted(c, false); c.restore() }
 
         drawRuler(c)
         drawProtractor(c)
@@ -682,6 +697,8 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
     private fun miniGeom(): MiniMap.Geometry? {
         // Na tablicy mini-mapa jest zawsze: płótno jest wielokrotnie większe od ekranu przy każdym powiększeniu.
         if (!(settings.miniMap || boardDoc) || width == 0 || ed.zoomWin || layout.count == 0) return null
+        // 2d-A1: na stanowisku mapa tylko aktywnego dokumentu (inaczej N map w tym samym rogu).
+        if (lane?.active(this) == false) return null
         if (!boardDoc && zoom < baseZoom() * MiniMap.MIN_ZOOM_FACTOR) return null
         val pi = ed.pageIndex.coerceIn(0, layout.count - 1)
         val spec = doc.pages[pi].spec
@@ -822,12 +839,20 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
             }
             c.restoreToCount(s1)
         }
-        if (lLifting && lPage in 0 until layout.count) {
+        if (lLifting && lPage in 0 until layout.count && !liftOut) drawLifted(c, true)
+        drawGhost(c)
+    }
+
+    /** 2d-A1 (2c-A7): zaznaczenie niesione nad innym dokumentem stanowiska — rysowane poza swoim pasem, bez przycięcia. */
+    private var liftOut = false
+
+    private fun drawLifted(c: Canvas, clip: Boolean) {
+        run {
             val tgt = dropPage()
             val spec = doc.pages[tgt].spec
             val s2 = c.save()
             c.translate(layout.left(tgt), layout.top(tgt))
-            c.clipRect(0f, 0f, spec.w, spec.h)
+            if (clip) c.clipRect(0f, 0f, spec.w, spec.h)
             c.translate(layout.left(lPage) - layout.left(tgt), layout.top(lPage) - layout.top(tgt))
             c.concat(matrixOf(lM))
             val z = zoom * lM.scaleFactor
@@ -837,7 +862,6 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
             c.restoreToCount(s2)
             lMShown = lM
         }
-        drawGhost(c)
     }
 
     /** Etykieta regulacji kształtu (długość i kąt / wymiary) przy piórze. */
@@ -1219,39 +1243,19 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
 
     private fun isStylus(t: Int) = t == MotionEvent.TOOL_TYPE_STYLUS || t == MotionEvent.TOOL_TYPE_ERASER
 
-    // ───────────────────────── stanowisko (2b-A7): widok jako rząd wspólnego pola ─────────────────────────
+    // ───────────────────────── stanowisko (2d-A1): widok jako pas wspólnego modelu ─────────────────────────
 
-    /** Położenie widoku w polu stanowiska (px): menu i pasek zaznaczenia, rysowane w polu, przesuwają się o tyle. */
-    var hostOffsetY = 0f
-    /** „100 %” narzucone przez stanowisko; null — liczone z rozmiaru widoku jak zwykle. */
-    var baseZoomOverride: Float? = null
-    /** Powiększenie na start (pierwszy rozmiar widoku); null — „100 %”. */
-    var startZoom: Float? = null
-    /** Widoczny pas widoku (od, do) w jego współrzędnych; null — cały widok. */
-    var band: FloatArray? = null
-        set(v) { field = v; invalidate() }
-    /** Pionowy ruch palca przekazywany polu (rząd sam przesuwa się tylko w poziomie); null — zwykły widok. */
-    var onPanY: ((Float) -> Unit)? = null
-    var onFlingY: ((Float) -> Unit)? = null
-    /** Dotknięcie widoku (rząd staje się aktywny: jego zaznaczenie, panele, menu). */
-    var onTouched: (() -> Unit)? = null
-    /**
-     * Zaznaczenie przeciągnięte poza rząd: elementy w układzie strony po przesunięciu i środek w px widoku; true —
-     * przyjął je inny rząd, więc stąd znikają.
-     */
-    var onDropOutside: ((List<Element>, Float, Float) -> Boolean)? = null
-    /** Środek szczypnięcia (y w px widoku) — pole trzyma ten punkt w miejscu, gdy rzędy zmieniają wysokość. */
-    var zoomAnchorY = Float.NaN
-        private set
+    /** Kontener stanowiska; null — zwykły widok jednego dokumentu (własny stan widoku i `OverScroller`). */
+    var lane: LaneHost? = null
+        set(v) { if (field === v) return; field = v; vpZoom = Float.NaN; invalidate() }
 
-    /** Koniec stanowiska: widok wraca do zwykłego płótna (cały widok, własne „100 %”, pionowy ruch u siebie). */
-    fun leaveStation() {
-        if (baseZoomOverride == null && onPanY == null && band == null && hostOffsetY == 0f) return
-        baseZoomOverride = null; startZoom = null; band = null; hostOffsetY = 0f
-        onPanY = null; onFlingY = null; onTouched = null; onDropOutside = null; onZoomChange = null
-    }
+    /** Układ stron tego dokumentu (dla modelu stanowiska). */
+    val docLayout: DocLayout get() = layout
 
-    /** Przyjmuje elementy z innego rzędu (zeszytu [fromNb]) środkiem w punkcie widoku ([sx], [sy]). */
+    /** Pas długo poza ekranem: kafelki powiększeń do zwolnienia (bazy stron zostają). */
+    fun releaseTiles() = cache.releaseTiles()
+
+    /** Przyjmuje elementy z innego dokumentu stanowiska (zeszytu [fromNb]) środkiem w punkcie ekranu ([sx], [sy]). */
     fun dropIn(els: List<Element>, fromNb: String, sx: Float, sy: Float) {
         if (layout.count == 0 || ed.readOnly) return
         val pi = layout.nearest(docX(sx), docY(sy)).coerceIn(0, layout.count - 1)
@@ -1259,7 +1263,6 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
     }
 
     override fun onTouchEvent(raw: MotionEvent): Boolean {
-        if (raw.actionMasked == MotionEvent.ACTION_DOWN) onTouched?.invoke()
         if (ed.zoomWin) {
             val used = zwTouch(raw)
             if (used != null) return used
@@ -1528,7 +1531,6 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
         val cx = sx / n; val cy = sy / n
         var span = 0f
         if (n >= 2) { for (i in 0 until ev.pointerCount) if (isLive(ev, i, -1)) span += hypot(ev.getX(i) - cx, ev.getY(i) - cy); span /= n }
-        if (n >= 2) zoomAnchorY = cy
         if (n >= 2 && lastSpan > 0f && span > 0f) zoomAbout(cx, cy, span / lastSpan)
         if (n >= 2 && pull > 0f) endPull(false)
         panWithPull(cx - lastCx, cy - lastCy, pullEligible && n == 1 && navMax == 1)
@@ -1574,12 +1576,12 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
                     val cw = layout.docWidth * zoom; val ch = layout.docHeight * zoom
                     val minX = if (cw <= width) ((cw - width) / 2).toInt() else 0
                     val maxX = if (cw <= width) minX else (cw - width).toInt()
-                    var minY = if (ch <= height) ((ch - height) / 2).toInt() else 0
-                    var maxY = if (ch <= height) minY else (ch - height).toInt()
-                    // Rząd stanowiska: pionowy rzut przejmuje pole, rząd leci tylko w bok.
-                    onFlingY?.let { it(vy); minY = (-ty).toInt(); maxY = minY }
-                    scroller.fling((-tx).toInt(), (-ty).toInt(), (-vx).toInt(), (-vy).toInt(), minX, maxX, minY, maxY)
-                    postInvalidateOnAnimation()
+                    val minY = if (ch <= height) ((ch - height) / 2).toInt() else 0
+                    val maxY = if (ch <= height) minY else (ch - height).toInt()
+                    // 2d-A1: na stanowisku rzut liczy model (oba kierunki naraz, ten sam wzór co OverScroller).
+                    val lh = lane
+                    if (lh != null) lh.fling(this, vx, vy)
+                    else { scroller.fling((-tx).toInt(), (-ty).toInt(), (-vx).toInt(), (-vy).toInt(), minX, maxX, minY, maxY); postInvalidateOnAnimation() }
                 } else snapIfNeeded()
             } else snapIfNeeded()
         }
@@ -1622,8 +1624,19 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
         if (pullOk && pull > 0f) {
             if (d > 0f) { val r = min(pull, d); pull -= r; d -= r } else { pull -= d; d = 0f }
         }
-        val toHost = onPanY
-        if (ax) { tx += d; if (toHost != null) toHost(other) else ty += other } else { ty += d; tx += other }
+        val lh = lane
+        if (lh != null) {
+            // 2d-A1: model przesuwa pas w osi stron i całe stanowisko w osi wspólnej; nadmiar za końcem pasa to odciągnięcie.
+            val applied = lh.pan(this, if (ax) d else other, if (ax) other else d)
+            if (pullOk) {
+                if (d < applied) pull += applied - d
+                val armed = pull >= pullThreshold()
+                if (armed != pullArmed) performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
+                pullArmed = armed
+            }
+            return
+        }
+        if (ax) { tx += d; ty += other } else { ty += d; tx += other }
         if (pullOk) {
             val lim = pullLimit()
             val cur = if (ax) tx else ty
@@ -3535,14 +3548,14 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
         vBase = null; rFrame = null; tBase = null; shapeLabel = null
         if (page == null || orig == null || lifted == null) return
         val m = lM
-        // 2b-A7: zaznaczenie upuszczone poza rzędem stanowiska przechodzi do dokumentu pod palcem.
-        val outside = onDropOutside
-        if (!cancel && wasMove && outside != null && (curY < 0f || curY > height) && lEls.isNotEmpty()) {
+        // 2d-A1: zaznaczenie upuszczone nad innym dokumentem stanowiska przechodzi do niego w tym samym miejscu ekranu.
+        val lh = lane
+        if (!cancel && wasMove && lh != null && lh.outside(this, curX, curY) && lEls.isNotEmpty()) {
             val moved = lEls.map { it.transformed(m) }
             var b = Bounds.EMPTY
             for (e in moved) b = b.union(e.bounds)
             val cx = (layout.left(lPage) + b.cx) * zoom + tx; val cy = (layout.top(lPage) + b.cy) * zoom + ty
-            if (outside(moved, cx, cy)) {
+            if (lh.dropOutside(this, moved, cx, cy)) {
                 // Na stronie stan „podniesiony” to już oryginał bez tych elementów — zapisujemy tylko krok cofania.
                 ed.record(DocEdit.Elements(page.id, ElementsEdit.remove(orig, lIds)))
                 ed.clearSel()
@@ -3677,7 +3690,7 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
             val s = ed.sel
             if (hit != null && (s == null || hit.id !in s.ids)) { ed.tool = Tool.LASSO; ed.select(page.id, setOf(hit.id)); hasSel = true }
         }
-        ed.ctxMenu = Editor.CtxMenu(sx, sy + hostOffsetY, pi, hasSel, px, py)
+        ed.ctxMenu = Editor.CtxMenu(sx, sy, pi, hasSel, px, py)
         invalidate()
     }
 

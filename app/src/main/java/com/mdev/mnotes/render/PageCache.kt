@@ -620,6 +620,9 @@ class PageCache(
 
     fun forget(pageId: String) { entries.remove(pageId)?.let { for (lv in it.levels) release(lv); drop(it.base) } }
 
+    /** 2d-A1: dokument stanowiska poza ekranem — zwalnia kafelki powiększeń; bazy stron zostają, więc powrót nie jest pusty. */
+    fun releaseTiles() { for (e in entries.values) { for (lv in e.levels) release(lv); e.levels.clear() } }
+
     // ───────────────────────── odczyt pikseli i tła ─────────────────────────
 
     /** Kolor piksela strony w punkcie ([x], [y]) pt z najlepszej dostępnej bitmapy; 0, gdy brak. */

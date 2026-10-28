@@ -78,6 +78,7 @@ private fun fmtLabel(f: ExportFormat) = when (f) {
     ExportFormat.PNG -> "PNG"
     ExportFormat.SVG -> "SVG"
     ExportFormat.MD -> "Markdown"
+    ExportFormat.TEX -> "TikZ"
     ExportFormat.MNOTES -> ".mnotes"
 }
 
@@ -86,6 +87,7 @@ private fun fmtInfo(f: ExportFormat) = when (f) {
     ExportFormat.PNG -> T.t("Obraz rastrowy każdej strony (kilka stron → archiwum ZIP).", "Raster image of each page (several pages → ZIP archive).")
     ExportFormat.SVG -> T.t("Grafika wektorowa do edycji w Inkscape (kilka stron → archiwum ZIP).", "Vector graphics for Inkscape (several pages → ZIP archive).")
     ExportFormat.MD -> T.t("Tylko tekst z pól tekstowych; pismo odręczne i obrazy nie wchodzą do pliku.", "Text boxes only; handwriting and images are not included.")
+    ExportFormat.TEX -> T.t("Rysunek do LaTeX-a: okręgi, prostokąty i krzywe jako polecenia TikZ, pismo jako łamane, tekst z greką; obrazy jako ramki do podmiany.", "Drawing for LaTeX: circles, rectangles and curves as TikZ commands, handwriting as polylines, text with Greek; images as frames to replace.")
     ExportFormat.MNOTES -> T.t("Pełna kopia zeszytu (otwarty format ZIP) — do przeniesienia na inne urządzenie lub kopii zapasowej.", "Full notebook copy (open ZIP format) — for moving to another device or backup.")
 }
 

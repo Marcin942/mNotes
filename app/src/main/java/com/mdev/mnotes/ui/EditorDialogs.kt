@@ -148,6 +148,7 @@ fun commandList(
         "stickerSave" to ({ ed.sel != null } to { ed.stickerSaveOpen = true }),
         "snipImage" to ({ ed.sel != null && !ed.readOnly } to { ed.snipSel(false) }),
         "snipCopy" to ({ ed.sel != null } to { ed.snipSel(true) }),
+        "tikzCopy" to ({ ed.sel != null } to { ed.copySelAsTikz() }),
         "addPage" to ({ !ed.readOnly } to { ed.addPage() }),
         "bookmark" to ({ true } to { ed.toggleBookmark() }),
         "pageTags" to ({ !ed.readOnly } to { ed.doc.pages.getOrNull(ed.pageIndex)?.let { ed.tagsFor = it.id } }),

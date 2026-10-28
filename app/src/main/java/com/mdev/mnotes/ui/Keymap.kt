@@ -136,6 +136,7 @@ object CmdDefs {
         CmdDef("stickerSave", 3, "Zapisz zaznaczenie jako naklejkę…", "Save selection as sticker…", ""),
         CmdDef("snipImage", 3, "Wycinek zaznaczenia jako obraz", "Snip selection as image", ""),
         CmdDef("snipCopy", 3, "Kopiuj wycinek zaznaczenia do schowka", "Copy selection snip to clipboard", ""),
+        CmdDef("tikzCopy", 3, "Kopiuj zaznaczenie jako TikZ (LaTeX)", "Copy selection as TikZ (LaTeX)", ""),
         CmdDef("addPage", 3, "Dodaj stronę", "Add page", "Ctrl+Shift+N"),
         CmdDef("bookmark", 3, "Przełącz zakładkę strony", "Toggle page bookmark", "Ctrl+B"),
         CmdDef("pageTags", 3, "Tagi tej strony… (#definicja, #zadanie)", "Tags of this page… (#definition, #exercise)", ""),

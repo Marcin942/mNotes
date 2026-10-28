@@ -1974,6 +1974,8 @@ internal fun CtxMenuOverlay(ed: Editor, openStyle: (() -> Unit)?, tools: Editor 
                         // F14: wycinek strony pod zaznaczeniem (z papierem i tłem) jako obraz.
                         Item(T.t("Wycinek jako obraz", "Snip as image"), enabled = !ed.readOnly) { ed.snipSel(false) }
                         Item(T.t("Kopiuj wycinek do schowka", "Copy snip to clipboard")) { ed.snipSel(true) }
+                        // FB13: ten sam rysunek jako kod TikZ — do sprawozdania w LaTeX-u bez przerysowywania.
+                        Item(T.t("Kopiuj jako TikZ (LaTeX)", "Copy as TikZ (LaTeX)")) { ed.copySelAsTikz() }
                         Item(T.t("Zapisz jako naklejkę…", "Save as sticker…")) { ed.stickerSaveOpen = true }
                         return@DropdownMenu
                     }

@@ -26,6 +26,24 @@ object MathText {
     private fun sup(c: Char): Char? = SUP_SRC.indexOf(c).let { if (it < 0) null else SUP_DST[it] }
     private fun sub(c: Char): Char? = SUB_SRC.indexOf(c).let { if (it < 0) null else SUB_DST[it] }
 
+    // FB13: odwrotność tabel do eksportu TikZ — co aplikacja zamieniła przy pisaniu, wraca do LaTeX-a.
+    private val LATEX: Map<Char, String> by lazy {
+        val m = HashMap<Char, String>()
+        for ((name, s) in GREEK) if (s.length == 1) m.putIfAbsent(s[0], "\\$name")
+        // `\sqrt` i `\deg` w LaTeX-u znaczą co innego niż sam znak (pierwiastek z argumentem, operator „deg”).
+        m['√'] = "\\surd"; m['°'] = "^\\circ"
+        m
+    }
+
+    /** Polecenie LaTeX (tryb matematyczny) dla znaku z tabeli greckiej i symboli, np. `α` → `\alpha`; null — zwykły znak. */
+    fun latexOf(c: Char): String? = LATEX[c]
+
+    /** Znak przed zamianą na indeks górny (`²` → `2`) albo null. */
+    fun unSup(c: Char): Char? = SUP_DST.indexOf(c).let { if (it < 0) null else SUP_SRC[it] }
+
+    /** Znak przed zamianą na indeks dolny (`₂` → `2`) albo null. */
+    fun unSub(c: Char): Char? = SUB_DST.indexOf(c).let { if (it < 0) null else SUB_SRC[it] }
+
     /**
      * Zamienia wszystkie zakończone znaczniki w [s]. [atEnd] = tekst zatwierdzony („Gotowe”): koniec tekstu też kończy
      * `\alpha` i ciąg cyfr, ale nie pojedynczą literę (`plik_a` zostaje).

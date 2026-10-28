@@ -46,6 +46,7 @@ enum class ExportFormat(val ext: String, val mime: String, val multi: Boolean) {
     PNG("png", "image/png", false),
     SVG("svg", "image/svg+xml", false),
     MD("md", "text/markdown", true),
+    TEX("tex", "application/x-tex", true),
     MNOTES("mnotes", "application/x-mnotes", true),
 }
 
@@ -96,6 +97,7 @@ class Exporter(private val repo: Repository, private val assets: Assets, private
                     when (fmt) {
                         ExportFormat.PDF -> { z.putNextEntry(ZipEntry("$base.pdf")); pdfOut(nb, meta, idx, z); z.closeEntry() }
                         ExportFormat.MD -> { z.putNextEntry(ZipEntry("$base.md")); z.write(markdown(nb, meta, idx).toByteArray()); z.closeEntry() }
+                        ExportFormat.TEX -> { z.putNextEntry(ZipEntry("$base.tex")); z.write(tikz(nb, meta, idx).toByteArray()); z.closeEntry() }
                         else -> imagesInto(z, nb, meta, idx, svg = fmt == ExportFormat.SVG, single = "$base.${fmt.ext}", folder = base)
                     }
                 }
@@ -114,6 +116,7 @@ class Exporter(private val repo: Repository, private val assets: Assets, private
                 ExportFormat.PNG -> imagesOut(nb, meta, idx, out, svg = false)
                 ExportFormat.SVG -> imagesOut(nb, meta, idx, out, svg = true)
                 ExportFormat.MD -> out.write(markdown(nb, meta, idx).toByteArray())
+                ExportFormat.TEX -> out.write(tikz(nb, meta, idx).toByteArray())
                 ExportFormat.MNOTES -> zipNotebook(nb, out)
             }
             out.flush()
@@ -395,6 +398,13 @@ class Exporter(private val repo: Repository, private val assets: Assets, private
     }
 
     // — Markdown: tylko tekst z pól tekstowych (odręczne notatki i obrazy nie mają odpowiednika) —
+
+    /** FB13: rysunek na stronę w jednym pliku `.tex` (`standalone`); pusta strona daje pusty rysunek, żeby numery się zgadzały. */
+    private fun tikz(nb: String, meta: NotebookMeta, idx: List<Int>): String =
+        com.mdev.mnotes.core.export.TikzExport.document(
+            idx.mapNotNull { i -> meta.pages.getOrNull(i) }.map { p -> com.mdev.mnotes.core.export.TikzExport.picture(repo.readPage(nb, p.id).elements).code },
+            meta.title,
+        )
 
     private fun markdown(nb: String, meta: NotebookMeta, idx: List<Int>): String {
         val sb = StringBuilder("# ${meta.title}\n")

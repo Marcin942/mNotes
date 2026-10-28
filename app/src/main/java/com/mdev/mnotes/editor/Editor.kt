@@ -55,6 +55,7 @@ import com.mdev.mnotes.core.model.TapeEl
 import com.mdev.mnotes.data.Bookmark
 import com.mdev.mnotes.core.search.TextSearch
 import com.mdev.mnotes.core.stats.ActiveTime
+import com.mdev.mnotes.core.export.TikzExport
 import com.mdev.mnotes.data.NotebookDoc
 import com.mdev.mnotes.data.PageState
 import com.mdev.mnotes.data.newId
@@ -522,6 +523,19 @@ class Editor(val ctx: Context, val nbId: String) {
     }.getOrNull()
 
     /** PNG do schowka przez FileProvider: inne aplikacje wklejają obraz, a nie ścieżkę. Wołane z wątku tła. */
+    /** FB13: zaznaczenie jako kod TikZ w schowku (tekst, więc wkleja się w każdym edytorze LaTeX-a, też w przeglądarce). */
+    fun copySelAsTikz() {
+        val els = selElements()
+        if (els.isEmpty()) return
+        val r = TikzExport.picture(els)
+        val cm = ctx.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+        cm.setPrimaryClip(android.content.ClipData.newPlainText("TikZ", r.code))
+        say(
+            if (r.skipped > 0) T.t("Kod TikZ w schowku (pominięte: ${r.skipped}) — wklej do LaTeX-a", "TikZ code copied (skipped: ${r.skipped}) — paste into LaTeX")
+            else T.t("Kod TikZ w schowku — wklej do LaTeX-a", "TikZ code copied — paste into LaTeX"),
+        )
+    }
+
     private fun pngToClipboard(png: ByteArray, name: String): Boolean = runCatching {
         val dir = java.io.File(ctx.cacheDir, "share").apply { mkdirs() }
         val f = java.io.File(dir, "$name-${System.currentTimeMillis()}.png").apply { writeBytes(png) }

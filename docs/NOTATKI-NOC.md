@@ -777,3 +777,14 @@ w kolorze akcentu) i 8 słupków tygodni podpisanych datą poniedziałku, bież�
 **Tablet:** otwórz zeszyt z pismem → „⋮” → Widok → „Statystyki zeszytu…” → liczby stron, kresek, słów; popisz 2–3 minuty
 bez dłuższych przerw → zamknij i otwórz okno jeszcze raz → „Ten tydzień” ok. 2–3 min, prawy słupek urósł; przerwa 5 min
 i jedna kreska → czas rośnie najwyżej o kilka sekund. Ctrl+K → „statystyki” też otwiera okno.
+
+**28.10, 11:48 (Agent A) — FB13 eksport TikZ** — `noc/f2c-tikz`; `TikzExportTest` (10 + 1 przykład za `MNOTES_PREVIEW_DIR`):
+liczby bez locale, tekst → LaTeX (grecki, indeksy, °, √, znaki specjalne), okrąg/elipsa/obrót, prostokąt/trójkąt/łamana
+otwarta z kreskowaniem, krzywa z uchwytami i zamknięta z wypełnieniem, pismo uproszczone i kropka, kolory raz, zakreślacz
+półprzezroczysty, pole tekstu z czcionką i wierszami, Douglas–Peucker, dokument `standalone`. Testy: core 812, lab 879,
+0 porażek, oba APK debug. **Nie sprawdzone:** kompilacja `.tex` (na tej maszynie nie ma pdflatex) i UI (tylko kompilacja).
+Przykład do skompilowania na komputerze: `docs/podglad/tikz-przyklad.tex` (trójkąt z okręgiem opisanym, sinusoida
+z krzywych, pismo odręczne, podpisy z α i a²) — `pdflatex tikz-przyklad.tex` albo wklejka do Overleaf.
+**Tablet:** narysuj z przytrzymaniem trójkąt i okrąg, dopisz polem tekstu „α” → zaznacz lassem → przytrzymaj →
+„Zaznaczenie jako ▸” → „Kopiuj jako TikZ (LaTeX)” → dymek „Kod TikZ w schowku” → wklej w notatniku/Overleaf: `\draw … --
+cycle;`, `circle [radius=…]`, `{$\alpha$}`. Eksport → „TikZ” → zapisz plik `.tex` całego zeszytu (rysunek na stronę).

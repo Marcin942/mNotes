@@ -41,6 +41,8 @@ import kotlin.math.roundToInt
 object GoodNotesConvert {
     private val MARKERS = listOf("Quartz PDFContext", "GoodNotes", "Goodnotes")
     private const val TOL = 0.15
+    private const val MAX_RINGS = 2_000
+    private const val MAX_PAGE_COORDS = 8_000_000L
     private val NORMAL = setOf("Normal", "Compatible")
     private val MULTIPLY = setOf("Multiply", "Darken")
 
@@ -347,6 +349,15 @@ object GoodNotesConvert {
             return 1
         }
 
+        /** Współrzędne z obu przebiegów strony; ponad [MAX_PAGE_COORDS] to wrogi albo zepsuty plik (krzywe po 2¹⁶ punktów). */
+        private var coords = 0L
+
+        private fun spend(f: DoubleArray): DoubleArray {
+            coords += f.size
+            if (coords > MAX_PAGE_COORDS) throw PdfException("strona ma za dużo punktów")
+            return f
+        }
+
         private fun why(key: String, pl: String, en: String): Nothing? {
             leave(key, pl, en)
             return null
@@ -406,13 +417,15 @@ object GoodNotesConvert {
             val hl = alpha < 0.99 || multiply
             val rings = ArrayList<FloatArray>()
             for (sp in p.subs) {
-                val f = PathMath.flatten(sp, TOL)
+                val f = spend(PathMath.flatten(sp, TOL))
                 var n = f.size / 2
                 if (n >= 2 && f[0] == f[2 * n - 2] && f[1] == f[2 * n - 1]) n--
                 if (n < 3) continue
                 rings.add(FloatArray(2 * n) { i -> if (i % 2 == 0) mx(f[i], f[i + 1]) else my(f[i - 1], f[i]) })
             }
             if (rings.isEmpty()) return EMPTY
+            // `nested` porównuje każdy obrys z każdym: tysiące obrysów z wrogiego PDF to minuty pracy
+            if (rings.size > MAX_RINGS) return why("rings", "Wypełnienie z bardzo wieloma obrysami", "A fill with very many outlines")
             if (!p.evenOdd && rings.size > 1 && nested(rings)) {
                 return why("nested", "Wypełnienie z zagnieżdżonymi obrysami", "A fill with nested outlines")
             }
@@ -454,7 +467,7 @@ object GoodNotesConvert {
             }
             val out = ArrayList<Element>()
             for (sp in p.subs) {
-                val f = PathMath.flatten(sp, TOL)
+                val f = spend(PathMath.flatten(sp, TOL))
                 var n = f.size / 2
                 if (n == 0) continue
                 val xs = ArrayList<Float>()

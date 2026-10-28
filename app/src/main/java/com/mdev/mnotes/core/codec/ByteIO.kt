@@ -68,7 +68,8 @@ class ByteReader(private val buf: ByteArray, var pos: Int = 0, val end: Int = bu
     val remaining: Int get() = end - pos
 
     private fun need(n: Int) {
-        if (pos + n > end) throw CodecException("Nieoczekiwany koniec danych")
+        // ujemne n cofało odczyt (skip), a pos + n przepełniało się dla długości bliskich Int.MAX_VALUE
+        if (n < 0 || n > end - pos) throw CodecException("Nieoczekiwany koniec danych")
     }
 
     fun u8(): Int {

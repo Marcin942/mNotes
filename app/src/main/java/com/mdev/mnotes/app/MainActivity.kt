@@ -43,6 +43,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.launch
+import com.mdev.mnotes.core.codec.IncomingUris
 import com.mdev.mnotes.data.ImportSource
 import com.mdev.mnotes.data.SamsungSession
 import com.mdev.mnotes.ui.LocalSamsungStart
@@ -215,6 +216,11 @@ open class MainActivity : FragmentActivity() {
                         if (on) window.addFlags(WindowManager.LayoutParams.FLAG_SECURE) else window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
                     }
                 }
+                // Przy blokadzie aplikacji podgląd w ostatnich pokazywał otwartą stronę: system robi zrzut przed onStop,
+                // czyli zanim ekran blokady ją zakryje. Zrzuty ekranu zostają (to robi FLAG_SECURE wyżej).
+                if (android.os.Build.VERSION.SDK_INT >= 33) LaunchedEffect(Unit) {
+                    snapshotFlow { settings.appLock }.collect { on -> setRecentsScreenshotEnabled(!on) }
+                }
                 Root(ui)
             }
         }
@@ -232,11 +238,14 @@ open class MainActivity : FragmentActivity() {
 
     private fun handle(i: Intent?) {
         if (i == null) return
+        // Zeszyt po identyfikatorze otwiera tylko własne okno (NoteWindowActivity nie jest wyeksportowane): w głównej
+        // aktywności dodatek mogłaby podać każda aplikacja.
+        val nb = if (this is NoteWindowActivity) i.getStringExtra(EXTRA_NOTEBOOK) else null
         if (ui.locked) {
-            if (i.action == Intent.ACTION_VIEW || i.action == Intent.ACTION_SEND || i.action == Intent.ACTION_SEND_MULTIPLE) pending = i
+            if (nb != null || i.action == Intent.ACTION_VIEW || i.action == Intent.ACTION_SEND || i.action == Intent.ACTION_SEND_MULTIPLE) pending = i
             return
         }
-        i.getStringExtra(EXTRA_NOTEBOOK)?.let { i.removeExtra(EXTRA_NOTEBOOK); ui.open(it) }
+        nb?.let { i.removeExtra(EXTRA_NOTEBOOK); ui.open(it) }
         when (i.action) {
             Intent.ACTION_CREATE_NOTE -> ui.quickNote()
             Intent.ACTION_VIEW, Intent.ACTION_SEND, Intent.ACTION_SEND_MULTIPLE -> {
@@ -266,7 +275,15 @@ open class MainActivity : FragmentActivity() {
         }
         // Część aplikacji podaje pliki tylko w ClipData (zwłaszcza z uprawnieniem do odczytu przypiętym do niej).
         i.clipData?.let { c -> for (k in 0 until c.itemCount) c.getItemAt(k).uri?.let { out.add(it) } }
-        return out.toList()
+        return out.filter(::foreign)
+    }
+
+    /** Czy adres nie wskazuje prywatnych plików mNotes (inna aplikacja nie może kazać ich zaimportować, [IncomingUris]). */
+    private fun foreign(u: android.net.Uri): Boolean {
+        val path = if (u.scheme.equals("file", ignoreCase = true)) runCatching { java.io.File(u.path ?: return false).canonicalPath }.getOrNull() else null
+        val roots = listOfNotNull(applicationInfo.dataDir, filesDir.parent, applicationInfo.deviceProtectedDataDir, "/data/data/$packageName")
+            .mapNotNull { runCatching { java.io.File(it).canonicalPath }.getOrNull() }
+        return IncomingUris.allowed(u.scheme, u.authority, path, packageName, roots)
     }
 
     override fun onStop() {

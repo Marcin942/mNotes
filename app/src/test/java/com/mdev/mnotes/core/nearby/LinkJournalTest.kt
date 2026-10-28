@@ -40,6 +40,23 @@ class LinkJournalTest {
     }
 
     @Test
+    fun scrubCatchesWhatSlippedThroughBefore() {
+        // luki znalezione w audycie (docs/BEZPIECZENSTWO.md): spacja w ścieżce, MAC zamaskowany przez Androida, adresy IP,
+        // nazwa Wi-Fi Direct, nazwa urządzenia z „|”
+        fun c(t: String, names: List<String> = emptyList()) = LinkScrub.clean(t, names)
+        val path = c("open failed: /storage/emulated/0/Download/Notatki Kowalskiego/scan.pdf (No such file or directory)")
+        assertFalse(path, path.contains("Kowalskiego")); assertTrue(path, path.contains("No such file"))
+        assertEquals("łączę z: ‹MAC›", c("łączę z: XX:XX:XX:XX:9C:FF"))
+        assertEquals("grupa ‹IP›", c("grupa 192.168.49.1"))
+        assertFalse(c("gniazdo fe80::1a2b:3c4d:5e6f%p2p0").contains("1a2b"))
+        assertFalse(c("sieć DIRECT-xy-Tablet Ani").contains("xy-Tablet"))
+        assertEquals("znaleziono: ‹urządzenie›", c("znaleziono: Tab|Ani", listOf("Tab|Ani")))
+        // czasy i liczby zostają
+        assertEquals("o 12:30:45 część 2/3", c("o 12:30:45 część 2/3"))
+        assertEquals("wersja 14.0.1", c("wersja 14.0.1"))
+    }
+
+    @Test
     fun scrubKeepsWhatTheAgentNeeds() {
         for (t in listOf("część 2/3 wysłana: 256 KB", "potwierdzona po 1520 ms", "Nearby: błąd (kod 8007)", "start: send, szukam",
                 "Bluetooth/Wi-Fi", "zdjęcie nie doszło po 4 próbach (runda 1)", "stan: Searching", "123456 ms od startu")) {

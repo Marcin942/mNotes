@@ -1,5 +1,6 @@
 package com.mdev.mnotes.data
 
+import com.mdev.mnotes.core.codec.LocalName
 import com.mdev.mnotes.core.codec.PageCodec
 import com.mdev.mnotes.core.edit.Sticker
 import com.mdev.mnotes.core.model.PageContent
@@ -29,7 +30,7 @@ class StickerStore(libraryRoot: File) {
         val d = File(dir, id).apply { mkdirs() }
         for (a in Sticker.assets(n.elements)) {
             val src = asset(a)
-            if (src.exists()) src.copyTo(File(d, "assets/$a").apply { parentFile?.mkdirs() }, overwrite = true)
+            if (src.exists()) src.copyTo(File(d, "assets/${LocalName.plain(a)}").apply { parentFile?.mkdirs() }, overwrite = true)
         }
         Repository.writeAtomic(File(d, "s.mnp"), PageCodec.encode(PageContent.of(n.elements)), false)
         val item = Item(id, NameText.oneLine(name).ifBlank { "Naklejka" }, n.w, n.h, System.currentTimeMillis())
@@ -43,7 +44,7 @@ class StickerStore(libraryRoot: File) {
         Sticker.Normalized(PageCodec.decode(File(d, "s.mnp").readBytes()).elements, o.optDouble("w", 0.0).toFloat(), o.optDouble("h", 0.0).toFloat())
     }.getOrNull()
 
-    fun assetFile(id: String, name: String) = File(dir, "$id/assets/$name")
+    fun assetFile(id: String, name: String) = File(dir, "$id/assets/${LocalName.plain(name)}")
 
     fun rename(id: String, name: String) {
         val it = list().firstOrNull { s -> s.id == id } ?: return

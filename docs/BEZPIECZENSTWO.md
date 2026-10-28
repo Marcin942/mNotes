@@ -32,4 +32,14 @@ Cele atakującego: odczyt notatek, podrzucenie treści, awaria aplikacji albo ut
 
 ## Stan
 
-- 29.10: szkielet raportu; manifesty obu wariantów i kreda przejrzane. W toku: pliki z zewnątrz, łącze, dane w spoczynku.
+- 29.10: szkielet raportu; manifesty obu wariantów i kreda przejrzane; przegląd plików z zewnątrz, łącza i danych
+  w spoczynku skończony. Naprawione: S-03, S-04, S-05.
+- Kolejka (do weryfikacji i poprawki, od najpoważniejszych): PDF `/W [0 0 0]` w strumieniu xref (pętla ~2³¹);
+  kopiowanie strumienia bez limitu + pozostałości katalogu po nieudanym imporcie; `file://`/własny FileProvider
+  przyjmowane jako import; podgląd w ostatnich aplikacjach przy blokadzie (API 33+); `lock` z importowanego pliku;
+  `EXTRA_NOTEBOOK` tylko dla okna wewnętrznego; `PreviewActivity` usunąć z manifestu debug; łącze: czyszczenie raportu
+  diagnostyki i luki `LinkScrub`, ładunki FILE/STREAM Nearby, `lastPeer`, długości w `SyncMsg`/`LinkPhoto`;
+  PDF: predyktor/ASCII85/krzywe bez limitu, głębokość `obj()`; `ByteReader.need` przepełnienie; NaN w rozmiarze strony;
+  limit liczby wpisów `.mnotes`; folder wymiany nadpisuje cudzy plik o tej samej nazwie; schowek bez „poufne”.
+- Do decyzji: wersja debug (S-01), FLAG_SECURE <API 33, `dataExtractionRules` (przenoszenie na nowy telefon),
+  blokada pojedynczych zeszytów (pół-funkcja), EXIF/GPS w zdjęciach z telefonu, wyłączanie blokady bez blokady ekranu.

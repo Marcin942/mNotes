@@ -880,4 +880,9 @@ Nearby nie zmieniam do odpowiedzi Marcina na pytania z `plan/NEARBY-OPEN-SOURCE.
   „Układ współrzędnych…”, jednostka 7 mm → dymek „Podziałka dopasowana do kratki: 5 mm zamiast 7 mm”. W układzie:
   prosta odręczna pod ok. 5–10° zostaje prostą (bez schodków), kreska wzdłuż linii kratki kładzie się na niej i dochodzi
   do niej łagodnie. Narysuj tabelę z prostych (przytrzymanie) i pisz w niej — kreski nie są dociskane.
+- **2c-A16 (część 1, 12:23):** `noc/lab2` (2c-B1–B3 agenta B: Nearby — ponawianie zdjęć, czysty start szukania,
+  odbiór strumieniowy) scalona do `noc/wszystko` (ed97884), bez konfliktów. Pełne testy z
+  `KREDA_DIR=…/materialy/kreda/blackboard`: core 834 (2 pominięte), lab 905 (2 pominięte), 0 porażek, oba APK.
+  **W toku:** raport w `dzienniki/RAPORT-NOCY.md` i lista na tablet z `PRZEGLAD-FABLE-2.md` §5 — po PILNYM 2d-A1
+  (stanowisko od nowa, polecenie Marcina 12:23).
 

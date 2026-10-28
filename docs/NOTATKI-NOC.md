@@ -321,6 +321,19 @@ Na starcie (`noc/wszystko` @ `471ed08`): lab 696 testów, 0 porażek.
   core 765, 0 porażek (`KREDA_DIR` ustawione, więc testy na prawdziwych zdjęciach też szły), oba APK. A może scalić `noc/lab2`
   z powrotem przewinięciem.
 
+- **2b-B4 kreda → gładkie krzywe Béziera (28.10 rano, w toku)**: `core/image/ChalkCurves.kt` — szkielet jak dotąd
+  (`ChalkVector.skeleton`), narożniki (skręt ≥ 45° zmierzony, skupiony: pół ramienia ≥ 0,65, sąsiedzi ≤ 0,55 — okręgi
+  r=5…40 px bez fałszywych narożników), filtr 1‑4‑6‑4‑1 między narożnikami (końce i narożniki stoją), dopasowanie
+  Schneidera (`Bezier.fit` dostał opcjonalne kierunki końców; domyślnie bez zmian), tolerancja 1 px (1,2 px przy 2400 px).
+  `ChalkStrokes.toCurves`: przycięcie do wycinka w pikselach wyniku, punkty kontrolne przeniesione na stronę, kreska z
+  `ctrl` (edycja uchwytami jak F17). Przełącznik „Edytowalne kreski jako gładkie krzywe” (panel i Ustawienia →
+  Laboratorium → Kreda, domyślnie włączony; wyłączony = dawne łamane). Testy: `ChalkCurvesTest` (okrąg, sinusoida, S, ∑,
+  L/V, schodki prostej, łuki bez narożników, przycięcie pętli, krzywe na kredzie zdjęcia), miary w `CurveMetrics`;
+  testy kredy/tablicy/Béziera zielone. **Nie zrobione (limit):** tabela przed/po na 24 zdjęciach + okładka
+  (`KredaPomiaryTest`: węzły/100 px, zęby, błąd), 3 podglądy PNG do `build/`, wpis w `docs/KREDA-POMIARY.md`, pełne testy
+  obu wariantów i APK. Zdjęcie wzoru z okładki PDF wyciągnięte poza repo (strumień obrazu 2992×942), do podania testowi
+  przez `KREDA_DIR`. **Tablet:** zdjęcie z blackboard/ → różdżka → „Edytowalne kreski” → zoom 4×: brak zębów, uchwyty.
+
 ### Co Marcin ma sprawdzić na tablecie — wariant lab, po fazie 2 (kolejność)
 
 Instalacja: `labDebug` z `noc/lab2` (albo `noc/wszystko` po scaleniu przez A) na tablecie **i** na telefonie (Nearby).

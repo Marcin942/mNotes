@@ -42,6 +42,7 @@ class LabSettings(ctx: Context) {
     private val faintP = B("board.faint", true)
     private val framesP = B("board.frames", true)
     private val specksP = B("board.specks", true)
+    private val curvesP = B("board.curves", true)
     private val lectureP = B("board.lecture", true)
 
     /** Łącze Nearby (zdjęcie z telefonu); domyślnie wyłączone, bo wymaga Usług Google Play i uprawnień radia. */
@@ -54,6 +55,9 @@ class LabSettings(ctx: Context) {
     var faint: Boolean get() = faintP.value; set(v) = faintP.set(v)
     var frames: Boolean get() = framesP.value; set(v) = framesP.set(v)
     var specks: Boolean get() = specksP.value; set(v) = specksP.set(v)
+
+    /** Edytowalne kreski z kredy jako gładkie krzywe Béziera (2b-B4). */
+    var curves: Boolean get() = curvesP.value; set(v) = curvesP.set(v)
 
     /** Zdjęcie z trybu wykładu od razu przez kredę (2b-B3); jedno cofnięcie wraca do zdjęcia. */
     var lecture: Boolean get() = lectureP.value; set(v) = lectureP.set(v)
@@ -71,6 +75,7 @@ class LabSettings(ctx: Context) {
     fun options(): BoardOptions = BoardOptions(
         straighten = straighten, crop = crop, flatten = flatten, sharpen = sharpen, autoCut = autoCut,
         cut = cut, solid = solid, tint = tintColor(tint), faint = faint, frames = frames, specks = specks,
+        curves = curves,
     )
 
     companion object {

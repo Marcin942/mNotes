@@ -49,9 +49,11 @@ object Bezier {
 
     /**
      * Dopasowanie splajnu do punktów (x, y …) z błędem najwyżej [tol] pt (Schneider, „An Algorithm for Automatically
-     * Fitting Digitized Curves”, przepisane od zera). Zwraca [ctrl]; dla mniej niż 2 punktów null.
+     * Fitting Digitized Curves”, przepisane od zera). Zwraca [ctrl]; dla mniej niż 2 punktów null. [startDir] i [endDir]
+     * (2b-B4) narzucają kierunek krzywej na końcach, oba w głąb krzywej; bez nich liczy się z pierwszych i ostatnich
+     * dwóch punktów. Kreda podaje je przy narożnikach i w pętlach zamkniętych (koniec gładko w początek).
      */
-    fun fit(xyIn: FloatArray, tol: Float = 1.2f): FloatArray? {
+    fun fit(xyIn: FloatArray, tol: Float = 1.2f, startDir: FloatArray? = null, endDir: FloatArray? = null): FloatArray? {
         // Punkty bliższe niż 0,6 pt łączymy: drżenie rysika dawałoby złe styczne.
         val xy = FloatList(xyIn.size)
         for (i in 0 until xyIn.size / 2) {
@@ -65,8 +67,8 @@ object Bezier {
         if (n == 2) return line(p[0], p[1], p[2], p[3])
         val out = FloatList(64)
         out.add(p[0], p[1])
-        val tl = unit(p[2] - p[0], p[3] - p[1])
-        val tr = unit(p[2 * n - 4] - p[2 * n - 2], p[2 * n - 3] - p[2 * n - 1])
+        val tl = startDir?.let { unit(it[0], it[1]) } ?: unit(p[2] - p[0], p[3] - p[1])
+        val tr = endDir?.let { unit(it[0], it[1]) } ?: unit(p[2 * n - 4] - p[2 * n - 2], p[2 * n - 3] - p[2 * n - 1])
         fitRange(p, 0, n - 1, tl, tr, tol * tol, out, 0)
         return out.toArray()
     }

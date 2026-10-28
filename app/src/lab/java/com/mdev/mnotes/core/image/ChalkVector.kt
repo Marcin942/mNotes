@@ -27,14 +27,20 @@ object ChalkVector {
     /** Największe odchylenie od prostej (stopnie), przy którym dwie ścieżki w węźle są jedną kreską. */
     const val JOIN_DEGREES = 40.0
 
-    fun vectorize(img: Raster, alphaMin: Int = 128, epsilon: Float = 1.2f, minLength: Float = 6f): List<ChalkLine> {
+    fun vectorize(img: Raster, alphaMin: Int = 128, epsilon: Float = 1.2f, minLength: Float = 6f): List<ChalkLine> =
+        skeleton(img, alphaMin).map { ChalkLine(simplify(it.pts, epsilon), it.width) }.filter { it.length() >= minLength }
+
+    /**
+     * Łamane szkieletu po porządkach w węzłach i łączeniu przerw, piksel po pikselu (bez uproszczenia), z grubością
+     * każdej. Wspólny początek łamanych [vectorize] i gładkich krzywych [ChalkCurves.paths] (2b-B4).
+     */
+    fun skeleton(img: Raster, alphaMin: Int = 128): List<ChalkLine> {
         val w = img.w; val h = img.h
         val mask = BooleanArray(w * h) { Raster.alpha(img.px[it]) >= alphaMin }
         if (mask.none { it }) return emptyList()
         val skel = thin(mask, w, h)
         val dist = distance(mask, w, h)
-        val paths = bridge(join(trace(skel, w, h), w, dist), w, dist)
-        return paths.map { ChalkLine(simplify(it, epsilon), widthOf(it, w, dist)) }.filter { it.length() >= minLength }
+        return bridge(join(trace(skel, w, h), w, dist), w, dist).map { ChalkLine(it, widthOf(it, w, dist)) }
     }
 
     /**

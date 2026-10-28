@@ -239,6 +239,17 @@ class Settings(ctx: Context) {
     private var profileBackup by Pref("profile.backup", "")   // wartości sprzed profilu (Profiles.encodeValues)
     var profilePins by Pref("profile.pins", "")         // zeszyt → profil (Profiles.pinsEncode)
 
+    // — Czas pisania (FB7): w preferencjach, nie w pliku zeszytu, więc format .mnotes się nie zmienia —
+    private var writingRaw by Pref("stats.writing", "")   // ActiveTime.encode: zeszyt → tydzień ISO → ms
+
+    fun writingWeeks(nbId: String): Map<String, Long> = com.mdev.mnotes.core.stats.ActiveTime.decode(writingRaw)[nbId].orEmpty()
+
+    fun addWriting(nbId: String, week: String, ms: Long) {
+        if (ms <= 0L) return
+        val all = com.mdev.mnotes.core.stats.ActiveTime.decode(writingRaw)
+        writingRaw = com.mdev.mnotes.core.stats.ActiveTime.encode(all + (nbId to com.mdev.mnotes.core.stats.ActiveTime.add(all[nbId].orEmpty(), week, ms)))
+    }
+
     var profiles: List<com.mdev.mnotes.core.prefs.Profile>
         get() = if (profilesRaw.isEmpty()) com.mdev.mnotes.core.prefs.Profiles.builtIns(com.mdev.mnotes.editor.T.pl) else com.mdev.mnotes.core.prefs.Profiles.decode(profilesRaw)
         set(v) { profilesRaw = com.mdev.mnotes.core.prefs.Profiles.encode(v).ifEmpty { "mnotes-profiles 1\n" } }

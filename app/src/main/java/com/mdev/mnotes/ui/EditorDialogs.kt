@@ -151,6 +151,7 @@ fun commandList(
         "addPage" to ({ !ed.readOnly } to { ed.addPage() }),
         "bookmark" to ({ true } to { ed.toggleBookmark() }),
         "pageTags" to ({ !ed.readOnly } to { ed.doc.pages.getOrNull(ed.pageIndex)?.let { ed.tagsFor = it.id } }),
+        "notebookStats" to ({ true } to { ed.statsOpen = true }),
         "copyPage" to ({ true } to { ed.copyPage() }),
         "copyPageImage" to ({ true } to { ed.copyPageAsImage(ed.pageIndex) }),
         "cutPage" to ({ !ed.readOnly && ed.pageCount > 1 } to { ed.cutPage() }),

@@ -5,7 +5,7 @@ import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
 
 /**
- * Syntetyczny `.sdocx` budowany w pamięci (port `skills/samsung-notes-do-mnotes/scripts/synth_sdocx.py`): tablica
+ * Syntetyczny `.sdocx` budowany w pamięci (port `narzedzia/samsung-notes-do-mnotes/scripts/synth_sdocx.py`): tablica
  * napisów, kolejność stron, nagłówek strony (papier, wzór) i pociągnięcia w wersji skompresowanej. Dzięki niemu testy
  * przechodzą cały tor od ZIP-a do [ConvertedNote] bez prywatnych plików użytkownika. To nie jest pełny koder formatu.
  */

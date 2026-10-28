@@ -15,7 +15,7 @@ import kotlin.math.min
 
 /**
  * Konwerter notatki Samsung Notes na strony mNotes: kreski jako natywne, edytowalne obiekty, tło strony i raport
- * odstępstw. Port `skills/samsung-notes-do-mnotes/scripts/convert.py` (tam opis kalibracji piór i tła).
+ * odstępstw. Port `narzedzia/samsung-notes-do-mnotes/scripts/convert.py` (tam opis kalibracji piór i tła).
  * Czysta logika bez Androida, więc w całości pokryta testami jednostkowymi.
  */
 object SamsungConvert {

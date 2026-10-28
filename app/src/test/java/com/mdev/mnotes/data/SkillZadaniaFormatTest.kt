@@ -14,7 +14,7 @@ import org.junit.Test
 
 /**
  * Pliki z `src/test/resources/zadania/` powstają skryptami skilla `zadania-do-mnotes`
- * (`skills/generuj-fixture.py`). Test pilnuje, że aplikacja czyta je tak, jak skill zakłada.
+ * (`narzedzia/generuj-fixture.py`). Test pilnuje, że aplikacja czyta je tak, jak skill zakłada.
  */
 class SkillZadaniaFormatTest {
     private fun resource(name: String): ByteArray =

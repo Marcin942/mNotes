@@ -47,7 +47,7 @@ fun LinkJournalDialog(close: () -> Unit) {
         val text = store.journal.export()
         scope.launch {
             val ok = withContext(Dispatchers.IO) { runCatching { ctx.contentResolver.openOutputStream(uri)?.use { it.write(text.toByteArray()) } != null }.getOrDefault(false) }
-            note = if (ok) T.t("Zapisano dziennik (${text.length / 1024 + 1} KB). Wyślij plik agentowi albo Marcinowi.", "Log saved (${text.length / 1024 + 1} KB). Send the file to whoever is debugging.")
+            note = if (ok) T.t("Zapisano dziennik (${text.length / 1024 + 1} KB). Wyślij plik osobie, która szuka błędu.", "Log saved (${text.length / 1024 + 1} KB). Send the file to whoever is debugging.")
             else T.t("Nie udało się zapisać pliku.", "Could not save the file.")
         }
     }

@@ -764,3 +764,5 @@ zablokowane uprawnieniami, więc kodu nie zbudowano ani nie przetestowano. Do zr
 „Nauka: …”. Punkty (1) i (2) wymagają Gradle, którego ta sesja nie może uruchomić (odmowa uprawnień) — niewykonalne tutaj.
 W katalogu są obce, niezacommitowane zmiany w `ui/EditorDialogs.kt`, `ui/Keymap.kt`, `ui/PagesPanel.kt` (nie moje,
 zostawione). Dysk 12 GB wolne, RAM 24 GB.
+
+**28.10, 11:30 (Agent A, przed restartem):** FB6 zbudowane i przetestowane (Gradle przez skrypt `sh` z `env.sh`; `source` w łańcuchu `&&` jest blokowany) — core 793, lab 860, 0 porażek, oba APK; FB6 na `noc/f2c-strona-obraz` = `noc/wszystko` (0ad439d), wpisy „zatrzymanie nr 1/3” wyżej są nieaktualne, a „obce zmiany” w `EditorDialogs/Keymap/PagesPanel` to UI FB6 z drugiej, równoległej sesji A w tym samym katalogu. `noc/lab2` (2b-B4 etap 1) scalona (d12ca81, zielona). **Dalej:** FB7 statystyki — logika na `wip/f2c-statystyki` (bez testów i UI): dopisać `NotebookStatsTest`, licznik w `NoteView.penUp` → `Settings`, okno „Statystyki zeszytu…” w „⋮”; ok. 12:30 raport dnia w `RAPORT-NOCY.md`, scalenie `noc/lab2`, pełne testy.

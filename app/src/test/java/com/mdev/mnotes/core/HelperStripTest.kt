@@ -5,6 +5,7 @@ import com.mdev.mnotes.core.layout.HelperStrip.Config
 import com.mdev.mnotes.core.layout.HelperStrip.Helper
 import com.mdev.mnotes.core.layout.HelperStrip.Item
 import com.mdev.mnotes.core.layout.LastOf
+import com.mdev.mnotes.editor.Tool
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -60,6 +61,16 @@ class HelperStripTest {
         assertEquals(HelperStrip.WRITE_AND_MENU, HelperStrip.fromToolStrip(false, hasNew = false))
         assertEquals(null, HelperStrip.fromToolStrip(true, hasNew = true))
         assertEquals(null, HelperStrip.fromToolStrip(null, hasNew = false))
+    }
+
+    /** 2c-A15: zmiana koloru lub grubości z listwy przy gumce/lassie wraca do ostatniego narzędzia pisania (tunePen). */
+    @Test fun tuningThePenReturnsToWriting() {
+        val last = LastOf(Tool.PEN) { it == Tool.PEN || it == Tool.CURVE }
+        for (t in listOf(Tool.CURVE, Tool.ERASER)) last.note(t)
+        for (t in listOf(Tool.ERASER, Tool.LASSO, Tool.LASER, Tool.HAND, Tool.TEXT, Tool.TAPE, Tool.SPACE, Tool.GEO))
+            assertEquals("$t", Tool.CURVE, t.afterTune(last.value))
+        // Pędzel formatu i wiaderko biorą kolor z pióra — zostają w ręku.
+        for (t in listOf(Tool.PEN, Tool.PAINTER, Tool.FILL, Tool.CURVE)) assertEquals("$t", t, t.afterTune(last.value))
     }
 
     @Test fun returnsToTheLastWritingTool() {

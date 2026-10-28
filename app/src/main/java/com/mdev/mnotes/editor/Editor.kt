@@ -65,7 +65,15 @@ import java.io.InputStream
 import kotlin.math.max
 import kotlin.math.min
 
-enum class Tool { PEN, ERASER, LASSO, TEXT, LASER, HAND, SPACE, TAPE, PAINTER, FILL, CURVE, GEO }
+enum class Tool {
+    PEN, ERASER, LASSO, TEXT, LASER, HAND, SPACE, TAPE, PAINTER, FILL, CURVE, GEO;
+
+    /** Narzędzie pracuje aktywnym piórem (kolor, grubość), więc zmiana pióra z listwy go nie zmienia. */
+    val usesPen: Boolean get() = this == PEN || this == PAINTER || this == FILL || this == CURVE
+
+    /** Narzędzie po zmianie pióra z listwy ([Editor.tunePen]): gumka, lasso i reszta ustępują ostatniemu piszącemu. */
+    fun afterTune(lastWrite: Tool): Tool = if (usesPen) this else lastWrite
+}
 
 class Sel(val pageId: String, val ids: Set<Int>)
 
@@ -262,7 +270,7 @@ class Editor(val ctx: Context, val nbId: String) {
     fun editKit(f: (PenKit) -> PenKit) { settings.penKit = f(kit) }
 
     /** Narzędzia, które biorą kolor i styl z aktywnego pióra (pióro, pędzel formatu, wypełnienie). */
-    val penTool: Boolean get() = tool == Tool.PEN || tool == Tool.PAINTER || tool == Tool.FILL || tool == Tool.CURVE
+    val penTool: Boolean get() = tool.usesPen
 
     /** Wybór narzędzia piszącego z paska: staje się aktywnym piórem i narzędziem, a zaznaczenie znika. */
     fun selectPen(kind: PenKind) {
@@ -287,7 +295,7 @@ class Editor(val ctx: Context, val nbId: String) {
     fun tunePen(f: (PenKit) -> PenKit) {
         editKit(f)
         // 2b-A2: wraca do ostatniego narzędzia pisania (także krzywej), a nie zawsze do pióra.
-        if (!penTool) returnToWriting()
+        if (tool.afterTune(lastWriteTool) != tool) returnToWriting()
     }
 
     fun say(msg: String) { toast = msg }

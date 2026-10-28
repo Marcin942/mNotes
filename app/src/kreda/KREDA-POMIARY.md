@@ -263,3 +263,30 @@ Pełna tabela (K = 2, dół 0,6):
 | 20260525_144320.jpg | 0.50 | 47 | 5.9 → 5.9 | 8.1 → 8.4 | 691 → 691 | 24.3 → 24.3 | 28 → 28 | +0.0 | 46 → 105 |
 | **średnio (24)** | | 49 | 3.9 → 3.9 | 5.2 → 5.6 | 421 → 421 | 29.2 → 29.1 | 18.2 → 18.3 | +0.2 | |
 Najgorszy przyrost fragmentów: +1.1 p.p. (20260401_133044.jpg); próg lokalny niższy od globalnego średnio na 49 % tablicy (K = 2.0, dół 0.6)
+
+## Kreda od nowa (3c-B1, 29.10): boki tablicy z prostych, listwy, prostszy panel
+
+Uwaga użytkownika: „obecnie działa beznadziejnie” (tło i odblaski zostają, złe prostowanie, niewygodna obsługa).
+Przyczyny znalezione na podglądach `KredaPomiaryTest` (`KREDA_OUT`) wszystkich 24 zdjęć:
+
+1. **Narożniki ze skrajnych punktów maski.** Osoba przy tablicy (`20260525_144320`) i głowy (`20260324_154544`) łączą
+   się z maską i ciągną narożnik, więc prostowanie wykrzywia wynik w trapez. Teraz `BoardGeometry.fitSides`: brzeg
+   maski dzielony między boki, na każdym boku prosta z największą liczbą punktów brzegu (RANSAC, pasmo 1,5 px podglądu,
+   ≥ 35 % długości boku, odchylenie ≤ 35°), narożniki z przecięć; dwa przebiegi. Test `bulgeOnTheSideDoesNotPullTheCorner`.
+2. **Listwy i brzegi ram zostawały jako długie białe pasy** (zdjęcia dwóch tablic, np. `20260317_142449`,
+   `20260326_140000`). `Chalk.dropRails`: prosty pas (Hough ±4°) przez ≥ 70 % szerokości lub wysokości, złożony z
+   kawałków ≥ 4 % na jednej prostej (listwa przerwana ręką, półką). `Chalk.dropEdgeScraps`: plama w pasie 1,2 % przy
+   brzegu wyniku, wydłużona wzdłuż brzegu. Prosta kreska podziału przez 60 % i falująca kreska przez 75 % zostają
+   (`fullWidthRailGoesHandDrawnLinesStay`); litera ucięta brzegiem zostaje (`frameScrapAlongTheEdgeGoesCutLetterStays`).
+   Pierwsza wersja z progiem 40 % zjadała prostą syntetyczną „kreskę kredy” z testów potoku — stąd 70 %.
+3. **Panel:** na wierzchu wynik i kolor, reszta pod „Więcej ustawień”; pod podglądem „Krzywo albo ucięte? Narożniki”
+   i „Śmieci? Gumka”; lupa 3× z krzyżykiem przy przeciąganiu narożnika.
+
+Średnio (24 zdjęcia, 1600 px): kreda 3,9 → **3,0 %**, kresek 451 → **398**, fragmenty < 10 px 19 → **17 %**, czas
+ok. 560 ms (JVM). Spadek kredy % i kresek to usunięte listwy, ramy, osoba i głowy — sprawdzone na podglądach
+`20260317_142449`, `20260326_140000`, `20260318_154119`, `20260323_135040`, `20260324_154544`, `20260525_144320`:
+żaden wzór nie zginął.
+
+**Zostaje (uczciwie):** gdy pod tablicą jest ciemna półka w kolorze tablicy (`20260525_144320`, `20260323_135040`),
+dolny bok dalej obejmuje półkę i pod pismem zostają odblaski kabli i drewna — obejście: „Narożniki” (teraz z lupą).
+Na `20260324_154544` zostaje kosmyk włosów w prawym dolnym rogu. Na tablecie panelu i lupy nie oglądałem.

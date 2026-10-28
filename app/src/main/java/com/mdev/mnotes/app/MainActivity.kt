@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Lock
 import androidx.compose.material3.Icon
@@ -71,6 +72,10 @@ import com.mdev.mnotes.ui.ROTATION_QUERY
 import com.mdev.mnotes.ui.PAINTER_QUERY
 import com.mdev.mnotes.ui.SHORTCUTS_CAT
 import com.mdev.mnotes.ui.SettingsScreen
+import com.mdev.mnotes.ui.SetupGuideScreen
+import com.mdev.mnotes.ui.SetupBanner
+import com.mdev.mnotes.ui.LocalOpenGuide
+import com.mdev.mnotes.core.guide.SetupGuide
 import com.mdev.mnotes.ui.mint
 
 enum class Screen { LIBRARY, EDITOR, SETTINGS }
@@ -85,6 +90,11 @@ class UiModel(application: Application) : AndroidViewModel(application) {
     var settingsQuery by mutableStateOf("")
 
     fun openSettings(cat: Int, query: String = "") { settingsCat = cat; settingsQuery = query; screen = Screen.SETTINGS }
+
+    /** 3c-A10: przewodnik po ustawieniach leży nad ekranem; przy nowej instalacji otwiera się sam, raz. */
+    var guide by mutableStateOf(
+        SetupGuide.entry(app.settings.setupState, app.settings.oldInstall, app.settings.setupDismissed) == SetupGuide.Entry.FULL,
+    )
     var editor by mutableStateOf<Editor?>(null)
     var locked by mutableStateOf(app.settings.appLock)
 
@@ -311,7 +321,7 @@ open class MainActivity : FragmentActivity() {
             ui.tabs, app.settings.tabs, ui::open, ui::closeTab, ui::stepTab, ui::leave,
             { id -> app.repo.meta(id)?.title ?: "" },
         )
-        CompositionLocalProvider(LocalSamsungStart provides ui::startSamsung) {
+        CompositionLocalProvider(LocalSamsungStart provides ui::startSamsung, LocalOpenGuide provides { ui.guide = true }) {
             Box(Modifier.fillMaxSize()) {
                 when (ui.screen) {
                     Screen.LIBRARY -> LibraryScreen(ui.lib, onOpen = ui::open, tabs = tabsCtl.takeIf { it.on }, onSettings = { ui.openSettings(0) })
@@ -329,6 +339,11 @@ open class MainActivity : FragmentActivity() {
                 if (ui.screen == Screen.SETTINGS) BackHandler { ui.screen = if (ui.editor != null) Screen.EDITOR else Screen.LIBRARY }
                 // Okno importu leży nad wszystkim (także nad edytorem, gdy plik przyszedł z innej aplikacji).
                 ui.samsung?.let { s -> SamsungImportScreen(s, onClose = ui::closeSamsung, onFinished = { _, failed -> ui.samsungFinished(failed) }) }
+                if (ui.screen == Screen.LIBRARY && !ui.guide && ui.samsung == null) SetupBanner(
+                    app.settings, onStart = { ui.guide = true },
+                    Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(horizontal = 16.dp, vertical = 16.dp),
+                )
+                if (ui.guide) SetupGuideScreen(app.settings, onClose = { ui.guide = false })
             }
         }
     }

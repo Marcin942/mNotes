@@ -38,6 +38,7 @@ import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.ColorLens
 import androidx.compose.material.icons.rounded.Extension
 import androidx.compose.material.icons.rounded.Search
+import androidx.compose.material.icons.rounded.Explore
 import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.Keyboard
 import androidx.compose.material.icons.rounded.Lock
@@ -145,6 +146,8 @@ fun SettingsScreen(onBack: () -> Unit, startCat: Int = 0, startQuery: String = "
                 )
             }
             if (query.isNotEmpty()) IconBtn(Icons.Rounded.Close, T.t("Wyczyść wyszukiwanie", "Clear search"), { query = "" })
+            // 3c-A10: przewodnik zawsze pod ręką — najważniejsze wybory strona po stronie.
+            IconBtn(Icons.Rounded.Explore, T.t("Przewodnik po ustawieniach", "Settings guide"), LocalOpenGuide.current)
         }
         HorizontalDivider(color = m.line)
         BoxWithConstraints(Modifier.fillMaxSize()) {

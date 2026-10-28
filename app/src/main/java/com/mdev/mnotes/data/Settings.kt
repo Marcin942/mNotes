@@ -163,6 +163,11 @@ class Settings(ctx: Context) {
     var axesSnap by Pref("axes.snap", false)         // 2b-A6: układ na kratce i kreski w nim dociskane do siatki; 2c-A3: wyłączone do testu na tablecie
     var axesSnapDp by Pref("axes.snap_dp", 3f)       // próg docisku kresek do linii siatki układu (dp ekranu; 0 = bez)
     var guideOffered by Pref("guide.offered", false) // zeszyt-przewodnik był już proponowany (F20)
+    /** 3c-A10: aplikacja działała tu już przed tym uruchomieniem (zeszyt-przewodnik zapisuje to przy pierwszym starcie). */
+    val oldInstall: Boolean = guideOffered
+    var setupState by Pref("setup.state", "")          // stan przewodnika po ustawieniach (SetupGuide.State.encode); pusty = nie otwierany
+    var setupDismissed by Pref("setup.dismissed", false) // propozycja przewodnika odrzucona („Nie teraz”)
+    var setupUse by Pref("setup.use", 0)               // do czego głównie (SetupGuide.USE_*): tylko do zaleceń przewodnika
     var attach by Pref("snap.attach", false)         // F22: końce linii i przeciągane punkty przyczepiają się do innych figur
     var zoomMaxFactor by Pref("zoom.max_factor", 6f)     // F25: największe powiększenie = mnożnik „100 %” (6 = dawne)
     var returnToPen by Pref("tools.return_to_pen", false) // F26: ponowne dotknięcie lasera/ręki/lassa albo puste miejsce wraca do pisania

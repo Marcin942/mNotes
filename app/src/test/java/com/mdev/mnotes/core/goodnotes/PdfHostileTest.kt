@@ -50,6 +50,23 @@ class PdfHostileTest {
     }
 
     @Test(timeout = 30_000)
+    fun longLengthChainDoesNotOverflowTheStack() {
+        // strumień, którego /Length to odwołanie do strumienia, którego /Length to odwołanie…: rekurencja na długość łańcucha
+        val n = 50_000
+        val out = ByteArrayOutputStream()
+        fun w(s: String) = out.write(s.toByteArray(Charsets.ISO_8859_1))
+        w("%PDF-1.4\n")
+        val off = IntArray(n)
+        for (i in 1..n) { off[i - 1] = out.size(); w(if (i < n) "$i 0 obj\n<</Length ${i + 1} 0 R>>\nstream\n\nendstream\nendobj\n" else "$i 0 obj\n0\nendobj\n") }
+        val x = out.size()
+        w("xref\n0 ${n + 1}\n0000000000 65535 f \n")
+        for (o in off) w("%010d 00000 n \n".format(o))
+        w("trailer\n<</Size ${n + 1}>>\nstartxref\n$x\n%%EOF\n")
+        val r = runCatching { PdfDocument(out.toByteArray()).obj(1) }
+        assertTrue(r.exceptionOrNull().toString(), r.exceptionOrNull() !is StackOverflowError)
+    }
+
+    @Test(timeout = 30_000)
     fun hugeCurvesDoNotExhaustMemory() {
         // ~60 KB treści: 2000 krzywych o współrzędnych 1e9 dzieliło się do głębokości 16, po 2¹⁶ punktów każda (GB pamięci)
         val ink = "0 0 0 RG 2 w " + (1..2000).joinToString(" ") { "0 0 m 0 1000000000 1000000000 -1000000000 1000000000 0 c S" }

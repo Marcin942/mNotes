@@ -208,7 +208,8 @@ class PdfDocument(val data: ByteArray) {
 
     fun obj(num: Int): Any? {
         if (cache.containsKey(num)) return cache[num]
-        if (!loading.add(num)) return null
+        // łańcuch /Length → strumień → /Length… ładuje obiekty rekurencyjnie; 50 000 ogniw przepełniało stos
+        if (loading.size >= MAX_LOADING || !loading.add(num)) return null
         try {
             val v: Any? = compressed[num]?.let { (stm, idx) ->
                 val list = objStm(stm)
@@ -575,6 +576,8 @@ class PdfDocument(val data: ByteArray) {
     }
 
     companion object {
+        /** Zwykły PDF zagnieżdża ładowanie obiektów na kilka poziomów (strumień obiektów, długość jako odwołanie). */
+        private const val MAX_LOADING = 64
         const val MAX_STREAM = 128 * 1024 * 1024
         const val MAX_PAGES = 5000
         private val INHERITED = listOf("Resources", "MediaBox", "CropBox", "Rotate")

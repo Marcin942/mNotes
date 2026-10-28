@@ -1,5 +1,7 @@
 package com.mdev.mnotes.core.codec
 
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Assert.fail
 import org.junit.Test
@@ -105,5 +107,14 @@ class HostileInputTest {
         val raw = ByteArray(200_000).also { it[0] = 0 }
         val back = PageCodec.decode(page(raw.size, raw))
         assertTrue(back.elements.isEmpty())
+    }
+
+    @Test
+    fun readerRejectsNegativeAndOverflowingLengths() {
+        // skip(-n) cofał odczyt (pętla po polach bez końca), pos + Int.MAX_VALUE przepełniało sprawdzenie
+        val r = ByteReader(ByteArray(16), pos = 8)
+        assertThrows(CodecException::class.java) { r.skip(-8) }
+        assertThrows(CodecException::class.java) { r.skip(Int.MAX_VALUE) }
+        assertEquals(8, r.pos)
     }
 }

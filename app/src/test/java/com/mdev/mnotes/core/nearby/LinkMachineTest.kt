@@ -10,6 +10,8 @@ import java.util.Random
 /**
  * Symulowane powietrze dla [LinkMachine]: urządzenia ogłaszają się i szukają, połączenie wymaga akceptacji po obu
  * stronach (jak Nearby), ramki idą w kolejności przez kolejkę zdarzeń. [drop] gubi wybrane ramki, [cut] zrywa łącze.
+ * Jak prawdziwe Nearby: drugie `discover` bez `stopSearch` → 8002 i zero ponownych `onFound`, drugie `advertise` →
+ * 8001, a jedno szukanie zgłasza dany punkt raz (znowu dopiero, gdy ten przestał się ogłaszać i zaczął od nowa).
  */
 class FakeAir {
     private val queue = ArrayDeque<() -> Unit>()
@@ -18,35 +20,51 @@ class FakeAir {
 
     fun end(id: String) = End(id).also { ends += it }
 
+    /** Zdarzenie dla maszyny punktu [e]; zamknięty transport ([End.close]) już nic nie dostaje. */
+    private fun to(e: End, call: LinkMachine.() -> Unit) { queue += { if (!e.closed) e.machine.call() } }
+
     inner class End(val id: String) : LinkTransport {
         lateinit var machine: LinkMachine
         var advertising: String? = null
         var discovering = false
         var peer: End? = null
+        /** Ile najbliższych próśb o połączenie ten punkt odrzuci (druga strona zajęta albo „Odrzuć”). */
+        var refuse = 0
+        var closed = false
+            private set
         private var acceptedFor: String? = null
         private var pendingWith: String? = null
+        /** Punkty zgłoszone już w bieżącym szukaniu. */
+        private val seen = HashSet<String>()
 
         private fun other(id: String) = ends.first { it.id == id }
 
         override fun advertise(name: String) {
+            if (advertising != null) { to(this) { onFailed(LinkErrors.ALREADY_ADVERTISING) }; return }
             advertising = name
-            for (e in ends) if (e !== this && e.discovering) queue += { e.machine.onFound(id, name) }
+            for (e in ends) if (e !== this && e.discovering && e.seen.add(id)) to(e) { onFound(id, name) }
         }
 
         override fun discover() {
+            if (discovering) { to(this) { onFailed(LinkErrors.ALREADY_DISCOVERING) }; return }
             discovering = true
-            for (e in ends) if (e !== this) e.advertising?.let { n -> queue += { machine.onFound(e.id, n) } }
+            seen.clear()
+            for (e in ends) if (e !== this) e.advertising?.let { n -> seen += e.id; to(this) { onFound(e.id, n) } }
         }
 
-        override fun stopSearch() { advertising = null; discovering = false }
+        override fun stopSearch() {
+            if (advertising != null) for (e in ends) e.seen.remove(id)
+            advertising = null; discovering = false
+        }
 
         override fun request(endpoint: String, name: String) {
             val o = ends.firstOrNull { it.id == endpoint } ?: return  // punkt, który nigdy nie odpowie
+            if (o.refuse > 0) { o.refuse--; to(this) { onConnectFailed(endpoint, LinkErrors.REJECTED) }; return }
             val adv = o.advertising
-            if (adv == null) { queue += { machine.onConnectFailed(endpoint, 8011) }; return }
+            if (adv == null) { to(this) { onConnectFailed(endpoint, 8011) }; return }
             pendingWith = endpoint; o.pendingWith = id
-            queue += { o.machine.onInitiated(id, name) }
-            queue += { machine.onInitiated(endpoint, adv) }
+            to(o) { onInitiated(id, name) }
+            to(this) { onInitiated(endpoint, adv) }
         }
 
         override fun accept(endpoint: String) {
@@ -54,27 +72,34 @@ class FakeAir {
             val o = other(endpoint)
             if (o.acceptedFor == id) {
                 peer = o; o.peer = this
-                queue += { machine.onConnected(endpoint) }
-                queue += { o.machine.onConnected(id) }
+                to(this) { onConnected(endpoint) }
+                to(o) { onConnected(id) }
             }
         }
 
         override fun reject(endpoint: String) {
             val o = other(endpoint)
-            if (o.pendingWith == id) queue += { o.machine.onConnectFailed(id, LinkErrors.REJECTED) }
+            if (o.pendingWith == id) to(o) { onConnectFailed(id, LinkErrors.REJECTED) }
         }
 
         override fun send(endpoint: String, bytes: ByteArray) {
             val o = peer ?: return
             if (drop(this, bytes)) return
-            queue += { if (o.peer === this) o.machine.onReceived(id, bytes) }
+            val from = this
+            to(o) { if (o.peer === from) onReceived(id, bytes) }
         }
 
         override fun disconnect(endpoint: String) {
             val o = peer ?: return
             unlink(o)
-            queue += { o.machine.onDisconnected(id) }
+            to(o) { onDisconnected(id) }
         }
+
+        /**
+         * Okno zamknięte (`NearbyTransport.close`): maszyna nic już nie dostaje, a druga strona połączenia w toku
+         * nie dowiaduje się o tym (czeka do własnego limitu czasu), tak jak przy przerwanym `requestConnection`.
+         */
+        fun close() { stopSearch(); closed = true }
 
         fun unlink(o: End) { peer = null; o.peer = null; acceptedFor = null; o.acceptedFor = null; pendingWith = null; o.pendingWith = null }
     }
@@ -83,8 +108,8 @@ class FakeAir {
     fun cut(a: End) {
         val b = a.peer ?: return
         a.unlink(b)
-        queue += { a.machine.onDisconnected(b.id) }
-        queue += { b.machine.onDisconnected(a.id) }
+        to(a) { onDisconnected(b.id) }
+        to(b) { onDisconnected(a.id) }
     }
 
     fun pump(max: Int = 100_000) {
@@ -268,6 +293,52 @@ class LinkMachineTest {
         run(tablet, phone) { pSeen.sent.size == 3 }
         assertEquals(hashes(photos), hashes(tSeen.photos.map { it.bytes }))
         assertEquals(2, phone.log.count { it.text.startsWith("połączono") })
+    }
+
+    @Test
+    fun tabletRejectsTheFirstConnectionAndThePhoneConnectsByItselfOnTheSecond() {
+        val key = pairKey()
+        val tEnd = air.end("tablet")
+        val tablet = machine(tEnd, LinkMode.RECEIVE, SyncRole.HOST, "T", key)
+        val phone = machine(air.end("telefon"), LinkMode.SEND, SyncRole.CLIENT, "P", key)
+        tEnd.refuse = 1
+        tablet.start(); phone.start()
+        run(tablet, phone) { phone.state is LinkState.Ready && tablet.state is LinkState.Ready }
+        assertTrue(phone.state is LinkState.Ready)
+        assertEquals(LinkErrors.REJECTED, phone.log.mapNotNull { it.code }.first())
+    }
+
+    @Test
+    fun closingThePhoneWindowWhileConnectingAndOpeningItAgainConnects() {
+        val key = pairKey()
+        val tablet = machine(air.end("tablet"), LinkMode.RECEIVE, SyncRole.HOST, "T", key)
+        val firstEnd = air.end("telefon")
+        val first = machine(firstEnd, LinkMode.SEND, SyncRole.CLIENT, "P", key)
+        tablet.start(); first.start()
+        air.pump(max = 2)  // telefon znalazł tablet i poprosił; tablet przyjął prośbę
+        assertTrue(first.state is LinkState.Connecting)
+        assertTrue(tablet.state is LinkState.Connecting)
+        first.stop(); firstEnd.close()  // okno zamknięte w trakcie „Łączę…”
+        // ponowne otwarcie: nowy transport, nowy identyfikator punktu (jak po stopAllEndpoints)
+        val second = machine(air.end("telefon-2"), LinkMode.SEND, SyncRole.CLIENT, "P", key)
+        second.start()
+        run(tablet, second) { second.state is LinkState.Ready && tablet.state is LinkState.Ready }
+        assertTrue(second.state is LinkState.Ready)
+    }
+
+    @Test
+    fun alreadyDiscoveringStartsTheSearchOverOnce() {
+        val key = pairKey()
+        val tablet = machine(air.end("tablet"), LinkMode.RECEIVE, SyncRole.HOST, "T", key)
+        val pEnd = air.end("telefon")
+        val phone = machine(pEnd, LinkMode.SEND, SyncRole.CLIENT, "P", key)
+        // Szukanie włączone wcześniej (np. przez poprzednie okno) zgłosiło tablet, zanim maszyna ruszyła; drugi raz go
+        // nie zgłosi, a drugie discover dostaje 8002.
+        pEnd.discover()
+        tablet.start(); air.pump()
+        phone.start()
+        run(tablet, phone) { phone.state is LinkState.Ready }
+        assertTrue(phone.state is LinkState.Ready)
     }
 
     @Test

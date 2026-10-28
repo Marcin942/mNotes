@@ -96,6 +96,8 @@ class LinkMachine(
     private var linkStart = 0L
     private var retryAt = 0L
     private var autoPickAt = 0L
+    /** Po 8002 szukanie zaczęte od nowa już raz w tym [search] (drugi raz nie, żeby nie krążyć). */
+    private var rediscovered = false
 
     fun start() {
         running = true
@@ -148,7 +150,7 @@ class LinkMachine(
     fun tick() {
         if (!running) return
         val now = clock()
-        if (retryAt in 1..now) { retryAt = 0; search(); return }
+        if (retryAt in 1..now) { retryAt = 0; if (endpoint == null) search(); return }
         val s = state
         when {
             s is LinkState.Searching && !s.slow && now - searchStart > SEARCH_MS -> set(s.copy(slow = true))
@@ -206,7 +208,11 @@ class LinkMachine(
         if (id != endpoint) return
         record("połączenie nieudane", code)
         endpoint = null
-        if (LinkErrors.isSetup(code)) problem(code) else search()
+        // Punkt, który odmówił, nie jest „znany”: szukanie zgłosi go znowu, jeśli żyje. Ponowienie po chwili, bo
+        // zajęta druga strona odrzuca od razu i bez przerwy kręcilibyśmy się w kółko.
+        found.remove(id)
+        if (LinkErrors.isSetup(code)) problem(code)
+        else { retryAt = clock() + RETRY_MS; showSearching() }
     }
 
     fun onDisconnected(id: String) {
@@ -232,6 +238,14 @@ class LinkMachine(
 
     /** Błąd startu ogłaszania/szukania. Ustawienia i uprawnienia → czekamy na użytkownika; reszta → ponowienie. */
     fun onFailed(code: Int) {
+        // 8002: Nearby nie zacznie drugiego szukania i nie zgłosi znanych punktów drugi raz. Raz: stop i od nowa.
+        if (code == LinkErrors.ALREADY_DISCOVERING && running && endpoint == null && !rediscovered) {
+            rediscovered = true
+            record("szukanie od nowa", code)
+            transport.stopSearch()
+            transport.discover()
+            return
+        }
         if (code in LinkErrors.HARMLESS) return
         record("Nearby: błąd", code)
         transport.stopSearch()
@@ -312,9 +326,15 @@ class LinkMachine(
 
     private fun search() {
         retryAt = 0
+        rediscovered = false
         searchStart = clock()
         showSearching()
+        // Zawsze od czystego startu: Nearby na drugie startDiscovery odpowiada 8002 i nie zgłasza znanego punktu
+        // ponownie, a telefon (SEND) łączy się tylko po onFound, więc bez tego wisiałby na „Szukam…”.
+        transport.stopSearch()
         if (role == SyncRole.HOST) transport.advertise(ownName) else transport.discover()
+        // Punkt znany z poprzedniego szukania (np. po zerwaniu łącza): próba od razu, bez czekania na onFound.
+        if (role == SyncRole.CLIENT && mode != LinkMode.PAIR) found.keys.firstOrNull()?.let(::connect)
     }
 
     private fun connect(id: String) {
@@ -322,6 +342,7 @@ class LinkMachine(
         peerName = found[id] ?: peerLabel
         linkStart = clock()
         autoPickAt = 0
+        retryAt = 0
         record("łączę z: $peerName")
         set(LinkState.Connecting(peerName))
         transport.request(id, ownName)
@@ -329,7 +350,7 @@ class LinkMachine(
 
     private fun restart(why: String) {
         record(why)
-        endpoint?.let(transport::disconnect)
+        endpoint?.let { transport.disconnect(it); found.remove(it) }  // milczący punkt nie jest „znany”
         drop()
         search()
     }

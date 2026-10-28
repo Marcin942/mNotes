@@ -49,6 +49,7 @@ import com.mdev.mnotes.core.layout.ZoomLimits
 import com.mdev.mnotes.core.layout.MiniMap
 import com.mdev.mnotes.core.layout.Board
 import com.mdev.mnotes.core.layout.ToolReturn
+import com.mdev.mnotes.core.layout.ScrollRange
 import com.mdev.mnotes.core.model.BoxElement
 import com.mdev.mnotes.core.color.ThemeMap
 import com.mdev.mnotes.core.model.DocEdit
@@ -347,8 +348,11 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
     private fun maxZoom() = lane?.maxZoom() ?: ZoomLimits.maxZoom(baseZoom(), settings.zoomMaxFactor)
 
     // 2d-A1: w pasie stanowiska oś wspólna należy do modelu (widok ma wysokość okna, nie pasa) — tu tylko oś stron.
-    private fun clampX(x: Float, z: Float): Float { if (lane != null && ed.layoutMode != 1) return x; val cw = layout.docWidth * z; return if (cw <= width) (width - cw) / 2 else x.coerceIn(width - cw, 0f) }
-    private fun clampY(y: Float, z: Float): Float { if (lane != null && ed.layoutMode == 1) return y; val ch = layout.docHeight * z; return if (ch <= height) (height - ch) / 2 else y.coerceIn(height - ch, 0f) }
+    private fun clampX(x: Float, z: Float): Float { if (lane != null && ed.layoutMode != 1) return x; return ScrollRange.clamp(x, layout.docWidth * z, width.toFloat(), marginX()) }
+    private fun clampY(y: Float, z: Float): Float { if (lane != null && ed.layoutMode == 1) return y; return ScrollRange.clamp(y, layout.docHeight * z, height.toFloat(), marginY()) }
+    // 3c-A4: zapas przewijania wokół dokumentu (pół ekranu); na stanowisku pasy liczy model, tam bez zapasu.
+    private fun marginX() = if (lane == null && settings.scrollMargin) width * ScrollRange.MARGIN else 0f
+    private fun marginY() = if (lane == null && settings.scrollMargin) height * ScrollRange.MARGIN else 0f
 
     private fun docX(sx: Float) = (sx - tx) / zoom
     private fun docY(sy: Float) = (sy - ty) / zoom
@@ -1584,11 +1588,11 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
                 tracker.computeCurrentVelocity(1000, cfg.scaledMaximumFlingVelocity.toFloat())
                 val vx = tracker.getXVelocity(navPid); val vy = tracker.getYVelocity(navPid)
                 if (hypot(vx, vy) > cfg.scaledMinimumFlingVelocity) {
-                    val cw = layout.docWidth * zoom; val ch = layout.docHeight * zoom
-                    val minX = if (cw <= width) ((cw - width) / 2).toInt() else 0
-                    val maxX = if (cw <= width) minX else (cw - width).toInt()
-                    val minY = if (ch <= height) ((ch - height) / 2).toInt() else 0
-                    val maxY = if (ch <= height) minY else (ch - height).toInt()
+                    // Scroller liczy -tx/-ty, więc zakres z [ScrollRange] odwrócony.
+                    val rx = ScrollRange.of(layout.docWidth * zoom, width.toFloat(), marginX())
+                    val ry = ScrollRange.of(layout.docHeight * zoom, height.toFloat(), marginY())
+                    val minX = (-rx[1]).toInt(); val maxX = (-rx[0]).toInt()
+                    val minY = (-ry[1]).toInt(); val maxY = (-ry[0]).toInt()
                     // 2d-A1: na stanowisku rzut liczy model (oba kierunki naraz, ten sam wzór co OverScroller).
                     val lh = lane
                     if (lh != null) lh.fling(this, vx, vy)

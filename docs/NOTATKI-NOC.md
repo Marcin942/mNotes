@@ -754,3 +754,8 @@ oryginale; tablica: „100 %” = szerokość A4, eksport = kadr treści.
 10. Przewodnik: „Nowy” → Przewodnik — 17 stron, czy akapity nie nachodzą na rysunki przy czcionce tabletu.
 11. Układ współrzędnych: wstawianie i przesuwanie na kratce, kreska po linii siatki dociąga się; naklejki na ciemnym tle.
 12. Ustawienia: wyszukiwarka potocznie („gumka”, „zoom”, „ciemny”, „profil”); menu „⋮” przewija się na telefonie w poziomie.
+
+**28.10, 11:26 (Agent A, zatrzymanie nr 1):** FB6 „cała strona jako obraz” (`Snip.pagePlan` + akcja w `Editor.kt` + 2 testy
+w `SnipTest`) zacommitowane na `wip/f2c-strona-obraz` (07e5713), **nie na noc/** — w tej sesji uruchamianie Gradle zostało
+zablokowane uprawnieniami, więc kodu nie zbudowano ani nie przetestowano. Do zrobienia: `./gradlew :app:assembleDebug
+:app:testDebugUnitTest`, przy zielonym wyniku przenieść na `noc/f2c-strona-obraz`. Dysk: 13 GB wolne (87 %), RAM 26 GB wolne.

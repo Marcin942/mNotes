@@ -1,6 +1,7 @@
 package com.mdev.mnotes.core.edit
 
 import com.mdev.mnotes.core.geom.Bounds
+import com.mdev.mnotes.core.layout.Board
 import kotlin.math.ceil
 import kotlin.math.max
 import kotlin.math.min
@@ -22,6 +23,16 @@ object Snip {
         if (r.w < 1f || r.h < 1f) return null
         val sc = min(scale, maxPx / max(r.w, r.h))
         return Plan(r, ceil(r.w * sc).toInt().coerceAtLeast(1), ceil(r.h * sc).toInt().coerceAtLeast(1), sc)
+    }
+
+    /**
+     * FB6: cała strona jako obraz. Kartka w całości (2 px/pt wystarcza do czatu i sprawozdania, a A4 mieści się
+     * w ~1,2 × 1,7 tys. px); tablica tylko w kadrze treści [content], bo płótno to tysiące punktów pustego pola.
+     * Null dla pustej tablicy.
+     */
+    fun pagePlan(pageW: Float, pageH: Float, board: Boolean, content: Bounds?, scale: Float = 2f, maxPx: Int = 2400): Plan? {
+        val r = if (board) Board.frame(content, pageW, pageH) ?: return null else Bounds(0f, 0f, pageW, pageH)
+        return plan(r, pageW, pageH, margin = 0f, scale = scale, maxPx = maxPx)
     }
 
     /**

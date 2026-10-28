@@ -467,30 +467,10 @@ class Editor(val ctx: Context, val nbId: String) {
         val content = doc.content(p)
         val pageId = p.id
         repo.io.execute {
-            val png = runCatching {
-                val bmp = android.graphics.Bitmap.createBitmap(plan.wPx, plan.hPx, android.graphics.Bitmap.Config.ARGB_8888)
-                val c = android.graphics.Canvas(bmp)
-                val r = plan.rect; val sc = plan.scale
-                c.scale(sc, sc); c.translate(-r.l, -r.t)
-                val renderer = com.mdev.mnotes.render.PageRenderer(app.assets)
-                renderer.drawPaper(c, spec, sc, null)
-                spec.pdf?.let { pdf ->
-                    app.pdf.renderTile(nbId, pdf.asset, pdf.page, sc, Math.round(r.l * sc), Math.round(r.t * sc), plan.wPx, plan.hPx)?.let { bg ->
-                        c.drawBitmap(bg, null, android.graphics.RectF(r.l, r.t, r.l + plan.wPx / sc, r.t + plan.hPx / sc), null)
-                    }
-                }
-                renderer.drawElements(c, nbId, content, 0, r, sc, true, spec.darkPaper)
-                java.io.ByteArrayOutputStream().also { bmp.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it); bmp.recycle() }.toByteArray()
-            }.getOrNull()
+            val png = renderPng(spec, content, plan)
             if (png == null) { view?.post { say(T.t("Nie udało się utworzyć wycinka", "Could not create the snip")) }; return@execute }
             if (toClipboard) {
-                val ok = runCatching {
-                    val dir = java.io.File(ctx.cacheDir, "share").apply { mkdirs() }
-                    val f = java.io.File(dir, "wycinek-${System.currentTimeMillis()}.png").apply { writeBytes(png) }
-                    val uri = androidx.core.content.FileProvider.getUriForFile(ctx, "${ctx.packageName}.files", f)
-                    val cm = ctx.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
-                    view?.post { cm.setPrimaryClip(android.content.ClipData.newUri(ctx.contentResolver, "mNotes", uri)) }
-                }.isSuccess
+                val ok = pngToClipboard(png, "wycinek")
                 view?.post { say(if (ok) T.t("Wycinek skopiowany jako obraz", "Snip copied as an image") else T.t("Nie udało się skopiować wycinka", "Could not copy the snip")) }
                 return@execute
             }
@@ -506,6 +486,48 @@ class Editor(val ctx: Context, val nbId: String) {
             }
         }
     }
+
+    /**
+     * FB6: strona [i] jako PNG do schowka systemu (wklejenie do czatu grupy albo pracy bez eksportu pliku). Strona w
+     * oryginale, jak w eksporcie; tablica w kadrze treści.
+     */
+    fun copyPageAsImage(i: Int) {
+        val p = doc.pages.getOrNull(i) ?: return
+        val spec = p.spec
+        val content = doc.content(p)
+        val plan = Snip.pagePlan(spec.w, spec.h, spec.board, content.bounds)
+            ?: return say(T.t("Tablica jest pusta — nie ma czego kopiować", "The board is empty — nothing to copy"))
+        repo.io.execute {
+            val ok = renderPng(spec, content, plan)?.let { pngToClipboard(it, "strona-${i + 1}") } ?: false
+            view?.post { say(if (ok) T.t("Strona ${i + 1} skopiowana jako obraz", "Page ${i + 1} copied as an image") else T.t("Nie udało się skopiować strony", "Could not copy the page")) }
+        }
+    }
+
+    /** Prostokąt strony z planu [plan] jako PNG: papier, wzór, tło PDF i elementy. Wołane z wątku tła; null przy błędzie. */
+    private fun renderPng(spec: PageSpec, content: PageContent, plan: Snip.Plan): ByteArray? = runCatching {
+        val bmp = android.graphics.Bitmap.createBitmap(plan.wPx, plan.hPx, android.graphics.Bitmap.Config.ARGB_8888)
+        val c = android.graphics.Canvas(bmp)
+        val r = plan.rect; val sc = plan.scale
+        c.scale(sc, sc); c.translate(-r.l, -r.t)
+        val renderer = com.mdev.mnotes.render.PageRenderer(app.assets)
+        renderer.drawPaper(c, spec, sc, null)
+        spec.pdf?.let { pdf ->
+            app.pdf.renderTile(nbId, pdf.asset, pdf.page, sc, Math.round(r.l * sc), Math.round(r.t * sc), plan.wPx, plan.hPx)?.let { bg ->
+                c.drawBitmap(bg, null, android.graphics.RectF(r.l, r.t, r.l + plan.wPx / sc, r.t + plan.hPx / sc), null)
+            }
+        }
+        renderer.drawElements(c, nbId, content, 0, r, sc, true, spec.darkPaper)
+        java.io.ByteArrayOutputStream().also { bmp.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it); bmp.recycle() }.toByteArray()
+    }.getOrNull()
+
+    /** PNG do schowka przez FileProvider: inne aplikacje wklejają obraz, a nie ścieżkę. Wołane z wątku tła. */
+    private fun pngToClipboard(png: ByteArray, name: String): Boolean = runCatching {
+        val dir = java.io.File(ctx.cacheDir, "share").apply { mkdirs() }
+        val f = java.io.File(dir, "$name-${System.currentTimeMillis()}.png").apply { writeBytes(png) }
+        val uri = androidx.core.content.FileProvider.getUriForFile(ctx, "${ctx.packageName}.files", f)
+        val cm = ctx.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+        view?.post { cm.setPrimaryClip(android.content.ClipData.newUri(ctx.contentResolver, "mNotes", uri)) }
+    }.isSuccess
 
     /**
      * F15: autobalans bieli zaznaczonych obrazów — piksele pomniejszonego obrazu (najwyżej 256 px) liczone w tle,

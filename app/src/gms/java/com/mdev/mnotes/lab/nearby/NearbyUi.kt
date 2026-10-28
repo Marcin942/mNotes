@@ -6,6 +6,7 @@ import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.Matrix
 import android.net.Uri
 import android.bluetooth.BluetoothAdapter
 import android.os.Build
@@ -20,6 +21,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -31,8 +33,12 @@ import androidx.compose.material.icons.rounded.BluetoothSearching
 import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.Lock
 import androidx.compose.material.icons.rounded.PhoneAndroid
+import androidx.compose.material.icons.rounded.PhotoCamera
+import androidx.compose.material.icons.rounded.PhotoLibrary
 import androidx.compose.material.icons.rounded.Warning
+import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -45,6 +51,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -53,6 +60,8 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.dp
+import androidx.core.content.FileProvider
+import androidx.exifinterface.media.ExifInterface
 import com.mdev.mnotes.app.MNotesApp
 import com.mdev.mnotes.core.nearby.BtLimits
 import com.mdev.mnotes.core.nearby.LinkErrors
@@ -115,6 +124,9 @@ private fun linkDir(ctx: Context) = File(ctx.cacheDir, "nearby")
 /** Schodki kolejnych zdjęć z telefonu: przesunięcie w pt i po ilu zdjęciach od nowa. */
 private const val CASCADE_STEP = 24f
 private const val CASCADE = 6
+
+/** Najwięcej zdjęć z galerii naraz (kolejka i tak idzie po jednym). */
+private const val MAX_PICK = 20
 
 /**
  * Jedno okno łącza telefon ↔ tablet po obu stronach (2b-B1, `docs/NEARBY-PRZEBUDOWA.md` §3.7): ikona i duże zdanie
@@ -182,7 +194,8 @@ fun PhoneLinkDialog(start: LinkMode, ed: Editor?, files: List<Outgoing>? = null,
         }
         extra = 0
     }
-    val ready = allowed && (mode == LinkMode.PAIR || key != null) && (mode != LinkMode.SEND || picked)
+    // 3b-B4: telefon łączy się od razu po otwarciu okna (pamiętany tablet), zanim jest zdjęcie: potem idzie bez czekania.
+    val ready = allowed && (mode == LinkMode.PAIR || key != null)
     link = remember(mode, role, generation, ready, key?.contentHashCode()) {
         if (!ready) null else {
             val t: LinkTransport = if (bt) RfcommTransport(AndroidBtPort(ctx), { mainThread.post(it) }, store.peerAddress.ifEmpty { null }) else NearbyTransport(ctx)
@@ -238,16 +251,39 @@ fun PhoneLinkDialog(start: LinkMode, ed: Editor?, files: List<Outgoing>? = null,
         while (true) { delay(1_000); m.tick(); if (++n % 5 == 0) journals.save() }
     }
 
-    val pick = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
-        if (uri == null) { if (!picked) close(); return@rememberLauncherForActivityResult }
-        val photo = readPhoto(ctx, uri, fullPhoto)
-        if (photo == null) { note = T.t("Nie udało się wczytać zdjęcia.", "Could not read the photo."); return@rememberLauncherForActivityResult }
-        note = null
-        picked = true
-        link?.first?.sendFile(photo.name, photo.mime, photo.file) ?: waiting.add(photo)
+    // 3b-B4: zdjęcia z aparatu i z galerii (kilka naraz) do kolejki; czytane i zmniejszane w tle, wysyłane po kolei.
+    var preparing by remember { mutableIntStateOf(0) }
+    fun enqueue(uris: List<Uri>, shot: File? = null) {
+        if (uris.isEmpty()) return
+        preparing += uris.size
+        scope.launch {
+            for (u in uris) {
+                val photo = withContext(Dispatchers.IO) { readPhoto(ctx, u, fullPhoto) }
+                preparing--
+                if (photo == null) { note = T.t("Nie udało się wczytać zdjęcia.", "Could not read the photo."); continue }
+                note = null
+                picked = true
+                liveLink.value?.first?.sendFile(photo.name, photo.mime, photo.file) ?: waiting.add(photo)
+            }
+            shot?.delete()
+        }
     }
+    val pick = rememberLauncherForActivityResult(ActivityResultContracts.PickMultipleVisualMedia(MAX_PICK)) { uris -> enqueue(uris) }
     fun pickPhoto() = pick.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
-    LaunchedEffect(mode, allowed) { if (mode == LinkMode.SEND && allowed && !picked && files == null) pickPhoto() }
+    // Ścieżka w rememberSaveable: gdy system zamknie aktywność przy aparacie, zdjęcie po powrocie nie ginie.
+    val shotPath = rememberSaveable { mutableStateOf<String?>(null) }
+    val camera = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { ok ->
+        val f = shotPath.value?.let(::File)
+        shotPath.value = null
+        if (ok && f != null && f.length() > 0) enqueue(listOf(Uri.fromFile(f)), shot = f) else f?.delete()
+    }
+    fun shoot() {
+        val f = File(ctx.cacheDir, "share/lacze-${System.currentTimeMillis()}.jpg").apply { parentFile?.mkdirs() }
+        shotPath.value = f.path
+        runCatching { camera.launch(FileProvider.getUriForFile(ctx, "${ctx.packageName}.files", f)) }
+            .onFailure { shotPath.value = null; f.delete(); note = T.t("Brak aplikacji aparatu: wybierz zdjęcie z galerii.", "No camera app: pick a photo from the gallery.") }
+    }
+    val photoMode = start == LinkMode.SEND && files == null && mode == LinkMode.SEND
 
     val title = when (start) {
         LinkMode.PAIR -> T.t("Połącz telefon z tabletem", "Connect phone and tablet")
@@ -260,7 +296,6 @@ fun PhoneLinkDialog(start: LinkMode, ed: Editor?, files: List<Outgoing>? = null,
         title, onDismiss = close,
         confirm = when {
             digits != null -> T.t("Zgadza się", "They match")
-            mode == LinkMode.SEND && files == null && picked && (state is LinkState.Ready || state is LinkState.Sending) -> T.t("Następne zdjęcie", "Next photo")
             else -> null
         },
         onConfirm = {
@@ -271,7 +306,7 @@ fun PhoneLinkDialog(start: LinkMode, ed: Editor?, files: List<Outgoing>? = null,
                     start == LinkMode.PAIR -> close()
                     else -> { key = result.pairKey; mode = start; note = null }
                 }
-            } else pickPhoto()
+            }
         },
         dismissText = if (received > 0 || imported > 0 || sentSome) T.t("Gotowe", "Done") else T.t("Zamknij", "Close"),
     ) {
@@ -282,6 +317,18 @@ fun PhoneLinkDialog(start: LinkMode, ed: Editor?, files: List<Outgoing>? = null,
                 else if (mode == LinkMode.PAIR && start != LinkMode.PAIR) Line(T.t("Najpierw połącz telefon z tabletem (raz).", "First connect the phone and the tablet (once)."))
                 IssuesPart(ctx, issues)
                 StatePart(state, mode, role, me, store.peerName, if (notebooks) imported else received, link?.first, notebooks)
+                if (photoMode) {
+                    Button(onClick = { shoot() }, modifier = Modifier.fillMaxWidth().height(64.dp).padding(top = 8.dp)) {
+                        Icon(Icons.Rounded.PhotoCamera, null, modifier = Modifier.size(26.dp))
+                        Text(T.t("Zrób zdjęcie", "Take a photo"), style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(start = 10.dp))
+                    }
+                    OutlinedButton(onClick = { pickPhoto() }, modifier = Modifier.fillMaxWidth().padding(top = 6.dp)) {
+                        Icon(Icons.Rounded.PhotoLibrary, null, modifier = Modifier.size(20.dp))
+                        Text(T.t("Z galerii (kilka naraz)", "From gallery (several at once)"), modifier = Modifier.padding(start = 8.dp))
+                    }
+                    if (preparing > 0) Line(T.t("Przygotowuję zdjęcia: $preparing…", "Preparing photos: $preparing…"))
+                    else if (state !is LinkState.Ready && state !is LinkState.Sending && picked) Line(T.t("Zdjęcia czekają w kolejce i pójdą same po połączeniu.", "Photos wait in the queue and go by themselves once connected."))
+                }
                 if (mode == LinkMode.PAIR && digits == null) {
                     TextButton(onClick = { role = if (role == SyncRole.HOST) SyncRole.CLIENT else SyncRole.HOST }) {
                         Text(if (role == SyncRole.HOST) T.t("To urządzenie: tablet (odbiera) · zmień", "This device: tablet (receives) · change") else T.t("To urządzenie: telefon (wysyła) · zmień", "This device: phone (sends) · change"))
@@ -381,6 +428,7 @@ private fun StatePart(state: LinkState, mode: LinkMode, role: SyncRole, me: Stri
                 else T.t("Wstawiono zdjęć: $received. Możesz wysłać kolejne.", "Photos inserted: $received. You can send more.")
                 state.sent > 0 && notebooks -> T.t("Zeszyt jest już na drugim urządzeniu.", "The notebook is on the other device.")
                 state.sent > 0 -> T.t("Wstawiono na tablecie zdjęć: ${state.sent}.", "Photos inserted on the tablet: ${state.sent}.")
+                mode == LinkMode.SEND && !notebooks -> T.t("Połączono z tabletem „${state.peer}”. Zdjęcie trafi od razu na otwartą stronę.", "Connected to the tablet “${state.peer}”. The photo goes straight to the open page.")
                 else -> T.t("Połączono z „${state.peer}”.", "Connected to “${state.peer}”.")
             },
         )
@@ -519,12 +567,20 @@ private fun readPhoto(ctx: Context, uri: Uri, full: Boolean): Outgoing? = runCat
     val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
     BitmapFactory.decodeByteArray(raw, 0, raw.size, bounds)
     val longest = if (full) Int.MAX_VALUE else PhotoScale.LONGEST
+    // 3b-B4: obrót z EXIF (zdjęcie z aparatu telefonu). Przy przekodowaniu EXIF ginie, więc obracamy piksele; plik bez
+    // przekodowania niesie EXIF dalej, a tablet obraca go przy wstawianiu (`Assets`).
+    val turn = runCatching {
+        when (ExifInterface(raw.inputStream()).getAttributeInt(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL)) {
+            ExifInterface.ORIENTATION_ROTATE_90 -> 90f; ExifInterface.ORIENTATION_ROTATE_180 -> 180f; ExifInterface.ORIENTATION_ROTATE_270 -> 270f; else -> 0f
+        }
+    }.getOrDefault(0f)
     val plain = ("jpeg" in mime || "png" in mime) && (full || raw.size <= 4 shl 20 && maxOf(bounds.outWidth, bounds.outHeight) <= longest)
     if (plain) return Outgoing(uri.lastPathSegment ?: "zdjecie", mime, LinkFile.Memory(raw))
     val opts = BitmapFactory.Options().apply { inSampleSize = PhotoScale.sample(bounds.outWidth, bounds.outHeight, longest) }
     var bmp = BitmapFactory.decodeByteArray(raw, 0, raw.size, opts) ?: return null
     val (w, h) = PhotoScale.size(bmp.width, bmp.height, longest)
     if (w != bmp.width || h != bmp.height) Bitmap.createScaledBitmap(bmp, w, h, true).let { if (it !== bmp) { bmp.recycle(); bmp = it } }
+    if (turn != 0f) Bitmap.createBitmap(bmp, 0, 0, bmp.width, bmp.height, Matrix().apply { postRotate(turn) }, true).let { if (it !== bmp) { bmp.recycle(); bmp = it } }
     val out = ByteArrayOutputStream()
     bmp.compress(Bitmap.CompressFormat.JPEG, 88, out)
     bmp.recycle()

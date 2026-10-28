@@ -985,6 +985,28 @@ Nearby nie zmieniam do odpowiedzi Marcina na pytania z `plan/NEARBY-OPEN-SOURCE.
   4. „Styczne z punktu do okręgu”: punkt poza okręgiem, potem okrąg → dwie styczne i punkty styczności.
   5. Stuknij puste miejsce, gdy narzędzie czeka na okrąg: dymek „Tu nie ma okręgu (narysuj go i przytrzymaj pióro) · …”.
   6. Lasso na dwóch okręgach → „Konstrukcja ▸ Przecięcie okręgów i prosta przez punkty”: kropki i prosta przez nie.
+- **2c-A9 (5848b08):** tryb ciemny. Import PDF mierzy medianę jasności podglądu 32 px pierwszych 400 stron
+  (`PageTone.pdfPaper`): ciemny slajd dostaje ciemny papier i w trybie ciemnym się nie odwraca (zeszyty
+  zaimportowane wcześniej — bez zmian, papier jest zapisany przy imporcie). Obrazy: rysunki i zrzuty (≥ 5 %
+  przezroczystych pikseli albo 95 % w ≤ 24 kolorach) zmieniają się jak atrament, zdjęcia zostają (przełącznik zdjęć
+  bez zmian). `ThemeMap`: czerń na ciemnej stronie jaśnieje do L 0,83 (granat ok. 0,92 — dawniej oba ok. 0,94),
+  biały pisak na jasnej stronie zostaje biały, pipeta na zamienionej kresce wraca dokładnie do jej koloru; pipeta
+  domyślnie „Pierwotny” (u tych, którzy nie zmieniali ustawienia). `ThemeMapTest` przed poprawką: 3 FAIL.
+  **Nie sprawdzone:** wygląd czerni 0,83 na tablecie, czas importu dużego PDF (400 podglądów 32 px).
+  **Tablet:** Ustawienia → tryb stron „Ciemny”:
+  1. Zaimportuj PDF ze slajdami na ciemnym tle (i drugi zwykły): slajdy zostają ciemne, zwykłe strony ciemnieją.
+  2. Wstaw PNG z czarnym rysunkiem na przezroczystym tle i zrzut ekranu: oba widoczne (jasne linie); zdjęcie
+     z aparatu zostaje jak w aparacie.
+  3. Napisz granatem i czarnym obok siebie: na ciemnej stronie da się je odróżnić.
+  4. Wybierz biały pisak na jasnej stronie pokazanej po ciemnemu i pisz: kreska widoczna.
+  5. Pipeta na czerwonej kresce w trybie ciemnym → pióro dostaje dokładnie ten czerwony, który był użyty.
+- **2c-A10 (c19641b):** piórko (Krzywa → Piórko). Przeciągnięcie od ostatniego węzła zmienia jego uchwyt (dawniej
+  dokładało drugi węzeł w tym samym miejscu); ↶ w kapsule ✓/✕ i Backspace cofają ostatni węzeł; zamknięcie zeszytu
+  w trakcie szkicu zapisuje krzywą. `CurveDraftTest` (+4). **Nie sprawdzone na JVM:** zapis przy zamknięciu (ścieżka
+  `Editor.close`, test sprawdza tylko, że szkic ma krzywą do zapisania).
+  **Tablet:** Krzywa → Piórko: stuknij dwa węzły, potem przeciągnij od drugiego — wyciąga się uchwyt, węzłów dalej
+  dwa. ↶ w kapsule (albo Backspace z klawiaturą) zdejmuje ostatni węzeł; przy ostatnim szkic znika. Postaw trzy węzły
+  i wyjdź z zeszytu strzałką wstecz — po powrocie krzywa jest na stronie.
 
 ### Na tablecie po FAZIE 2c/2d — kolejność (z `dzienniki/PRZEGLAD-FABLE-2.md` §5, szczegóły tam)
 Instalacja: `labDebug` z `noc/wszystko` (tablet i telefon), do pkt 16 też `coreDebug`. Przy punktach poprawionych

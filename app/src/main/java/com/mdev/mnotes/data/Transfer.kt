@@ -453,6 +453,22 @@ class Exporter(private val repo: Repository, private val assets: Assets, private
 /** Import PDF, obrazów i zeszytów .mnotes — kopiuje dane do prywatnego katalogu zeszytu; zwrócone meta trzeba zarejestrować przez `repo.addNotebook` na wątku UI. */
 class Importer(private val repo: Repository, private val pdf: PdfPool) {
     private val cover = 0xFF3E7CB1.toInt()
+    /** Tyle pierwszych stron PDF dostaje pomiar tonu (dalsze — jasne): tysiące stron mierzyłyby się zbyt długo. */
+    private val tonePages = 400
+
+    /**
+     * 2c-A9: papier strony PDF z podglądu 32 px — slajdy z ciemnym tłem dostają ciemny papier i w trybie ciemnym nie
+     * odwracają się na jasne. Null — zwykła jasna strona (albo podgląd się nie udał).
+     */
+    private fun pdfPaper(nb: String, asset: String, page: Int, w: Float, h: Float): Int? {
+        val pw = 32; val ph = (32f * h / w.coerceAtLeast(1f)).toInt().coerceIn(8, 96)
+        val bmp = pdf.render(nb, asset, page, pw, ph) ?: return null
+        return try {
+            val px = IntArray(pw * ph)
+            bmp.getPixels(px, 0, pw, 0, 0, pw, ph)
+            com.mdev.mnotes.core.color.PageTone.pdfPaper(px)
+        } catch (_: Throwable) { null } finally { bmp.recycle() }
+    }
 
     fun importPdf(input: InputStream, title: String, folderId: String?): NotebookMeta? {
         val id = newId()
@@ -462,7 +478,8 @@ class Importer(private val repo: Repository, private val pdf: PdfPool) {
         val now = System.currentTimeMillis()
         val pages = (0 until count).map { i ->
             val (w, h) = pdf.pageSize(id, asset, i) ?: (595f to 842f)
-            PageMeta(newId(), PageSpec(w = w, h = h, paper = Paper.WHITE, template = Template.BLANK, pdf = PdfRef(asset, i)))
+            val paper = if (i < tonePages) pdfPaper(id, asset, i, w, h) ?: Paper.WHITE else Paper.WHITE
+            PageMeta(newId(), PageSpec(w = w, h = h, paper = paper, template = Template.BLANK, pdf = PdfRef(asset, i)))
         }
         return NotebookMeta(id, title, folderId, now, now, now, cover, CoverStyle.PLAIN, pdfDoc = true, pages = pages)
     }

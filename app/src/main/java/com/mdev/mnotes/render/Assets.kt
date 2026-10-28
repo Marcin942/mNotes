@@ -59,6 +59,20 @@ class Assets(private val repo: Repository) {
 
     fun drop(nb: String, name: String) = synchronized(this) { lru.remove("$nb/$name")?.let { bytes -= it.allocationByteCount } }
 
+    private val drawings = java.util.concurrent.ConcurrentHashMap<String, Boolean>()
+
+    /** 2c-A9: rysunek albo zrzut (true; w trybie ciemnym zmienia się jak atrament) czy zdjęcie — raz na obraz. */
+    fun isDrawing(nb: String, name: String, bmp: Bitmap): Boolean = drawings.getOrPut("$nb/$name") {
+        try {
+            // Bez wygładzania: mieszanie sąsiadów dodałoby rysunkowi pośrednich kolorów.
+            val s = Bitmap.createScaledBitmap(bmp, 32, 32, false)
+            val px = IntArray(32 * 32)
+            s.getPixels(px, 0, 32, 0, 0, 32, 32)
+            if (s !== bmp) s.recycle()
+            com.mdev.mnotes.core.color.PageTone.isDrawing(px)
+        } catch (_: Throwable) { false }
+    }
+
     companion object {
         const val MAX_DIM = 3072
         const val MAX_BYTES = 96L * 1024 * 1024

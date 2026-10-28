@@ -374,10 +374,14 @@ class PageRenderer(private val assets: Assets?) {
     private var fxCached: com.mdev.mnotes.core.model.ImageFx? = null
     private var fxFilterCached: android.graphics.ColorMatrixColorFilter? = null
 
-    private fun fxFilter(fx: com.mdev.mnotes.core.model.ImageFx): android.graphics.ColorMatrixColorFilter? {
-        // 2b-A9: zdjęcia odwracamy tylko na życzenie (domyślnie zostają jak w aparacie).
+    /** Czy obraz na stronie po zamianie trybu to rysunek albo zrzut (klasyfikacja tylko, gdy jest zamiana). */
+    private fun drawingNow(nb: String, im: ImageEl, bmp: android.graphics.Bitmap) = theme != null && assets?.isDrawing(nb, im.asset, bmp) == true
+
+    private fun fxFilter(fx: com.mdev.mnotes.core.model.ImageFx, drawing: Boolean): android.graphics.ColorMatrixColorFilter? {
+        // 2b-A9: zdjęcia odwracamy tylko na życzenie (domyślnie zostają jak w aparacie); 2c-A9: rysunki i zrzuty zawsze,
+        // bo czarna kreska na przezroczystym tle znikała na ciemnej stronie.
         val t = theme
-        if (t != null && themePhotos) {
+        if (t != null && (themePhotos || drawing)) {
             if (fx.isNone) return themeImageFilter()
             return android.graphics.ColorMatrixColorFilter(android.graphics.ColorMatrix(fx.matrix()).apply { postConcat(android.graphics.ColorMatrix(t.imageMatrix)) })
         }
@@ -397,7 +401,7 @@ class PageRenderer(private val assets: Assets?) {
         rect.set(im.cx - im.w * 0.5f, im.cy - im.h * 0.5f, im.cx + im.w * 0.5f, im.cy + im.h * 0.5f)
         if (bmp != null) {
             bmpPaint.alpha = (im.alpha * 255f).toInt().coerceIn(0, 255)
-            val filter = fxFilter(im.fx)
+            val filter = fxFilter(im.fx, drawingNow(nb, im, bmp))
             bmpPaint.colorFilter = filter
             val cr = im.crop
             if (cr.isFull) c.drawBitmap(bmp, null, rect, bmpPaint)
@@ -405,7 +409,7 @@ class PageRenderer(private val assets: Assets?) {
                 val b = CropBake.bake(bmp, cr, (im.w * BAKE_PX_PER_PT).roundToInt(), (im.h * BAKE_PX_PER_PT).roundToInt())
                 baked.add(b)
                 c.drawBitmap(b, null, rect, bmpPaint)
-            } else if (cr.a != 0f) drawTilted(c, bmp, im)
+            } else if (cr.a != 0f) drawTilted(c, nb, bmp, im)
             else {
                 val bw = bmp.width; val bh = bmp.height
                 src.set((cr.l * bw).roundToInt(), (cr.t * bh).roundToInt(), (cr.r * bw).roundToInt().coerceAtLeast(1), (cr.b * bh).roundToInt().coerceAtLeast(1))
@@ -424,7 +428,7 @@ class PageRenderer(private val assets: Assets?) {
      * Wycinek obrócony w pliku: bitmapa jako cieniowanie prostokąta obrazu (krawędzie wygładzone, bez przycinania maską).
      * Płótno jest już obrócone o obrót obrazu; dołożony kąt wycinka prostuje plik pod ramką.
      */
-    private fun drawTilted(c: Canvas, bmp: Bitmap, im: ImageEl) {
+    private fun drawTilted(c: Canvas, nb: String, bmp: Bitmap, im: ImageEl) {
         val f = com.mdev.mnotes.core.edit.CropGeom.frameOf(im.crop, bmp.width.toFloat(), bmp.height.toFloat())
         val s = im.w / (2f * f.hw)
         tiltMatrix.reset()
@@ -436,7 +440,7 @@ class PageRenderer(private val assets: Assets?) {
         sh.setLocalMatrix(tiltMatrix)
         tiltPaint.shader = sh
         tiltPaint.alpha = (im.alpha * 255f).toInt().coerceIn(0, 255)
-        tiltPaint.colorFilter = fxFilter(im.fx)
+        tiltPaint.colorFilter = fxFilter(im.fx, drawingNow(nb, im, bmp))
         c.drawRect(rect, tiltPaint)
         tiltPaint.shader = null
         tiltPaint.colorFilter = null

@@ -27,6 +27,13 @@ object ThemeMap {
     private const val DARK_PAPER_L = 0.24
     private const val LIGHT_PAPER_L = 0.97
     private const val INK_MAX = 0.94
+    /**
+     * 2c-A9: neutralny atrament (czerń) na ciemnej stronie jaśnieje najwyżej do tylu — kolorowy (granat) zachowuje
+     * kontrast i dochodzi do ok. 0,92, więc przy wspólnym pułapie 0,94 granat i czerń wyglądały tak samo.
+     */
+    private const val NEUTRAL_MAX = 0.83
+    /** Atrament neutralny jasny jak papier (± tyle L) — na kartce niewidoczny, np. biały pisak na jasnej stronie. */
+    private const val SAME_L = 0.02
     private const val INK_MIN = 0.12
     private const val NEUTRAL_C = 0.04
     private const val HL_DARK_MAX = 0.6
@@ -43,7 +50,14 @@ object ThemeMap {
         private val inks = ConcurrentHashMap<Int, Int>()
         private val hls = ConcurrentHashMap<Int, Int>()
 
-        fun ink(argb: Int): Int = inks.getOrPut(argb) { mapInk(argb, srcPaper, dstPaper, toDark) }
+        /** Wydane kolory → oryginał: pipeta na zamienionej kresce wraca dokładnie do jej koloru (2c-A9). */
+        private val back = ConcurrentHashMap<Int, Int>()
+        @Volatile private var origin: Transform? = null
+
+        fun ink(argb: Int): Int {
+            origin?.back?.get(argb)?.let { return it }
+            return inks.getOrPut(argb) { mapInk(argb, srcPaper, dstPaper, toDark) }.also { back.putIfAbsent(it, argb) }
+        }
         fun highlighter(argb: Int): Int = hls.getOrPut(argb) { mapHighlighter(argb, toDark) }
         /** Kryte wypełnienie (tło pola tekstu, wiaderko): zachowuje się jak papier, nie jak atrament (2c-A2). */
         fun surface(argb: Int): Int = surfaces.getOrPut(argb) { mapSurface(argb, srcPaper, dstPaper, toDark) }
@@ -56,7 +70,7 @@ object ThemeMap {
         val imageMatrix: FloatArray by lazy { imageMatrix(toDark, dstPaper) }
 
         /** Przekształcenie w drugą stronę (pipeta: widoczny kolor → atrament, który tak wygląda). */
-        fun reverse(): Transform = transform(dstPaper, !toDark)
+        fun reverse(): Transform = transform(dstPaper, !toDark).also { it.origin = this }
     }
 
     private val transforms = ConcurrentHashMap<Long, Transform>()
@@ -129,9 +143,12 @@ object ThemeMap {
         val o = oklab(argb); val L = o[0]
         val lp = oklab(src)[0]; val lq = oklab(dst)[0]
         val neutral = hypot(o[1], o[2]) < NEUTRAL_C
+        // 2c-A9: biały pisak na jasnej stronie (albo czarny na ciemnej) był pisany na stronie pokazanej po zamianie,
+        // gdzie go widać — zostaje, jaki jest, zamiast zlać się z nowym papierem.
+        if (neutral && (if (toDark) L >= lp - SAME_L else L <= lp + SAME_L)) return argb
         val nl = if (toDark) {
             val d = max(0.0, lp - L)
-            if (neutral) lq + d * (INK_MAX - lq) / max(lp, 0.05) else max(L, lq + d).coerceAtMost(INK_MAX + 0.04)
+            if (neutral) lq + d * (NEUTRAL_MAX - lq) / max(lp, 0.05) else max(L, lq + d).coerceAtMost(INK_MAX + 0.04)
         } else {
             val d = max(0.0, L - lp)
             if (neutral) lq - d * (lq - INK_MIN) / max(1.0 - lp, 0.05) else min(L, lq - d).coerceAtLeast(INK_MIN - 0.04)

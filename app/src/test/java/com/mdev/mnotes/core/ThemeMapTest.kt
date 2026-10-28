@@ -30,7 +30,8 @@ class ThemeMapTest {
         val paper = toDark.dstPaper
         assertEquals(0.24, L(paper), 0.01)
         val ink = toDark.ink(0xFF000000.toInt())
-        assertTrue("czarne pismo jasne, ale nie białe jak ekran: ${L(ink)}", L(ink) in 0.85..0.95)
+        // 2c-A9: czerń do 0,83 (granat ok. 0,92 — muszą się różnić), dalej jasna, ale nie biała jak ekran.
+        assertTrue("czarne pismo jasne, ale nie białe jak ekran: ${L(ink)}", L(ink) in 0.80..0.95)
         // Z ciemnej strony do jasnej: biały atrament robi się ciemny.
         val back = ThemeMap.transform(0xFF202124.toInt(), toDark = false)
         assertTrue(L(back.ink(0xFFFFFFFF.toInt())) < 0.25)
@@ -125,5 +126,32 @@ class ThemeMapTest {
         // #767676 na białym to znana granica AA (4,54:1).
         assertEquals(4.54, ThemeMap.contrastWcag(0xFF767676.toInt(), 0xFFFFFFFF.toInt()), 0.01)
         assertEquals(ThemeMap.contrastWcag(0xFF1976D2.toInt(), 0xFFFFF59D.toInt()), ThemeMap.contrastWcag(0xFFFFF59D.toInt(), 0xFF1976D2.toInt()), 1e-12)
+    }
+
+    // — 2c-A9 —
+
+    private fun dE(a: Int, b: Int): Double { val x = ThemeMap.oklab(a); val y = ThemeMap.oklab(b); return kotlin.math.sqrt((x[0] - y[0]) * (x[0] - y[0]) + (x[1] - y[1]) * (x[1] - y[1]) + (x[2] - y[2]) * (x[2] - y[2])) }
+
+    @Test fun penPaletteSurvivesTheRoundTrip() {
+        val back = toDark.reverse()
+        for (c in PEN) assertTrue("%08X → ΔE %.4f".format(c, dE(c, back.ink(toDark.ink(c)))), dE(c, back.ink(toDark.ink(c))) < 0.01)
+    }
+
+    @Test fun navyAndBlackStayApartOnDark() {
+        val navy = toDark.ink(0xFF1A237E.toInt()); val black = toDark.ink(0xFF000000.toInt())
+        assertTrue(abs(L(navy) - L(black)) >= 0.08 || ThemeMap.contrastWcag(navy, black) >= 1.5)
+    }
+
+    @Test fun whiteInkOnALightPageStaysVisibleOnDark() {
+        val w = toDark.ink(0xFFFFFFFF.toInt())
+        assertTrue("WCAG ${ThemeMap.contrastWcag(w, toDark.dstPaper)}", ThemeMap.contrastWcag(w, toDark.dstPaper) >= 4.5)
+        // I odwrotnie: czarna kreska na czarnym papierze w trybie jasnym.
+        val toLight = ThemeMap.transform(Paper.BLACK, toDark = false)
+        assertTrue(ThemeMap.contrastWcag(toLight.ink(0xFF000000.toInt()), toLight.dstPaper) >= 4.5)
+    }
+
+    private companion object {
+        /** Typowe kolory pióra: czerń, granat, niebieski, czerwony, zielony, fiolet, pomarańcz, brąz. */
+        val PEN = intArrayOf(0xFF000000.toInt(), 0xFF1A237E.toInt(), 0xFF1565C0.toInt(), 0xFFE53935.toInt(), 0xFF2E7D32.toInt(), 0xFF6A1B9A.toInt(), 0xFFEF6C00.toInt(), 0xFF5D4037.toInt())
     }
 }

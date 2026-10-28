@@ -886,3 +886,27 @@ Nearby nie zmieniam do odpowiedzi Marcina na pytania z `plan/NEARBY-OPEN-SOURCE.
   **W toku:** raport w `dzienniki/RAPORT-NOCY.md` i lista na tablet z `PRZEGLAD-FABLE-2.md` §5 — po PILNYM 2d-A1
   (stanowisko od nowa, polecenie Marcina 12:23).
 
+- **2d-A1 stanowisko od nowa (PILNE, 12:25–12:50)** — `noc/f2d-stanowisko`: projekt `docs/STANOWISKO-PROJEKT.md`,
+  model `core/layout/Workspace` + rzut `core/layout/Fling` (a2eb683), widok `editor/WorkspaceView` z pasami (f4e50c6,
+  19e1a1e). Jeden stan widoku dla N dokumentów: jedno powiększenie, wspólne przesunięcie, każdy dokument osobno wzdłuż
+  stron; odstęp dokument–dokument = odstęp stron (14 pt × zoom); zoom wokół palców bez sprzężenia; rzut w obu osiach
+  wzorem `OverScroller`; kierunek wspólny (domyślnie jak pierwszy dokument, „⋮” → Układ zmienia całe stanowisko, po
+  zamknięciu dołożonych każdy wraca do swojego); pas poza ekranem > 2 s zwalnia kafelki. Usunięte: `StationCanvas`,
+  haki starego stanowiska w `NoteView`, geometria `Workbench` i `DualRows` (oprócz wyboru zeszytu). Zapis stanowisk
+  zgodny wstecz (nowe pola `m`, `o`, `a`). Testy: core 841, lab 912 (po 2 pominięte), 0 porażek, oba APK; nowe testy
+  JVM: `WorkspaceTest` (11), `FlingTest` (3), `WorkbenchTest` (stary zapis). Jeden dokument: ta sama ścieżka co przed
+  zmianą (`OverScroller`, własne granice). **Nie sprawdzone:** nic na urządzeniu — płynność, „czucie” rzutu, pamięć.
+  **Tablet (stanowisko, dwa zeszyty, potem trzy):** „⋮” → „Dołóż zeszyt poniżej…”, wybierz zeszyt.
+  1. Szczypnij dwoma palcami nad pierwszym, potem nad drugim dokumentem: punkt pod palcami stoi, nic nie drga, oba
+     dokumenty rosną razem jak jeden; granice zoomu jak w jednym zeszycie.
+  2. Przesuń palcem w bok i puść z rozpędem: jedzie tylko dokument pod palcem i wyhamowuje płynnie; w pionie z rozpędem:
+     jadą oba razem i też wyhamowują; po skosie: oba kierunki naraz. Dotknięcie w trakcie zatrzymuje ruch.
+  3. Odstęp między dokumentami wygląda jak odstęp między stronami przy każdym powiększeniu; na górze i dole marginesy
+     jak w zeszycie.
+  4. Dołóż trzeci zeszyt: to samo dla trzech; ✕ przy nagłówku środkowego zamyka go, pozostałe stoją w miejscu.
+  5. „⋮” → Układ → Pionowo: dokumenty stają kolumnami obok siebie, ruch lustrzanie (pion osobno, poziom razem).
+     Zamknij dołożone — główny zeszyt wraca do swojego układu.
+  6. Lasso w jednym dokumencie, przeciągnij zaznaczenie nad drugi (widać je nad nim) i puść: przechodzi tam w tym samym
+     miejscu ekranu; cofnij w każdym dokumencie osobno.
+  7. Dwa duże PDF-y: przewiń jeden daleko poza ekran, odczekaj kilka sekund, wróć — strony odrysowują się, aplikacja
+     nie zwalnia. Zapisz stanowisko („Stanowiska”), zamknij i otwórz zapisane: wraca powiększenie, przesunięcia i aktywny dokument.

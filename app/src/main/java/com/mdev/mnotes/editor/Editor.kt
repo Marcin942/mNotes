@@ -484,8 +484,23 @@ class Editor(val ctx: Context, val nbId: String) {
         selTick++
     }
 
-    fun recolorSel(color: Int) = replaceSel { e ->
-        when (e) { is Stroke -> e.withStyle(color = if (e.pen == PenKind.HIGHLIGHTER) com.mdev.mnotes.ui.softenForHighlighter(color) else color); is TextBox -> e.copy(color = color); is FillEl -> e.copy(color = if (e.hl) com.mdev.mnotes.ui.softenForHighlighter(color) else color); else -> e }
+    fun recolorSel(color: Int) {
+        val p = selPage() ?: return
+        replaceSel { e ->
+            native(p, when (e) { is Stroke -> e.withStyle(color = if (e.pen == PenKind.HIGHLIGHTER) com.mdev.mnotes.ui.softenForHighlighter(color) else color); is TextBox -> e.copy(color = color); is FillEl -> e.copy(color = if (e.hl) com.mdev.mnotes.ui.softenForHighlighter(color) else color); else -> e })
+        }
+    }
+
+    /**
+     * 3c-A1b: przekształcenie, w którym strona jest teraz pokazana (null — jak powstała). Kolory wybrane na niej
+     * przechodzą przez [native] przed zapisem: biały w trybie ciemnym zapisuje się jako czarny itd.
+     */
+    fun shownTheme(p: PageState): com.mdev.mnotes.core.color.ThemeMap.Transform? =
+        com.mdev.mnotes.core.color.ThemeMap.forPage(p.spec.paper, p.spec.inverted, settings.pageTheme)
+    fun native(p: PageState, argb: Int): Int = shownTheme(p)?.native(argb) ?: argb
+    fun <E : Element> native(p: PageState, e: E): E {
+        @Suppress("UNCHECKED_CAST")
+        return (shownTheme(p)?.native(e) ?: e) as E
     }
 
     fun setSelWidth(w: Float) = replaceSel { e -> if (e is Stroke) e.withStyle(width = w) else e }
@@ -742,11 +757,18 @@ class Editor(val ctx: Context, val nbId: String) {
         val content = doc.content(p)
         if (req.existing == null) {
             if (t == null || t.text.isBlank()) return
-            exec(withOverflowPage(p, t, DocEdit.Elements(p.id, ElementsEdit.add(content, listOf(t)))))
-            select(p.id, setOf(t.id))
+            val n = native(p, t)
+            exec(withOverflowPage(p, n, DocEdit.Elements(p.id, ElementsEdit.add(content, listOf(n)))))
+            select(p.id, setOf(n.id))
         } else {
             if (t == null || t.text.isBlank()) { exec(DocEdit.Elements(p.id, ElementsEdit.remove(content, setOf(req.existing.id)))); clearSel() }
-            else exec(withOverflowPage(p, t, DocEdit.Elements(p.id, ElementsEdit.replace(content, mapOf(req.existing.id to t)))))
+            else {
+                // Tylko kolor zmieniony w oknie przechodzi przez native — biały „korektor” zapisany na stronie zostaje.
+                val e = req.existing
+                val n = if (t.color == e.color && t.fill == e.fill) t
+                    else native(p, t).let { m -> m.copy(color = if (t.color == e.color) t.color else m.color, fill = if (t.fill == e.fill) t.fill else m.fill) }
+                exec(withOverflowPage(p, n, DocEdit.Elements(p.id, ElementsEdit.replace(content, mapOf(e.id to n)))))
+            }
         }
     }
 
@@ -937,7 +959,7 @@ class Editor(val ctx: Context, val nbId: String) {
     /** Dopisuje wynik konstrukcji w kolorze i grubości aktywnego pióra; zaznacza wynik (jedno cofnięcie). */
     fun applyConstruction(op: ConstructOps.Op) {
         val p = selPage() ?: return
-        val ink = (if (pen.kind == PenKind.HIGHLIGHTER) 0xFF37474F.toInt() else pen.color) or (0xFF shl 24)
+        val ink = native(p, (if (pen.kind == PenKind.HIGHLIGHTER) 0xFF37474F.toInt() else pen.color) or (0xFF shl 24))
         val els = constructed(p, op.build(ink, pen.width.coerceIn(0.6f, 3f)), ConstructOps.failOf(op.id))
             ?: return say(T.t("Ta konstrukcja nie ma rozwiązania dla zaznaczonych kształtów", "This construction has no solution for the selected shapes"))
         if (els.isEmpty()) return
@@ -982,7 +1004,7 @@ class Editor(val ctx: Context, val nbId: String) {
         if (picked == null) { say(GeoTool.missHint(geoKind, geoInputs.size, T.pl)); return }
         geoInputs += picked.input; geoPicks += picked
         if (geoInputs.size < geoKind.inputs.size) { view?.invalidate(); return }
-        val ink = (if (pen.kind == PenKind.HIGHLIGHTER) 0xFF37474F.toInt() else pen.color) or (0xFF shl 24)
+        val ink = native(page, (if (pen.kind == PenKind.HIGHLIGHTER) 0xFF37474F.toInt() else pen.color) or (0xFF shl 24))
         val kind = geoKind; val w = pen.width.coerceIn(0.6f, 3f); val names = settings.constructNames; val pl = T.pl; val angle = geoAngle
         val picks = geoPicks.toList()
         val built = GeoTool.build(kind, geoInputs.toList(), ink, w, names, pl, angle)
@@ -1041,7 +1063,7 @@ class Editor(val ctx: Context, val nbId: String) {
         val shut = com.mdev.mnotes.core.shapes.CurveFit.closed(c)
         val p = pen
         val s = Stroke(Ids.next(), p.kind, p.color, p.width, com.mdev.mnotes.core.shapes.Bezier.sample(c), line = p.style, ctrl = c, fill = if (shut && settings.curveFill) p.color or (0xFF shl 24) else 0)
-        exec(DocEdit.Elements(page.id, ElementsEdit.add(doc.content(page), listOf(s))))
+        exec(DocEdit.Elements(page.id, ElementsEdit.add(doc.content(page), listOf(native(page, s)))))
         select(page.id, setOf(s.id))
     }
 
@@ -1183,7 +1205,7 @@ class Editor(val ctx: Context, val nbId: String) {
         }
         val d = Axes.build(s, left, top)
         // Kolor aktywnego pióra (zakreślacz dałby blade osie, więc wtedy grafit); siatka to ten sam kolor, przygaszony.
-        val ink = (if (pen.kind == PenKind.HIGHLIGHTER) 0xFF37474F.toInt() else pen.color) or (0xFF shl 24)
+        val ink = native(page, (if (pen.kind == PenKind.HIGHLIGHTER) 0xFF37474F.toInt() else pen.color) or (0xFF shl 24))
         val faint = (ink and 0xFFFFFF) or (0x48 shl 24)
         fun line(xy: FloatArray, width: Float, color: Int): Stroke {
             val pts = FloatArray(xy.size / 2 * 3)
@@ -1633,13 +1655,14 @@ class Editor(val ctx: Context, val nbId: String) {
      * Pędzel formatu: kopia elementu w kolorze i stylu pióra [p]; null, gdy nie ma czego zmienić (obraz, taśma,
      * element zablokowany, ten sam styl). Zakreślacz nie przefarbowuje tekstu (byłby nieczytelny).
      */
-    fun painted(e: Element, p: ActivePen = pen): Element? {
+    fun painted(e: Element, page: PageState? = null, p: ActivePen = pen): Element? {
         if (e.locked) return null
         val hl = p.kind == PenKind.HIGHLIGHTER
+        val c = if (hl || page == null) p.color else native(page, p.color)
         return when (e) {
-            is Stroke -> if (e.pen == p.kind && e.color == p.color && e.width == p.width && e.line == p.style) null else e.withStyle(p.color, p.width, p.kind, p.style)
-            is FillEl -> if (e.color == p.color && e.hl == hl) null else e.copy(color = p.color, hl = hl)
-            is TextBox -> if (hl || e.color == p.color) null else e.copy(color = p.color)
+            is Stroke -> if (e.pen == p.kind && e.color == c && e.width == p.width && e.line == p.style) null else e.withStyle(c, p.width, p.kind, p.style)
+            is FillEl -> if (e.color == c && e.hl == hl) null else e.copy(color = c, hl = hl)
+            is TextBox -> if (hl || e.color == c) null else e.copy(color = c)
             else -> null
         }
     }
@@ -1669,7 +1692,7 @@ class Editor(val ctx: Context, val nbId: String) {
                 var at = 0
                 while (at < cur.size && (cur[at] is FillEl || (cur[at] is ImageEl && cur[at].locked))) at++
                 val hl = p.kind == PenKind.HIGHLIGHTER
-                val el = FillEl(Ids.next(), if (hl) p.color else p.color or (0xFF shl 24), hl, rings)
+                val el = native(pg, FillEl(Ids.next(), if (hl) p.color else p.color or (0xFF shl 24), hl, rings))
                 val after = cur.subList(0, at) + el + cur.subList(at, cur.size)
                 exec(DocEdit.Elements(pg.id, ElementsEdit.diff(doc.content(pg), PageContent.of(after))))
             }

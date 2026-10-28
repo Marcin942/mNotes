@@ -822,7 +822,7 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
             c.clipRect(0f, 0f, spec.w, spec.h)
             // Na przekształconej stronie (tryb ciemny/jasny, 2b-A9) kreska w trakcie ma ten sam kolor co po zatwierdzeniu.
             val th = themeFor(spec)
-            val col = if (th == null) builder.penColor else if (builder.penKind == PenKind.HIGHLIGHTER) th.highlighter(builder.penColor) else th.ink(builder.penColor)
+            val col = if (th == null) builder.penColor else if (builder.penKind == PenKind.HIGHLIGHTER) th.highlighter(builder.penColor) else th.ink(th.native(builder.penColor))
             val dk = th?.toDark ?: spec.darkPaper
             if (shapeSnapped) renderer.drawStrokeData(c, builder.penKind, col, builder.width, shapePts, shapePts.size / 3, zoom, dk, shapePoly, builder.line, true)
             else {
@@ -1934,7 +1934,7 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
         fun sy(y: Float) = (oy + y) * zoom + ty
         val p = ed.pen
         val th = themeFor(doc.pages[pi].spec)
-        val ink = th?.ink(p.color) ?: p.color
+        val ink = th?.ink(th.native(p.color)) ?: p.color
         d.ctrl()?.let { cc ->
             val s = Bezier.sample(cc, 2f / zoom)
             tmpPath.rewind(); tmpPath.moveTo(sx(s[0]), sy(s[1]))
@@ -2748,7 +2748,7 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
         if (tiny) { invalidate(); return }   // samo dotknięcie środka kątomierza nie zostawia kropki
         if (stroke == null || pi !in doc.pages.indices) return
         val page = doc.pages[pi]
-        ed.exec(DocEdit.Elements(page.id, ElementsEdit.add(doc.content(page), listOf(stroke))))
+        ed.exec(DocEdit.Elements(page.id, ElementsEdit.add(doc.content(page), listOf(ed.native(page, stroke)))))
         ed.noteWriting()
         // Kształt (i krzywa) z uchwytami od razu zaznaczony — niebieskie punkty pozwalają go przekształcić.
         if (snapped && !quiet) ed.select(page.id, setOf(stroke.id))
@@ -3122,7 +3122,7 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
         renderer.drawElements(c, doc.id, doc.content(page), 0, Bounds(zw.x, zw.y, zw.x + rw, zw.y + rh), z, false, spec.darkPaper)
         renderer.theme = null
         if (liveActive && livePage == zwPage) {
-            val col = if (th == null) builder.penColor else if (builder.penKind == PenKind.HIGHLIGHTER) th.highlighter(builder.penColor) else th.ink(builder.penColor)
+            val col = if (th == null) builder.penColor else if (builder.penKind == PenKind.HIGHLIGHTER) th.highlighter(builder.penColor) else th.ink(th.native(builder.penColor))
             val dk = th?.toDark ?: spec.darkPaper
             if (shapeSnapped) renderer.drawStrokeData(c, builder.penKind, col, builder.width, shapePts, shapePts.size / 3, z, dk, shapePoly, builder.line, true)
             else renderer.drawStrokeData(c, builder.penKind, col, builder.width, builder.pts, builder.count, z, dk, line = builder.line)
@@ -3299,7 +3299,7 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
         // Wypełnienie przejmuje styl tylko wtedy, gdy rysik jest na nim samym, a nie na linii leżącej na nim.
         val onInk = hits.any { it !is FillEl }
         val repl = HashMap<Element, Element>()
-        for (e in hits) if (!(onInk && e is FillEl)) ed.painted(e)?.let { repl[e] = it }
+        for (e in hits) if (!(onInk && e is FillEl)) ed.painted(e, page)?.let { repl[e] = it }
         if (repl.isEmpty()) return
         eraseStart.getOrPut(page.id) { cur }
         doc.applyElements(page.id, ElementsEdit.diff(cur, PageContent.of(cur.elements.map { repl[it] ?: it })))
@@ -3313,7 +3313,7 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
                 val poly = lp.copyOf(2 * ln)
                 val cur = doc.content(page)
                 var changed = false
-                val out = cur.elements.map { e -> if (EraseMath.selectedByLasso(e, poly)) ed.painted(e)?.also { changed = true } ?: e else e }
+                val out = cur.elements.map { e -> if (EraseMath.selectedByLasso(e, poly)) ed.painted(e, page)?.also { changed = true } ?: e else e }
                 if (changed) ed.exec(DocEdit.Elements(page.id, ElementsEdit.diff(cur, PageContent.of(out))))
             }
             ln = 0; lPage = -1

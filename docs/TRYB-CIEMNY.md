@@ -73,6 +73,12 @@ przekształcenia do ciemnego; symetrycznie do jasnego).
   Okładki w bibliotece zostają jak powstały (biblioteka pokazuje zeszyty, nie czytanie).
 - **Pipeta**: próbkuje kolor widoczny; na przekształconej stronie odwraca go przekształceniem w drugą stronę, więc
   narysowany nim atrament wygląda jak próbka.
+- **Prawie biały / prawie czarny (3c-A1b)**: neutralny kolor prawie niewidoczny na papierze strony (kontrast WCAG
+  < 1,35: biały, #F2F2F2, #FAFAF0 na jasnej; czarny, #1A1A1A na ciemnej) wybrany na stronie pokazanej w drugim trybie
+  zapisuje się jako przeciwny biegun (`Transform.native`): biały pisak w trybie ciemnym = czarna kreska w jasnym i w
+  eksporcie. Dotyczy pióra, pędzla, kształtów, krzywych, konstrukcji, tekstu (kolor i tło), wiaderka, przefarbowania i
+  pędzla formatu; zakreślacz zostaje (czarny przygasłby na ciemnym do niewidocznego). Stare zeszyty się nie zmieniają —
+  zapisany tam prawie biały na jasnej stronie jest w trybie ciemnym widoczny jak biały.
 - **Eksport PDF/PNG i druk**: oryginał; w oknie eksportu przełącznik „Kolory jak na ekranie” (pamiętany, ustawienie
   `export.as_screen`; pokazuje się tylko, gdy ekran różni się od oryginału). SVG i Markdown zawsze w oryginale.
 

@@ -1,7 +1,12 @@
 package com.mdev.mnotes.core.color
 
 import com.mdev.mnotes.core.model.ColorInvert
+import com.mdev.mnotes.core.model.Element
+import com.mdev.mnotes.core.model.FillEl
 import com.mdev.mnotes.core.model.Paper
+import com.mdev.mnotes.core.model.PenKind
+import com.mdev.mnotes.core.model.Stroke
+import com.mdev.mnotes.core.model.TextBox
 import java.util.concurrent.ConcurrentHashMap
 import kotlin.math.abs
 import kotlin.math.atan2
@@ -32,8 +37,11 @@ object ThemeMap {
      * kontrast i dochodzi do ok. 0,92, więc przy wspólnym pułapie 0,94 granat i czerń wyglądały tak samo.
      */
     private const val NEUTRAL_MAX = 0.83
-    /** Atrament neutralny jasny jak papier (± tyle L) — na kartce niewidoczny, np. biały pisak na jasnej stronie. */
-    private const val SAME_L = 0.02
+    /**
+     * 3c-A1b: atrament neutralny o kontraście WCAG do papieru poniżej tego jest na swojej kartce niewidoczny (np. biały
+     * albo #F2F2F2 na białej, #1A1A1A na czarnej) — wybrano go na stronie pokazanej w drugim trybie. Dawniej tylko ±0,02 L.
+     */
+    private const val SAME_CONTRAST = 1.35
     private const val INK_MIN = 0.12
     private const val NEUTRAL_C = 0.04
     private const val HL_DARK_MAX = 0.6
@@ -68,6 +76,32 @@ object ThemeMap {
 
         /** Macierz 4×5 (`ColorMatrix`) dla tła PDF i obrazów: odwrócenie jasności z odcieniem, biel → nowy papier. */
         val imageMatrix: FloatArray by lazy { imageMatrix(toDark, dstPaper) }
+
+        /**
+         * 3c-A1b: kolor wybrany na pokazanej stronie → kolor do zapisu. Biały albo prawie biały na jasnej stronie
+         * pokazanej jako ciemna (i prawie czarny na ciemnej pokazanej jako jasna) jest zapisywany jako przeciwny biegun,
+         * więc po przełączeniu i w eksporcie jest czarny, a nie niewidoczny. Pozostałe kolory bez zmian (krycie też).
+         */
+        fun native(argb: Int): Int =
+            if (sameAsPaper(argb, srcPaper)) (argb and BLACK) or (if (toDark) 0 else 0xFFFFFF) else argb
+
+        /**
+         * [native] dla kolorów nowego albo przefarbowanego elementu. Zakreślacz zostaje: na ciemnym przygasa do
+         * [HL_DARK_MAX], więc czarny byłby tam niewidoczny — biały zakreślacz w trybie ciemnym widać jako szary.
+         */
+        fun native(e: Element): Element = when (e) {
+            is Stroke -> {
+                val c = if (e.pen == PenKind.HIGHLIGHTER) e.color else native(e.color)
+                val f = if (e.fill == 0) 0 else native(e.fill)
+                if (c == e.color && f == e.fill) e else Stroke(e.id, e.pen, c, e.width, e.pts, e.locked, e.poly, e.ellipse, e.line, e.ctrl, f)
+            }
+            is TextBox -> {
+                val c = native(e.color); val f = if (e.fill == 0) 0 else native(e.fill)
+                if (c == e.color && f == e.fill) e else e.copy(color = c, fill = f)
+            }
+            is FillEl -> if (e.hl) e else native(e.color).let { if (it == e.color) e else e.copy(color = it) }
+            else -> e
+        }
 
         /** Przekształcenie w drugą stronę (pipeta: widoczny kolor → atrament, który tak wygląda). */
         fun reverse(): Transform = transform(dstPaper, !toDark).also { it.origin = this }
@@ -144,8 +178,9 @@ object ThemeMap {
         val lp = oklab(src)[0]; val lq = oklab(dst)[0]
         val neutral = hypot(o[1], o[2]) < NEUTRAL_C
         // 2c-A9: biały pisak na jasnej stronie (albo czarny na ciemnej) był pisany na stronie pokazanej po zamianie,
-        // gdzie go widać — zostaje, jaki jest, zamiast zlać się z nowym papierem.
-        if (neutral && (if (toDark) L >= lp - SAME_L else L <= lp + SAME_L)) return argb
+        // gdzie go widać — zostaje, jaki jest, zamiast zlać się z nowym papierem. Nowe kreski zapisuje już [Transform.native];
+        // to zostaje dla starych zeszytów (3c-A1b: z tolerancją, prawie biały też).
+        if (sameAsPaper(argb, src)) return argb
         val nl = if (toDark) {
             val d = max(0.0, lp - L)
             if (neutral) lq + d * (NEUTRAL_MAX - lq) / max(lp, 0.05) else max(L, lq + d).coerceAtMost(INK_MAX + 0.04)
@@ -186,6 +221,12 @@ object ThemeMap {
         var lo = 0.0; var hi = 1.0
         repeat(20) { val mid = (lo + hi) / 2; if (contrastWcag(opaque(at(mid)), bg) >= need) hi = mid else lo = mid }
         return at(hi)
+    }
+
+    /** Neutralny kolor, który na papierze [paper] prawie nie odcina się od tła (patrz [SAME_CONTRAST]). */
+    fun sameAsPaper(argb: Int, paper: Int): Boolean {
+        val o = oklab(argb)
+        return hypot(o[1], o[2]) < NEUTRAL_C && contrastWcag(opaque(argb), paper) < SAME_CONTRAST
     }
 
     /** Kontrast WCAG 2 (1–21) dwóch kolorów; krycie pomijane. */

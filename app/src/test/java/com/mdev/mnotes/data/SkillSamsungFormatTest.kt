@@ -11,7 +11,7 @@ import org.junit.Test
 
 /**
  * Pliki z `src/test/resources/samsung/` powstają skryptami skilla `samsung-notes-do-mnotes`
- * (`skills/generuj-fixture-samsung.py`, z syntetycznego .sdocx). Test pilnuje, że aplikacja czyta kreski i tło
+ * (`narzedzia/generuj-fixture-samsung.py`, z syntetycznego .sdocx). Test pilnuje, że aplikacja czyta kreski i tło
  * tak, jak skill zakłada: pióra, szerokości, współczynniki grubości, kolory i kratkę.
  */
 class SkillSamsungFormatTest {

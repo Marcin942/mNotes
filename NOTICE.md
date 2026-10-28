@@ -1,6 +1,6 @@
 # NOTICE
 
-> Szkic (3a-2). Licencja projektu czeka na decyzję autora, zob. `LICENSE-DO-DECYZJI.md`.
+mNotes jest udostępniony na licencji Mozilla Public License 2.0 (`LICENSE`). Biblioteki niżej mają własne licencje.
 
 ## Zależności w aplikacji
 
@@ -29,5 +29,5 @@
 
 ## Podziękowania
 
-Pomysły konstrukcji geometrycznych, eksportu i części narzędzi pochodzą z pracy licencjackiej, której autorce
-dziękujemy. Nazwisko podamy tylko za jej zgodą. Kod mNotes napisano od zera.
+Pomysły konstrukcji geometrycznych, eksportu i części narzędzi pochodzą z pracy licencjackiej. Dziękujemy za nią.
+Nazwisko podamy tylko za zgodą osoby, która ją napisała. Kod mNotes napisano od zera, bez kopiowania kodu z tej pracy.

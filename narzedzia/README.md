@@ -1,7 +1,18 @@
-# Skille dla mNotes
+# Narzędzia dla mNotes
 
-Folder zawiera skille Claude, które pracują na danych z mNotes bez komputera właściciela (w aplikacji Claude na
-telefonie albo na claude.ai, z włączonym wykonywaniem kodu).
+Skrypty w Pythonie, które robią zeszyty `.mnotes` z plików spoza aplikacji. **Działają bez Claude:** wystarczy
+Python 3 na komputerze, a polecenia są niżej i w `SKILL.md` każdego narzędzia. Każde narzędzie jest też gotowym
+skillem Claude (plik `SKILL.md`), więc można je wgrać do aplikacji Claude i używać z telefonu.
+
+Bez Claude, na komputerze:
+
+```bash
+# PDF z zadaniami → zeszyt: analiza, przegląd planu (plan.json), budowa
+python3 narzedzia/zadania-do-mnotes/scripts/analyze.py ZADANIA.pdf --out /tmp/zm
+python3 narzedzia/zadania-do-mnotes/scripts/build.py /tmp/zm/plan.json --format mnotes
+# Samsung Notes (.sdocx albo PDF zgodny z Notatkami) → zeszyt
+python3 narzedzia/samsung-notes-do-mnotes/scripts/convert.py NOTATKA.sdocx -o NOTATKA.mnotes
+```
 
 ## `zadania-do-mnotes`
 
@@ -13,7 +24,7 @@ z obrazków zadań (`scripts/wycinki.py`), bo warstwa tekstowa PDF-ów bywa znie
 
 ### Instalacja w Claude
 
-1. Zbuduj archiwum: `skills/pakuj.sh zadania-do-mnotes` (powstaje `skills/zadania-do-mnotes.zip`, folder `zadania-do-mnotes/` na najwyższym poziomie).
+1. Zbuduj archiwum: `narzedzia/pakuj.sh zadania-do-mnotes` (powstaje `narzedzia/zadania-do-mnotes.zip`, folder `zadania-do-mnotes/` na najwyższym poziomie).
 2. claude.ai lub aplikacja → Ustawienia → Możliwości → Skille → Dodaj skill → wybierz ZIP.
    Włącz „Wykonywanie kodu i tworzenie plików”.
 3. W rozmowie dołącz PDF i napisz np. „Zrób z tego zeszyt mNotes”.
@@ -24,7 +35,7 @@ ghostscript. Skill sam sprawdza środowisko (`scripts/check_env.py`) i podpowiad
 ### Test lokalny
 
 ```bash
-python3 skills/zadania-do-mnotes/scripts/selftest.py
+python3 narzedzia/zadania-do-mnotes/scripts/selftest.py
 ```
 
 Test Kotlin `SkillZadaniaFormatTest` sprawdza, że aplikacja czyta strony i zeszyt zapisane przez skrypty.
@@ -43,7 +54,7 @@ Etap pierwszy przenosi tylko kreski i tło. Pola tekstowe, obrazy, kształty, t�
 
 ### Instalacja w Claude
 
-1. `skills/pakuj.sh samsung-notes-do-mnotes` (powstaje `skills/samsung-notes-do-mnotes.zip`).
+1. `narzedzia/pakuj.sh samsung-notes-do-mnotes` (powstaje `narzedzia/samsung-notes-do-mnotes.zip`).
 2. claude.ai lub aplikacja → Ustawienia → Możliwości → Skille → Dodaj skill → wybierz ZIP.
    Włącz „Wykonywanie kodu i tworzenie plików”.
 3. W rozmowie dołącz plik `.sdocx` (albo PDF zgodny z Notatkami) i napisz np. „Zrób z tego zeszyt mNotes”.
@@ -53,10 +64,10 @@ Wymagania: Python 3 (konwersja używa tylko biblioteki standardowej); do podglą
 ### Test lokalny
 
 ```bash
-python3 skills/samsung-notes-do-mnotes/scripts/selftest.py
+python3 narzedzia/samsung-notes-do-mnotes/scripts/selftest.py
 ```
 
 Samotest buduje syntetyczny `.sdocx` (`scripts/synth_sdocx.py`) i przechodzi całą konwersję bez prywatnych plików.
 Test Kotlin `SkillSamsungFormatTest` czyta w aplikacji zeszyt wygenerowany z tej próbki
-(`skills/generuj-fixture-samsung.py` → `app/src/test/resources/samsung/`); fixture odnawiaj tylko po zmianie formatu
+(`narzedzia/generuj-fixture-samsung.py` → `app/src/test/resources/samsung/`); fixture odnawiaj tylko po zmianie formatu
 zapisu albo kalibracji piór.

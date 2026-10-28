@@ -258,10 +258,12 @@ fun MDialog(
     onConfirm: () -> Unit = {},
     confirmEnabled: Boolean = true,
     dismissText: String = T.t("Anuluj", "Cancel"),
+    /** Stuknięcie obok okna albo „wstecz”; domyślnie to samo co „Anuluj”. */
+    onOutside: () -> Unit = onDismiss,
     content: @Composable () -> Unit,
 ) {
     AlertDialog(
-        onDismissRequest = onDismiss,
+        onDismissRequest = onOutside,
         title = { Text(title, style = MaterialTheme.typography.titleLarge) },
         text = { Column { content() } },
         confirmButton = { if (confirm != null) TextButton(onClick = onConfirm, enabled = confirmEnabled) { Text(confirm, color = if (confirmEnabled) mint.accentText else Color.Unspecified) } },

@@ -20,11 +20,16 @@ class PairStore(ctx: Context) {
     val paired: Boolean get() = sp.contains(K_BLOB)
     val peerName: String get() = sp.getString(K_NAME, "").orEmpty()
 
-    /** Zapisuje klucz pary; false, gdy Keystore odmówił (wtedy nic nie zapisano). */
-    fun save(pairKey: ByteArray, peer: String): Boolean = runCatching {
+    /** Adres Bluetooth drugiego urządzenia (2e-B1): telefon łączy się z nim wprost, bez szukania; pusty = nieznany. */
+    var peerAddress: String
+        get() = sp.getString(K_MAC, "").orEmpty()
+        set(v) { if (v != peerAddress) sp.edit().putString(K_MAC, v).apply() }
+
+    /** Zapisuje klucz pary; false, gdy Keystore odmówił (wtedy nic nie zapisano). [address]: null przy parze przez Nearby. */
+    fun save(pairKey: ByteArray, peer: String, address: String? = null): Boolean = runCatching {
         val c = Cipher.getInstance("AES/GCM/NoPadding").apply { init(Cipher.ENCRYPT_MODE, wrappingKey()) }
         val blob = c.iv + c.doFinal(pairKey)
-        sp.edit().putString(K_BLOB, Base64.encodeToString(blob, Base64.NO_WRAP)).putString(K_NAME, peer).apply()
+        sp.edit().putString(K_BLOB, Base64.encodeToString(blob, Base64.NO_WRAP)).putString(K_NAME, peer).putString(K_MAC, address.orEmpty()).apply()
     }.isSuccess
 
     fun load(): ByteArray? = runCatching {
@@ -56,5 +61,6 @@ class PairStore(ctx: Context) {
         const val ALIAS = "mnotes-nearby-pair"
         const val K_BLOB = "pair.blob"
         const val K_NAME = "pair.name"
+        const val K_MAC = "pair.mac"
     }
 }

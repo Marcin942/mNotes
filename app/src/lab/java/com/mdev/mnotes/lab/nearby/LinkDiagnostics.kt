@@ -31,13 +31,22 @@ object LinkDiagnostics {
         LocationManagerCompat.isLocationEnabled(ctx.getSystemService(Context.LOCATION_SERVICE) as LocationManager)
     }.getOrNull()
 
+    private fun bluetooth(ctx: Context) = com.mdev.mnotes.lab.LabSettings.of(ctx).bluetooth
+
+    /** Bluetooth RFCOMM (2e-B1): zgody tego transportu, Bluetooth i zapamiętany adres; bez wierszy o Wi-Fi i Usługach Google. */
     fun checks(ctx: Context): List<Check> {
         val out = ArrayList<Check>()
-        for (p in LinkPermissions.required(Build.VERSION.SDK_INT)) {
+        val bt = bluetooth(ctx)
+        for (p in if (bt) LinkPermissions.rfcomm(Build.VERSION.SDK_INT) else LinkPermissions.required(Build.VERSION.SDK_INT)) {
             if (p == LinkPermissions.COARSE) continue
             out += Check(permissionName(p), has(ctx, p))
         }
         out += Check(T.t("Bluetooth włączony", "Bluetooth on"), runCatching { (ctx.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager).adapter?.isEnabled }.getOrNull())
+        if (bt) {
+            val store = PairStore(ctx)
+            out += Check(T.t("Adres drugiego urządzenia zapamiętany", "Other device's address remembered"), if (store.paired) store.peerAddress.isNotEmpty() else null)
+            return out
+        }
         out += Check(T.t("Wi-Fi włączone (szybsze przesyłanie)", "Wi-Fi on (faster transfer)"), runCatching { (ctx.applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager).isWifiEnabled }.getOrNull())
         out += Check(T.t("Lokalizacja (usługa) włączona", "Location (service) on"), locationOn(ctx))
         out += Check(T.t("Usługi Google Play", "Google Play services"), runCatching { GoogleApiAvailability.getInstance().isGooglePlayServicesAvailable(ctx) == ConnectionResult.SUCCESS }.getOrNull())
@@ -62,7 +71,7 @@ object LinkDiagnostics {
 
     /** Raport do skopiowania (bez kluczy i treści zdjęć). */
     fun report(ctx: Context, log: List<LinkEvent>): String = buildString {
-        appendLine("mNotes lab — Nearby — Android ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT}), ${Build.MANUFACTURER} ${Build.MODEL}")
+        appendLine("mNotes lab — ${if (bluetooth(ctx)) "Bluetooth" else "Nearby"} — Android ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT}), ${Build.MANUFACTURER} ${Build.MODEL}")
         for (c in checks(ctx)) appendLine("${mark(c.ok)} ${c.label}")
         if (log.isNotEmpty()) appendLine(T.t("Ostatnie zdarzenia:", "Last events:"))
         for (e in log) appendLine(event(e))

@@ -247,3 +247,25 @@ object LinkErrors {
 
     private fun p(code: Int, pl: String, en: String, setup: Boolean = true) = LinkProblem(code, pl, en, setup)
 }
+
+/**
+ * Zmniejszanie zdjęć z telefonu do dłuższego boku [LONGEST] (2e-B1, `plan/NEARBY-OPEN-SOURCE.md` §1.3): `inSampleSize`
+ * daje tylko potęgi dwójki, więc najpierw [sample] (dekodowanie nie mniejsze niż cel), potem skalowanie do [size].
+ * 2400 px to zwykle 0,6–1,2 MB w JPEG 88, a to wciąż dość dla zdjęcia tablicy.
+ */
+object PhotoScale {
+    const val LONGEST = 2400
+
+    fun sample(w: Int, h: Int, longest: Int = LONGEST): Int {
+        var s = 1
+        while (maxOf(w, h) / (s * 2) >= longest) s *= 2
+        return s
+    }
+
+    fun size(w: Int, h: Int, longest: Int = LONGEST): Pair<Int, Int> {
+        val m = maxOf(w, h)
+        if (m <= longest) return w to h
+        val k = longest.toDouble() / m
+        return maxOf(1, Math.round(w * k).toInt()) to maxOf(1, Math.round(h * k).toInt())
+    }
+}

@@ -412,6 +412,41 @@ Na starcie (`noc/wszystko` @ `471ed08`): lab 696 testów, 0 porażek.
   PNG przed/po: `app/build/kreda-krzywe/{syntetyczne,okladka-wzor,20260318_154119,20260326_140000}.png` (plan podawał
   `kreda-bezier/`, katalog z testu został). **Tablet:** jak 2b-B4 (zoom 4× na „Edytowalnych kreskach”).
 
+- **2e-B2** (`41d3b96`): wzmianki o zewnętrznym projekcie usunięte z drzewa (komentarze, `docs/`), `docs/nearby/`
+  (kopia cudzego kodu-wzoru) usunięte, bo wszystko potrzebne jest w `core/nearby`. Historia git nadal je ma (FAZA 3a, A).
+
+- **2e-B1 Bluetooth RFCOMM obok Nearby** (`993fbea`, `38e2322`, cz. 3 diagnostyka). Nearby zostaje; przełącznik
+  Ustawienia → Laboratorium → Telefon i tablet → „Łącze przez Bluetooth (bez Usług Google Play)”. Para (klucz) wspólna,
+  zmiana transportu bez parowania od nowa. `core/nearby/Rfcomm.kt`: `RfcommTransport` nad `BtPort` (wątki, ramki
+  długości, zdarzenia przez `post`), UUID parowania stały, po parowaniu z nazwy łącza (skrót klucza); `LinkMachine`
+  bez zmian poza `autoPick` (lista sparowanych to też słuchawki) i nazwą w `discover`. Zdjęcia naprawdę do 2400 px
+  (`PhotoScale`; „Zdjęcia w pełnej jakości” wyłącza). Zeszyt przez Bluetooth: rozmiar i czas przed wysłaniem, ponad
+  15 MB odmowa (150 KB/s założone, **do zmierzenia**). Testy JVM na symulatorze Bluetooth (`RfcommTransportTest`, 6
+  scenariuszy jak dla Nearby: parowanie bez autowyboru, części, telefon przed tabletem co 3 s, zerwanie i wznowienie,
+  inny klucz, para z Nearby bez adresu) + `RfcommBasicsTest` (7). Core 806, lab 888, 0 porażek, oba APK.
+  **Nie zrobione:** „Udostępnij → mNotes → Wyślij na tablet” na telefonie — import udostępnionych plików jest we
+  wspólnym `MainActivity.handle` (część A); potrzebny haczyk dla lab (pytanie do A). W lab `BLUETOOTH_SCAN` bez
+  `neverForLocation` (Nearby skanuje BLE), więc „Szukaj w pobliżu” na 12+ pyta też o lokalizację; po usunięciu Nearby
+  dodać flagę i zdjąć lokalizację (`LinkPermissions.rfcomm(scanForLocation = false)`).
+  **Tablet + telefon (lista kontrolna, Bluetooth włączony w ustawieniach mNotes na obu):**
+  1. Sparuj tablet z telefonem w systemowych ustawieniach Bluetooth → mNotes „Połącz telefon z tabletem” na obu →
+     telefon: lista ze słuchawkami i tabletem, nic nie wybiera się samo → stuknij tablet → 6 cyfr równe → „Zgadza się”.
+  2. Bez parowania systemowego: tablet „Pokaż tablet na 2 min”, telefon „Szukaj w pobliżu” → tablet na liście.
+  3. Zdjęcie 1 MB i 3 MB (oraz „pełna jakość”): czas z „Diagnostyki → Kopiuj raport”.
+  4. Telefon wysyła, zanim tablet otworzył „Zdjęcie z telefonu” → po otwarciu okna zdjęcie dochodzi samo.
+  5. Bluetooth tabletu wyłączony na 5 s w trakcie → „Włącz Bluetooth” → zdjęcie dochodzi raz.
+  6. Zeszyt 5 MB: przed wysłaniem „ok. 35 s”; prawdziwy czas do porównania. Zeszyt > 15 MB → odmowa.
+  7. Para zrobiona przez Nearby, potem przełącznik na Bluetooth → zdjęcie dochodzi (telefon próbuje sparowanych).
+  8. Android ≤ 11, jeśli jest: „Szukaj w pobliżu” pyta o lokalizację, lista sparowanych bez pytania.
+- **2c-B9 próg lokalny kredy** (`c2bfdbd`): `Chalk.localCut` (średnia + 2σ w oknie 1/16 szerokości, 0,6…1 × próg
+  globalny, tylko obniża), za przełącznikiem „Próg lokalny (blade litery w spokojnych miejscach)”, **domyślnie
+  wyłączony**. Powód: na 24 zdjęciach prawie bez zysku (widoczne piksele 5,2 → 5,6 %, kreda % i kreski bez zmian, żadna
+  nowa litera na podglądzie), a jedno zdjęcie +1,1 p.p. fragmentów (> 1 p.p. z planu). Tabela i warianty K w
+  `docs/KREDA-POMIARY.md`. Test `FaintAndFramesTest.localCutBringsBackFaintLetterOnlyWhereTheBoardIsQuiet`. Pełne testy:
+  core 806, lab 890, 0 porażek, oba APK. **Na tablecie:** zdjęcie szarej tablicy z bladym pismem (jak okładka) →
+  panel kredy → włączyć „Próg lokalny” → czy wracają blade litery, czy tylko szum; czas podglądu po przełączeniu.
+- **Lista 2c-B wyczerpana** (B1–B11; B7, B8, B10, B11 w mLabs na `noc/wszystko`, opis w `mLabs/docs/NOTATKI-NOC.md`).
+
 ### Co Marcin ma sprawdzić na tablecie — wariant lab, po fazie 2 (kolejność)
 
 Instalacja: `labDebug` z `noc/lab2` (albo `noc/wszystko` po scaleniu przez A) na tablecie **i** na telefonie (Nearby).

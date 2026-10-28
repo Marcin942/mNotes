@@ -79,9 +79,32 @@ class RfcommBasicsTest {
         assertEquals(listOf(connect, scan), LinkPermissions.rfcomm(33, discovery = true))
         assertEquals(listOf(connect, adv), LinkPermissions.rfcomm(36, visible = true))
         assertFalse(LinkPermissions.rfcomm(36, discovery = true).any { "LOCATION" in it })
+        // wariant lab: BLUETOOTH_SCAN bez neverForLocation (Nearby), więc szukanie na 12+ z dokładną lokalizacją
+        assertEquals(listOf(connect, scan, LinkPermissions.FINE, LinkPermissions.COARSE), LinkPermissions.rfcomm(34, discovery = true, scanForLocation = true))
+        assertEquals(listOf(connect), LinkPermissions.rfcomm(34, scanForLocation = true))
         // przybliżona jest brakiem tylko tam, gdzie wystarcza sama
         assertEquals(listOf(LinkPermissions.COARSE), LinkPermissions.missing(LinkPermissions.rfcomm(26, discovery = true)) { false })
         assertEquals(listOf(LinkPermissions.FINE), LinkPermissions.missing(LinkPermissions.rfcomm(29, discovery = true)) { false })
+    }
+
+    @Test
+    fun phonePhotosShrinkTo2400PxEvenWhenSamplingAlonePassesThemWhole() {
+        // dawniej: 4000×3000 → inSampleSize 1 → pełny rozmiar przez łącze
+        assertEquals(1, PhotoScale.sample(4000, 3000))
+        assertEquals(2400 to 1800, PhotoScale.size(4000, 3000))
+        assertEquals(2, PhotoScale.sample(8000, 6000))
+        assertEquals(2400 to 1800, PhotoScale.size(4000, 3000))  // po dekodowaniu z próbką 2
+        assertEquals(1800 to 2400, PhotoScale.size(3000, 4000))  // pionowe
+        assertEquals(1000 to 800, PhotoScale.size(1000, 800))    // małe bez zmian
+        assertEquals(1, PhotoScale.sample(9000, 9000, Int.MAX_VALUE))  // „pełna jakość”
+        assertEquals(9000 to 9000, PhotoScale.size(9000, 9000, Int.MAX_VALUE))
+    }
+
+    @Test
+    fun notebookTimeOverBluetoothIsShownInWholeSeconds() {
+        assertEquals(1, BtLimits.seconds(0))
+        assertEquals(7, BtLimits.seconds(1_000_000))         // 1 MB ≈ 7 s przy 150 KB/s
+        assertEquals(105, BtLimits.seconds(BtLimits.NOTEBOOK_MAX))  // 15 MB ≈ 1¾ min
     }
 
     @Test

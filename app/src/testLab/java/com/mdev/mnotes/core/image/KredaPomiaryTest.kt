@@ -74,6 +74,65 @@ class KredaPomiaryTest {
     }
 
     /**
+     * Próg lokalny (2c-B9): to samo źródło ([BoardPipeline.prepare]) wykończone bez i z [BoardOptions.localCut]. Kryterium
+     * z planu: fragmenty < 10 px nie rosną o więcej niż 1 p.p. na żadnym zdjęciu; ostatni wiersz podaje najgorszy przyrost.
+     * Z `KREDA_OUT` zapisuje `*-lokalny.png`: krycie bez progu lokalnego, z nim i (czerwono) to, co doszło.
+     */
+    @Test
+    fun measureLocalCut() {
+        val dir = System.getenv("KREDA_DIR")?.let(::File)?.takeIf { it.isDirectory }
+        assumeTrue("brak KREDA_DIR", dir != null)
+        val photos = dir!!.listFiles { f -> f.extension.lowercase() in setOf("jpg", "jpeg", "png") }.orEmpty().sortedBy { it.name }
+        println("| zdjęcie | próg | niżej % | kreda % bez → z | widoczne % bez → z | kresek bez → z | śr. długość px bez → z | fragmenty % bez → z | Δ fragm. p.p. | czas ms bez → z |")
+        println("|---|---|---|---|---|---|---|---|---|---|")
+        var worst = -100.0; var worstName = ""; var sumLowered = 0.0; var anyOff = 0.0; var anyOn = 0.0
+        val sum = DoubleArray(9)
+        for (f in photos) {
+            val src = BoardPipeline.prepare(load(f, SIDE), BoardOptions(maxSide = SIDE))
+            val visible = max(1, src.image.px.count { Raster.alpha(it) > 127 })
+            val lowered = Chalk.localCut(src.image, src.black, src.autoCut).count { it < src.autoCut - 1e-4f } * 100.0 / visible
+            sumLowered += lowered
+            val row = listOf(false, true).map { local ->
+                val t0 = System.nanoTime()
+                val res = BoardPipeline.finish(src, BoardOptions(maxSide = SIDE, localCut = local))
+                val ms = (System.nanoTime() - t0) / 1_000_000
+                val lines = ChalkVector.vectorize(res.image)
+                val lens = lines.map { it.length() }
+                doubleArrayOf(
+                    res.image.px.count { Raster.alpha(it) > 128 } * 100.0 / visible, lines.size.toDouble(),
+                    if (lens.isEmpty()) 0.0 else lens.average(), if (lens.isEmpty()) 0.0 else lens.count { it < 10f } * 100.0 / lens.size,
+                    ms.toDouble(), res.image.px.count { Raster.alpha(it) > 0 } * 100.0 / visible,
+                ) to res.image
+            }
+            val (a, b) = row[0].first to row[1].first
+            val d = b[3] - a[3]
+            if (d > worst) { worst = d; worstName = f.name }
+            for (k in 0 until 4) { sum[k] += a[k]; sum[k + 4] += b[k] }
+            sum[8] += d
+            anyOff += a[5]; anyOn += b[5]
+            println("| ${f.name} | ${"%.2f".format(src.autoCut)} | ${"%.0f".format(lowered)} | ${"%.1f → %.1f".format(a[0], b[0])} | ${"%.1f → %.1f".format(a[5], b[5])} | ${a[1].toInt()} → ${b[1].toInt()} | " +
+                "${"%.1f → %.1f".format(a[2], b[2])} | ${"%.0f → %.0f".format(a[3], b[3])} | ${"%+.1f".format(d)} | ${a[4].toInt()} → ${b[4].toInt()} |")
+            System.getenv("KREDA_OUT")?.let { out -> dumpLocal(File(out, f.nameWithoutExtension + "-lokalny.png"), row[0].second, row[1].second) }
+        }
+        val n = max(1, photos.size)
+        println("| **średnio (${photos.size})** | | ${"%.0f".format(sumLowered / n)} | ${"%.1f → %.1f".format(sum[0] / n, sum[4] / n)} | ${"%.1f → %.1f".format(anyOff / n, anyOn / n)} | ${"%.0f → %.0f".format(sum[1] / n, sum[5] / n)} | " +
+            "${"%.1f → %.1f".format(sum[2] / n, sum[6] / n)} | ${"%.1f → %.1f".format(sum[3] / n, sum[7] / n)} | ${"%+.1f".format(sum[8] / n)} | |")
+        println("Najgorszy przyrost fragmentów: ${"%+.1f".format(worst)} p.p. ($worstName); próg lokalny niższy od globalnego średnio na ${"%.0f".format(sumLowered / n)} % tablicy (K = ${Chalk.LOCAL_K}, dół ${Chalk.LOCAL_FLOOR})")
+    }
+
+    private fun dumpLocal(to: File, off: Raster, on: Raster) {
+        val img = java.awt.image.BufferedImage(off.w * 2, off.h, java.awt.image.BufferedImage.TYPE_INT_RGB)
+        for (i in off.px.indices) {
+            val x = i % off.w; val y = i / off.w
+            val a = Raster.alpha(off.px[i]); val b = Raster.alpha(on.px[i])
+            img.setRGB(x, y, (a shl 16) or (a shl 8) or a)
+            img.setRGB(off.w + x, y, if (b > 128 && a <= 128) 0xff3030 else (b shl 16) or (b shl 8) or b)
+        }
+        to.parentFile.mkdirs()
+        ImageIO.write(img, "png", to)
+    }
+
+    /**
      * Podgląd do oczu (tylko gdy `KREDA_OUT`): z lewej zdjęcie z narożnikami tablicy (czerwone) i przyciemnionym tym,
      * co [BoardGeometry.boardMask] uznał za „nie tablicę”; z prawej krycie kredy biało na czarnym.
      */

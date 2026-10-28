@@ -40,19 +40,29 @@ class LabSettings(ctx: Context) {
     private val nearbyP = B("nearby.enabled", false)
     private val boardHintP = B("board.hint", true)
     private val faintP = B("board.faint", true)
+    private val localCutP = B("board.localCut", false)
     private val framesP = B("board.frames", true)
     private val specksP = B("board.specks", true)
     private val curvesP = B("board.curves", true)
     private val lectureP = B("board.lecture", true)
+    private val bluetoothP = B("link.bluetooth", false)
+    private val fullPhotoP = B("link.photo.full", false)
 
-    /** Łącze Nearby (zdjęcie z telefonu); domyślnie wyłączone, bo wymaga Usług Google Play i uprawnień radia. */
+    /** Łącze z telefonem (zdjęcie z telefonu, zeszyty); domyślnie wyłączone, bo wymaga uprawnień radia. */
     var nearby: Boolean get() = nearbyP.value; set(v) = nearbyP.set(v)
+
+    /** Transport łącza (2e-B1): Bluetooth RFCOMM zamiast Nearby (Usługi Google). Oba zostają, Marcin porównuje. */
+    var bluetooth: Boolean get() = bluetoothP.value; set(v) = bluetoothP.set(v)
+
+    /** Zdjęcia z telefonu w pełnej rozdzielczości; domyślnie dłuższy bok 2400 px (przez Bluetooth kilka razy szybciej). */
+    var fullPhoto: Boolean get() = fullPhotoP.value; set(v) = fullPhotoP.set(v)
 
     var straighten: Boolean get() = straightenP.value; set(v) = straightenP.set(v)
     var crop: Boolean get() = cropP.value; set(v) = cropP.set(v)
     var flatten: Boolean get() = flattenP.value; set(v) = flattenP.set(v)
     var sharpen: Boolean get() = sharpenP.value; set(v) = sharpenP.set(v)
     var faint: Boolean get() = faintP.value; set(v) = faintP.set(v)
+    var localCut: Boolean get() = localCutP.value; set(v) = localCutP.set(v)
     var frames: Boolean get() = framesP.value; set(v) = framesP.set(v)
     var specks: Boolean get() = specksP.value; set(v) = specksP.set(v)
 
@@ -74,7 +84,7 @@ class LabSettings(ctx: Context) {
 
     fun options(): BoardOptions = BoardOptions(
         straighten = straighten, crop = crop, flatten = flatten, sharpen = sharpen, autoCut = autoCut,
-        cut = cut, solid = solid, tint = tintColor(tint), faint = faint, frames = frames, specks = specks,
+        cut = cut, solid = solid, tint = tintColor(tint), faint = faint, localCut = localCut, frames = frames, specks = specks,
         curves = curves,
     )
 

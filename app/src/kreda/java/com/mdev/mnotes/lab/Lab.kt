@@ -37,8 +37,10 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathEffect
+import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
@@ -78,6 +80,7 @@ import kotlinx.coroutines.withContext
 import java.io.ByteArrayOutputStream
 import java.io.File
 import kotlin.math.hypot
+import kotlin.math.max
 import kotlin.math.min
 
 /**
@@ -123,6 +126,7 @@ object Lab : LabFeatures {
         var preview by remember { mutableStateOf<Bitmap?>(null) }
         var info by remember { mutableStateOf("") }
         var busy by remember { mutableStateOf(false) }
+        var more by remember { mutableStateOf(false) }
         val sources by produceState<List<Raster>?>(null, files) {
             value = withContext(Dispatchers.IO) { files.map { loadRaster(it, PREVIEW) ?: return@withContext null } }
         }
@@ -224,6 +228,11 @@ object Lab : LabFeatures {
                     else -> if (sources == null) T.t("Wczytuję zdjęcie…", "Loading the photo…") else info
                 }
                 Text(hint, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 6.dp, bottom = 4.dp))
+                // Poprawki wyniku tam, gdzie widać problem: krzywo lub ucięte → narożniki, śmieci → gumka.
+                if (mode == SHOW_RESULT && sources != null) Row {
+                    if (!many && opt.straighten) TextButton(onClick = { mode = SHOW_CORNERS }) { Text(T.t("Krzywo albo ucięte? Narożniki", "Crooked or cut off? Corners")) }
+                    TextButton(onClick = { mode = SHOW_ERASER }) { Text(T.t("Śmieci? Gumka", "Leftovers? Eraser")) }
+                }
                 if (mode == SHOW_CORNERS && corners != null) {
                     TextButton(onClick = { edits = edits.withGeometry(null) }) { Text(T.t("Narożniki automatycznie", "Automatic corners")) }
                 }
@@ -243,7 +252,13 @@ object Lab : LabFeatures {
                     },
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(vertical = 4.dp),
                 )
-                Steps(opt) { opt = it; edits = edits.withGeometry(edits.corners, it.straighten, it.crop) }
+                // 3c-B1: na wierzchu tylko wynik i kolor; kroki potoku i suwaki pod „Więcej ustawień” (domyślne są dobre
+                // na większości zdjęć, a dziesięć przełączników na wierzchu odstraszało).
+                ChalkColour(opt) { opt = it }
+                TextButton(onClick = { more = !more }) {
+                    Text(if (more) T.t("Mniej ustawień", "Fewer settings") else T.t("Więcej ustawień", "More settings"))
+                }
+                if (more) Steps(opt) { opt = it; edits = edits.withGeometry(edits.corners, it.straighten, it.crop) }
             }
         }
     }
@@ -274,6 +289,11 @@ object Lab : LabFeatures {
         }
         SectionLabel(T.t("Pełne krycie od: ${(opt.solid * 100).toInt()}%", "Fully opaque from: ${(opt.solid * 100).toInt()}%"))
         MSlider(opt.solid, 0.3f, 1f) { change(opt.copy(solid = it)) }
+    }
+
+    /** Kolor kredy (na wierzchu panelu, zawsze widoczny). */
+    @Composable
+    private fun ChalkColour(opt: BoardOptions, change: (BoardOptions) -> Unit) {
         SectionLabel(T.t("Kolor kredy", "Chalk colour"))
         val modes = listOf(null, LabSettings.tintColor(1), LabSettings.tintColor(2))
         Choice(listOf(T.t("Oryginalny", "Original"), T.t("Biały", "White"), T.t("Grafit", "Graphite")), modes.indexOf(opt.tint).coerceAtLeast(0)) {
@@ -390,9 +410,43 @@ object Lab : LabFeatures {
                     drawCircle(accent.copy(alpha = if (i == active) 0.5f else 0.3f), radius = 14.dp.toPx(), center = at(i))
                     drawCircle(accent, radius = 5.dp.toPx(), center = at(i))
                 }
+                if (active >= 0) loupe(img, r, at(active), accent, base)
             }
         }
     }
+
+    /**
+     * Lupa przy przeciąganiu narożnika (3c-B1): zdjęcie wokół uchwytu [at] powiększone [LOUPE_ZOOM]× w kółku w górnym
+     * rogu po przeciwnej stronie niż palec, z krzyżykiem w miejscu narożnika (palec zasłania dokładnie to, co trzeba trafić).
+     */
+    private fun DrawScope.loupe(img: ImageBitmap, r: Rect, at: Offset, accent: Color, base: Color) {
+        val rad = 48.dp.toPx()
+        val margin = 8.dp.toPx()
+        val c = Offset(if (at.x > size.width / 2) margin + rad else size.width - margin - rad, margin + rad)
+        val perPx = r.width / img.width
+        val half = rad / LOUPE_ZOOM / perPx
+        val sx = (at.x - r.left) / perPx; val sy = (at.y - r.top) / perPx
+        val circle = Path().apply { addOval(Rect(c, rad)) }
+        clipPath(circle) {
+            drawRect(base, Offset(c.x - rad, c.y - rad), Size(2 * rad, 2 * rad))
+            // Wycinek przycięty do zdjęcia (przy brzegu część lupy zostaje tłem); cel przesunięty o tyle samo.
+            val x0 = max(0f, sx - half); val y0 = max(0f, sy - half)
+            val x1 = min(img.width.toFloat(), sx + half); val y1 = min(img.height.toFloat(), sy + half)
+            val k = rad / half
+            if (x1 - x0 >= 1f && y1 - y0 >= 1f) drawImage(
+                img,
+                srcOffset = IntOffset(x0.toInt(), y0.toInt()), srcSize = IntSize((x1 - x0).toInt(), (y1 - y0).toInt()),
+                dstOffset = IntOffset((c.x + (x0 - sx) * k).toInt(), (c.y + (y0 - sy) * k).toInt()),
+                dstSize = IntSize(((x1 - x0) * k).toInt(), ((y1 - y0) * k).toInt()),
+            )
+        }
+        drawCircle(accent, rad, c, style = Stroke(2.dp.toPx()))
+        val arm = 10.dp.toPx()
+        drawLine(accent, Offset(c.x - arm, c.y), Offset(c.x + arm, c.y), 1.5.dp.toPx())
+        drawLine(accent, Offset(c.x, c.y - arm), Offset(c.x, c.y + arm), 1.5.dp.toPx())
+    }
+
+    private const val LOUPE_ZOOM = 3f
 
     /** Cały kadr jako narożniki (gdy podglądu jeszcze nie ma). */
     private val FULL = floatArrayOf(0f, 0f, 1f, 0f, 1f, 1f, 0f, 1f)
@@ -519,8 +573,8 @@ object Lab : LabFeatures {
                 set.straighten = o.straighten; set.crop = o.crop; set.flatten = o.flatten; set.sharpen = o.sharpen
                 set.faint = o.faint; set.localCut = o.localCut; set.frames = o.frames; set.specks = o.specks; set.curves = o.curves
                 set.autoCut = o.autoCut; set.cut = o.cut; set.solid = o.solid
-                set.tint = listOf(null, LabSettings.tintColor(1), LabSettings.tintColor(2)).indexOf(o.tint).coerceAtLeast(0)
             }
+            ChalkColour(set.options()) { o -> set.tint = listOf(null, LabSettings.tintColor(1), LabSettings.tintColor(2)).indexOf(o.tint).coerceAtLeast(0) }
         }
     }
 

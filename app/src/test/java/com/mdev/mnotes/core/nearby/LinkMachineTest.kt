@@ -47,7 +47,7 @@ class FakeAir {
             for (e in ends) if (e !== this && e.discovering && e.seen.add(id)) to(e) { onFound(id, name) }
         }
 
-        override fun discover() {
+        override fun discover(name: String) {
             if (discovering) { to(this) { onFailed(LinkErrors.ALREADY_DISCOVERING) }; return }
             discovering = true
             seen.clear()
@@ -371,7 +371,7 @@ class LinkMachineTest {
         val phone = machine(pEnd, LinkMode.SEND, SyncRole.CLIENT, "P", key)
         // Szukanie włączone wcześniej (np. przez poprzednie okno) zgłosiło tablet, zanim maszyna ruszyła; drugi raz go
         // nie zgłosi, a drugie discover dostaje 8002.
-        pEnd.discover()
+        pEnd.discover("")
         tablet.start(); air.pump()
         phone.start()
         run(tablet, phone) { phone.state is LinkState.Ready }

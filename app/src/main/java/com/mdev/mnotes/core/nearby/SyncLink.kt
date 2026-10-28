@@ -27,7 +27,26 @@ object LinkPermissions {
     fun granted(result: Map<String, Boolean>): Boolean = result.isNotEmpty() && result.all { (k, v) -> v || k == COARSE && result[FINE] == true }
 
     /** Których jeszcze brakuje (do ekranu „Dlaczego” i diagnostyki); [has] mówi, czy uprawnienie jest przyznane. */
-    fun missing(sdk: Int, has: (String) -> Boolean): List<String> = required(sdk).filter { !has(it) && it != COARSE }
+    fun missing(sdk: Int, has: (String) -> Boolean): List<String> = missing(required(sdk), has)
+
+    fun missing(required: List<String>, has: (String) -> Boolean): List<String> = required.filter { !has(it) && (it != COARSE || FINE !in required) }
+
+    /**
+     * Uprawnienia pytane w czasie działania dla Bluetooth RFCOMM (2e-B1, `plan/NEARBY-OPEN-SOURCE.md` §3.2). Do Androida
+     * 11 łączenie i nasłuch biorą `BLUETOOTH` z instalacji (bez pytania); lokalizacja tylko przy [discovery] („Szukaj w
+     * pobliżu”): przybliżona do 9, dokładna 10–11. Od 12 jedno „Urządzenia w pobliżu”: CONNECT, SCAN przy szukaniu
+     * (w manifeście `neverForLocation`, więc bez lokalizacji), ADVERTISE przy [visible] („Pokaż tablet na 2 min”).
+     */
+    fun rfcomm(sdk: Int, discovery: Boolean = false, visible: Boolean = false): List<String> = buildList {
+        if (sdk >= 31) {
+            add("android.permission.BLUETOOTH_CONNECT")
+            if (discovery) add("android.permission.BLUETOOTH_SCAN")
+            if (visible) add("android.permission.BLUETOOTH_ADVERTISE")
+        } else if (discovery) {
+            if (sdk >= 29) add(FINE)
+            add(COARSE)
+        }
+    }
 }
 
 /** Kto się ogłasza (tablet: [HOST]) i kto szuka (telefon: [CLIENT]); od roli zależy kolejność w identyfikatorze sesji. */

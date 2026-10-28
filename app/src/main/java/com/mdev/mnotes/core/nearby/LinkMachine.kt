@@ -1,12 +1,20 @@
 package com.mdev.mnotes.core.nearby
 
 /**
- * Transport łącza: Nearby Connections w wariancie lab (`NearbyTransport`) albo symulacja w testach. Same wywołania,
- * zero decyzji; zdarzenia wracają do [LinkMachine] (`onFound`, `onInitiated`, `onConnected`, `onReceived`…).
+ * Transport łącza: Nearby Connections (`NearbyTransport`), Bluetooth RFCOMM ([RfcommTransport]) albo symulacja w testach.
+ * Same wywołania, zero decyzji; zdarzenia wracają do [LinkMachine] (`onFound`, `onInitiated`, `onConnected`,
+ * `onReceived`…), zawsze później niż wywołanie, które je spowodowało (nie z jego wnętrza).
  */
 interface LinkTransport {
+    /**
+     * Czy znalezione urządzenia to na pewno mNotes (Nearby: tak, nazwa punktu to mówi). W Bluetooth lista sparowanych
+     * to też słuchawki i zegarki, więc w parowaniu nie wybieramy samemu jedynego znalezionego.
+     */
+    val autoPick: Boolean get() = true
+
     fun advertise(name: String)
-    fun discover()
+    /** [name]: nazwa tego urządzenia w łączu (jak w [advertise]); Bluetooth z niej wie, czego szuka. */
+    fun discover(name: String)
     fun stopSearch()
     fun request(endpoint: String, name: String)
     fun accept(endpoint: String)
@@ -203,7 +211,7 @@ class LinkMachine(
         if (mode == LinkMode.PAIR) {
             if (endpoint == null) {
                 showSearching()
-                autoPickAt = if (found.size == 1) clock() + AUTO_PICK_MS else 0
+                autoPickAt = if (found.size == 1 && transport.autoPick) clock() + AUTO_PICK_MS else 0
             }
         } else if (endpoint == null) connect(id)
     }
@@ -285,7 +293,7 @@ class LinkMachine(
             rediscovered = true
             record("szukanie od nowa", code)
             transport.stopSearch()
-            transport.discover()
+            transport.discover(ownName)
             return
         }
         if (code in LinkErrors.HARMLESS) return
@@ -377,7 +385,7 @@ class LinkMachine(
         // Zawsze od czystego startu: Nearby na drugie startDiscovery odpowiada 8002 i nie zgłasza znanego punktu
         // ponownie, a telefon (SEND) łączy się tylko po onFound, więc bez tego wisiałby na „Szukam…”.
         transport.stopSearch()
-        if (role == SyncRole.HOST) transport.advertise(ownName) else transport.discover()
+        if (role == SyncRole.HOST) transport.advertise(ownName) else transport.discover(ownName)
         // Punkt znany z poprzedniego szukania (np. po zerwaniu łącza): próba od razu, bez czekania na onFound.
         if (role == SyncRole.CLIENT && mode != LinkMode.PAIR) found.keys.firstOrNull()?.let(::connect)
     }

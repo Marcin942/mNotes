@@ -84,7 +84,7 @@ class KredaKrzyweTest {
         println("|---|---|---|---|---|---|---|---|---|---|")
         val old = CurveMetrics.Sum(); val new = CurveMetrics.Sum()
         var lines = 0; var msOld = 0L; var msNew = 0L; var worstSmooth = 0.0
-        val previews = setOf("okladka-wzor", "20260318_154119")
+        val previews = setOf("okladka-wzor", "20260318_154119", "20260326_140000")
         for (f in files) {
             val res = BoardPipeline.run(load(f, SIDE))
             val b = both(res.image)

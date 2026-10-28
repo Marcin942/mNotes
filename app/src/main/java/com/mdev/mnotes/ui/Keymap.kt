@@ -140,6 +140,7 @@ object CmdDefs {
         CmdDef("bookmark", 3, "Przełącz zakładkę strony", "Toggle page bookmark", "Ctrl+B"),
         CmdDef("pageTags", 3, "Tagi tej strony… (#definicja, #zadanie)", "Tags of this page… (#definition, #exercise)", ""),
         CmdDef("copyPage", 3, "Kopiuj stronę", "Copy page", "Ctrl+Shift+C"),
+        CmdDef("copyPageImage", 3, "Kopiuj stronę jako obraz (do schowka)", "Copy page as image (to clipboard)", ""),
         CmdDef("cutPage", 3, "Wytnij stronę", "Cut page"),
         CmdDef("pastePage", 3, "Wklej stronę po bieżącej", "Paste page after current", "Ctrl+Shift+V"),
 

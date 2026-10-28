@@ -54,6 +54,7 @@ import androidx.compose.material.icons.rounded.ContentPaste
 import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.FileCopy
+import androidx.compose.material.icons.rounded.Image
 import androidx.compose.material.icons.rounded.MoreVert
 import androidx.compose.material.icons.rounded.SwapVert
 import androidx.compose.material.icons.rounded.Tag
@@ -435,6 +436,7 @@ private fun PageThumbItem(
                     It(T.t("Duplikuj", "Duplicate"), Icons.Rounded.FileCopy, !ro) { ed.duplicatePage(i) }
                     HorizontalDivider(color = m.line)
                     It(T.t("Kopiuj stronę", "Copy page"), Icons.Rounded.ContentCopy) { ed.copyPage(i) }
+                    It(T.t("Kopiuj stronę jako obraz", "Copy page as image"), Icons.Rounded.Image, !page.spec.board || !ed.doc.content(page).isEmpty) { ed.copyPageAsImage(i) }
                     It(T.t("Wytnij stronę", "Cut page"), Icons.Rounded.ContentCut, !ro && total > 1) { ed.cutPage(i) }
                     It(T.t("Wklej stronę po tej", "Paste page after"), Icons.Rounded.ContentPaste, !ro && Clip.page != null) { ed.pastePage(i) }
                     It(if (marked) T.t("Usuń zakładkę", "Remove bookmark") else T.t("Dodaj zakładkę", "Add bookmark"), if (marked) Icons.Rounded.BookmarkBorder else Icons.Rounded.Bookmark) { ed.toggleBookmark(i) }

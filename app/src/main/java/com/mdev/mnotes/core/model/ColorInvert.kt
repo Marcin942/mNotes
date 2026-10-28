@@ -22,18 +22,6 @@ object ColorInvert {
         0f, 0f, 0f, 1f, 0f,
     )
 
-    /**
-     * Kolor kreski rysowanej w trakcie na stronie [inverted] (A2-6): kryjący atrament od razu odwrócony — tam, gdzie
-     * zakrywa tło, wynik jest ten sam co odwrócenie całości, a warstwa na każdą klatkę odpada. Kreska, która miesza się z
-     * tłem ([mixes]: zakreślacz, pióro półprzezroczyste) wymaga odwrócenia sumy, bo macierz obcina nasycone kanały i nie
-     * przenosi się przez mieszanie: wtedy null = rysuj w warstwie z filtrem.
-     */
-    fun liveInk(argb: Int, inverted: Boolean, mixes: Boolean): Int? = when {
-        !inverted -> argb
-        mixes -> null
-        else -> apply(argb)
-    }
-
     /** Kolor ARGB po odwróceniu (do testów i miniatur kolorów w UI). */
     fun apply(argb: Int): Int {
         val r = (argb shr 16) and 255; val g = (argb shr 8) and 255; val b = argb and 255

@@ -837,4 +837,11 @@ Nearby nie zmieniam do odpowiedzi Marcina na pytania z `plan/NEARBY-OPEN-SOURCE.
   **Tablet:** pole tekstu z żółtym/różowym/błękitnym tłem i tekstem czarnym, granatowym, czerwonym → „⋮” → Strony →
   „Ciemne”: tło pola ciemne w tym samym odcieniu, tekst wyraźnie jasny i czytelny (wcześniej jasne tło i jasny tekst);
   wiaderkiem wypełniony obszar też ciemnieje. Zakreślacz i wypełnienie zamkniętej krzywej wyglądają jak przedtem.
+- **2c-A3 docisk do kratki w układzie** — `noc/f2c-osie`, 9963cd6. `axes.snap` domyślnie wyłączone (też w profilu
+  „Rysowanie”); spłaszczanie tylko biegów prawie równoległych (< 2°) z płynnym wejściem; układem jest tylko krzyż
+  z podziałką; dymek przy zmianie jednostki. Testy: core 822, lab 893, 0 porażek. **Nie sprawdzone:** na urządzeniu.
+  **Tablet:** Ustawienia → Edytor i pióro → Układ współrzędnych → włącz „Układ na kratce…”. Strona w kratkę → Wstaw →
+  „Układ współrzędnych…”, jednostka 7 mm → dymek „Podziałka dopasowana do kratki: 5 mm zamiast 7 mm”. W układzie:
+  prosta odręczna pod ok. 5–10° zostaje prostą (bez schodków), kreska wzdłuż linii kratki kładzie się na niej i dochodzi
+  do niej łagodnie. Narysuj tabelę z prostych (przytrzymanie) i pisz w niej — kreski nie są dociskane.
 

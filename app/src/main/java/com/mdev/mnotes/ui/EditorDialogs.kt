@@ -72,6 +72,8 @@ import com.mdev.mnotes.core.text.MathText
 import com.mdev.mnotes.core.text.TextFit
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import com.mdev.mnotes.app.app
@@ -266,6 +268,19 @@ fun GoToDialog(ed: Editor, onDismiss: () -> Unit) {
 
 // ─────────────────────────────── Pole tekstowe (TextBox) ───────────────────────────────
 
+/** Czcionki do wyboru w panelu tekstu (3c-A11): dołączone i systemowa bezszeryfowa (dawna domyślna). */
+private val FONT_CHOICES = listOf(
+    TextBox.FAMILY_LITERATA, TextBox.FAMILY_INTER, TextBox.FAMILY_ATKINSON, TextBox.FAMILY_JETBRAINS, TextBox.FAMILY_CAVEAT, TextBox.FAMILY_SANS,
+)
+
+/** Podpis czcionki: nazwa dołączonej albo opis systemowej. */
+internal fun fontLabel(family: Int): String = TextBox.fontName(family)?.let { if (family == TextBox.FAMILY_ATKINSON) "Atkinson" else it } ?: when (family) {
+    TextBox.FAMILY_SERIF -> T.t("Systemowa szeryfowa", "System serif")
+    TextBox.FAMILY_MONO -> T.t("Systemowa mono", "System mono")
+    TextBox.FAMILY_HAND -> T.t("Systemowe pismo ręczne", "System handwriting")
+    else -> T.t("Systemowa", "System")
+}
+
 @Composable
 fun TextDialog(ed: Editor, req: TextRequest) {
     val set = ed.settings
@@ -345,11 +360,15 @@ fun TextDialog(ed: Editor, req: TextRequest) {
             IconBtn(Icons.Rounded.FormatAlignJustify, T.t("Wyjustuj", "Justify"), { align = TextBox.ALIGN_JUSTIFY }, selected = align == TextBox.ALIGN_JUSTIFY, size = 36.dp, iconSize = 20.dp)
         }
         FlowRow(Modifier.padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            Chip(T.t("Bezszeryfowa", "Sans"), family == TextBox.FAMILY_SANS, { family = TextBox.FAMILY_SANS })
-            Chip(T.t("Szeryfowa", "Serif"), family == TextBox.FAMILY_SERIF, { family = TextBox.FAMILY_SERIF })
-            Chip(T.t("Mono", "Mono"), family == TextBox.FAMILY_MONO, { family = TextBox.FAMILY_MONO })
-            Chip(T.t("Pismo ręczne", "Handwriting"), family == TextBox.FAMILY_HAND, { family = TextBox.FAMILY_HAND })
+            // 3c-A11: czcionki dołączone; systemowe szeryfowa/mono/ręczna tylko wtedy, gdy ma je edytowane pole.
+            val shown = FONT_CHOICES + listOfNotNull(family.takeIf { it in TextBox.FAMILY_SERIF..TextBox.FAMILY_HAND })
+            for (f in shown) Chip(fontLabel(f), family == f, { family = f })
         }
+        Text(
+            T.t("Zażółć gęślą jaźń · αβγ · x² · 1,25", "The quick brown fox · αβγ · x² · 1.25"),
+            fontFamily = remember(family, style) { FontFamily(renderer.typeface(family, style)) },
+            fontSize = 18.sp, modifier = Modifier.padding(top = 6.dp),
+        )
         Row(Modifier.padding(top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
             SectionLabel(T.t("Rozmiar", "Size")); Spacer(Modifier.weight(1f))
             Text("${size.toInt()} pt", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)

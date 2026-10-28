@@ -212,7 +212,7 @@ class Settings(ctx: Context) {
     var viewPdf by Pref("view.pdf", ViewMode.DEFAULT_PDF)
     var textSize by Pref("text.size", 20f)
     var textColor by Pref("text.color", 0xFF202124.toInt())
-    var textFamily by Pref("text.family", 0)
+    var textFamily by Pref("text.family", com.mdev.mnotes.core.model.TextBox.FAMILY_DEFAULT)
 
     // — Biblioteka —
     var libView by Pref("lib.view", 0)               // 0 ikony, 1 lista, 2 kompaktowy

@@ -286,7 +286,7 @@ object TikzExport {
             if (t.text.isBlank()) return
             drawn++
             val font = StringBuilder("\\fontsize{").append(num(t.size.toDouble())).append("}{").append(num(t.size * 1.2)).append("}\\selectfont")
-            font.append(when (t.family) { TextBox.FAMILY_SERIF -> "\\rmfamily"; TextBox.FAMILY_MONO -> "\\ttfamily"; else -> "\\sffamily" })
+            font.append(when (TextBox.generic(t.family)) { TextBox.FAMILY_SERIF -> "\\rmfamily"; TextBox.FAMILY_MONO -> "\\ttfamily"; else -> "\\sffamily" })
             if (t.bold) font.append("\\bfseries")
             if (t.italic) font.append("\\itshape")
             val o = arrayListOf(

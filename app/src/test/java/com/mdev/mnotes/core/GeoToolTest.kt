@@ -131,6 +131,18 @@ class GeoToolTest {
         assertTrue(GeoTool.build(Kind.ANGLE_AT, listOf(ln, v), 0, 1f, angle = 120f).isNotEmpty())
     }
 
+    /** 3c-B3: ostatnie stuknięcie liczy z bieżących kształtów; usunięty między stuknięciami — brak wejść. */
+    @Test fun picksAreReadAgainAtTheLastTap() {
+        val seg = poly(0f, 0f, 100f, 0f)
+        val pl = GeoTool.pickFrom(listOf(seg), 50f, 1f, 5f, In.LINE)!!
+        val pp = GeoTool.pickFrom(listOf(seg), 50f, 60f, 5f, In.POINT)!!
+        val moved = poly(0f, 20f, 100f, 20f).withId(seg.id)
+        val now = GeoTool.resolveAll(Kind.PARALLEL, listOf(pl, pp), mapOf(seg.id to moved))!!
+        assertEquals(20f, (now[0] as Input.Ln).l.a.y, 1e-3f)
+        assertEquals(60f, (now[1] as Input.Point).p.y, 1e-3f)
+        assertNull(GeoTool.resolveAll(Kind.PARALLEL, listOf(pl, pp), emptyMap()))
+    }
+
     /** 3c-B3: prosta zwinięta do punktu (koniec przeciągnięty na początek przy konstrukcji na żywo) nie daje wyniku. */
     @Test fun collapsedLineGivesNoResult() {
         val p = com.mdev.mnotes.core.geom.Construct.P(50f, 50f)

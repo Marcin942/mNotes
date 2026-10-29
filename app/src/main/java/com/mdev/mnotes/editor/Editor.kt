@@ -1185,8 +1185,10 @@ class Editor(val ctx: Context, val nbId: String) {
         val ink = native(page, (if (pen.kind == PenKind.HIGHLIGHTER) 0xFF37474F.toInt() else pen.color) or (0xFF shl 24))
         val kind = geoKind; val w = pen.width.coerceIn(0.6f, 3f); val names = settings.constructNames; val pl = T.pl; val prm = geoParams()
         val picks = geoPicks.toList()
-        val built = GeoTool.build(kind, geoInputs.toList(), ink, w, names, pl, prm = prm)
+        val now = GeoTool.resolveAll(kind, picks, doc.content(page).elements.associateBy { it.id })
         geoReset()
+        if (now == null) return say(T.t("Wskazany wcześniej kształt zniknął — wskaż od nowa", "A shape picked earlier is gone — pick again"))
+        val built = GeoTool.build(kind, now, ink, w, names, pl, prm = prm)
         val els = constructed(page, built, GeoTool.failOf(kind))
             ?: return say(T.t("Ta konstrukcja nie ma rozwiązania dla wskazanych kształtów", "This construction has no solution for the picked shapes"))
         if (els.isEmpty()) return
@@ -1196,8 +1198,7 @@ class Editor(val ctx: Context, val nbId: String) {
         // 3c-B2: przecięcie zależy od dwóch kształtów, środek odcinka od odcinka — Live dostaje je wszystkie.
         val ids = picks.flatMap { it.ids }.distinct()
         live.add(pid, ids, els.map { it.id }) { cur ->
-            val byId = cur.associateBy { it.id }
-            val ins = picks.mapIndexed { i, pk -> GeoTool.resolvePick(kind.inputs[i], pk, byId) ?: return@add null }
+            val ins = GeoTool.resolveAll(kind, picks, cur.associateBy { it.id }) ?: return@add null
             GeoTool.build(kind, ins, ink, w, names, pl, prm = prm).takeUnless { it.isEmpty() || liveTooFar(pid, it) }
         }
     }

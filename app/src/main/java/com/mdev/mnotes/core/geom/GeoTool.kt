@@ -150,6 +150,14 @@ object GeoTool {
         return resolve(want, byId[id] ?: return null, pk.part)
     }
 
+    /**
+     * Wejścia konstrukcji [k] odczytane od nowa z bieżącej strony [byId]; null, gdy któryś wskazany kształt zniknął.
+     * 3c-B3: między stuknięciami kształt można przesunąć albo usunąć (gumka, cofnięcie) — wynik liczony ze starych
+     * współrzędnych wisiał wtedy w powietrzu, a zależność na żywo od razu się zrywała.
+     */
+    fun resolveAll(k: Kind, picks: List<Picked>, byId: Map<Int, Element>): List<Input>? =
+        picks.mapIndexed { i, pk -> resolvePick(k.inputs[i], pk, byId) ?: return null }
+
     fun pickFrom(els: List<Element>, x: Float, y: Float, tol: Float, want: In): Picked? {
         val t = P(x, y)
         val strokes = els.asReversed().filterIsInstance<Stroke>()

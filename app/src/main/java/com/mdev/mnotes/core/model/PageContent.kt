@@ -143,6 +143,13 @@ class PageContent private constructor(val elements: List<Element>) {
 
     fun revert(edit: ElementsEdit): PageContent = apply(edit.inverse())
 
+    /**
+     * Ta sama zawartość z nowymi identyfikatorami — dla kopii strony (powielenie, wklejenie). Identyfikatory są wspólne
+     * dla całej pamięci, a [apply] usuwa po identyfikatorze: kopia z tymi samymi numerami po przeniesieniu elementu
+     * między stronami miała dwa elementy o jednym numerze i cofnięcie kasowało oba.
+     */
+    fun copyWithNewIds(): PageContent = if (isEmpty) EMPTY else PageContent(elements.map { it.withId(Ids.next()) })
+
     companion object {
         val EMPTY = PageContent(emptyList())
 

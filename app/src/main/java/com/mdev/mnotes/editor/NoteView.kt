@@ -2792,7 +2792,7 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
         val s = ed.sel ?: return null
         if (s.ids.size != 1) return null
         val e = ed.selElements().singleOrNull() as? Stroke ?: return null
-        return if (ShapeBox.frameOf(e) != null) e else null
+        return if (!e.locked && ShapeBox.frameOf(e) != null) e else null
     }
 
     /** Promień chwytu uchwytów kształtu: najwyżej 24 dp, a przy małym kształcie mniejszy, by środek zostawał do przesuwania. */

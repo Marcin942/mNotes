@@ -311,3 +311,57 @@ class BoardPipelineTest {
         assertEquals("litera", 30, (0 until 30).count { Raster.alpha(out[it, 101]) > 128 })
     }
 }
+
+/** 3c-B3: przegląd kredy (K1–K5) — każdy test odtwarzał błąd przed poprawką. */
+class KredaReviewTest {
+    private val plain = BoardOptions(crop = false, flatten = false, sharpen = false)
+
+    /** K1: ręczny próg poniżej 10 % z progiem lokalnym — pusty zakres coerceIn wywracał panel. */
+    @Test fun localCutBelowAutoMinimumDoesNotThrow() {
+        val m = Chalk.localCut(Raster.filled(8, 8, 0xFF202020.toInt()), black = true, cut = 0.05f)
+        assertEquals(64, m.size)
+        for (v in m) assertEquals(0.05f, v, 1e-6f)
+    }
+
+    /** K4: listwa z drobnymi przerwami (≤ RAIL_GAP) to jeden pas, nie kawałki za krótkie, żeby się liczyły. */
+    @Test fun railWithSmallGapsIsBridged() {
+        val ink = Raster.rgbF(0.95f, 0.95f, 0.95f)
+        val r = Raster(1000, 200)
+        for (x in 0 until 1000) if (x % 25 >= 2) for (y in 100..102) r[x, y] = ink
+        val out = Chalk.dropRails(r)
+        assertEquals(0, Raster.alpha(out[510, 101]))
+    }
+
+    /** K5: „tablicy nie znaleziono” (cały kadr) nie przepróbkowuje zdjęcia: ten sam rozmiar i te same piksele. */
+    @Test fun fullFrameStraightenKeepsPixels() {
+        val r = Raster(50, 40)
+        for (y in 0 until 40) for (x in 0 until 50) r[x, y] = if ((x + y) % 2 == 0) 0xFF202020.toInt() else 0xFF282828.toInt()
+        val s = BoardPipeline.prepare(r, plain)
+        assertEquals(50, s.image.w); assertEquals(40, s.image.h)
+        assertTrue(s.image.px.contentEquals(r.px))
+        val p = s.toPhoto(49f, 39f)
+        assertEquals(49.5f / 50, p[0], 1e-4f); assertEquals(39.5f / 40, p[1], 1e-4f)
+    }
+
+    /** K3: skrzyżowane ręczne narożniki nie zamieniają zdjęcia w prawie pusty obraz. */
+    @Test fun crossedManualCornersFallBack() {
+        val r = Raster.filled(100, 50, 0xFF202020.toInt())
+        val s = BoardPipeline.prepare(r, plain, Quad.of(99f, 0f, 0f, 0f, 99f, 49f, 0f, 49f))
+        val clear = s.image.px.count { Raster.alpha(it) == 0 }
+        assertTrue("przezroczystych $clear z ${s.image.px.size}", clear < s.image.px.size / 100)
+    }
+
+    /** K2: przy kilku zdjęciach wynik większy niż maxSide nie jest pomniejszany drugi raz (kreski trafiały obok). */
+    @Test fun mergedBoardLargerThanMaxSideMapsBack() {
+        // Długa tablica po przekątnej: górny bok ~430 px na zdjęciu 400×400, czyli dłuższy niż maxSide.
+        val q = Quad.of(64f, 27f, 394f, 304f, 336f, 373f, 6f, 96f)
+        val photos = listOf(Synthetic.photo(400, 400, seed = 1, quad = q), Synthetic.photo(400, 400, seed = 2, quad = q))
+        val s = BoardPipeline.prepareMany(2, plain.copy(maxSide = 400)) { photos[it] }!!
+        val found = s.quad!!
+        assertTrue("wyprostowana tablica dłuższa niż maxSide: ${found.rectSize()}", found.rectSize().first > 400)
+        // Prawy górny piksel wyniku wraca dokładnie na prawy górny narożnik tablicy.
+        val tr = s.toPhoto(s.image.w - 1f, 0f)
+        assertEquals("x", (found.x(1) + 0.5f) / 400, tr[0], 1e-3f)
+        assertEquals("y", (found.y(1) + 0.5f) / 400, tr[1], 1e-3f)
+    }
+}

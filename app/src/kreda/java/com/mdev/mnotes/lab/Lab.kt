@@ -3,6 +3,8 @@ package com.mdev.mnotes.lab
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Matrix
+import android.os.Handler
+import android.os.Looper
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.awaitEachGesture
@@ -102,6 +104,8 @@ object Lab : LabFeatures {
      * obliczeń, a nie na jednowątkowym `repo.io`, które w tym czasie musi móc zapisywać zeszyt.
      */
     private val work = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    // lazy: obiekt ładuje się po nazwie także w testach JVM, gdzie Looper to atrapa
+    private val main by lazy { Handler(Looper.getMainLooper()) }
 
     /** Tryby podglądu: wynik, ręczne narożniki tablicy, gumka wielokątna. */
     private const val SHOW_RESULT = 0
@@ -124,6 +128,9 @@ object Lab : LabFeatures {
         val erase = edits.erase
         var prep by remember { mutableStateOf<BoardSource?>(null) }
         var preview by remember { mutableStateOf<Bitmap?>(null) }
+        // 3c-B3 (K8): po zmianie geometrii podgląd pokazuje stary wynik, dopóki nowy się nie policzy — pętla gumki
+        // narysowana na nim trafiłaby w inne miejsce nowego wyniku.
+        var stale by remember { mutableStateOf(false) }
         var info by remember { mutableStateOf("") }
         var busy by remember { mutableStateOf(false) }
         var more by remember { mutableStateOf(false) }
@@ -136,6 +143,7 @@ object Lab : LabFeatures {
         // i dopiero po 60 ms ciszy (szybkie klikanie nie ustawia w kolejce kilku przeliczeń).
         LaunchedEffect(sources, listOf(opt.straighten, opt.crop, opt.flatten, opt.sharpen), corners?.toList()) {
             val src = sources ?: return@LaunchedEffect
+            stale = true
             delay(60)
             val small = opt.copy(maxSide = PREVIEW)
             prep = withContext(Dispatchers.Default) {
@@ -148,6 +156,7 @@ object Lab : LabFeatures {
             val p = prep ?: return@LaunchedEffect
             val res = withContext(Dispatchers.Default) { BoardPipeline.finish(p, opt, scaled(erase, p.image)) }
             preview = res.image.toBitmap()
+            stale = false
             val skipped = p.skipped.map { it + 1 }
             info = T.t(
                 "Tło ${if (res.black) "ciemne" else "jasne"} · próg ${"%.2f".format(res.cut)}" + (if (many) " · mediana ${imgs.size - skipped.size} zdjęć" else "") +
@@ -169,43 +178,50 @@ object Lab : LabFeatures {
                 val quad = corners
                 val rub = erase
                 work.launch {
-                    // Pełny rozmiar: zdjęcia wczytywane po jednym (przy kilku zostają tylko wyprostowane klatki).
-                    val src = if (many) BoardPipeline.prepareMany(files.size, chosen) { loadRaster(files[it], chosen.maxSide) }
-                    else loadRaster(files[0], chosen.maxSide)?.let { BoardPipeline.prepare(it, chosen, quad?.let { q -> quadOf(q, it) }) }
-                    val res = src?.let { BoardPipeline.finish(it, chosen, scaled(rub, it.image)) }
-                    val post = { f: () -> Unit -> ed.view?.post(f) }
-                    val skippedNote = src?.skipped?.takeIf { it.isNotEmpty() }?.let { s ->
-                        T.t("Pominięto zdjęcia ${s.joinToString { "${it + 1}" }}: nie znalazłem na nich tablicy", "Skipped photos ${s.joinToString { "${it + 1}" }}: no board found on them")
-                    }
-                    if (res == null || src == null) {
-                        post { busy = false; ed.say(T.t("Nie udało się wczytać zdjęcia", "Could not load the photo")) }
-                        return@launch
-                    }
-                    when {
-                        strokes -> {
-                            val ink = strokeInk(chosen)
-                            val els = if (chosen.curves) ChalkStrokes.toCurves(res.image, src, imgs[src.ref], ink)
-                            else ChalkStrokes.toStrokes(res.image, src, imgs[src.ref], ink)
-                            post {
-                                busy = false
-                                if (els.isEmpty()) ed.say(T.t("Nie znaleziono kredy do zamiany na kreski", "No chalk found to turn into strokes"))
-                                else { ed.addOnSelPage(els); skippedNote?.let(ed::say); close() }
+                    // 3c-B3 (K7): powrót przez główny wątek, nie przez widok (po jego zwolnieniu okno wisiało na
+                    // „Przetwarzam…”), a błąd potoku (też brak pamięci przy wielu zdjęciach) zdejmuje blokadę, nie wywraca aplikacji.
+                    val post = { f: () -> Unit -> main.post(f); Unit }
+                    try {
+                        // Pełny rozmiar: zdjęcia wczytywane po jednym (przy kilku zostają tylko wyprostowane klatki).
+                        val src = if (many) BoardPipeline.prepareMany(files.size, chosen) { loadRaster(files[it], chosen.maxSide) }
+                        else loadRaster(files[0], chosen.maxSide)?.let { BoardPipeline.prepare(it, chosen, quad?.let { q -> quadOf(q, it) }) }
+                        val res = src?.let { BoardPipeline.finish(it, chosen, scaled(rub, it.image)) }
+                        val skippedNote = src?.skipped?.takeIf { it.isNotEmpty() }?.let { s ->
+                            T.t("Pominięto zdjęcia ${s.joinToString { "${it + 1}" }}: nie znalazłem na nich tablicy", "Skipped photos ${s.joinToString { "${it + 1}" }}: no board found on them")
+                        }
+                        if (res == null || src == null) {
+                            post { busy = false; ed.say(T.t("Nie udało się wczytać zdjęcia", "Could not load the photo")) }
+                            return@launch
+                        }
+                        when {
+                            strokes -> {
+                                val ink = strokeInk(chosen)
+                                val els = if (chosen.curves) ChalkStrokes.toCurves(res.image, src, imgs[src.ref], ink)
+                                else ChalkStrokes.toStrokes(res.image, src, imgs[src.ref], ink)
+                                post {
+                                    busy = false
+                                    if (els.isEmpty()) ed.say(T.t("Nie znaleziono kredy do zamiany na kreski", "No chalk found to turn into strokes"))
+                                    else { ed.addOnSelPage(els); skippedNote?.let(ed::say); close() }
+                                }
+                            }
+                            many -> {
+                                val png = encodePng(res.image)
+                                post {
+                                    if (png == null) busy = false
+                                    else addImage(ed, imgs[src.ref], png, res.image) { busy = false; skippedNote?.let(ed::say); close() }
+                                }
+                            }
+                            else -> {
+                                val png = encodePng(res.image)
+                                post {
+                                    if (png == null) busy = false
+                                    else ed.replaceSelImageAsset(imgs[0].id, png, res.image.w, res.image.h) { busy = false; if (it) close() }
+                                }
                             }
                         }
-                        many -> {
-                            val png = encodePng(res.image)
-                            post {
-                                if (png == null) busy = false
-                                else addImage(ed, imgs[src.ref], png, res.image) { busy = false; skippedNote?.let(ed::say); close() }
-                            }
-                        }
-                        else -> {
-                            val png = encodePng(res.image)
-                            post {
-                                if (png == null) busy = false
-                                else ed.replaceSelImageAsset(imgs[0].id, png, res.image.w, res.image.h) { busy = false; if (it) close() }
-                            }
-                        }
+                    } catch (e: Throwable) {
+                        if (e is kotlinx.coroutines.CancellationException) throw e
+                        post { busy = false; ed.say(if (e is OutOfMemoryError) T.t("Za mało pamięci — wybierz mniej zdjęć", "Not enough memory — pick fewer photos") else T.t("Nie udało się oczyścić zdjęcia", "Could not clean up the photo")) }
                     }
                 }
             },
@@ -216,7 +232,7 @@ object Lab : LabFeatures {
                 when {
                     mode == SHOW_CORNERS && photo != null && !many && opt.straighten ->
                         CornerBox(photo, corners ?: auto ?: FULL) { edits = edits.withGeometry(it) }
-                    else -> ResultBox(preview, if (mode == SHOW_ERASER) erase else null) { edits = edits.withLoop(it) }
+                    else -> ResultBox(preview, if (mode == SHOW_ERASER) erase else null) { if (!stale) edits = edits.withLoop(it) }
                 }
                 val hint = when (mode) {
                     SHOW_CORNERS -> when {
@@ -392,10 +408,12 @@ object Lab : LabFeatures {
                     active = i
                     drag(down.id) { ch ->
                         ch.consume()
-                        q = q.copyOf().also {
+                        val next = q.copyOf().also {
                             it[2 * i] = ((ch.position.x - r.left) / r.width).coerceIn(0f, 1f)
                             it[2 * i + 1] = ((ch.position.y - r.top) / r.height).coerceIn(0f, 1f)
                         }
+                        // 3c-B3 (K3): narożnik nie przechodzi za sąsiedni — czworokąt zostaje wypukły.
+                        if (Quad(next).isConvex()) q = next
                     }
                     active = -1
                     onDone(q.copyOf())

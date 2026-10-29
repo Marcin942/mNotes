@@ -154,7 +154,8 @@ object Chalk {
         val mean = BoardFilters.boxBlur(a, w, h, r)
         for (i in a.indices) a[i] *= a[i]
         val sq = BoardFilters.boxBlur(a, w, h, r)
-        val lo = max(AUTO_CUT_MIN, LOCAL_FLOOR * cut)
+        // 3c-B3 (K1): ręczny próg może być niższy niż AUTO_CUT_MIN — wtedy zakres byłby pusty i coerceIn rzucał.
+        val lo = min(cut, max(AUTO_CUT_MIN, LOCAL_FLOOR * cut))
         return FloatArray(w * h) { i -> (mean[i] + LOCAL_K * kotlin.math.sqrt(max(0f, sq[i] - mean[i] * mean[i]))).coerceIn(lo, cut) }
     }
 
@@ -227,12 +228,16 @@ object Chalk {
             // Odcinki w paśmie ±1 z przerwami ≤ gap; liczą się tylko długie ([RAIL_PIECE]): listwa przerwana półką, kablem
             // albo ręką to kilka długich kawałków na jednej prostej, a pismo takich nie ma.
             val runs = ArrayList<IntArray>()
+            // 3c-B3 (K4): odcinek zamyka dopiero przerwa dłuższa niż gap albo koniec (dawniej każdy pusty piksel).
             var s = -1; var last = -1
             for (u in 0..len) {
                 val on = u < len && (hit(u, -1) || hit(u, 0) || hit(u, 1))
-                if (on && (s < 0 || u - last <= gap)) { if (s < 0) s = u; last = u; continue }
-                if (s >= 0 && last - s + 1 >= RAIL_PIECE * len) runs += intArrayOf(s, last)
-                s = if (on) u else -1; last = u
+                if (on && s >= 0 && u - last - 1 <= gap) { last = u; continue }
+                if (s >= 0 && (on || u == len || u - last - 1 > gap)) {
+                    if (last - s + 1 >= RAIL_PIECE * len) runs += intArrayOf(s, last)
+                    s = -1
+                }
+                if (on) { s = u; last = u }
             }
             if (runs.sumOf { it[1] - it[0] + 1 } < need) continue
             // Grubość: kolejne przesunięcia od prostej, na których pas pokrywa co najmniej połowę odcinków.
@@ -512,11 +517,15 @@ object BoardPipeline {
         var used: Quad? = null
         var back: Homography? = null
         if (opt.straighten) {
-            val q = quad?.scaled(k) ?: BoardGeometry.guessQuad(img, black)
+            // 3c-B3 (K3): skrzyżowane narożniki (niewypukły czworokąt) dawały prawie pusty obraz — wtedy zgadnięte.
+            val q = quad?.scaled(k)?.takeIf { it.isConvex() } ?: BoardGeometry.guessQuad(img, black)
             used = q
-            val (w, h) = q.rectSize()
-            back = Homography.of(Quad.of(0f, 0f, w - 1f, 0f, w - 1f, h - 1f, 0f, h - 1f), q)
-            img = BoardGeometry.warp(img, q)
+            // 3c-B3 (K5): cały kadr („tablicy nie znaleziono”) nie przepróbkowuje zdjęcia o piksel mniejszego.
+            if (!q.isFull(img.w, img.h)) {
+                val (w, h) = q.rectSize()
+                back = Homography.of(Quad.of(0f, 0f, w - 1f, 0f, w - 1f, h - 1f, 0f, h - 1f), q)
+                img = BoardGeometry.warp(img, q)
+            }
         }
         var cx = 0; var cy = 0
         if (opt.crop) cropToBoardAt(img, black).let { (cut, x, y) -> img = cut; cx = x; cy = y }
@@ -579,11 +588,15 @@ object BoardPipeline {
         }
         if (ref < 0) {
             val (first, img) = whole[0]
-            ref = first; refQuad = Quad.full(img.w, img.h); refSize = refQuad.rectSize(); refFit = img.w to img.h
-            for ((_, w) in whole) frames += BoardGeometry.warp(w, Quad.full(w.w, w.h), refSize)
+            // 3c-B3 (K5, K6): klatki całych zdjęć bez przepróbkowania i bez drugiej kopii, gdy rozmiar się zgadza.
+            ref = first; refQuad = Quad.full(img.w, img.h); refSize = img.w to img.h; refFit = img.w to img.h
+            for ((_, w) in whole) frames += if (w.w to w.h == refSize) w else BoardGeometry.warp(w, Quad.full(w.w, w.h), refSize)
+            whole.clear()
         }
         val merged = BoardStack.median(frames)
-        val s = prepare(merged, opt.copy(straighten = false, black = black))
+        frames.clear()
+        // 3c-B3 (K2): wyprostowana tablica bywa dłuższa niż maxSide; drugie pomniejszenie rozjechałoby `back` z wynikiem.
+        val s = prepare(merged, opt.copy(straighten = false, black = black, maxSide = max(opt.maxSide, max(merged.w, merged.h))))
         val (w, h) = refSize
         val back = Homography.of(Quad.of(0f, 0f, w - 1f, 0f, w - 1f, h - 1f, 0f, h - 1f), refQuad!!)
         return BoardSource(s.image, s.black, refQuad, s.flattened, refFit.first, refFit.second, s.cropX, s.cropY, back, ref, skipped)

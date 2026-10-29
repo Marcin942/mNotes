@@ -67,6 +67,25 @@ class LinkedUndoTest {
         assertEquals(listOf(later.id), ids("A"))
     }
 
+    /** 3c-B3: źródło zapisuje usunięcie razem z krokiem „na żywo” (Group) — para dalej cofa się razem. */
+    @Test fun halfWrappedInGroupStillLinks() {
+        val s = stroke(0f, 0f, 5f, 5f)
+        exec("A", DocEdit.Elements("p", ElementsEdit.add(hosts.getValue("A").contents.getValue("p"), listOf(s))))
+        val removal = DocEdit.Elements("p", ElementsEdit.remove(hosts.getValue("A").contents.getValue("p"), setOf(s.id)))
+        exec("A", DocEdit.Group(listOf(removal)))
+        val b = exec("B", DocEdit.Elements("p", ElementsEdit.add(hosts.getValue("B").contents.getValue("p"), listOf(s.withId(s.id + 1000)))))
+        linked.link("A", removal, "B", b)
+        undo("B")
+        assertEquals(listOf(s.id), ids("A"))
+        assertEquals(emptyList<Int>(), ids("B"))
+        redo("A")
+        assertEquals(emptyList<Int>(), ids("A"))
+        assertEquals(1, ids("B").size)
+        undo("A")
+        assertEquals(listOf(s.id), ids("A"))
+        assertEquals(emptyList<Int>(), ids("B"))
+    }
+
     @Test fun ordinaryStepsAreUntouched() {
         val s = stroke(0f, 0f, 1f, 1f)
         exec("A", DocEdit.Elements("p", ElementsEdit.add(hosts.getValue("A").contents.getValue("p"), listOf(s))))

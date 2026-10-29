@@ -146,8 +146,10 @@ fun PhoneLinkDialog(start: LinkMode, ed: Editor?, files: List<Outgoing>? = null,
     val bt = remember { com.mdev.mnotes.lab.LinkSettings.of(ctx).bluetooth }
     val fullPhoto = remember { com.mdev.mnotes.lab.LinkSettings.of(ctx).fullPhoto }
     val me = remember { deviceName(ctx) }
+    // 3c-B3: nazwa pary odczytana przed loadOrForget — ono ją czyści, więc „para wygasła” nigdy się nie pokazywało.
+    val hadPeer = remember { store.peerName.isNotEmpty() }
     var key by remember { mutableStateOf(if (start == LinkMode.PAIR) null else store.loadOrForget()) }
-    val expired = remember { start != LinkMode.PAIR && key == null && store.peerName.isNotEmpty() }
+    val expired = remember { start != LinkMode.PAIR && key == null && hadPeer }
     var mode by remember { mutableStateOf(if (start != LinkMode.PAIR && key == null) LinkMode.PAIR else start) }
     var role by remember(mode) { mutableStateOf(when (mode) { LinkMode.PAIR -> defaultRole(ctx); LinkMode.RECEIVE -> SyncRole.HOST; LinkMode.SEND -> SyncRole.CLIENT }) }
     var allowed by remember { mutableStateOf(missing(ctx, bt).isEmpty()) }
@@ -230,8 +232,11 @@ fun PhoneLinkDialog(start: LinkMode, ed: Editor?, files: List<Outgoing>? = null,
     DisposableEffect(link) {
         link?.first?.let { m ->
             m.start()
-            for (p in waiting) m.sendFile(p.name, p.mime, p.file)
-            waiting.clear()
+            // 3c-B3: maszyna parowania jest po sparowaniu zastępowana nową — oddane jej pliki by przepadły, czekają dalej.
+            if (mode != LinkMode.PAIR) {
+                for (p in waiting) m.sendFile(p.name, p.mime, p.file)
+                waiting.clear()
+            }
         }
         onDispose { link?.let { (m, t) -> m.stop(); (t as? NearbyTransport)?.close(); (t as? RfcommTransport)?.close() }; journals.save() }
     }
@@ -263,7 +268,7 @@ fun PhoneLinkDialog(start: LinkMode, ed: Editor?, files: List<Outgoing>? = null,
                 if (photo == null) { note = T.t("Nie udało się wczytać zdjęcia.", "Could not read the photo."); continue }
                 note = null
                 picked = true
-                liveLink.value?.first?.sendFile(photo.name, photo.mime, photo.file) ?: waiting.add(photo)
+                liveLink.value?.first?.takeIf { mode != LinkMode.PAIR }?.sendFile(photo.name, photo.mime, photo.file) ?: waiting.add(photo)
             }
             shot?.delete()
         }

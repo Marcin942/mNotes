@@ -289,8 +289,8 @@ fun penName(k: PenKind) = when (k) {
 fun EditorScreen(main: Editor, tabs: TabsCtl, onExit: () -> Unit, onSettings: () -> Unit, onShortcuts: () -> Unit, onColorSets: () -> Unit) {
     val ctx = LocalContext.current
     // 2b-A7: stanowisko — otwarty zeszyt i dokumenty dołożone pod nim; paski, panele i menu działają na aktywnym rzędzie.
+    // Rzędy zamyka Editor.close() głównego zeszytu (3c-B3), nie zniknięcie ekranu (Ustawienia, blokada).
     val st = remember(main) { main.station ?: Station(ctx, main) }
-    DisposableEffect(st) { onDispose { st.closeAll() } }
     val ed = st.active
     val set = ed.settings
     val m = mint
@@ -1039,8 +1039,7 @@ private fun androidx.compose.foundation.layout.BoxScope.GeoHint(ed: Editor) {
             }
         }
     }
-    val rotate = ed.geoKind == com.mdev.mnotes.core.geom.GeoTool.Kind.ROTATE
-    if (custom) GeoAngleDialog(ed.geoAngle, rotate, { custom = false }) { ed.geoAngle = it; custom = false }
+    if (custom) GeoAngleDialog(ed.geoAngle, ed.geoKind, { custom = false }) { ed.geoAngle = it; custom = false }
 }
 
 private val GEO_ANGLES = listOf(30f, 45f, 60f, 90f, 120f, 180f)
@@ -1055,15 +1054,17 @@ private fun GeoScaleLabel(s: Float): String {
     return if (s < 0) "×(−$v)" else "×$v"
 }
 
-/** Własny kąt w stopniach (także ujemny — w drugą stronę); [rotate] — kąt obrotu, inaczej kąt przy punkcie. */
+/** Własny kąt w stopniach (także ujemny — w drugą stronę); obrót do ±360°, kąt przy punkcie do ±180° ([GeoTool.angleOk]). */
 @Composable
-private fun GeoAngleDialog(start: Float, rotate: Boolean, onDismiss: () -> Unit, onPick: (Float) -> Unit) {
+private fun GeoAngleDialog(start: Float, kind: com.mdev.mnotes.core.geom.GeoTool.Kind, onDismiss: () -> Unit, onPick: (Float) -> Unit) {
+    val rotate = kind == com.mdev.mnotes.core.geom.GeoTool.Kind.ROTATE
     var text by remember { mutableStateOf(com.mdev.mnotes.core.geom.ConstructOps.deg(start, T.pl).removeSuffix("°")) }
-    val value = text.trim().replace(',', '.').toFloatOrNull()?.takeIf { it.isFinite() && kotlin.math.abs(it) <= 360f && it != 0f }
+    val value = text.trim().replace(',', '.').toFloatOrNull()?.takeIf { com.mdev.mnotes.core.geom.GeoTool.angleOk(kind, it) }
     MDialog(if (rotate) T.t("Kąt obrotu", "Rotation angle") else T.t("Miara kąta", "Angle size"), onDismiss, confirm = "OK", onConfirm = { value?.let(onPick) }, confirmEnabled = value != null) {
         androidx.compose.material3.OutlinedTextField(
             text, { text = it }, singleLine = true, suffix = { Text("°") },
-            supportingText = { Text(T.t("Od −360 do 360; ujemny obraca w drugą stronę", "From −360 to 360; negative turns the other way")) },
+            supportingText = { Text(if (rotate) T.t("Od −360 do 360; dodatni przeciwnie do wskazówek zegara", "From −360 to 360; positive turns counterclockwise")
+                else T.t("Od −180 do 180; ujemny w drugą stronę", "From −180 to 180; negative goes the other way")) },
             keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Decimal),
         )
     }

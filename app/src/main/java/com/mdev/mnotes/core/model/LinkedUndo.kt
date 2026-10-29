@@ -23,10 +23,14 @@ class LinkedUndo<K : Any> {
 
     /** Partner kroku [e], o ile [peek] partnera (wierzch jego stosu) to właśnie druga połowa pary. */
     fun partner(e: DocEdit?, peek: (K) -> DocEdit?): K? {
-        val h = halves[e ?: return null] ?: return null
+        if (e == null) return null
+        // 3c-B3: edytor może zapisać połowę razem z krokiem dodatkowym (ruch konstrukcji na żywo) jako Group.
+        val h = halves[e] ?: (e as? DocEdit.Group)?.edits?.firstNotNullOfOrNull { halves[it] } ?: return null
         val other = h.edit.get() ?: return null
-        return h.key.takeIf { peek(it) === other }
+        return h.key.takeIf { holds(peek(it), other) }
     }
+
+    private fun holds(top: DocEdit?, half: DocEdit) = top === half || (top as? DocEdit.Group)?.edits?.any { it === half } == true
 
     /** Cofa w [k] przez [undoIn], a gdy na wierzchu jest połowa pary — też u partnera. */
     fun undo(k: K, stackOf: (K) -> UndoStack?, undoIn: (K) -> Unit) {

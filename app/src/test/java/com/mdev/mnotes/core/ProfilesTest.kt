@@ -172,6 +172,15 @@ class ProfilesTest {
         assertEquals("", Profiles.unpin(Profiles.pin(null, "rysik", ""), "rysik"))
     }
 
+    /** 3c-B3: ręczna zmiana profilu po otwarciu zeszytu, potem stanowisko z innym profilem — wyjście wraca do ręcznego. */
+    @Test fun pinAfterManualChangeRestoresManualProfile() {
+        val first = Profiles.pin(null, "P1", "")
+        val second = Profiles.pin(first, "P2", "P3")  // użytkownik przełączył P1 → P3 ręcznie
+        assertEquals("P3", Profiles.unpin(second, "P2"))
+        // Bez ręcznej zmiany pierwotne „przed” zostaje.
+        assertEquals("", Profiles.unpin(Profiles.pin(first, "P2", "P1"), "P2"))
+    }
+
     @Test fun stationKeepsItsProfile() {
         val s = com.mdev.mnotes.core.layout.Workbench.Station("Analiza", listOf("nb1", "nb2"), profile = "rysik")
         val back = com.mdev.mnotes.core.layout.Workbench.decode(com.mdev.mnotes.core.layout.Workbench.encode(listOf(s)))

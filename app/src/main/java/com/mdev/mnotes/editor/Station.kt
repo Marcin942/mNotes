@@ -51,9 +51,18 @@ class Station(private val ctx: Context, val main: Editor) {
         main.app.pendingStation?.takeIf { it.ids.firstOrNull() == main.nbId }?.let { s ->
             main.app.pendingStation = null
             s.ids.drop(1).forEach { add(it) }
-            applyMode(s); restore = s
+            applyMode(s); restore = present(s)
             stationProfile = s.profile
         }
+    }
+
+    /**
+     * 3c-B3: stan do odtworzenia tylko dla dokumentów, które naprawdę stanęły (któryś mógł być otwarty w innym oknie);
+     * dawniej lista się nie zgadzała i stan czekał bez końca — aż przypadkiem pasował do innego układu.
+     */
+    private fun present(s: Workbench.Station): Workbench.Station {
+        val ids = rows.map { it.nbId }.toSet()
+        return Workbench.alive(s) { it in ids }
     }
 
     /** Przy pierwszym pokazaniu edytora: profil stanowiska albo zeszytu. Powrót z ustawień nie włącza go drugi raz. */
@@ -162,12 +171,19 @@ class Station(private val ctx: Context, val main: Editor) {
     fun open(s: Workbench.Station, openNotebook: (String) -> Unit) {
         val first = s.ids.firstOrNull() ?: return
         if (first == main.nbId) {
-            for (e in extra.toList()) if (e.nbId !in s.ids) remove(e)
-            s.ids.drop(1).forEach { add(it) }
-            applyMode(s); restore = s
+            // 3c-B3: zostają tylko rzędy stojące już w kolejności zapisu; reszta wychodzi i dochodzi na swoje miejsce
+            // (dawniej stare rzędy zostawały wyżej, kolejność się nie zgadzała i zapisany stan nigdy się nie stosował).
+            val want = s.ids.drop(1)
+            val keep = Workbench.keptPrefix(extra.map { it.nbId }, want)
+            for (e in extra.drop(keep)) remove(e)
+            want.drop(keep).forEach { add(it) }
+            applyMode(s); restore = present(s)
             if (s.profile.isNotEmpty()) pinProfile(s.profile)
             view?.post { view?.restorePending() }
         } else {
+            // 3c-B3: dołożone rzędy zwalniamy od razu — nowe stanowisko może je zawierać, a do zamknięcia tego
+            // edytora wciąż byłyby „otwarte w innym oknie”.
+            closeAll()
             main.app.pendingStation = s
             openNotebook(first)
         }

@@ -61,6 +61,60 @@ class LinkPhotoTest {
         assertArrayEquals(photo, got!!.bytes)
     }
 
+    /** 3c-B3: spóźnione potwierdzenie części poprzedniego zdjęcia oznaczało tę część nowego jako doszłą — nigdy nie wychodziła. */
+    @Test
+    fun ackForAnotherPhotoIsIgnored() {
+        val s = sender()
+        s.due(0)
+        assertFalse(s.ack("poprzednie", 0, 10))
+        assertEquals(0, s.confirmed)
+        assertTrue(s.ack("z1", 0, 10))
+    }
+
+    /** 3c-B3: wszystko potwierdzone, a `PhotoDone` nie przyszło (zgubione, tablet zamknął okno) — telefon czekał bez końca. */
+    @Test
+    fun noDoneAfterAllAcksResendsAfterTimeout() {
+        val s = sender(ByteArray(10))
+        s.due(0); assertTrue(s.ack("z1", 0, 100))
+        assertTrue(s.done)
+        assertTrue(s.due(100 + s.timeout() - 1).isEmpty())
+        val again = s.due(100 + s.timeout())
+        assertEquals(listOf(0), again.map { it.index })
+        // Nowy odbiorca składa całość od zera i odpowiada „gotowe”.
+        val res = PhotoReceiver().accept(again[0])
+        assertTrue(res.reply.any { it is SyncMsg.PhotoDone && it.ok })
+    }
+
+    /** 3c-B3: po ponownym połączeniu z nowym odbiorcą (okno tabletu otwarte od nowa) wysyłka zaczyna się od zera. */
+    @Test
+    fun reconnectAfterAllAcksStartsOver() {
+        val s = sender(); val old = PhotoReceiver()
+        var t = 0L
+        // Odbiorca potwierdza wszystko, ale „gotowe” nie dochodzi: dostarczamy tylko potwierdzenia.
+        while (!s.done) { for (p in s.due(t)) old.accept(p).reply.filterIsInstance<SyncMsg.PhotoAck>().forEach { s.ack(it.id, it.index, t) }; t += 100 }
+        s.reset()
+        val fresh = PhotoReceiver(); var got: SyncMsg.Photo? = null
+        while (got == null && t < 100_000) { got = deliver(s, fresh, t) ?: got; t += 100 }
+        assertArrayEquals(photo, got!!.bytes)
+    }
+
+    /** 3c-B3: część odrzuconego zdjęcia otwierała nowe składanie (nowy plik tymczasowy) i dostawała potwierdzenie. */
+    @Test
+    fun rejectedPhotoIsNotReopenedByLateParts() {
+        var created = 0
+        val files = LinkFiles { created++; LinkFiles.MEMORY.create() }
+        val r = PhotoReceiver(maxBytes = 300_000, files = files)
+        val s = sender(ByteArray(400_000))
+        val parts = (0 until s.count).map { s.part(it) }
+        assertTrue(r.accept(parts[0]).reply.any { it is SyncMsg.PhotoAck })
+        val rejected = r.accept(parts[1])  // razem 400 000 B > 300 000 B
+        assertTrue(rejected.bad)
+        val late = r.accept(parts[0])      // ponowienie części, która była już w drodze
+        assertTrue(late.reply.none { it is SyncMsg.PhotoAck })
+        assertTrue(late.reply.any { it is SyncMsg.PhotoDone && !it.ok })
+        assertEquals(1, created)
+    }
+
     @Test
     fun givesUpAfterMaxTries() {
         val s = sender(ByteArray(10))

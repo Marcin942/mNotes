@@ -101,6 +101,20 @@ class LiveTest {
         assertEquals("O₁", (fin.byId(label.id) as TextBox).text)
     }
 
+    /** 3c-B3: podpis z miarą kąta zostawał stary („90°”) po przeliczeniu; nazwa zmieniona przez ucznia nadal zostaje. */
+    @Test fun measureLabelFollowsTheShape() {
+        val live = Live(); val t = tri(Ids.next(), 0f, 0f)
+        val build = { cur: List<Element> -> ConstructOps.ops(cur).firstOrNull { it.id == "angles" }?.build?.invoke(0xFF000000.toInt(), 1.2f) }
+        val out = build(listOf(t))!!
+        live.add(page, listOf(t.id), out.map { it.id }, build)
+        val before = PageContent.of(listOf(t) + out)
+        val right = out.filterIsInstance<TextBox>().first { it.text == "90°" }
+        val after = replaced(before, tri(t.id, 0f, -20f))
+        val fin = after.apply(live.follow(page, before, after)!!)
+        val now = (fin.byId(right.id) as TextBox).text
+        assertTrue("podpis przeliczony: $now", now != "90°" && now.endsWith("°"))
+    }
+
     @Test fun chainRecomputesInOrder() {
         // Geometria: okrąg przez 3 kropki, potem środek tego okręgu; ruch kropki przesuwa oba wyniki.
         val live = Live()

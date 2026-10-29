@@ -27,11 +27,18 @@ object Workbench {
         companion object {
             fun of(o: JSONObject): Station? {
                 val a = o.optJSONArray("ids") ?: return null
-                val ids = (0 until a.length()).map { a.optString(it) }.filter { it.isNotEmpty() }.distinct()
+                val raw = (0 until a.length()).map { a.optString(it) }
+                // 3c-B3: puste i powtórzone id odpadają, a przesunięcia i aktywny pas idą za tymi, które zostały (jak w [alive]).
+                val seen = HashSet<String>()
+                val keep = raw.map { it.isNotEmpty() && seen.add(it) }
+                val ids = raw.filterIndexed { i, _ -> keep[i] }
                 if (ids.isEmpty()) return null
-                val off = o.optJSONArray("o")?.let { arr -> (0 until arr.length()).map { arr.optDouble(it, 0.0).toFloat() } }.orEmpty()
+                val rawOff = o.optJSONArray("o")?.let { arr -> (0 until arr.length()).map { arr.optDouble(it, 0.0).toFloat() } }.orEmpty()
+                val off = when (rawOff.size) { raw.size -> rawOff.filterIndexed { i, _ -> keep[i] }; ids.size -> rawOff; else -> emptyList() }
+                val a0 = o.optInt("a", 0)
+                val act = if (keep.getOrElse(a0) { false }) (0 until a0).count { keep[it] } else 0
                 val m = o.optInt("m", -1).takeIf { it == 0 || it == 1 } ?: -1
-                return Station(o.optString("n", ""), ids, o.optDouble("s", 0.0).toFloat(), o.optDouble("z", 0.0).toFloat(), m, off, o.optInt("a", 0).coerceIn(0, ids.size - 1), o.optString("p", ""))
+                return Station(o.optString("n", ""), ids, o.optDouble("s", 0.0).toFloat(), o.optDouble("z", 0.0).toFloat(), m, off, act, o.optString("p", ""))
             }
         }
     }
@@ -46,6 +53,9 @@ object Workbench {
 
     /** Lista po zapisaniu [s]: stanowisko o tej samej nazwie jest zastępowane, nowe trafia na początek. */
     fun upsert(list: List<Station>, s: Station): List<Station> = listOf(s) + list.filter { it.name != s.name }
+
+    /** Ile pierwszych pozycji [have] stoi już tak, jak w [want] (te rzędy mogą zostać przy przełączaniu stanowiska). */
+    fun keptPrefix(have: List<String>, want: List<String>): Int = have.zip(want).takeWhile { (a, b) -> a == b }.size
 
     /** Dokumenty stanowiska bez tych, których już nie ma (usunięte, w koszu) — [exists] sprawdza id. */
     fun alive(s: Station, exists: (String) -> Boolean): Station {

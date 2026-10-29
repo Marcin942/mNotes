@@ -11,6 +11,7 @@ import com.mdev.mnotes.core.model.Stroke
 import com.mdev.mnotes.core.model.TextBox
 import com.mdev.mnotes.core.shapes.ShapeBox
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -112,9 +113,44 @@ class GeoToolTest {
         for (a in listOf(30f, 45f, 60f, 120f, 180f, -45f)) {
             val r = strokes(GeoTool.build(Kind.ROTATE, listOf(o, d), 0, 1f, angle = a)).single()
             val rad = a * PI / 180
+            // 3c-B3: kąt dodatni przeciwnie do wskazówek zegara, jak w szkole i jak „kąt przy punkcie” (y ekranu w dół).
             assertEquals(100f * cos(rad).toFloat(), r.pts[0], 1e-2f)
-            assertEquals(100f * sin(rad).toFloat(), r.pts[1], 1e-2f)
+            assertEquals(-100f * sin(rad).toFloat(), r.pts[1], 1e-2f)
         }
+    }
+
+    /** 3c-B3: kąt przy punkcie ponad 180° dostawał podpis kąta wypukłego (270° → „90°”); narzędzie przyjmuje do 180°. */
+    @Test fun angleLimitsPerTool() {
+        assertTrue(GeoTool.angleOk(Kind.ROTATE, 270f)); assertTrue(GeoTool.angleOk(Kind.ROTATE, -360f))
+        assertTrue(GeoTool.angleOk(Kind.ANGLE_AT, 180f)); assertTrue(GeoTool.angleOk(Kind.ANGLE_AT, -120f))
+        assertFalse(GeoTool.angleOk(Kind.ANGLE_AT, 270f)); assertFalse(GeoTool.angleOk(Kind.ANGLE_AT, 0f))
+        assertFalse(GeoTool.angleOk(Kind.ROTATE, Float.NaN))
+        val ln = GeoTool.Input.Ln(com.mdev.mnotes.core.geom.Construct.Line(com.mdev.mnotes.core.geom.Construct.P(0f, 0f), com.mdev.mnotes.core.geom.Construct.P(100f, 0f)))
+        val v = GeoTool.Input.Point(com.mdev.mnotes.core.geom.Construct.P(0f, 0f))
+        assertTrue(GeoTool.build(Kind.ANGLE_AT, listOf(ln, v), 0, 1f, angle = 270f).isEmpty())
+        assertTrue(GeoTool.build(Kind.ANGLE_AT, listOf(ln, v), 0, 1f, angle = 120f).isNotEmpty())
+    }
+
+    /** 3c-B3: ostatnie stuknięcie liczy z bieżących kształtów; usunięty między stuknięciami — brak wejść. */
+    @Test fun picksAreReadAgainAtTheLastTap() {
+        val seg = poly(0f, 0f, 100f, 0f)
+        val pl = GeoTool.pickFrom(listOf(seg), 50f, 1f, 5f, In.LINE)!!
+        val pp = GeoTool.pickFrom(listOf(seg), 50f, 60f, 5f, In.POINT)!!
+        val moved = poly(0f, 20f, 100f, 20f).withId(seg.id)
+        val now = GeoTool.resolveAll(Kind.PARALLEL, listOf(pl, pp), mapOf(seg.id to moved))!!
+        assertEquals(20f, (now[0] as Input.Ln).l.a.y, 1e-3f)
+        assertEquals(60f, (now[1] as Input.Point).p.y, 1e-3f)
+        assertNull(GeoTool.resolveAll(Kind.PARALLEL, listOf(pl, pp), emptyMap()))
+    }
+
+    /** 3c-B3: prosta zwinięta do punktu (koniec przeciągnięty na początek przy konstrukcji na żywo) nie daje wyniku. */
+    @Test fun collapsedLineGivesNoResult() {
+        val p = com.mdev.mnotes.core.geom.Construct.P(50f, 50f)
+        val ln = GeoTool.Input.Ln(com.mdev.mnotes.core.geom.Construct.Line(p, p))
+        val q = GeoTool.Input.Point(com.mdev.mnotes.core.geom.Construct.P(80f, 20f))
+        for (k in listOf(Kind.PERP, Kind.PARALLEL, Kind.BISECTOR))
+            assertTrue("$k", GeoTool.build(k, if (k == Kind.BISECTOR) listOf(ln) else listOf(ln, q), 0, 1f).isEmpty())
+        assertTrue(GeoTool.build(Kind.REFLECT, listOf(ln, GeoTool.Input.Obj(dot(80f, 20f))), 0, 1f).isEmpty())
     }
 
     @Test fun reflectionThroughAPointInTheTool() {

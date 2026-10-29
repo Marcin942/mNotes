@@ -251,8 +251,11 @@ object Profiles {
     /** Profil przypięty na czas pracy: [pinned] włączony przy otwarciu, [before] — aktywny wcześniej ("" — żaden). */
     data class Pin(val pinned: String, val before: String)
 
-    /** Przypięcie [target] przy aktywnym [active]; kolejne (stanowisko po zeszycie) zachowuje pierwotne „przed”. */
-    fun pin(session: Pin?, target: String, active: String) = Pin(target, session?.before ?: active)
+    /**
+     * Przypięcie [target] przy aktywnym [active]; kolejne (stanowisko po zeszycie) zachowuje pierwotne „przed”,
+     * chyba że w międzyczasie profil zmieniono ręcznie (aktywny ≠ przypięty) — wtedy „przed” to ten ręczny.
+     */
+    fun pin(session: Pin?, target: String, active: String) = Pin(target, session?.takeIf { it.pinned == active }?.before ?: active)
 
     /** Profil do przywrócenia przy wyjściu ("" — bez profilu); null, gdy w trakcie zmieniono go ręcznie albo nie ma czego cofać. */
     fun unpin(session: Pin?, active: String): String? = session?.takeIf { it.pinned == active && it.before != active }?.before

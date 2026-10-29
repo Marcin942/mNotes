@@ -30,6 +30,8 @@ class SyncFolder(private val ctx: Context, private val repo: Repository, private
     var done by mutableIntStateOf(0); private set
     var total by mutableIntStateOf(0); private set
     var report by mutableStateOf<SyncReport?>(null); private set
+    /** 3c-A8: zeszyty pomijane — kopie z folderu wymiany nie wracają do lustra (byłyby cudzym plikiem pod naszą nazwą). */
+    var skip: (String) -> Boolean = { false }
 
     private val exporter = Exporter(repo, assets, pdf)
     private val worker = Executors.newSingleThreadExecutor { Thread(it, "mnotes-sync").apply { priority = Thread.MIN_PRIORITY } }
@@ -51,7 +53,7 @@ class SyncFolder(private val ctx: Context, private val repo: Repository, private
         val uri = settings.syncUri
         if (uri.isEmpty() || running) return false
         running = true; done = 0; total = 0
-        val books = repo.notebooks.filter { !it.isTrashed && !repo.folderTrashed(it.folderId) }
+        val books = repo.notebooks.filter { !it.isTrashed && !repo.folderTrashed(it.folderId) && !skip(it.id) }
         val folders = repo.folders
         val formats = buildList {
             add(ExportFormat.MNOTES)

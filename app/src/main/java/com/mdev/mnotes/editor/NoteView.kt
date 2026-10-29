@@ -1363,7 +1363,8 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
 
     /** W trybie tylko do odczytu gest przewija, chyba że narzędziem jest laser (jedyne, które nic nie zmienia). */
     // 3c-B4: Wycinek działa też w dokumencie do odczytu (slajdy są źródłem wycinków, niczego w nich nie zmienia).
-    private fun navOnly(ev: MotionEvent, idx: Int) = ed.readOnly && effectiveTool(ev, idx).let { it != Tool.LASER && it != Tool.SNIP }
+    // 3c-A9: w trybie do odczytu także laser i wycinek tylko przewijają — nic się nie dzieje przypadkiem.
+    private fun navOnly(ev: MotionEvent, idx: Int) = ed.readOnly && (ed.reader || effectiveTool(ev, idx).let { it != Tool.LASER && it != Tool.SNIP })
 
     /** Identyfikatory dotknięć, które nie są gestem: opierająca się dłoń albo palec poza stroną (np. na pasku narzędzi). */
     private val palm = HashSet<Int>()
@@ -1461,7 +1462,8 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
         when (settings.fingerMode) {
             0 -> if (!ed.readOnly && selGrab(ev.getX(idx), ev.getY(idx))) beginTool(ev, idx, Tool.LASSO) else { startNav(ev); navSelect = true }
             1 -> if (navOnly(ev, idx)) startNav(ev) else beginTool(ev, idx)
-            else -> mode = Mode.IGNORE
+            // „Tylko rysik” wyłącza palec do pisania; w trybie do odczytu palec i tak przewija (3c-A9).
+            else -> if (ed.reader) startNav(ev) else mode = Mode.IGNORE
         }
     }
 

@@ -210,6 +210,32 @@ class Editor(val ctx: Context, val nbId: String) {
     var viewTick by mutableIntStateOf(0)
     var readOnly by mutableStateOf(false)
     var chrome by mutableStateOf(true)
+    /** 3c-A9: tryb „do odczytu” — palec i rysik tylko przewijają, bez pasków ([com.mdev.mnotes.core.prefs.Reader]). */
+    var reader by mutableStateOf(false)
+        private set
+    /** 3c-A8: zeszyt to kopia z folderu wymiany — zostaje tylko do odczytu także po wyjściu z trybu. */
+    var mirror by mutableStateOf(false)
+
+    private var readerChecked = false
+
+    /** Pierwsze pokazanie dokumentu: włącza tryb, jeśli tak każe ustawienie, telefon albo kopia z folderu wymiany. */
+    fun readerOnOpen(on: Boolean, auto: Boolean, smallestWidthDp: Int) {
+        if (readerChecked) return
+        readerChecked = true
+        if (com.mdev.mnotes.core.prefs.Reader.onOpen(on, auto, smallestWidthDp, mirror)) enterReader()
+    }
+
+    fun enterReader() = applyReader(com.mdev.mnotes.core.prefs.Reader.enter(mirror), true)
+
+    fun leaveReader() {
+        applyReader(com.mdev.mnotes.core.prefs.Reader.leave(mirror), false)
+        if (mirror) say(T.t("To kopia z folderu wymiany: zmiany rób na urządzeniu, które ją zapisuje", "This is a copy from the exchange folder: edit it on the device that writes it"))
+    }
+
+    private fun applyReader(s: com.mdev.mnotes.core.prefs.Reader.State, on: Boolean) {
+        reader = on; readOnly = s.readOnly; chrome = s.chrome
+        if (on) { clearSel(); view?.post { view?.fitWidth() } }
+    }
     var textReq by mutableStateOf<TextRequest?>(null)
     var exportOpen by mutableStateOf(false)
     var toast by mutableStateOf<String?>(null)

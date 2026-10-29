@@ -313,6 +313,12 @@ open class MainActivity : FragmentActivity() {
         T.systemChanges++
     }
 
+    // 3c-A8: powrót do aplikacji wczytuje nowsze wersje z folderu wymiany (przed wczytaniem biblioteki nic nie robi).
+    override fun onStart() {
+        super.onStart()
+        app.exchange.auto()
+    }
+
     override fun onStop() {
         super.onStop()
         ui.editor?.doc?.flush()

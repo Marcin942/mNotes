@@ -347,6 +347,15 @@ private fun Appearance(set: com.mdev.mnotes.data.Settings) {
             T.t("Przewijanie o pół ekranu poza brzeg stron (wygodniej pisać przy brzegu, np. leworęcznym)", "Scroll half a screen past the page edges (easier writing near an edge, e.g. left-handed)"),
             set.scrollMargin, keys = "leworęczny lewa ręka dłoń przewijanie margines zapas brzeg pierwsza strona przesuń left handed scroll margin overscroll",
         ) { set.scrollMargin = it }
+        // 3c-A9: tryb do odczytu — zawsze (też z profilu „Do odczytu”) albo sam na telefonie.
+        ToggleRow(
+            T.t("Otwieraj zeszyty w trybie do odczytu (bez pasków, palec i rysik tylko przewijają)", "Open notebooks in reading mode (no bars, finger and stylus only scroll)"),
+            set.reader, keys = "tryb do odczytu czytanie przeglądanie telefon blokada edycji podgląd reading mode read only viewer phone",
+        ) { set.reader = it }
+        ToggleRow(
+            T.t("Na telefonie sam włączaj tryb do odczytu (przycisk „Edytuj” go wyłącza)", "On a phone, turn on reading mode automatically (the “Edit” button leaves it)"),
+            set.readerAuto, keys = "tryb do odczytu telefon mały ekran automatycznie czytanie reading mode phone small screen automatic",
+        ) { set.readerAuto = it }
         ToggleRow(
             T.t("Mini-mapa strony po przewinięciu przy dużym powiększeniu (przesuwana palcem)", "Page mini-map after scrolling when zoomed in (moved with a finger)"),
             set.miniMap, keys = "mini mapa podgląd strony nawigacja powiększenie zoom róg minimap overview",
@@ -865,6 +874,93 @@ private fun SyncPrefs(set: com.mdev.mnotes.data.Settings) {
                 else -> ""
             }
             if (line.isNotEmpty()) Extra { Text(line, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+        }
+        Extra { DriveHint() }
+    }
+    ExchangePrefs(set)
+}
+
+/** 3c-A8: Dysk Google bywa niedostępny jako folder (drzewo) w systemowym wyborze — co wtedy zrobić. */
+@Composable
+private fun DriveHint() {
+    Text(
+        T.t(
+            "Dysk Google i podobne aplikacje często nie pozwalają wybrać swojego folderu. Wybierz wtedy zwykły folder w pamięci urządzenia (np. Dokumenty/mNotes) i ustaw w aplikacji synchronizującej (Syncthing, FolderSync, Autosync itp.), żeby wysyłała go do chmury lub na drugie urządzenie.",
+            "Google Drive and similar apps often don't let you pick their folder. Then choose a plain folder on the device (e.g. Documents/mNotes) and set a sync app (Syncthing, FolderSync, Autosync, etc.) to send it to the cloud or to the other device.",
+        ),
+        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(vertical = 6.dp),
+    )
+}
+
+/**
+ * 3c-A8: folder wymiany po stronie czytającej — drugie urządzenie (np. telefon) wczytuje z folderu nowsze wersje zeszytów
+ * zapisanych przez tablet. Kopie są tylko do odczytu i otwierają się w trybie do odczytu.
+ */
+@Composable
+private fun ExchangePrefs(set: com.mdev.mnotes.data.Settings) {
+    val ctx = LocalContext.current
+    val ex = ctx.app.exchange
+    val flags = android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION
+    fun release(uri: String) { runCatching { ctx.contentResolver.releasePersistableUriPermission(android.net.Uri.parse(uri), flags) } }
+    var cancelled by remember { mutableStateOf(false) }
+    val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
+        // Pusty wynik: anulowano albo dostawca (np. Dysk Google) nie dał wybrać folderu — pokazujemy wskazówkę.
+        cancelled = uri == null
+        if (uri != null) {
+            runCatching { ctx.contentResolver.takePersistableUriPermission(uri, flags) }
+            if (set.exchangeUri.isNotEmpty() && set.exchangeUri != uri.toString()) { release(set.exchangeUri); ex.forget() }
+            set.exchangeUri = uri.toString()
+            ex.start()
+        }
+    }
+    val linked = set.exchangeUri.isNotEmpty()
+    val name by androidx.compose.runtime.produceState<String?>(null, set.exchangeUri) {
+        value = if (!linked) null else kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { ex.folderName(set.exchangeUri) }
+    }
+    // null — jeszcze sprawdzam; -1 — folderu nie da się przejrzeć.
+    val files by androidx.compose.runtime.produceState<Int?>(null, set.exchangeUri, ex.report) {
+        value = if (!linked) null else kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { ex.probe(set.exchangeUri) ?: -1 }
+    }
+    val access = remember(set.exchangeUri) { !linked || ex.accessible(set.exchangeUri) }
+
+    Group(T.t("Folder wymiany: wczytuj z innego urządzenia", "Exchange folder: read from another device"), keys = "folder wymiany wymiana telefon drugie urządzenie wczytaj odczyt tylko do odczytu kopia dysk google chmura exchange folder phone read only drive") { Extra {
+        Text(
+            T.t(
+                "Na drugim urządzeniu (np. telefonie) wskaż folder, do którego tablet zapisuje zeszyty (sekcja wyżej). Przy otwarciu aplikacji nowsze wersje wczytają się do folderu biblioteki „Folder wymiany” jako kopie tylko do odczytu — zmiany rób na tablecie. Folder między urządzeniami przenosi aplikacja synchronizująca; mNotes nie łączy się z siecią.",
+                "On the other device (e.g. a phone) choose the folder the tablet writes notebooks to (section above). When the app opens, newer versions are read into the library folder “Exchange folder” as read-only copies — make changes on the tablet. A sync app moves the folder between devices; mNotes never touches the network.",
+            ),
+            style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(vertical = 8.dp),
+        )
+        Row(Modifier.padding(vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            Chip(if (linked) T.t("Zmień folder…", "Change folder…") else T.t("Wybierz folder…", "Choose folder…"), false, { cancelled = false; picker.launch(null) })
+            if (linked) Chip(T.t("Odłącz", "Detach"), false, { release(set.exchangeUri); ex.forget(); set.exchangeUri = "" })
+        }
+        if (cancelled && !linked) DriveHint()
+    }
+        if (linked) {
+            Extra { Text(T.t("Folder: ", "Folder: ") + (name ?: "…"), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(vertical = 4.dp)) }
+            val problem = when {
+                !access -> T.t("Brak dostępu do folderu — wybierz go ponownie.", "No access to the folder — choose it again.")
+                files == -1 -> T.t("Tego folderu nie da się przejrzeć (dostawca nie obsługuje folderów). Wybierz folder w pamięci urządzenia.", "This folder can't be listed (the provider doesn't support folders). Choose a folder on the device.")
+                else -> null
+            }
+            if (problem != null) Extra {
+                Text(problem, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(bottom = 4.dp))
+                DriveHint()
+            }
+            ToggleRow(T.t("Wczytuj przy otwarciu aplikacji", "Read when the app opens"), set.exchangeAuto, keys = "automatycznie otwarcie start wczytaj") { set.exchangeAuto = it }
+            Extra { Row(Modifier.padding(vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                Chip(if (ex.running) T.t("Wczytuję…", "Reading…") else T.t("Wczytaj teraz", "Read now"), false, { if (access) ex.start() })
+                files?.takeIf { it >= 0 }?.let { Text(T.t("plików .mnotes: $it", ".mnotes files: $it"), style = MaterialTheme.typography.labelLarge) }
+            } }
+            ex.report?.let { r ->
+                val at = java.text.DateFormat.getDateTimeInstance(java.text.DateFormat.SHORT, java.text.DateFormat.SHORT).format(java.util.Date(r.at))
+                Extra { Text(
+                    T.t("Ostatnio: $at · nowe ${r.added}, nowsze wersje ${r.replaced}, czeka (otwarte) ${r.waiting}, błędy ${r.failed}",
+                        "Last: $at · new ${r.added}, newer versions ${r.replaced}, waiting (open) ${r.waiting}, errors ${r.failed}"),
+                    style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                ) }
+            }
         }
     }
 }

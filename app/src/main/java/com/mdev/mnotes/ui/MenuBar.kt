@@ -51,6 +51,7 @@ private fun checked(ed: Editor, set: com.mdev.mnotes.data.Settings, id: String):
     "layoutH" -> ed.layoutMode == 1
     "layoutS" -> ed.layoutMode == 2
     "readOnly" -> ed.readOnly
+    "reader" -> ed.reader
     "pagesDock" -> set.dockPages
     "zoomWindow" -> ed.zoomWin
     "tbTop" -> set.toolbarPos == 0

@@ -223,7 +223,10 @@ class Settings(ctx: Context) {
     var constructNames by Pref("construct.names", true)  // L1 (A2-9): konstrukcje podpisują punkty A, B, C, O, H…
     var paletteRecent by Pref("palette.recent", "")      // pomysł Fable 2: ostatnio użyte polecenia palety (id po przecinku)
     var scrollMargin by Pref("view.scroll_margin", true)  // 3c-A4: dokument da się przewinąć o pół ekranu poza brzeg (np. dla leworęcznych)
-    var miniMap by Pref("view.minimap", false)          // pomysł Fable 3: mini-mapa strony przy dużym powiększeniu; domyślnie wył. (A2-2)
+    // 3c-A9: tryb „do odczytu” (core.prefs.Reader): na stałe (też z profilu) albo sam na telefonie
+    var reader by Pref("view.reader", false)
+    var readerAuto by Pref("view.reader_auto", true)
+    var miniMap by Pref("view.minimap", false)         // pomysł Fable 3: mini-mapa strony przy dużym powiększeniu; domyślnie wył. (A2-2)
     var miniMapSize by Pref("view.minimap_size", com.mdev.mnotes.core.layout.MiniMap.DEFAULT_SIZE_DP)   // 2b-A3: szerokość pola w dp (80–200)
     var miniMapCorner by Pref("view.minimap_corner", com.mdev.mnotes.core.layout.MiniMap.BOTTOM_RIGHT)  // 2b-A3: narożnik widoku
     var imageGridFit by Pref("images.grid_fit", false)   // pomysł Fable 11: wstawione zdjęcie wyrównane do kratki
@@ -272,6 +275,9 @@ class Settings(ctx: Context) {
     var syncPdf by Pref("sync.pdf", false)           // obok .mnotes kopiuj też PDF
     var syncMd by Pref("sync.md", false)             // …i Markdown
     var lastSync by Pref("sync.last_min", 0)         // minuty od epoki (Int wystarczy do roku 6000+)
+    // 3c-A8: folder wymiany po stronie czytającej (ExchangeReader): skąd wczytywać kopie i czy przy otwarciu aplikacji
+    var exchangeUri by Pref("sync.in_uri", "")
+    var exchangeAuto by Pref("sync.in_auto", true)
 
     private var kitJson by Pref("pen.kit", "")
 
@@ -308,6 +314,17 @@ class Settings(ctx: Context) {
     var profileActive by Pref("profile.active", "")     // id włączonego profilu albo pusty
     private var profileBackup by Pref("profile.backup", "")   // wartości sprzed profilu (Profiles.encodeValues)
     var profilePins by Pref("profile.pins", "")         // zeszyt → profil (Profiles.pinsEncode)
+    // Gotowe profile już zaproponowane (Profiles.addNewBuiltIns); trzy pierwsze istniały od początku listy.
+    private var profileBuiltInsSeen by Pref("profile.builtins_seen", "wyklad,rysowanie,rysik")
+
+    /** 3c-A9: nowy gotowy profil („Do odczytu”) dopisany raz do listy sprzed jego wprowadzenia. */
+    fun addNewBuiltInProfiles() {
+        if (profilesRaw.isEmpty()) return
+        val pr = com.mdev.mnotes.core.prefs.Profiles
+        val (list, seen) = pr.addNewBuiltIns(profiles, profileBuiltInsSeen.split(',').filter { it.isNotEmpty() }.toSet(), pr.builtIns(com.mdev.mnotes.editor.T.pl))
+        if (list.size != profiles.size) profiles = list
+        profileBuiltInsSeen = seen.sorted().joinToString(",")
+    }
 
     // — Czas pisania (FB7): w preferencjach, nie w pliku zeszytu, więc format .mnotes się nie zmienia —
     private var writingRaw by Pref("stats.writing", "")   // ActiveTime.encode: zeszyt → tydzień ISO → ms

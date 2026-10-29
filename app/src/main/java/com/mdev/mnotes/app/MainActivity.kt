@@ -218,6 +218,7 @@ open class MainActivity : FragmentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge(SystemBarStyle.auto(android.graphics.Color.TRANSPARENT, android.graphics.Color.TRANSPARENT), SystemBarStyle.auto(android.graphics.Color.TRANSPARENT, android.graphics.Color.TRANSPARENT))
         val settings = app.settings
+        locales = resources.configuration.locales.toLanguageTags()
         app.repo.notice = { msg -> runOnUiThread { android.widget.Toast.makeText(applicationContext, msg, android.widget.Toast.LENGTH_LONG).show() } }
         setContent {
             MNotesTheme(settings) {
@@ -232,6 +233,8 @@ open class MainActivity : FragmentActivity() {
                 if (android.os.Build.VERSION.SDK_INT >= 33) LaunchedEffect(Unit) {
                     snapshotFlow { settings.appLock }.collect { on -> setRecentsScreenshotEnabled(!on) }
                 }
+                // Język z Ustawień trafia do systemowego „Języka aplikacji” (i przy starcie przejmuje wybór z systemu).
+                LaunchedEffect(Unit) { snapshotFlow { settings.lang }.collect { AppLocales.sync(this@MainActivity, settings) } }
                 Root(ui)
             }
         }
@@ -295,6 +298,19 @@ open class MainActivity : FragmentActivity() {
         val roots = listOfNotNull(applicationInfo.dataDir, filesDir.parent, applicationInfo.deviceProtectedDataDir, "/data/data/$packageName")
             .mapNotNull { runCatching { java.io.File(it).canonicalPath }.getOrNull() }
         return IncomingUris.allowed(u.scheme, u.authority, path, packageName, roots)
+    }
+
+    // „locale” jest w configChanges: zmiana języka (w systemie albo z Ustawień) nie odtwarza ekranu, tylko odświeża teksty.
+    /** Języki konfiguracji przy ostatnim odświeżeniu tekstów (obrót ekranu ich nie zmienia — nic do roboty). */
+    private var locales: String? = null
+
+    override fun onConfigurationChanged(newConfig: android.content.res.Configuration) {
+        super.onConfigurationChanged(newConfig)
+        val now = newConfig.locales.toLanguageTags()
+        if (now == locales) return
+        locales = now
+        AppLocales.sync(this, app.settings)
+        T.systemChanges++
     }
 
     override fun onStop() {

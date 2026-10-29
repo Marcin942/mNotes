@@ -32,6 +32,10 @@ Zasady:
 | 6 | Pasek narzędzi | Położenie (`toolbar.position`) | **Góra**, Dół, Z boku po stronie wolnej ręki | Makieta ekranu z paskiem w wybranym miejscu |
 | 7 | Gotowe | — | „Zacznij pisać”, tematy „Poznaj więcej” | Karta „Twoje wybory” (ręka, palec, kartka, motyw, pasek) |
 
+Na stronie 1 w lewym górnym rogu (zamiast nazwy ścieżki) stoi przełącznik języka: „🌐 English” po polsku, „🌐 Polski”
+po angielsku (`ui.lang`, 3c-A15). Nie jest osobną stroną — język rzadko trzeba zmieniać, ale kto nie czyta po polsku,
+musi go znaleźć od razu. Na Androidzie 13+ wybór trafia też do systemowego „Języka aplikacji” i odwrotnie.
+
 ### Poznaj więcej (z menu: Biblioteka → menu → Przewodnik, Ustawienia → „Przewodnik po ustawieniach”)
 
 | Temat | Strony (ustawienie) |

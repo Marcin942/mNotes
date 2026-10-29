@@ -20,6 +20,8 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
@@ -42,6 +44,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.Language
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -143,7 +146,10 @@ fun SetupGuideScreen(set: Settings, onClose: () -> Unit) {
     Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).systemBarsPadding()) {
         // Górny pasek: postęp i zamknięcie (zawsze dostępne — przewodnik niczego nie wymusza, wraca się w to samo miejsce).
         Row(Modifier.fillMaxWidth().padding(start = 20.dp, end = 8.dp, top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text(
+            // Na pierwszej stronie zamiast „Pierwsze kroki” (tytuł i tak wita) — język: kto nie czyta po polsku, nie musi
+            // szukać go w Ustawieniach (3c-A15).
+            if (st.path == SetupGuide.START && st.first) Box(Modifier.weight(1f), contentAlignment = Alignment.CenterStart) { LanguageSwitch(set) }
+            else Text(
                 when (st.path) {
                     SetupGuide.START -> T.t("Pierwsze kroki", "Getting started")
                     SetupGuide.HUB -> T.t("Poznaj więcej", "Learn more")
@@ -192,6 +198,22 @@ fun SetupGuideScreen(set: Settings, onClose: () -> Unit) {
         }
         Box(Modifier.fillMaxWidth().height(1.dp).background(m.line))
         NavBar(st, ::go, onClose)
+    }
+}
+
+/** Przełącznik polski/angielski: drugi język podpisany w nim samym, bo właśnie go ktoś szuka. */
+@Composable
+private fun LanguageSwitch(set: Settings) {
+    val other = if (T.pl) "English" else "Polski"
+    TextButton(
+        { set.lang = if (T.pl) 2 else 1 },
+        // Wcięcie przycisku zjada odstęp paska — tekst ma stać tam, gdzie na innych stronach nazwa ścieżki.
+        Modifier.offset(x = (-8).dp).heightIn(min = 48.dp).semantics { contentDescription = T.t("Język: polski. Zmień na angielski", "Language: English. Switch to Polish") },
+        contentPadding = PaddingValues(horizontal = 8.dp),
+    ) {
+        Icon(Icons.Rounded.Language, null, Modifier.size(18.dp))
+        Spacer(Modifier.size(6.dp))
+        Text(other)
     }
 }
 

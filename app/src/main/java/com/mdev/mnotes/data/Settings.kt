@@ -158,6 +158,21 @@ class Settings(ctx: Context) {
     var helperMenu: com.mdev.mnotes.core.layout.HelperStrip.Config
         get() = com.mdev.mnotes.core.layout.HelperStrip.Config.parse(helperMenuPref)
         set(v) { helperMenuPref = v.encode() }
+    private var helperFadePref by Pref("toolbar.helper_fade", "")   // 3c-A17a: gaśnięcie menu gumki/lassa/lasera (ToolPopups.Fades)
+
+    /** 3c-A17a: wyskakujące opcje narzędzia [t] — jeden model dla pędzla i narzędzi pomocniczych. */
+    fun popup(t: com.mdev.mnotes.core.layout.ToolPopups.Tool): com.mdev.mnotes.core.layout.ToolPopups.Rule {
+        val h = com.mdev.mnotes.core.layout.ToolPopups.helper(t)
+            ?: return com.mdev.mnotes.core.layout.ToolPopups.Rule(painterQuick, painterQuickSec)
+        return com.mdev.mnotes.core.layout.ToolPopups.Rule(helperMenu.menuFor(h), com.mdev.mnotes.core.layout.ToolPopups.Fades.parse(helperFadePref).of(t))
+    }
+
+    fun setPopup(t: com.mdev.mnotes.core.layout.ToolPopups.Tool, r: com.mdev.mnotes.core.layout.ToolPopups.Rule) {
+        val h = com.mdev.mnotes.core.layout.ToolPopups.helper(t)
+        if (h == null) { painterQuick = r.show; painterQuickSec = r.sec; return }
+        helperMenu = helperMenu.withMenu(h, r.show)
+        helperFadePref = com.mdev.mnotes.core.layout.ToolPopups.Fades.parse(helperFadePref).with(t, r.sec).encode()
+    }
     var laserColor by Pref("laser.color", 0xFF3B30)    // RGB śladu lasera (LaserColors.PALETTE)
     var axesLast by Pref("axes.last", "")            // ostatnio wstawiony układ współrzędnych (AxesSpec.encode), F8
     var axesSnap by Pref("axes.snap", false)         // 2b-A6: układ na kratce i kreski w nim dociskane do siatki; 2c-A3: wyłączone do testu na tablecie

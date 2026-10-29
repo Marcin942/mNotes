@@ -226,6 +226,7 @@ import com.mdev.mnotes.core.layout.BarFit
 import com.mdev.mnotes.core.layout.BarMode
 import com.mdev.mnotes.core.layout.BottomStack
 import com.mdev.mnotes.core.layout.HelperStrip
+import com.mdev.mnotes.core.layout.ToolPopups
 import com.mdev.mnotes.core.pen.ActivePen
 import com.mdev.mnotes.core.pen.ColorSet
 import com.mdev.mnotes.core.pen.InkColor
@@ -1130,7 +1131,16 @@ private fun HelperMenu(ed: Editor, set: com.mdev.mnotes.data.Settings, panel: Pa
     val cfg = set.helperMenu
     val ownPanel = when (h) { HelperStrip.Helper.ERASER -> Panel.ERASER; HelperStrip.Helper.LASSO -> Panel.LASSO; HelperStrip.Helper.LASER -> null }
     val state = remember { MutableTransitionState(false) }
-    state.targetState = helperOf(ed.tool) == h && !ed.readOnly && HelperStrip.menuVisible(set.helperStrip, h, cfg, ownPanel != null && panel == ownPanel)
+    // 3c-A17a: menu gaśnie po czasie z Ustawień (jak „Pobierz format”); dotknięcie menu liczy czas od nowa, a wróci po
+    // ponownym wybraniu narzędzia — drugie dotknięcie ikony i tak otwiera pełny panel.
+    val rule = set.popup(ToolPopups.of(h))
+    var touches by remember { mutableIntStateOf(0) }
+    var faded by remember(ed.tool) { mutableStateOf(false) }
+    LaunchedEffect(ed.tool, touches, rule.sec) {
+        faded = false
+        if (rule.sec > 0 && helperOf(ed.tool) == h) { delay(rule.sec * 1000L); faded = true }
+    }
+    state.targetState = helperOf(ed.tool) == h && !ed.readOnly && !faded && HelperStrip.menuVisible(set.helperStrip, h, cfg, ownPanel != null && panel == ownPanel)
     if (!state.currentState && !state.targetState) return
     val pos = set.toolbarPos
     val place = rememberBarPopupPlace(pos)
@@ -1141,7 +1151,10 @@ private fun HelperMenu(ed: Editor, set: com.mdev.mnotes.data.Settings, panel: Pa
     val vertical = pos == 2 || pos == 3
     Popup(popupPositionProvider = place) {
         AnimatedVisibility(visibleState = state, enter = fadeIn(tween(150)), exit = fadeOut(tween(180))) {
-            Box(Modifier.shadow(4.dp, shape).clip(shape).background(m.chrome).border(1.dp, m.line, shape)) {
+            Box(
+                Modifier.shadow(4.dp, shape).clip(shape).background(m.chrome).border(1.dp, m.line, shape)
+                    .pointerInput(Unit) { awaitPointerEventScope { while (true) { awaitPointerEvent(PointerEventPass.Initial); touches++ } } },
+            ) {
                 when (h) {
                     HelperStrip.Helper.ERASER -> EraserStripItems(ed, set, vertical, panel, open, items)
                     HelperStrip.Helper.LASSO -> LassoStripItems(ed, set, vertical, panel, open, items)

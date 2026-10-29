@@ -128,6 +128,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.material.icons.rounded.AutoStories
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -944,6 +945,11 @@ private fun NotebookTile(
             }
             if (n.favorite) Icon(Icons.Rounded.Star, null, Modifier.align(Alignment.TopEnd).padding(5.dp).size(20.dp), tint = Color(0xFFF5B800))
             if (n.locked) Icon(Icons.Rounded.Lock, null, Modifier.align(Alignment.BottomEnd).padding(6.dp).size(16.dp), tint = Color.White)
+            // 3c-A8: kopia z folderu wymiany — tylko do odczytu, nowsze wersje przychodzą same.
+            if (LocalContext.current.app.exchange.isMirror(n.id)) Icon(
+                Icons.Rounded.AutoStories, T.t("Kopia z folderu wymiany (tylko do odczytu)", "Copy from the exchange folder (read-only)"),
+                Modifier.align(Alignment.BottomStart).padding(6.dp).clip(CircleShape).background(Color.Black.copy(alpha = 0.35f)).padding(3.dp).size(14.dp), tint = Color.White,
+            )
             SelectBadge(selected, selecting, Modifier.align(Alignment.TopStart).padding(6.dp))
         }
         Spacer(Modifier.height(8.dp))

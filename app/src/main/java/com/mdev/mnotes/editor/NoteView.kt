@@ -491,7 +491,7 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
 
     /** Akcja podwójnego albo potrójnego dotknięcia palcem wybrana w ustawieniach: 0 cofnij, 1 ponów, 2 przybliż/oddal, 3 brak. */
     private fun tapAction(action: Int, sx: Float, sy: Float) {
-        when (action) { 0 -> ed.undo(); 1 -> ed.redo(); 2 -> toggleZoom(sx, sy) }
+        when (com.mdev.mnotes.core.prefs.Reader.tap(action, ed.readOnly, ed.reader)) { 0 -> ed.undo(); 1 -> ed.redo(); 2 -> toggleZoom(sx, sy) }
     }
 
     private fun cancelPendingDouble() {

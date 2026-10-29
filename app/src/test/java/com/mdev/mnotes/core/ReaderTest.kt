@@ -27,6 +27,16 @@ class ReaderTest {
         assertFalse(Reader.enter(mirror = true).editable)
     }
 
+    /** 3c-B3: podwójne stuknięcie (domyślnie „cofnij”) cofało zmiany w zeszycie tylko do odczytu. */
+    @Test fun tapsNeverUndoWhenLocked() {
+        assertEquals(Reader.TAP_UNDO, Reader.tap(Reader.TAP_UNDO, readOnly = false, reader = false))
+        assertEquals(Reader.TAP_NONE, Reader.tap(Reader.TAP_UNDO, readOnly = true, reader = false))
+        assertEquals(Reader.TAP_NONE, Reader.tap(Reader.TAP_REDO, readOnly = true, reader = false))
+        assertEquals("w trybie do odczytu stuknięcie powiększa", Reader.TAP_ZOOM, Reader.tap(Reader.TAP_UNDO, readOnly = true, reader = true))
+        assertEquals(Reader.TAP_ZOOM, Reader.tap(Reader.TAP_ZOOM, readOnly = true, reader = false))
+        assertEquals(Reader.TAP_NONE, Reader.tap(Reader.TAP_NONE, readOnly = true, reader = true))
+    }
+
     @Test fun readingProfileTurnsModeOnAndFingerScrolls() {
         val p = Profiles.builtIns(true).single { it.id == Profiles.READER_ID }
         assertEquals("Do odczytu", p.name)

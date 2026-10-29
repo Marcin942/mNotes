@@ -23,6 +23,22 @@ object Reader {
 
     fun enter(mirror: Boolean) = State(readOnly = true, chrome = false, editable = !mirror)
 
+    // Akcje stuknięć palcem (Settings.doubleTap/tripleTap): 0 cofnij, 1 ponów, 2 przybliż/oddal, 3 brak.
+    const val TAP_UNDO = 0
+    const val TAP_REDO = 1
+    const val TAP_ZOOM = 2
+    const val TAP_NONE = 3
+
+    /**
+     * 3c-B3: stuknięcie przy blokadzie edycji nie może cofać ani ponawiać (dawniej domyślne podwójne stuknięcie cofało
+     * zmiany w zeszycie „tylko do odczytu”). W trybie do odczytu zamiast tego przybliża/oddala, poza nim nic nie robi.
+     */
+    fun tap(action: Int, readOnly: Boolean, reader: Boolean): Int = when {
+        !readOnly || (action != TAP_UNDO && action != TAP_REDO) -> action
+        reader -> TAP_ZOOM
+        else -> TAP_NONE
+    }
+
     /** „Edytuj”: wraca paski i edycję; kopia z folderu wymiany zostaje zablokowana (zmiany i tak zastąpi nowsza wersja). */
     fun leave(mirror: Boolean) = State(readOnly = mirror, chrome = true, editable = !mirror)
 }

@@ -401,6 +401,21 @@ object SetupScenes {
                 out += Box(70f, 60f, 140f, 84f, 8f, Role.INK)
                 out += Label(80f, 77f, 12f, "Gumka", "Eraser", Role.PAPER)
             }
+            // Menu przytrzymanego przycisku; pierwsza pozycja prowadzi do jego ustawień.
+            "hold_settings" -> {
+                val on = s.get("ui.hold_settings") != 0
+                val rows = if (on) 3 else 2
+                out += Box(80f, 54f, 260f, 62f + rows * 26f, 8f, Role.SURFACE)
+                out += Box(80f, 54f, 260f, 62f + rows * 26f, 8f, Role.LINE, outline = true)
+                var y = 62f
+                if (on) {
+                    out += Box(84f, y, 256f, y + 24f, 6f, Role.ACCENT, outline = true)
+                    out += Label(94f, y + 16f, 12f, "Ustawienia tej funkcji", "Settings for this feature", Role.INK)
+                    y += 26f
+                }
+                out += Label(94f, y + 16f, 12f, "Zawsze na pasku", "Always on the bar", Role.MUTED); y += 26f
+                out += Label(94f, y + 16f, 12f, "Przesuń w lewo", "Move left", Role.MUTED)
+            }
             else -> if (s.get("ui.tool_hints") != 0) {
                 out += Box(70f, 60f, 250f, 84f, 8f, Role.INK)
                 out += Label(80f, 77f, 12f, "Przeciągnij, by zakryć", "Drag to cover", Role.PAPER)

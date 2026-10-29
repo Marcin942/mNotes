@@ -272,7 +272,7 @@ object SetupGuide {
             ),
         ),
         Topic(
-            "hints", "Podpowiedzi", "Hints", "dymki, nazwy przycisków, wibracja", "tips, button names, vibration",
+            "hints", "Podpowiedzi", "Hints", "dymki, nazwy przycisków, przytrzymanie, wibracja", "tips, button names, hold, vibration",
             listOf(
                 Page(
                     "tool_hints", "Dymki o narzędziach", "Tool tips",
@@ -285,6 +285,12 @@ object SetupGuide {
                     "Przytrzymaj przycisk albo najedź rysikiem, żeby zobaczyć jego nazwę.",
                     "Hold a button or hover the stylus over it to see its name.",
                     Sample.HINTS, onOff("ui.tooltips", "Pokazuj", "Show", "Nie pokazuj", "Don't show"),
+                ),
+                Page(
+                    "hold_settings", "Ustawienia z paska", "Settings from the toolbar",
+                    "Przytrzymaj przycisk paska i wybierz „Ustawienia tej funkcji” — otworzą się dokładnie w jej miejscu.",
+                    "Hold a toolbar button and pick “Settings for this feature” — they open right at that spot.",
+                    Sample.HINTS, onOff("ui.hold_settings", "Pokazuj w menu", "Show in the menu", "Nie pokazuj", "Don't show"),
                 ),
                 Page(
                     "haptics", "Wibracja", "Vibration",

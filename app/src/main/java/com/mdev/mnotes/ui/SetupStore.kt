@@ -35,6 +35,7 @@ class SetupStore(private val s: Settings) : SetupGuide.Store {
         "ui.tool_hints" -> b(s.toolHints)
         "ui.tooltips" -> b(s.tooltips)
         "ui.haptics" -> b(s.haptics)
+        "ui.hold_settings" -> b(s.holdSettings)
         else -> 0
     }
 
@@ -62,6 +63,7 @@ class SetupStore(private val s: Settings) : SetupGuide.Store {
             "ui.tool_hints" -> s.toolHints = v != 0
             "ui.tooltips" -> s.tooltips = v != 0
             "ui.haptics" -> s.haptics = v != 0
+            "ui.hold_settings" -> s.holdSettings = v != 0
         }
     }
 }

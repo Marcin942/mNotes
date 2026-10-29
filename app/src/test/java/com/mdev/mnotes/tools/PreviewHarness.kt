@@ -336,6 +336,9 @@ class PreviewHarness {
      * 3c-A10: strony przewodnika po ustawieniach — układ jak `SetupGuideScreen` (wymiary w dp), próbki z tych samych
      * `SetupScenes`. Tablet poziomo (1280×800 dp) i telefon pionowo (400×840 dp), motyw jasny i ciemny.
      */
+    /** `MNOTES_PREVIEW_ONLY=setup-docs` — tylko wybrane strony przewodnika po ustawieniach, wprost do katalogu. */
+    private val docsOnly get() = System.getenv("MNOTES_PREVIEW_ONLY") == "setup-docs"
+
     private fun setupSheet(dir: String) {
         class Mem : G.Store {
             val m = HashMap(mapOf("new.template" to 1, "toolbar.size" to 1, "pen.smoothing" to 1, "ui.tooltips" to 1, "ui.haptics" to 1, "ui.tool_hints" to 1, "view.minimap" to 1))
@@ -528,11 +531,25 @@ class PreviewHarness {
             g.dispose()
             return img
         }
-        val out = File(dir, "przewodnik-ustawienia"); out.mkdirs()
         val states = ArrayList<Pair<String, G.State>>()
         var s0 = G.State(); repeat(G.START_PAGES.size) { states += "start-${it + 1}-${s0.page.id}" to s0; s0 = s0.next() }
         var hub = s0
         for (t in G.TOPICS) { var s = hub.open(t.id); while (s.path == t.id) { states += "temat-${t.id}-${s.page.id}" to s; s = s.next() } ; hub = s }
+        if (docsOnly) {
+            // Wybór do `docs/podglad`: kilka stron zamiast pełnego zestawu (ten idzie do katalogu roboczego).
+            fun one(id: String, file: String, dark: Boolean, w: Int, h: Int, k: Float) {
+                val st = states.first { it.second.page.id == id }.second
+                val store = Mem().also { m -> G.choose(st.page, st.page.recommended(m), m) }
+                ImageIO.write(page(st, store, dark, w, h, k), "png", File(dir, "przewodnik-ustawienia-$file.png"))
+            }
+            one("hand", "reka-jasny", false, 1280, 800, 1f)
+            one("input", "palec-ciemny", true, 1280, 800, 1f)
+            one("theme", "motyw-telefon", true, 400, 840, 1.5f)
+            one("done", "gotowe-ciemny", true, 1280, 800, 1f)
+            one("hold_settings", "przytrzymanie", true, 1280, 800, 1f)
+            return
+        }
+        val out = File(dir, "przewodnik-ustawienia"); out.mkdirs()
         for ((name, st) in states) {
             val store = Mem().also { m -> G.choose(st.page, st.page.recommended(m), m) }
             for (dark in listOf(false, true)) {
@@ -553,6 +570,7 @@ class PreviewHarness {
         System.setProperty("java.awt.headless", "true")
         File(dir).mkdirs()
         setupSheet(dir)
+        if (docsOnly) return
         guideSheet(dir)
         glyphSheet(dir)
         toolSheet(dir)

@@ -30,6 +30,8 @@ object SetupGuide {
         val options: List<Option>,
         /** Indeks opcji zalecanej (może zależeć od wcześniejszych wyborów, np. zastosowania). */
         val recommended: (Store) -> Int = { 0 },
+        /** Krótka nazwa do podsumowania na stronie „Gotowe” (PL, EN); null — strona nie trafia do podsumowania. */
+        val short: Pair<String, String>? = null,
     )
 
     class Topic(val id: String, val titlePl: String, val titleEn: String, val descPl: String, val descEn: String, val pages: List<Page>)
@@ -81,13 +83,14 @@ object SetupGuide {
         ),
         Page(
             "hand", "Którą ręką piszesz?", "Which hand do you write with?",
-            "Listwa pióra, mini-mapa i kapsuła Cofnij ustawią się pod Twoją rękę.",
-            "The pen strip, mini-map and undo capsule arrange themselves for your hand.",
+            "Przyciski przy brzegu kartki ustawimy po stronie, której nie zasłania dłoń.",
+            "We'll put the buttons along the page on the side your palm doesn't cover.",
             Sample.HAND,
             listOf(
                 Option("Prawą", "Right hand", sets = one("input.hand", 0)),
-                Option("Lewą", "Left hand", "też: strona da się odsunąć spod dłoni", "also: the page can be pushed out from under your palm", one("input.hand", 1)),
+                Option("Lewą", "Left hand", "kartkę będzie można odsunąć spod dłoni", "you'll be able to push the page out from under your palm", one("input.hand", 1)),
             ),
+            short = "Ręka" to "Hand",
         ),
         Page(
             "input", "Rysik i palec", "Stylus and finger",
@@ -99,6 +102,7 @@ object SetupGuide {
                 Option("Palec też pisze", "Finger writes too", "gdy nie masz rysika", "if you have no stylus", one("input.finger", 1)),
                 Option("Palec nic nie robi", "Finger does nothing", "tylko rysik, nic przypadkiem", "stylus only, nothing by accident", one("input.finger", 2)),
             ),
+            short = "Palec" to "Finger",
         ),
         Page(
             "page", "Jaka kartka?", "What kind of paper?",
@@ -112,17 +116,19 @@ object SetupGuide {
                 Option("Kropki", "Dots", sets = one("new.template", 3)),
             ),
             recommended = { s -> when (s.get(USE)) { USE_MATH -> 2; USE_DRAW -> 0; else -> 1 } },
+            short = "Kartka" to "Paper",
         ),
         Page(
             "theme", "Jasno czy ciemno?", "Light or dark?",
-            "Ciemny tryb odwraca też strony, zachowując kolory pisma. Zmiana działa od razu — zobacz ten ekran.",
-            "Dark mode turns the pages dark too and keeps your ink colours. It applies right away — look at this screen.",
+            "W ciemnym trybie kartki też mogą być ciemne, a kolory pisma zostają czytelne. Zmiana działa od razu.",
+            "In dark mode the pages can be dark too, and your ink stays readable. It applies right away.",
             Sample.THEME,
             listOf(
-                Option("Jak w systemie", "Follow the system", "strony zostają takie, jakie powstały", "pages stay as they were made", { mapOf("ui.theme" to 0, "pages.theme" to 0) }),
+                Option("Jak w systemie", "Follow the system", "kartki zostają takie, jak je utworzono", "pages stay as they were created", { mapOf("ui.theme" to 0, "pages.theme" to 0) }),
                 Option("Jasny", "Light", sets = { mapOf("ui.theme" to 1, "pages.theme" to 1) }),
-                Option("Ciemny, także strony", "Dark, pages too", sets = { mapOf("ui.theme" to 2, "pages.theme" to 2) }),
+                Option("Ciemny, także kartki", "Dark, pages too", sets = { mapOf("ui.theme" to 2, "pages.theme" to 2) }),
             ),
+            short = "Motyw" to "Theme",
         ),
         Page(
             "toolbar", "Gdzie pasek narzędzi?", "Where should the toolbar go?",
@@ -134,6 +140,7 @@ object SetupGuide {
                 Option("Na dole", "Bottom", sets = one("toolbar.position", 1)),
                 Option("Z boku, po stronie wolnej ręki", "On the side of your free hand", sets = { s -> mapOf("toolbar.position" to sideToolbar(s)) }),
             ),
+            short = "Pasek" to "Toolbar",
         ),
         DONE_PAGE,
     )
@@ -167,8 +174,8 @@ object SetupGuide {
             listOf(
                 Page(
                     "eraser", "Jak ściera gumka?", "How should the eraser work?",
-                    "Obiektowa usuwa całą kreskę jednym dotknięciem, pikselowa ściera tylko to, czego dotknie.",
-                    "Stroke eraser removes a whole stroke with one touch; pixel eraser rubs out only what it touches.",
+                    "Gumka może usuwać całe kreski jednym dotknięciem, ścierać tylko dotknięte miejsce albo usuwać to, co obrysujesz.",
+                    "The eraser can remove whole strokes with one touch, rub out only what it touches, or remove what you circle.",
                     Sample.ERASER,
                     listOf(
                         Option("Całe kreski", "Whole strokes", sets = one("eraser.mode", 0)),
@@ -178,9 +185,9 @@ object SetupGuide {
                 ),
                 Page(
                     "lasso", "Co zaznacza lasso?", "What does the lasso pick?",
-                    "Lasso to pętla wokół obiektów. Może łapać tylko to, co jest w środku, albo wszystko, czego dotknie.",
-                    "The lasso is a loop around things. It can pick only what's inside, or anything it touches.",
-                    Sample.ERASER, onOff("lasso.touch", "Wszystko, czego dotknie", "Anything it touches", "To, co w środku", "What's inside"),
+                    "Lasso to pętla wokół obiektów. Może łapać to, co leży głównie w środku, albo wszystko, czego dotknie.",
+                    "The lasso is a loop around things. It can pick what's mostly inside, or anything it touches.",
+                    Sample.ERASER, onOff("lasso.touch", "Wszystko, czego dotknie", "Anything it touches", "To, co głównie w środku", "What's mostly inside"),
                     recommended = { 1 },
                 ),
             ),
@@ -293,6 +300,15 @@ object SetupGuide {
         val out = HashSet<String>()
         for (p in START_PAGES + TOPICS.flatMap { it.pages }) for (o in p.options) out += o.sets(probe).keys
         return out
+    }
+
+    /** Podsumowanie startu: strona i wybrana opcja (−1 — ustawione inaczej, np. w Ustawieniach). */
+    fun summary(s: Store): List<Pair<Page, Int>> = START_PAGES.filter { it.short != null }.map { it to current(it, s) }
+
+    /** Tematy „Poznaj więcej” w kolejności pod zastosowanie: najbliższy temat pierwszy. */
+    fun topics(s: Store): List<Topic> {
+        val first = when (s.get(USE)) { USE_MATH -> "math"; USE_PDF -> "erase"; USE_DRAW -> "write"; else -> null }
+        return TOPICS.sortedBy { if (it.id == first) 0 else 1 }
     }
 
     fun pages(path: String): List<Page> = when (path) {

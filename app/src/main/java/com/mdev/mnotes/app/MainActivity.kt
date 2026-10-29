@@ -337,6 +337,7 @@ open class MainActivity : FragmentActivity() {
         val tabsCtl = TabsCtl(
             ui.tabs, app.settings.tabs, ui::open, ui::closeTab, ui::stepTab, ui::leave,
             { id -> app.repo.meta(id)?.title ?: "" },
+            { id -> app.repo.meta(id) },
         )
         CompositionLocalProvider(LocalSamsungStart provides ui::startSamsung, LocalOpenGuide provides { ui.guide = true }) {
             Box(Modifier.fillMaxSize()) {

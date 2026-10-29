@@ -22,6 +22,9 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Delete
+import androidx.compose.material.icons.rounded.Description
+import androidx.compose.material.icons.rounded.Lock
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -33,7 +36,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.style.TextOverflow
@@ -41,6 +48,7 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import com.mdev.mnotes.core.layout.DualRows
+import com.mdev.mnotes.core.layout.LaneLabel
 import com.mdev.mnotes.core.model.PageFormat
 import com.mdev.mnotes.core.model.PageSpec
 import com.mdev.mnotes.core.model.Template
@@ -77,27 +85,51 @@ internal fun EditorCanvas(st: Station, onTouch: () -> Unit) {
 @Composable
 private fun LaneChips(st: Station, h: WorkspaceView, rows: List<Editor>) {
     h.tick
-    rows.forEachIndexed { i, e -> h.laneRect(i)?.let { r -> RowChip(st, e, r[0], r[1]) } }
+    rows.forEachIndexed { i, e -> h.laneRect(i)?.let { r -> RowChip(st, e, r[0], r[1], r[2] - r[0]) } }
 }
 
-/** Nagłówek dokumentu w lewym górnym rogu jego pasa: tytuł zeszytu (aktywny w akcencie) i ✕ dla dołożonych. */
+/**
+ * Nagłówek dokumentu w lewym górnym rogu jego pasa (3c-A7): ikonka (miniatura okładki zeszytu albo okładka ze znakiem
+ * PDF), nazwa, kłódka przy dokumencie do odczytu i ✕ dla dołożonych. Aktywny w akcencie. W wąskim pasie sama ikonka —
+ * nazwę podaje opis dla czytnika ekranu.
+ */
 @Composable
-private fun RowChip(st: Station, e: Editor, left: Float, top: Float) {
+private fun RowChip(st: Station, e: Editor, left: Float, top: Float, widthPx: Float) {
     val m = mint
     val on = st.active === e
     val shape = RoundedCornerShape(10.dp)
+    val meta = e.repo.meta(e.nbId)
+    val dens = LocalDensity.current.density
+    val l = LaneLabel.of(meta?.title.orEmpty(), meta?.pdfDoc == true, e.readOnly, widthPx / dens, T.pl)
+    val closable = e !== st.main
     Row(
         Modifier.offset { IntOffset(left.roundToInt() + 8.dp.roundToPx(), top.roundToInt() + 6.dp.roundToPx()) }
+            .widthIn(max = l.maxDp.dp)
             .clip(shape).background(if (on) m.accentSoft else m.chrome).border(1.dp, if (on) m.accent else m.line, shape)
-            .clickable { st.activate(e) }.padding(start = 10.dp, end = if (e === st.main) 10.dp else 2.dp, top = 2.dp, bottom = 2.dp),
-        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(2.dp),
+            .clickable { st.activate(e) }.semantics { contentDescription = l.description }
+            .padding(start = 6.dp, end = if (closable) 2.dp else 10.dp, top = 3.dp, bottom = 3.dp),
+        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        Text(
-            e.repo.meta(e.nbId)?.title.orEmpty().ifBlank { T.t("Bez tytułu", "Untitled") }, Modifier.widthIn(max = 220.dp),
+        DocIcon(meta?.cover ?: 0xFF4C9A6A.toInt(), meta?.coverStyle ?: 0, l.kind)
+        if (l.showTitle) Text(
+            l.title, Modifier.weight(1f, fill = false),
             style = MaterialTheme.typography.labelMedium, maxLines = 1, overflow = TextOverflow.Ellipsis,
             color = if (on) m.accentText else MaterialTheme.colorScheme.onSurface,
         )
-        if (e !== st.main) IconBtn(Icons.Rounded.Close, T.t("Zamknij ten dokument na stanowisku", "Close this document on the workspace"), { st.remove(e) }, size = 28.dp, iconSize = 16.dp)
+        if (l.readOnly) Icon(Icons.Rounded.Lock, null, Modifier.size(13.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+        if (closable) IconBtn(Icons.Rounded.Close, T.t("Zamknij ten dokument na stanowisku", "Close this document on the workspace"), { st.remove(e) }, size = 28.dp, iconSize = 16.dp)
+    }
+}
+
+/** Ikonka dokumentu w nagłówku pasa i na karcie: miniatura okładki (kolor i wzór jak w bibliotece), u PDF ze znakiem dokumentu. */
+@Composable
+internal fun DocIcon(cover: Int, style: Int, kind: LaneLabel.Kind) {
+    Box(Modifier.size(width = 15.dp, height = 20.dp).clip(RoundedCornerShape(topStart = 2.dp, bottomStart = 2.dp, topEnd = 4.dp, bottomEnd = 4.dp)), contentAlignment = Alignment.Center) {
+        CoverArt(cover, style, Modifier.fillMaxSize())
+        if (kind == LaneLabel.Kind.PDF) {
+            val ink = if (androidx.compose.ui.graphics.Color(cover).luminance() > 0.4f) androidx.compose.ui.graphics.Color.Black else androidx.compose.ui.graphics.Color.White
+            Icon(Icons.Rounded.Description, null, Modifier.size(12.dp), tint = ink.copy(alpha = 0.85f))
+        }
     }
 }
 

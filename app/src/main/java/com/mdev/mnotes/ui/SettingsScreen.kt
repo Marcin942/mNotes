@@ -376,7 +376,7 @@ private fun Appearance(set: com.mdev.mnotes.data.Settings) {
         }
         ToggleRow(T.t("Otwieraj zeszyty jako karty (pasek kart w nagłówku, bez dodatkowego miejsca; Ctrl+Tab przełącza)", "Open notebooks as tabs (tab strip inside the header, no extra space; Ctrl+Tab switches)"), set.tabs, keys = "zakładki tabs przełączanie notatek wiele zeszytów") { set.tabs = it }
         ToggleRow(T.t("Zadokuj panel stron z lewej na szerokim oknie (≥ 840 dp, DeX)", "Dock the page panel on the left in wide windows (≥ 840 dp, DeX)"), set.dockPages, keys = "panel stron miniatury dex szeroki ekran okno tablet") { set.dockPages = it }
-        Opt(T.t("Język", "Language"), "language polski angielski english") { Choice(listOf(T.t("Systemowy", "System"), "Polski", "English"), set.lang) { set.lang = it } }
+        Opt(T.t("Język", "Language"), "language polski angielski english język aplikacji app language lokalizacja tłumaczenie translation") { Choice(listOf(T.t("Systemowy", "System"), "Polski", "English"), set.lang) { set.lang = it } }
         Opt(T.t("Jednostki", "Units"), "units mm cale milimetry centymetry inches") { Choice(listOf(T.t("Milimetry", "Millimeters"), T.t("Cale", "Inches")), if (set.unitsMm) 0 else 1) { set.unitsMm = it == 0 } }
     }
 }

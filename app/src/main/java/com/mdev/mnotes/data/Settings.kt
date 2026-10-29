@@ -99,6 +99,9 @@ class Settings(ctx: Context) {
 
     init { com.mdev.mnotes.editor.T.mode = langPref }
 
+    /** Tag z ostatniego uzgodnienia z systemowym „Językiem aplikacji” (3c-A15, `AppLanguage.reconcile`); "?" — nigdy. */
+    var langSys by Pref("ui.lang_sys", "?")
+
     // — Wejście —
     private var handPref by Pref("input.hand", com.mdev.mnotes.core.layout.Handedness.RIGHT)
     /** 3c-A13: ręka, którą się pisze; zmiana odbija położenia pasków, kapsuły i mini-mapy ([Handedness.switch]). */

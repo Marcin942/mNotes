@@ -49,6 +49,9 @@ val LocalBarSettings = staticCompositionLocalOf<() -> Unit> { {} }
 /** Otwiera ustawienia pędzla formatu (zębatka w jego panelu). */
 val LocalPainterSettings = staticCompositionLocalOf<() -> Unit> { {} }
 
+/** 3c-A17b: otwiera Ustawienia z zapytaniem-kotwicą ([com.mdev.mnotes.core.search.SettingsAnchors]). */
+val LocalSettingsAt = staticCompositionLocalOf<(String) -> Unit> { {} }
+
 /** Zapytanie, które w wyszukiwarce ustawień zostawia tylko grupę pędzla formatu. */
 const val PAINTER_QUERY = "pędzel formatu"
 

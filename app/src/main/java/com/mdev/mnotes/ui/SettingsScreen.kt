@@ -3,6 +3,7 @@ package com.mdev.mnotes.ui
 import com.mdev.mnotes.core.edit.AngleSnap
 import com.mdev.mnotes.core.layout.HelperStrip
 import com.mdev.mnotes.core.layout.MiniMap
+import com.mdev.mnotes.core.layout.ToolPopups
 import kotlin.math.roundToInt
 import com.mdev.mnotes.core.layout.PageShift
 import androidx.activity.compose.BackHandler
@@ -38,6 +39,7 @@ import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.ColorLens
 import androidx.compose.material.icons.rounded.Extension
 import androidx.compose.material.icons.rounded.Search
+import androidx.compose.material.icons.rounded.Explore
 import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.Keyboard
 import androidx.compose.material.icons.rounded.Lock
@@ -145,6 +147,8 @@ fun SettingsScreen(onBack: () -> Unit, startCat: Int = 0, startQuery: String = "
                 )
             }
             if (query.isNotEmpty()) IconBtn(Icons.Rounded.Close, T.t("Wyczyść wyszukiwanie", "Clear search"), { query = "" })
+            // 3c-A10: przewodnik zawsze pod ręką — najważniejsze wybory strona po stronie.
+            IconBtn(Icons.Rounded.Explore, T.t("Przewodnik po ustawieniach", "Settings guide"), LocalOpenGuide.current)
         }
         HorizontalDivider(color = m.line)
         BoxWithConstraints(Modifier.fillMaxSize()) {
@@ -333,6 +337,10 @@ private fun Appearance(set: com.mdev.mnotes.data.Settings) {
         ToggleRow(T.t("Zagęszczony interfejs (desktopowy)", "Compact interface (desktop-like)"), set.compact, keys = "compact gęsty kompaktowy desktop małe odstępy") { set.compact = it }
         ToggleRow(T.t("Delikatna wibracja przy dotknięciu przycisków", "Light vibration when tapping buttons"), set.haptics, keys = "haptyka drgania wibracje vibration haptic") { set.haptics = it }
         ToggleRow(T.t("Podpowiedź z nazwą przycisku (najechanie, przytrzymanie)", "Button name tooltip (hover, long press)"), set.tooltips, keys = "podpowiedź dymek napis nazwa tooltip hover") { set.tooltips = it }
+        ToggleRow(
+            T.t("Przytrzymanie otwiera ustawienia (menu przycisku paska: „Ustawienia tej funkcji”)", "Long press opens settings (toolbar button menu: “Settings for this feature”)"), set.holdSettings,
+            keys = "przytrzymanie przytrzymaj długie naciśnięcie ustawienia funkcji skrót zębatka long press hold",
+        ) { set.holdSettings = it }
         ToggleRow(T.t("Pokazuj dymki o narzędziach po ich wybraniu", "Show tool tips after picking a tool"), set.toolHints, keys = "dymki komunikaty napis wybrane narzędzie podpowiedź toast hint") { set.toolHints = it }
         HelperStripPrefs(set)
         ToggleRow(
@@ -401,10 +409,22 @@ private fun HelperStripPrefs(set: com.mdev.mnotes.data.Settings) {
     for ((h, label, keys) in groups) {
         ToggleRow(label, cfg.menuFor(h), keys = "menu wyskakujące $keys popup") { set.helperMenu = cfg.withMenu(h, it) }
         if (cfg.menuFor(h)) {
+            FadeChoice(set, ToolPopups.of(h), keys)
             val items = HelperStrip.Item.entries.filter { it.helper == h }
             if (items.size > 1 && rowVisible(label, keys)) FlowRow(Modifier.padding(bottom = 6.dp), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 for (i in items) Chip(helperItemName(i), cfg.shows(i), { set.helperMenu = cfg.withItem(i, !cfg.shows(i)) })
             }
+        }
+    }
+}
+
+/** 3c-A17a: po ilu sekundach gasną wyskakujące opcje narzędzia [t] — ten sam wybór dla pędzla, gumki, lassa i lasera. */
+@Composable
+private fun FadeChoice(set: com.mdev.mnotes.data.Settings, t: ToolPopups.Tool, keys: String) {
+    val r = set.popup(t)
+    Opt(T.t("Gaśnie po", "Fades after"), "gaśnie znika czas sekundy opóźnienie wyskakujące menu fade timeout $keys") {
+        Choice(ToolPopups.STEPS.map { if (it == 0) T.t("Nie gaśnie", "Never") else "$it s" }, ToolPopups.stepOf(r.sec)) {
+            set.setPopup(t, r.copy(sec = ToolPopups.STEPS[it]))
         }
     }
 }
@@ -502,10 +522,7 @@ private fun EditorPrefs(set: com.mdev.mnotes.data.Settings) {
             )
             ToggleRow(T.t("Gaś przy pierwszym malowaniu", "Fade when painting starts"), set.painterQuickFadeUse, keys = "pobierz format przycisk gaśnie znika malowanie użycie pędzel") { set.painterQuickFadeUse = it }
             ToggleRow(T.t("Gaś po pobraniu formatu", "Fade after taking a format"), set.painterQuickFadeTake, keys = "pobierz format przycisk gaśnie znika po pobraniu pędzel") { set.painterQuickFadeTake = it }
-            Opt(
-                if (set.painterQuickSec == 0) T.t("Gaś po czasie: nigdy", "Fade after time: never") else T.t("Gaś po czasie: ${set.painterQuickSec} s", "Fade after time: ${set.painterQuickSec} s"),
-                "pobierz format przycisk gaśnie znika czas sekundy opóźnienie pędzel",
-            ) { MSlider(set.painterQuickSec.toFloat(), 0f, 30f) { set.painterQuickSec = it.toInt() } }
+            FadeChoice(set, ToolPopups.Tool.PAINTER, "pobierz format przycisk pędzel")
         }
     }
     Group(T.t("Wypełnienie", "Fill"), keys = "wiaderko wypełnianie fill") {

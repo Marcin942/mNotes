@@ -228,6 +228,8 @@ import com.mdev.mnotes.core.layout.BarFit
 import com.mdev.mnotes.core.layout.BarMode
 import com.mdev.mnotes.core.layout.BottomStack
 import com.mdev.mnotes.core.layout.HelperStrip
+import com.mdev.mnotes.core.layout.ToolPopups
+import com.mdev.mnotes.core.search.SettingsAnchors
 import com.mdev.mnotes.core.pen.ActivePen
 import com.mdev.mnotes.core.pen.ColorSet
 import com.mdev.mnotes.core.pen.InkColor
@@ -757,6 +759,7 @@ private fun ToolBar(ed: Editor, set: com.mdev.mnotes.data.Settings, vertical: Bo
     val cfg = set.barConfig
     val shown = items.filter { set.undoDock == 0 || (it.id != "undo" && it.id != "redo") }.sortedBy { cfg.order.indexOf(it.id) }
     val openSettings = LocalBarSettings.current
+    val settingsAt = LocalSettingsAt.current
     BoxWithConstraints(contentAlignment = Alignment.Center) {
         val fit = BarFit.fit(
             shown.map { BarEntry(it.group, it.rank, cfg.mode(it.id)) }, (if (vertical) maxHeight else maxWidth).value - 8f, sz.value,
@@ -772,7 +775,7 @@ private fun ToolBar(ed: Editor, set: com.mdev.mnotes.data.Settings, vertical: Bo
                     group = b.group
                     Box {
                         ToolBtn(b.tip, b.onClick, enabled = b.enabled, selected = b.selected, size = sz, shortcut = b.shortcut, onLong = { b.onHold?.invoke() ?: run { menuFor = b.id } }) { c -> b.glyph(c, isz) }
-                        if (menuFor == b.id) BarItemMenu(b.id, cfg, vertical, { set.barConfig = it }, { menuFor = null }, openSettings)
+                        if (menuFor == b.id) BarItemMenu(b.id, cfg, vertical, { set.barConfig = it }, { menuFor = null }, openSettings, if (set.holdSettings) settingsAt else null)
                         if (b.id == "painter") QuickFormat(ed, set, panel, sz, isz)
                         HELPER_IDS[b.id]?.let { HelperMenu(ed, set, panel, it, holdTool) }
                     }
@@ -835,8 +838,14 @@ private fun QuickFormat(ed: Editor, set: com.mdev.mnotes.data.Settings, panel: P
  * Zmiana działa od razu, bez wchodzenia w Ustawienia.
  */
 @Composable
-private fun BarItemMenu(id: String, cfg: BarConfig, vertical: Boolean, save: (BarConfig) -> Unit, close: () -> Unit, openSettings: () -> Unit) {
+private fun BarItemMenu(id: String, cfg: BarConfig, vertical: Boolean, save: (BarConfig) -> Unit, close: () -> Unit, openSettings: () -> Unit, settingsAt: ((String) -> Unit)?) {
     DropdownMenu(true, close) {
+        // 3c-A17b: na górze, bo po to najczęściej się przytrzymuje — ustawienia samej funkcji, nie jej miejsca na pasku.
+        val anchor = settingsAt?.let { SettingsAnchors.of(id) }
+        if (anchor != null) {
+            DropdownMenuItem(text = { Text(T.t("Ustawienia tej funkcji", "Settings for this feature")) }, leadingIcon = { Icon(Icons.Rounded.Settings, null) }, onClick = { close(); settingsAt(anchor) })
+            HorizontalDivider()
+        }
         @Composable
         fun mode(label: String, v: Int) = DropdownMenuItem(
             text = { Text(label) },
@@ -1160,7 +1169,16 @@ private fun HelperMenu(ed: Editor, set: com.mdev.mnotes.data.Settings, panel: Pa
     val cfg = set.helperMenu
     val ownPanel = when (h) { HelperStrip.Helper.ERASER -> Panel.ERASER; HelperStrip.Helper.LASSO -> Panel.LASSO; HelperStrip.Helper.LASER, HelperStrip.Helper.SNIP -> null }
     val state = remember { MutableTransitionState(false) }
-    state.targetState = helperOf(ed.tool) == h && (!ed.readOnly || h == HelperStrip.Helper.SNIP) && HelperStrip.menuVisible(set.helperStrip, h, cfg, ownPanel != null && panel == ownPanel)
+    // 3c-A17a: menu gaśnie po czasie z Ustawień (jak „Pobierz format”); dotknięcie menu liczy czas od nowa, a wróci po
+    // ponownym wybraniu narzędzia — drugie dotknięcie ikony i tak otwiera pełny panel.
+    val rule = set.popup(ToolPopups.of(h))
+    var touches by remember { mutableIntStateOf(0) }
+    var faded by remember(ed.tool) { mutableStateOf(false) }
+    LaunchedEffect(ed.tool, touches, rule.sec) {
+        faded = false
+        if (rule.sec > 0 && helperOf(ed.tool) == h) { delay(rule.sec * 1000L); faded = true }
+    }
+    state.targetState = helperOf(ed.tool) == h && (!ed.readOnly || h == HelperStrip.Helper.SNIP) && !faded && HelperStrip.menuVisible(set.helperStrip, h, cfg, ownPanel != null && panel == ownPanel)
     if (!state.currentState && !state.targetState) return
     val pos = set.toolbarPos
     val place = rememberBarPopupPlace(pos)
@@ -1171,7 +1189,10 @@ private fun HelperMenu(ed: Editor, set: com.mdev.mnotes.data.Settings, panel: Pa
     val vertical = pos == 2 || pos == 3
     Popup(popupPositionProvider = place) {
         AnimatedVisibility(visibleState = state, enter = fadeIn(tween(150)), exit = fadeOut(tween(180))) {
-            Box(Modifier.shadow(4.dp, shape).clip(shape).background(m.chrome).border(1.dp, m.line, shape)) {
+            Box(
+                Modifier.shadow(4.dp, shape).clip(shape).background(m.chrome).border(1.dp, m.line, shape)
+                    .pointerInput(Unit) { awaitPointerEventScope { while (true) { awaitPointerEvent(PointerEventPass.Initial); touches++ } } },
+            ) {
                 when (h) {
                     HelperStrip.Helper.ERASER -> EraserStripItems(ed, set, vertical, panel, open, items)
                     HelperStrip.Helper.LASSO -> LassoStripItems(ed, set, vertical, panel, open, items)

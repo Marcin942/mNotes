@@ -1356,7 +1356,8 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
     }
 
     /** W trybie tylko do odczytu gest przewija, chyba że narzędziem jest laser (jedyne, które nic nie zmienia). */
-    private fun navOnly(ev: MotionEvent, idx: Int) = ed.readOnly && effectiveTool(ev, idx) != Tool.LASER
+    // 3c-B4: Wycinek działa też w dokumencie do odczytu (slajdy są źródłem wycinków, niczego w nich nie zmienia).
+    private fun navOnly(ev: MotionEvent, idx: Int) = ed.readOnly && effectiveTool(ev, idx).let { it != Tool.LASER && it != Tool.SNIP }
 
     /** Identyfikatory dotknięć, które nie są gestem: opierająca się dłoń albo palec poza stroną (np. na pasku narzędzi). */
     private val palm = HashSet<Int>()

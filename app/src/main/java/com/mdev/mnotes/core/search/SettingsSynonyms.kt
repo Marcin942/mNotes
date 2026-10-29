@@ -11,6 +11,7 @@ object SettingsSynonyms {
         listOf("pióro", "pióra", "długopis", "pisak", "rysik", "atrament", "pisanie", "pen", "pens", "stylus", "ink", "writing"),
         listOf("powiększenie", "przybliżenie", "przybliżanie", "oddalanie", "zoom", "lupa", "skala", "magnify", "magnifier", "scale"),
         listOf("lasso", "zaznaczanie", "zaznaczenie", "zaznacz", "wybór", "pętla", "selection", "select", "marquee", "loop"),
+        listOf("wycinek", "wycinki", "wytnij", "nożyczki", "zrzut", "fragment", "slajd", "slajdy", "snip", "snippet", "screenshot", "clip", "scissors", "slide"),
         listOf("kolor", "kolory", "barwa", "barwy", "odcień", "paleta", "colour", "color", "hue", "palette"),
         listOf("motyw", "ciemny", "jasny", "nocny", "amoled", "theme", "dark", "light", "night"),
         listOf("strona", "strony", "kartka", "kartki", "arkusz", "page", "pages", "sheet"),

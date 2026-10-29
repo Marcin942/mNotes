@@ -13,7 +13,7 @@ object SetupGuide {
     }
 
     /** Rodzaj żywej próbki obok opcji (rysuje ją `ui`; makiety z [SetupScenes]). */
-    enum class Sample { WELCOME, HAND, INPUT, PAGE, THEME, TOOLBAR, DONE, WRITE, ERASER, GESTURES, MATH, VIEW, HINTS }
+    enum class Sample { WELCOME, HAND, INPUT, PAGE, THEME, TOOLBAR, DONE, WRITE, ERASER, SNIP, GESTURES, MATH, VIEW, HINTS }
 
     class Option(
         val pl: String, val en: String,
@@ -170,7 +170,7 @@ object SetupGuide {
             ),
         ),
         Topic(
-            "erase", "Gumka i zaznaczanie", "Eraser and selection", "jak ściera gumka, co łapie lasso", "how the eraser works, what the lasso picks",
+            "erase", "Gumka, lasso i wycinek", "Eraser, lasso and snip", "jak ściera gumka, co łapie lasso, wycinek ze slajdu", "how the eraser works, what the lasso picks, snips from slides",
             listOf(
                 Page(
                     "eraser", "Jak ściera gumka?", "How should the eraser work?",
@@ -189,6 +189,16 @@ object SetupGuide {
                     "The lasso is a loop around things. It can pick what's mostly inside, or anything it touches.",
                     Sample.ERASER, onOff("lasso.touch", "Wszystko, czego dotknie", "Anything it touches", "To, co głównie w środku", "What's mostly inside"),
                     recommended = { 1 },
+                ),
+                Page(
+                    "snip", "Wycinek", "Snip",
+                    "Nożyczki na pasku wycinają fragment strony (choćby diagram ze slajdu) jako obraz, który przeciągasz do notatek. Jaki kształt ma mieć wycinek?",
+                    "The scissors on the toolbar cut out part of a page (say, a diagram from a slide) as an image you drag into your notes. What shape should a snip be?",
+                    Sample.SNIP,
+                    listOf(
+                        Option("Prostokąt", "Rectangle", "ostre krawędzie, jak slajd", "sharp edges, like a slide", one("snip.rect", 1)),
+                        Option("Lasso", "Lasso", "dowolny kształt, poza nim przezroczyście", "any shape, transparent outside", one("snip.rect", 0)),
+                    ),
                 ),
             ),
         ),

@@ -563,6 +563,9 @@ class PreviewHarness {
         val ts = Mem().also { G.choose(th.page, 0, it) }
         ImageIO.write(page(th, ts, false, 800, 1280, 1f), "png", File(out, "pion-tablet-theme-jasny.png"))
         ImageIO.write(page(th, ts, true, 840, 400, 1.5f), "png", File(out, "poziom-telefon-theme-ciemny.png"))
+        // Wycinek lassem: w zestawie jest tylko zalecany prostokąt.
+        val sn = states.first { it.second.page.id == "snip" }.second
+        ImageIO.write(page(sn, Mem().also { G.choose(sn.page, 1, it) }, true, 1280, 800, 1f), "png", File(out, "temat-erase-snip-lasso-tablet-ciemny.png"))
     }
 
     @Test fun render() {

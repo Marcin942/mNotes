@@ -41,14 +41,14 @@ musi go znaleźć od razu. Na Androidzie 13+ wybór trafia też do systemowego �
 | Temat | Strony (ustawienie) |
 |---|---|
 | Pisanie i kształty | Prostowanie po przytrzymaniu (`input.hold_to_shape`); Wygładzanie pisma (`pen.smoothing`: mało / średnio / dużo) |
-| Gumka i zaznaczanie | Domyślna gumka (`eraser.mode`: obiektowa / pikselowa / lasso gumki); Co zaznacza lasso (`lasso.touch`) |
+| Gumka, lasso i wycinek | Domyślna gumka (`eraser.mode`: obiektowa / pikselowa / lasso gumki); Co zaznacza lasso (`lasso.touch`); Wycinek — kształt prostokąt / lasso (`snip.rect`, 3c-B4; scena: slajd z wykresem → notatki) |
 | Gesty | Podwójne dotknięcie palcem (`input.double_tap`); Cofnij dwoma palcami (`input.two_finger_undo`); Przycisk rysika (`input.pen_button`) |
 | Matematyka | Symbole z \alpha, x^2 w tekście (`text.math_unicode`); Podpisy punktów w konstrukcjach (`construct.names`) |
 | Widok | Zapas przewijania (`view.scroll_margin`); Mini-mapa (`view.minimap`); Rozmiar paska (`toolbar.size`) |
 | Podpowiedzi | Dymki o narzędziach (`ui.tool_hints`); Nazwy przycisków (`ui.tooltips`); Ustawienia z paska — przytrzymany przycisk paska → „Ustawienia tej funkcji” (`ui.hold_settings`, 3c-A17b); Wibracja (`ui.haptics`) |
 
 Każdy temat kończy się powrotem do listy tematów; przejrzany temat ma znaczek ✓. Tematy są kartami nawigacji (strzałka ›),
-nie opcjami. Kolejność zależy od strony 1: Matematyka → najpierw „Matematyka”, PDF → „Gumka i zaznaczanie”, Rysowanie →
+nie opcjami. Kolejność zależy od strony 1: Matematyka → najpierw „Matematyka”, PDF → „Gumka, lasso i wycinek”, Rysowanie →
 „Pisanie i kształty”.
 
 ## Teksty stron (PL; EN w kodzie obok, jak w całej aplikacji przez `T.t`)

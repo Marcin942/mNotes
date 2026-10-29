@@ -1124,7 +1124,7 @@ class Editor(val ctx: Context, val nbId: String) {
      */
     class GeoProbe(val pageId: String, val picked: GeoTool.Picked?, val ghost: List<Element>)
 
-    fun geoProbe(pageId: String, x: Float, y: Float, tol: Float): GeoProbe? {
+    fun geoProbe(pageId: String, x: Float, y: Float, tol: Float, color: Int): GeoProbe? {
         if (readOnly) return null
         val page = doc.page(pageId) ?: return null
         val have = if (geoPage == null || geoPage == pageId) geoInputs.toList() else emptyList()
@@ -1132,7 +1132,7 @@ class Editor(val ctx: Context, val nbId: String) {
         val picked = GeoTool.pickFrom(doc.content(page).elements, x, y, tol, want)
         val ins = if (picked == null) have else have + picked.input
         val ghost = if (ins.size < geoKind.inputs.size) emptyList()
-            else GeoTool.build(geoKind, ins, 0, pen.width.coerceIn(0.6f, 3f), names = false, pl = T.pl, prm = geoParams())
+            else GeoTool.build(geoKind, ins, color, pen.width.coerceIn(0.6f, 3f), names = false, pl = T.pl, prm = geoParams())
                 .takeUnless { ConstructOps.tooFar(it, page.spec.w, page.spec.h) }.orEmpty()
         return GeoProbe(pageId, picked, ghost)
     }

@@ -50,7 +50,7 @@ Każdy temat kończy się powrotem do listy tematów; przejrzany temat ma znacze
 1. **Witaj w mNotes** — „Kilka krótkich pytań, po jednym na stronę. Wszystko zmienisz później w Ustawieniach.” Pytanie:
    „Do czego głównie będziesz używać mNotes?”
 2. **Którą ręką piszesz?** — „Paski i podglądy staną po stronie, której nie zasłania dłoń.”
-3. **Rysik i palec** — „Rysik zawsze pisze. Wybierz, co ma robić palec — spróbuj obu w polu obok.”
+3. **Rysik i palec** — „Rysik zawsze pisze. Wybierz, co ma robić palec — spróbuj na kartce w podglądzie.”
 4. **Jaka kartka?** — „Wzór nowych stron. Każdą stronę możesz potem zmienić osobno.”
 5. **Jasno czy ciemno?** — „Ciemny tryb odwraca też strony, zachowując kolory pisma.”
 6. **Gdzie pasek narzędzi?** — „Na dużym ekranie wygodnie u góry; z boku zostawia więcej wysokości na kartkę.”

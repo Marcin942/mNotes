@@ -34,6 +34,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material3.Button
@@ -215,7 +216,7 @@ private fun Choices(st: State, page: SetupGuide.Page, store: SetupGuide.Store, g
         Spacer(Modifier.size(8.dp))
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             for (t in SetupGuide.TOPICS) Card(
-                T.t(t.titlePl, t.titleEn), T.t(t.descPl, t.descEn), selected = false, recommended = false, done = t.id in st.seen,
+                T.t(t.titlePl, t.titleEn), T.t(t.descPl, t.descEn), selected = false, recommended = false, done = t.id in st.seen, nav = true,
             ) { go((if (st.path == SetupGuide.START) st.next() else st).open(t.id)) }
         }
         return
@@ -232,7 +233,7 @@ private fun Choices(st: State, page: SetupGuide.Page, store: SetupGuide.Store, g
 }
 
 @Composable
-private fun Card(title: String, note: String, selected: Boolean, recommended: Boolean, done: Boolean, onClick: () -> Unit) {
+private fun Card(title: String, note: String, selected: Boolean, recommended: Boolean, done: Boolean, nav: Boolean = false, onClick: () -> Unit) {
     val m = mint
     val cs = MaterialTheme.colorScheme
     val bg by animateColorAsState(if (selected) m.accentSoft else cs.surface, tween(200), label = "card")
@@ -240,16 +241,17 @@ private fun Card(title: String, note: String, selected: Boolean, recommended: Bo
     val shape = RoundedCornerShape(12.dp)
     Row(
         Modifier.fillMaxWidth().heightIn(min = 56.dp).clip(shape).background(bg).border(if (selected) 2.dp else 1.dp, edge, shape)
-            .clickable(onClick = onClick).semantics { role = Role.RadioButton; this.selected = selected }
+            .clickable(onClick = onClick).semantics { if (nav) role = Role.Button else { role = Role.RadioButton; this.selected = selected } }
             .padding(horizontal = 16.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        // Znacznik wyboru jak przełącznik radiowy; w liście tematów — ✓ przy przejrzanych.
+        // Znacznik wyboru jak przełącznik radiowy; w liście tematów nie ma wyboru — tylko ✓ przy przejrzanych.
+        val mark = selected || done
         Box(
-            Modifier.size(22.dp).clip(CircleShape).background(if (selected || done) m.accent else Color.Transparent)
-                .border(2.dp, if (selected || done) m.accent else m.line, CircleShape),
+            Modifier.size(22.dp).clip(CircleShape).background(if (mark) m.accent else Color.Transparent)
+                .border(2.dp, if (mark) m.accent else if (nav) Color.Transparent else m.line, CircleShape),
             contentAlignment = Alignment.Center,
-        ) { if (selected || done) Icon(Icons.Rounded.Check, null, tint = m.onAccent, modifier = Modifier.size(14.dp)) }
+        ) { if (mark) Icon(Icons.Rounded.Check, null, tint = m.onAccent, modifier = Modifier.size(14.dp)) }
         Spacer(Modifier.size(14.dp))
         Column(Modifier.weight(1f)) {
             Text(title, style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Medium))
@@ -262,6 +264,7 @@ private fun Card(title: String, note: String, selected: Boolean, recommended: Bo
                 modifier = Modifier.clip(RoundedCornerShape(50)).background(m.accentSoft).padding(horizontal = 10.dp, vertical = 4.dp),
             )
         }
+        if (nav) Icon(Icons.AutoMirrored.Rounded.KeyboardArrowRight, null, tint = cs.onSurfaceVariant)
     }
 }
 

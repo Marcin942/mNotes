@@ -25,8 +25,10 @@ class SetupGuideTest {
             assertTrue(pg.id, pg.options.size in 2..4)
             assertTrue(pg.id, SetupGuide.recommendedIn(pg, Mem()))
             assertTrue("${pg.id}: tytuł krótki", pg.titlePl.length <= 32 && pg.titleEn.length <= 36)
-            assertTrue("${pg.id}: opis 1–2 zdania", pg.bodyPl.count { it == '.' || it == '?' || it == '—' } <= 3)
+            assertTrue("${pg.id}: opis 1–2 zdania", pg.bodyPl.count { it == '.' || it == '?' } <= 2)
         }
+        // Zalecenie ma każda strona poza pytaniem o zastosowanie.
+        assertEquals(listOf("welcome"), (p.dropLast(1) + SetupGuide.TOPICS.flatMap { it.pages }).filter { it.recommended(Mem()) == SetupGuide.NONE }.map { it.id })
         val ids = (p + SetupGuide.TOPICS.flatMap { it.pages }).map { it.id }
         assertEquals("id stron niepowtarzalne", ids.size, ids.toSet().size)
     }

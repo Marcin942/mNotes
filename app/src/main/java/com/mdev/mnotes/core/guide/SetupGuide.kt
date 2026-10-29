@@ -41,6 +41,9 @@ object SetupGuide {
     const val USE_PDF = 2
     const val USE_DRAW = 3
 
+    /** Strona bez zalecanej opcji. */
+    const val NONE = -1
+
     const val START = "start"
     /** Lista tematów „Poznaj więcej” (strona „Gotowe” bez ścieżki startu). */
     const val HUB = "hub"
@@ -64,8 +67,8 @@ object SetupGuide {
     val START_PAGES: List<Page> = listOf(
         Page(
             "welcome", "Witaj w mNotes", "Welcome to mNotes",
-            "Kilka krótkich pytań, po jednym na stronę. Wszystko zmienisz później w Ustawieniach. Do czego głównie będziesz używać mNotes?",
-            "A few short questions, one per page. You can change everything later in Settings. What will you mostly use mNotes for?",
+            "Kilka krótkich pytań — wszystko zmienisz później w Ustawieniach. Do czego głównie będziesz używać mNotes?",
+            "A few short questions — you can change everything later in Settings. What will you mostly use mNotes for?",
             Sample.WELCOME,
             listOf(
                 Option("Notatki", "Notes", "wykłady, spotkania, plany", "lectures, meetings, plans", one(USE, USE_NOTES)),
@@ -73,11 +76,13 @@ object SetupGuide {
                 Option("Czytanie PDF", "Reading PDFs", "podkreślanie i dopiski", "highlighting and margin notes", one(USE, USE_PDF)),
                 Option("Rysowanie", "Drawing", "szkice, schematy", "sketches, diagrams", one(USE, USE_DRAW)),
             ),
+            // Pytanie o zastosowanie nie ma dobrej odpowiedzi — zalecenie byłoby tu podpowiadaniem na siłę.
+            recommended = { NONE },
         ),
         Page(
             "hand", "Którą ręką piszesz?", "Which hand do you write with?",
-            "Listwa pióra, mini-mapa i kapsuła Cofnij staną po stronie, której nie zasłania dłoń.",
-            "The pen strip, mini-map and undo capsule move to the side your palm doesn't cover.",
+            "Listwa pióra, mini-mapa i kapsuła Cofnij ustawią się pod Twoją rękę.",
+            "The pen strip, mini-map and undo capsule arrange themselves for your hand.",
             Sample.HAND,
             listOf(
                 Option("Prawą", "Right hand", sets = one("input.hand", 0)),
@@ -86,8 +91,8 @@ object SetupGuide {
         ),
         Page(
             "input", "Rysik i palec", "Stylus and finger",
-            "Rysik zawsze pisze. Wybierz, co ma robić palec — spróbuj obu w polu obok.",
-            "The stylus always writes. Choose what your finger does — try both in the box.",
+            "Rysik zawsze pisze. Wybierz, co ma robić palec — spróbuj na kartce w podglądzie.",
+            "The stylus always writes. Choose what your finger does — try it on the preview page.",
             Sample.INPUT,
             listOf(
                 Option("Palec przewija i powiększa", "Finger scrolls and zooms", "najwygodniej z rysikiem", "best with a stylus", one("input.finger", 0)),
@@ -297,7 +302,7 @@ object SetupGuide {
     }
 
     /** Czy zalecenie strony [p] wskazuje istniejącą opcję. */
-    fun recommendedIn(p: Page, s: Store): Boolean = p.recommended(s) in p.options.indices
+    fun recommendedIn(p: Page, s: Store): Boolean = p.recommended(s).let { it == NONE || it in p.options.indices }
 
     /** Zapisuje ustawienia opcji [i] strony [p]. */
     fun choose(p: Page, i: Int, s: Store) { p.options.getOrNull(i)?.sets?.invoke(s)?.forEach { (k, v) -> s.set(k, v) } }

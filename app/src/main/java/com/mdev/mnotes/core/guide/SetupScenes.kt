@@ -135,11 +135,13 @@ object SetupScenes {
         out += Box(mx, b - 30f, mx + 34f, b - 6f, 4f, Role.MUTED, outline = true)
         out += Box(mx + 6f, b - 26f, mx + 20f, b - 14f, 2f, Role.ACCENT, outline = true)
         if (showHand) {
-            // Dłoń piszącego obok i poniżej rysika, po stronie ręki; rysik od dłoni do końca pisma.
+            // Dłoń piszącego obok i poniżej końca pisma, po stronie ręki; rysik od dłoni do ostatniej linijki.
             val right = handSide != Handedness.LEFT
-            val hx = if (right) r - 40f else l + 66f
-            out += Dot(hx, b - 4f, 38f, Role.HAND)
-            out += Line(floatArrayOf(hx + (if (right) -18f else 18f), b - 28f, if (right) r - 104f else l + 120f, t + 70f), 4f, Role.INK)
+            val tipX = if (right) r - 74f else l + 70f
+            val tipY = y - 14f
+            val d = if (right) 1f else -1f
+            out += Line(floatArrayOf(tipX, tipY, tipX + d * 30f, tipY + 40f), 4f, Role.MUTED)
+            out += Dot(tipX + d * 40f, tipY + 52f, 22f, Role.HAND)
         }
         return out
     }
@@ -151,8 +153,8 @@ object SetupScenes {
         lines(out, 24f, 22f, W - 24f, H - 22f, 1)
         out += Line(scribble(40f, 190f, 52f, seed = 1), 1.6f, Role.INK)
         out += Line(scribble(40f, 150f, 68f, seed = 3), 1.6f, Role.INK)
-        // rysik
-        out += Line(floatArrayOf(196f, 46f, 236f, 6f), 5f, Role.MUTED)
+        // rysik: koniec przy pierwszej linijce, cały w ramce
+        out += Line(floatArrayOf(194f, 50f, 230f, 26f), 5f, Role.MUTED)
         when (finger) {
             0 -> { // palec przesuwa kartkę: strzałki
                 out += Dot(200f, 150f, 12f, Role.HAND)
@@ -219,8 +221,8 @@ object SetupScenes {
     }
 
     fun done(): List<Shape> {
+        // Bez ramki ekranu: sam znak gotowości, nie makieta.
         val out = ArrayList<Shape>()
-        frame(out)
         out += Dot(W / 2, H / 2, 46f, Role.ACCENT)
         out += Line(floatArrayOf(W / 2 - 22f, H / 2 + 2f, W / 2 - 6f, H / 2 + 18f, W / 2 + 24f, H / 2 - 16f), 7f, Role.PAPER)
         return out

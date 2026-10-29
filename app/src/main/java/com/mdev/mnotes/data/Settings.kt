@@ -275,6 +275,9 @@ class Settings(ctx: Context) {
     var syncPdf by Pref("sync.pdf", false)           // obok .mnotes kopiuj też PDF
     var syncMd by Pref("sync.md", false)             // …i Markdown
     var lastSync by Pref("sync.last_min", 0)         // minuty od epoki (Int wystarczy do roku 6000+)
+    // 3c-A8: folder wymiany po stronie czytającej (ExchangeReader): skąd wczytywać kopie i czy przy otwarciu aplikacji
+    var exchangeUri by Pref("sync.in_uri", "")
+    var exchangeAuto by Pref("sync.in_auto", true)
 
     private var kitJson by Pref("pen.kit", "")
 

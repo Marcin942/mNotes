@@ -299,7 +299,7 @@ fun EditorScreen(main: Editor, tabs: TabsCtl, onExit: () -> Unit, onSettings: ()
     // 3c-A9: tryb do odczytu raz przy pierwszym pokazaniu dokumentu (ustawienie, profil, telefon, kopia z folderu wymiany),
     // a potem tylko po zmianie ustawienia — „Edytuj” nie wraca do trybu przy przełączaniu rzędów stanowiska.
     val sw = androidx.compose.ui.platform.LocalConfiguration.current.smallestScreenWidthDp
-    LaunchedEffect(ed) { ed.readerOnOpen(set.reader, set.readerAuto, sw) }
+    LaunchedEffect(ed) { ed.mirror = ctx.app.exchange.isMirror(ed.nbId); ed.readerOnOpen(set.reader, set.readerAuto, sw) }
     var readerPref by remember { mutableStateOf(set.reader) }
     LaunchedEffect(set.reader) {
         if (set.reader == readerPref) return@LaunchedEffect

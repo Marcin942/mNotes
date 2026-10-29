@@ -111,6 +111,32 @@ class Repository(ctx: Context) {
         return m
     }
 
+    /**
+     * 3c-A8: zeszyt z rozpakowanego archiwum [staged] (katalog w [cache]) — nowy, gdy [m] nie ma go w bibliotece, inaczej
+     * podmiana treści tego samego identyfikatora. Stara treść odchodzi dopiero po udanym przeniesieniu nowej.
+     * [done] dostaje wynik na wątku UI.
+     */
+    fun putFromDir(staged: File, m: NotebookMeta, done: (Boolean) -> Unit) {
+        io.execute {
+            val d = dir(m.id)
+            val old = File(cache, "replaced-${m.id}-${System.nanoTime()}")
+            val ok = runCatching {
+                if (d.exists() && !move(d, old)) error("old")
+                if (!move(staged, d)) { if (old.exists()) move(old, d); error("new") }
+                writeAtomic(File(d, "meta.json"), m.toJson().toByteArray(), false)
+            }.isSuccess
+            old.deleteRecursively(); staged.deleteRecursively()
+            main.post {
+                if (ok) notebooks = if (notebooks.any { it.id == m.id }) notebooks.map { if (it.id == m.id) m else it } else notebooks + m
+                done(ok)
+            }
+        }
+    }
+
+    /** Przeniesienie katalogu: zmiana nazwy (ten sam system plików), a gdy się nie da — kopia i usunięcie. */
+    private fun move(from: File, to: File): Boolean =
+        from.renameTo(to) || (runCatching { from.copyRecursively(to, overwrite = true) }.getOrDefault(false) && from.deleteRecursively())
+
     fun duplicate(id: String, suffix: String) {
         val src = meta(id) ?: return
         val now = System.currentTimeMillis()

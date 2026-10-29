@@ -19,6 +19,7 @@ class MNotesApp : Application() {
     lateinit var thumbs: Thumbs
     lateinit var search: SearchIndex
     lateinit var sync: SyncFolder
+    lateinit var exchange: com.mdev.mnotes.data.ExchangeReader
     /** Zapytanie z biblioteki, które edytor ma od razu wpisać w pasek szukania (jednorazowo). */
     @Volatile var pendingSearch: String? = null
     /** Zeszyty otwarte teraz w którymkolwiek oknie — jeden zeszyt nie może być edytowany w dwóch oknach naraz. */
@@ -38,8 +39,12 @@ class MNotesApp : Application() {
         thumbs = Thumbs(repo, assets, pdf)
         search = SearchIndex(repo)
         sync = SyncFolder(this, repo, settings, assets, pdf)
+        // 3c-A8: kopie z folderu wymiany nie wracają do lustra, a otwarty zeszyt nie jest podmieniany pod ręką.
+        exchange = com.mdev.mnotes.data.ExchangeReader(this, repo, settings)
+        sync.skip = exchange::isMirror
+        exchange.busy = { synchronized(openIds) { openIds.toSet() } }
         // F20: przy pierwszym uruchomieniu (pusta biblioteka) powstaje zeszyt-przewodnik.
-        repo.load { com.mdev.mnotes.data.GuideMaker.offerOnFirstRun(repo, settings) }
+        repo.load { com.mdev.mnotes.data.GuideMaker.offerOnFirstRun(repo, settings); exchange.auto() }
     }
 }
 

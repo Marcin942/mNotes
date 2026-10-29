@@ -700,7 +700,6 @@ class Editor(val ctx: Context, val nbId: String) {
         }
     }
 
-    /** PNG do schowka przez FileProvider: inne aplikacje wklejają obraz, a nie ścieżkę. Wołane z wątku tła. */
     /** FB13: zaznaczenie jako kod TikZ w schowku (tekst, więc wkleja się w każdym edytorze LaTeX-a, też w przeglądarce). */
     fun copySelAsTikz() {
         val raw = selElements()
@@ -719,6 +718,7 @@ class Editor(val ctx: Context, val nbId: String) {
         )
     }
 
+    /** PNG do schowka przez FileProvider: inne aplikacje wklejają obraz, a nie ścieżkę. Wołane z wątku tła. */
     private fun pngToClipboard(png: ByteArray, name: String): Boolean = runCatching {
         // obrazy ze schowka zostawały w cache/share do następnego eksportu (dostępne pod starym adresem schowka)
         val dir = java.io.File(ctx.cacheDir, "share").apply { mkdirs() }
@@ -938,10 +938,10 @@ class Editor(val ctx: Context, val nbId: String) {
         textReq = TextRequest(page.id, null, target.second - 120f, target.third - 10f, text)
     }
 
-    /** Wstawia obraz wskazany przez URI (galeria, schowek, przeciągnięcie); zwraca false, gdy to nie obraz lub nie da się go otworzyć. */
     /** Następny wstawiany obraz zostanie podkładem bieżącej strony (PAG-009). */
     var imageAsBackground = false
 
+    /** Wstawia obraz wskazany przez URI (galeria, schowek, przeciągnięcie); zwraca false, gdy to nie obraz lub nie da się go otworzyć. */
     fun insertFromUri(uri: android.net.Uri): Boolean {
         val cr = ctx.contentResolver
         val mime = runCatching { cr.getType(uri) }.getOrNull().orEmpty()

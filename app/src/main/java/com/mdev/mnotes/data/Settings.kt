@@ -140,8 +140,9 @@ class Settings(ctx: Context) {
     var painterQuickSec by Pref("painter.quick_sec", 6)                // przycisk gaśnie po tylu sekundach bez dotknięcia; 0 = nigdy
     var fillCloseGaps by Pref("fill.close_gaps", false) // wiaderko domyka szpary węższe niż ok. 2 pt
     var pipetteKeep by Pref("pipette.keep", false)   // pobrany pipetą kolor zostaje w zestawie, gdy listwa nie jest pełna; domyślnie znika po zmianie koloru
-    /** Pipeta na zakreślaczu: false = kolor widoczny na stronie (po multiply), true = kolor pierwotny kreski. */
-    /** 2c-A9: domyślnie kolor z modelu elementu — z odwróconego piksela w trybie ciemnym wychodził inny atrament. */
+    /**
+     * Pipeta na zakreślaczu: false = kolor widoczny na stronie (po multiply), true = kolor pierwotny kreski.
+     * 2c-A9: domyślnie kolor z modelu elementu — z odwróconego piksela w trybie ciemnym wychodził inny atrament. */
     var pipetteOriginal by Pref("pipette.original", true)
     var eraserSize by Pref("eraser.size", 14f)       // promień w pt
     var eraserKeepHighlighter by Pref("eraser.ignore_highlighter", false)

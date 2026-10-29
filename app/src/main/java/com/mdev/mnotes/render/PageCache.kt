@@ -657,7 +657,6 @@ class PageCache(
         }.getOrDefault(0)
     }
 
-    /** Tło PDF strony (niska skala) dla lupy; zleca renderowanie bazy, jeśli jej jeszcze nie ma. */
     /** Bitmapa całej strony w skali bazy (papier i treść) — do mini-mapy; null, dopóki baza się nie wyrenderuje. */
     fun overview(page: PageState): Bitmap? {
         val e = entry(page)
@@ -666,6 +665,7 @@ class PageCache(
         return e.base.bmp
     }
 
+    /** Tło PDF strony (niska skala) dla lupy; zleca renderowanie bazy, jeśli jej jeszcze nie ma. */
     fun backdrop(page: PageState): Bitmap? {
         val e = entry(page)
         e.base.stamp = frame
@@ -767,10 +767,8 @@ class Thumbs(private val repo: Repository, assets: Assets, private val pdf: PdfP
         }
     }
 
-    /** Renderuje stronę do bitmapy o szerokości [wPx]. Wywoływać poza wątkiem UI. */
-    /** Miniatura strony; [paper] = false — same elementy na przezroczystym tle (podgląd naklejki, 2b-A5). */
     /**
-     * Miniatura strony; [paper] = false — same elementy na przezroczystym tle (podgląd naklejki, 2b-A5); [theme] —
+     * Renderuje stronę do bitmapy o szerokości [wPx] (wywoływać poza wątkiem UI). Miniatura strony; [paper] = false — same elementy na przezroczystym tle (podgląd naklejki, 2b-A5); [theme] —
      * przekształcenie trybu ciemnego/jasnego (2b-A9), żeby miniatura wyglądała jak strona w edytorze.
      */
     fun render(nb: String, spec: PageSpec, content: PageContent, wPx: Int, paper: Boolean = true, theme: com.mdev.mnotes.core.color.ThemeMap.Transform? = null, photos: Boolean = false): Bitmap {

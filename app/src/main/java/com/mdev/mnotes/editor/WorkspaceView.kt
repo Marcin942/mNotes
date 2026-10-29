@@ -50,6 +50,8 @@ interface LaneHost {
     fun dropOutside(v: NoteView, els: List<Element>, cx: Float, cy: Float, removal: DocEdit): Boolean
     /** Przeciągane zaznaczenie pod palcem w ([sx], [sy]); NaN — koniec przeciągania. */
     fun dragOver(v: NoteView, sx: Float, sy: Float)
+    /** 3c-B4: wycinek upuszczony środkiem w ([cx], [cy]) poza swoim pasem; true — wstawił go dokument pod nim. */
+    fun dropSnip(v: NoteView, shot: SnipShot, cx: Float, cy: Float): Boolean
 }
 
 /**
@@ -200,6 +202,15 @@ class WorkspaceView(ctx: Context, private val st: Station) : ViewGroup(ctx), Lan
         // Usunięcie w źródle i wstawienie w celu: jeden krok cofania w obu dokumentach (2c-A5).
         v.ed.record(removal)
         st.linked.link(v.ed, removal, t.ed, added)
+        st.activate(t.ed)
+        invalidate()
+        return true
+    }
+
+    override fun dropSnip(v: NoteView, shot: SnipShot, cx: Float, cy: Float): Boolean {
+        val w = ws ?: return false
+        val t = lanes.getOrNull(w.laneAt(cx, cy)) ?: return false
+        if (t === v || !t.snipDropHere(shot, cx, cy)) return false
         st.activate(t.ed)
         invalidate()
         return true

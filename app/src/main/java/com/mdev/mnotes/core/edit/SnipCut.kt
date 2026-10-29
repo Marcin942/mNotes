@@ -1,6 +1,9 @@
 package com.mdev.mnotes.core.edit
 
 import com.mdev.mnotes.core.geom.Bounds
+import com.mdev.mnotes.core.model.Element
+import com.mdev.mnotes.core.model.ImageEl
+import com.mdev.mnotes.core.model.TextBox
 import kotlin.math.ceil
 import kotlin.math.floor
 import kotlin.math.max
@@ -103,6 +106,21 @@ object SnipCut {
     fun fit(w: Float, h: Float, pageW: Float, pageH: Float): FloatArray {
         val k = min(1f, min(pageW * FIT / w, pageH * FIT / h))
         return floatArrayOf(w * k, h * k)
+    }
+
+    /** Kolor i rozmiar (pt) podpisu źródła — szary, drobny, czytelny na jasnym i (po zamianie) ciemnym papierze. */
+    const val CAPTION_COLOR = 0xFF78909C.toInt()
+    const val CAPTION_PT = 9f
+
+    /**
+     * Elementy wstawianego wycinka: obraz [w]×[h] (pt) środkiem w ([cx], [cy]) i — gdy jest [caption] — podpis tuż pod
+     * nim, nie węższy niż 120 pt. Wkleja się je razem (jedno cofnięcie), a wklejanie dosuwa całość do wnętrza strony.
+     */
+    fun elements(asset: String, w: Float, h: Float, cx: Float, cy: Float, caption: String?, nextId: () -> Int): List<Element> {
+        val img = ImageEl(nextId(), asset, cx, cy, w, h)
+        if (caption.isNullOrBlank()) return listOf(img)
+        val boxH = CAPTION_PT * 1.6f
+        return listOf(img, TextBox(nextId(), cx, cy + h / 2f + boxH / 2f + 2f, max(w, 120f), boxH, 0f, caption, CAPTION_PT, CAPTION_COLOR))
     }
 
     /** Podpis źródła pod wycinkiem: „slajd 12 · wykład.pdf” dla stron PDF, inaczej „str. 12 · Zeszyt”. */

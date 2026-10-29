@@ -509,7 +509,9 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
     /** Środek widoku jako (indeks strony, x, y) we współrzędnych strony — miejsce wklejania/wstawiania. */
     fun viewCenterOnPage(): Triple<Int, Float, Float>? {
         if (doc.pages.isEmpty() || layout.count == 0) return null
-        val dx = docX(width / 2f); val dy = docY(height / 2f)
+        // W stanowisku środek pasa, nie okna (okno obejmuje też drugi dokument).
+        val lr = lane?.rect(this)
+        val dx = docX(if (lr != null) (lr[0] + lr[2]) / 2f else width / 2f); val dy = docY(if (lr != null) (lr[1] + lr[3]) / 2f else height / 2f)
         var i = layout.pageAt(dx, dy)
         if (i < 0) i = layout.nearest(dx, dy)
         val r = layout.rect(i)
@@ -670,6 +672,7 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
         drawLive(c)
         c.restore()
         if (liftOut && lPage in 0 until layout.count) { c.save(); c.translate(tx, ty); c.scale(zoom, zoom); drawLifted(c, false); c.restore() }
+        drawSnip(c, if (lr != null) floatArrayOf(bl, bt, br, bb) else null)
 
         drawRuler(c)
         drawProtractor(c)
@@ -1005,7 +1008,7 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
         val col = if (eraser) 0xFFE5484D.toInt() else if (replaces) ed.pen.color or (0xFF shl 24) else accent
         lassoPaint.color = col
         tmpPath.rewind()
-        if (settings.lassoRect && !replaces) {
+        if (rectShape() && !replaces) {
             val x0 = scrX(lPage, lp[0]); val y0 = scrY(lPage, lp[1])
             val x1 = scrX(lPage, lp[2 * (ln - 1)]); val y1 = scrY(lPage, lp[2 * (ln - 1) + 1])
             tmpPath.addRect(min(x0, x1), min(y0, y1), max(x0, x1), max(y0, y1), Path.Direction.CW)
@@ -2466,6 +2469,7 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
             Tool.PEN, Tool.CURVE -> if (tool == Tool.CURVE && ed.curveMode.stepwise) curveDown() else penDown(ev, idx)
             Tool.ERASER -> eraseDown()
             Tool.LASSO -> { lassoDown(); if (mode == Mode.TOOL) postDelayed(holdRunnable, 520L) }
+            Tool.SNIP -> snipDown(ev, idx)
             Tool.SPACE -> spaceDown()
             Tool.TAPE -> tapeDown()
             Tool.PAINTER -> paintDown()
@@ -2486,6 +2490,7 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
                 eraseTo(curX, curY)
             }
             Tool.LASSO -> lassoMove()
+            Tool.SNIP -> snipMove()
             Tool.SPACE -> spaceMove()
             Tool.TAPE -> tapeMove()
             Tool.PAINTER -> {
@@ -2504,6 +2509,7 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
             Tool.PEN, Tool.CURVE -> if (curveStep) curveUp(cancel) else penUp(cancel)
             Tool.ERASER -> eraseUp(cancel)
             Tool.LASSO -> lassoUp(cancel)
+            Tool.SNIP -> snipUp(cancel)
             Tool.SPACE -> spaceUp(cancel)
             Tool.TAPE -> tapeUp(cancel)
             Tool.PAINTER -> paintUp(cancel)
@@ -3347,11 +3353,134 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
         ed.fillAt(doc.pages[pi].id, pgX(pi, curX), pgY(pi, curY))
     }
 
+    // ───────────────────────── 3c-B4: Wycinek ─────────────────────────
+
+    /** Wycinek czekający w tym dokumencie jest właśnie przeciągany palcem/rysikiem. */
+    private var snipDrag = false
+    private val snipPaint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
+    private val snipFrame = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE }
+    private val snipGhost = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE; pathEffect = android.graphics.DashPathEffect(floatArrayOf(10f, 8f), 0f) }
+    private val snipShade = Paint(Paint.ANTI_ALIAS_FLAG)
+    private var snipFilterFor: com.mdev.mnotes.core.color.ThemeMap.Transform? = null
+
+    /** Wycinek na ekranie w miejscu wycięcia (l, t, r, b); null — brak albo jego strona zniknęła. */
+    fun snipScreenRect(): RectF? = snipHome()
+
+    private fun snipHome(): RectF? {
+        val s = ed.snipShot ?: return null
+        val pi = doc.indexOf(s.pageId)
+        if (pi !in 0 until layout.count) return null
+        return RectF(scrX(pi, s.rect.l), scrY(pi, s.rect.t), scrX(pi, s.rect.r), scrY(pi, s.rect.b))
+    }
+
+    /**
+     * Wycinek pod palcem przy przeciąganiu: duży (cały slajd) maleje do [SNIP_DRAG_DP], żeby widać było, gdzie się go
+     * kładzie; chwycony punkt zostaje pod palcem.
+     */
+    private fun snipDragged(home: RectF): RectF {
+        val k = min(1f, SNIP_DRAG_DP * dp / max(home.width(), home.height()))
+        return RectF(curX - (downX - home.left) * k, curY - (downY - home.top) * k, curX + (home.right - downX) * k, curY + (home.bottom - downY) * k)
+    }
+
+    private fun drawSnip(c: Canvas, clip: FloatArray?) {
+        val s = ed.snipShot ?: return
+        val home = snipHome() ?: return
+        val r = if (snipDrag) snipDragged(home) else home
+        val accentCol = accent
+        if (snipDrag) {
+            c.save(); if (clip != null) c.clipRect(clip[0], clip[1], clip[2], clip[3])
+            snipGhost.color = accentCol; snipGhost.strokeWidth = 1.5f * dp
+            c.drawRect(home, snipGhost)
+            c.restore()
+        }
+        c.save()
+        // W spoczynku wycinek leży na swojej stronie (przycięty do pasa), w locie — nad całym stanowiskiem.
+        if (!snipDrag && clip != null) c.clipRect(clip[0], clip[1], clip[2], clip[3])
+        snipShade.color = if (darkUi) 0x66000000 else 0x30000000
+        c.drawRect(r.left + 3f * dp, r.top + 3f * dp, r.right + 3f * dp, r.bottom + 3f * dp, snipShade)
+        // Ten sam wygląd co na stronie: na stronie pokazanej w drugim trybie obraz przechodzi przez macierz strony.
+        val t = doc.page(s.pageId)?.let { ed.shownTheme(it) }
+        if (t !== snipFilterFor) { snipPaint.colorFilter = t?.let { android.graphics.ColorMatrixColorFilter(android.graphics.ColorMatrix(it.imageMatrix)) }; snipFilterFor = t }
+        c.drawBitmap(s.bmp, null, r, snipPaint)
+        snipFrame.color = accentCol; snipFrame.strokeWidth = 2f * dp
+        c.drawRect(r, snipFrame)
+        c.restore()
+    }
+
+    private fun snipDown(ev: MotionEvent, idx: Int) {
+        snipDrag = false
+        val home = snipHome()
+        if (home != null && RectF(home).apply { inset(-8f * dp, -8f * dp) }.contains(curX, curY)) {
+            snipDrag = true; lane?.stop(); return
+        }
+        // Świeżo wstawiony wycinek (zaznaczony): chwyt ramki przesuwa go jak lasso, bez zmiany narzędzia.
+        if (!ed.readOnly && selGrab(curX, curY)) { activeTool = Tool.LASSO; lassoDown(); return }
+        if (ed.sel != null) ed.clearSel()
+        val pi = layout.nearest(docX(curX), docY(curY))
+        if (pi < 0) { mode = Mode.IGNORE; return }
+        lPage = pi; lm = LM.DRAW; ln = 0
+        addLasso(pgX(pi, curX), pgY(pi, curY))
+    }
+
+    private fun snipMove() {
+        if (snipDrag) { lane?.dragOver(this, curX, curY); return }
+        if (lm == LM.DRAW && lPage >= 0) addLasso(pgX(lPage, curX), pgY(lPage, curY))
+    }
+
+    private fun snipUp(cancel: Boolean) {
+        if (snipDrag) {
+            snipDrag = false
+            lane?.dragOver(this, Float.NaN, Float.NaN)
+            val s = ed.snipShot
+            val home = snipHome()
+            if (cancel || !toolMoved || s == null || home == null) return
+            val r = snipDragged(home)
+            snipDrop(s, r.centerX(), r.centerY())
+            return
+        }
+        val pi = lPage
+        val rect = rectShape()
+        val n = ln
+        lm = LM.NONE; ln = 0; lPage = -1
+        if (cancel || pi !in 0 until doc.pages.size) return
+        val poly = when {
+            rect && n >= 2 -> com.mdev.mnotes.core.edit.SnipCut.rect(lp[0], lp[1], lp[2 * n - 2], lp[2 * n - 1])
+            !rect && n >= 3 -> lp.copyOf(2 * n)
+            else -> null
+        }
+        val tiny = poly == null || com.mdev.mnotes.core.edit.SnipCut.bounds(poly).let { it.w * zoom < 14f * dp && it.h * zoom < 14f * dp }
+        // Stuknięcie obok czekającego wycinka chowa go (jak stuknięcie obok zaznaczenia).
+        if (tiny) { ed.snipShot = null; return }
+        ed.snipCut(pi, poly!!, !rect, zoom)
+    }
+
+    /** Upuszczenie wycinka środkiem w punkcie ekranu: na innym pasie stanowiska — tam, inaczej na tej stronie. */
+    private fun snipDrop(s: SnipShot, cx: Float, cy: Float) {
+        if (lane?.outside(this, cx, cy) == true) {
+            if (lane?.dropSnip(this, s, cx, cy) == true) ed.snipShot = null
+            return
+        }
+        if (!snipDropHere(s, cx, cy)) return
+        ed.snipShot = null
+    }
+
+    /** Wstawia wycinek [s] (z dowolnego dokumentu) środkiem w punkcie ekranu tego widoku; false — tylko do odczytu. */
+    fun snipDropHere(s: SnipShot, sx: Float, sy: Float): Boolean {
+        if (layout.count == 0 || ed.readOnly) return false
+        val pi = layout.nearest(docX(sx), docY(sy)).coerceIn(0, layout.count - 1)
+        val r = layout.rect(pi)
+        ed.insertSnip(s, Triple(pi, pgX(pi, sx).coerceIn(0f, r.w), pgY(pi, sy).coerceIn(0f, r.h)))
+        return true
+    }
+
     // ───────────────────────── lasso / zaznaczenie ─────────────────────────
+
+    /** Obrys rysowany prostokątem: kształt lassa albo — przy Wycinku — jego własny (3c-B4). */
+    private fun rectShape() = if (activeTool == Tool.SNIP) settings.snipRect else settings.lassoRect
 
     private fun addLasso(x: Float, y: Float) {
         if (ln > 0) {
-            if (settings.lassoRect && lm == LM.DRAW) { if (ln >= 2) ln = 1 } else if (abs(lp[2 * ln - 2] - x) + abs(lp[2 * ln - 1] - y) < 0.4f / zoom) return
+            if (rectShape() && lm == LM.DRAW) { if (ln >= 2) ln = 1 } else if (abs(lp[2 * ln - 2] - x) + abs(lp[2 * ln - 1] - y) < 0.4f / zoom) return
         }
         if (2 * ln + 2 > lp.size) lp = lp.copyOf(lp.size * 2)
         lp[2 * ln] = x; lp[2 * ln + 1] = y; ln++
@@ -3746,6 +3875,8 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
         /** Uchwyt obrotu leży daleko nad ramką, a jego strefa dotyku (20 dp) nie sięga strefy przesuwania (ramka + 10 dp). */
         const val ROTATE_OFFSET_DP = 52f
         private const val ROTATE_HIT_DP = 20f
+        /** Dłuższy bok przeciąganego wycinka na ekranie (dp). */
+        private const val SNIP_DRAG_DP = 220f
         private val TAP_SLOPS_DP = floatArrayOf(8f, 14f, 22f)
         /** Zapas prostokąta zaznaczenia (dp ekranu): obiekt na samym brzegu ramki też jest w środku. */
         private const val RECT_SLACK_DP = 4f

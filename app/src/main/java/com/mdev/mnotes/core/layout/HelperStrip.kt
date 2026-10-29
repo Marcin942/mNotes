@@ -22,13 +22,14 @@ object HelperStrip {
      */
     fun fromToolStrip(old: Boolean?, hasNew: Boolean): Int? = if (old == null || hasNew) null else if (old) TOOL_OPTIONS else WRITE_AND_MENU
 
-    enum class Helper { ERASER, LASSO, LASER }
+    enum class Helper { ERASER, LASSO, LASER, SNIP }
 
     /** Grupy opcji w menu (i na listwie w trybie [TOOL_OPTIONS] — tam zawsze wszystkie). */
     enum class Item(val helper: Helper) {
         ERASER_MODES(Helper.ERASER), ERASER_SIZES(Helper.ERASER), ERASER_HIGHLIGHTER(Helper.ERASER),
         LASSO_SHAPE(Helper.LASSO), LASSO_MODE(Helper.LASSO),
         LASER_COLORS(Helper.LASER),
+        SNIP_SHAPE(Helper.SNIP), SNIP_CAPTION(Helper.SNIP),
     }
 
     /**

@@ -396,6 +396,7 @@ private fun HelperStripPrefs(set: com.mdev.mnotes.data.Settings) {
         Triple(HelperStrip.Helper.ERASER, T.t("Menu przy gumce", "Menu by the eraser"), "gumka mazanie ścieranie tryby rozmiar zakreślacz eraser"),
         Triple(HelperStrip.Helper.LASSO, T.t("Menu przy lassie", "Menu by the lasso"), "lasso zaznaczanie kształt prostokąt pętla lasso shape"),
         Triple(HelperStrip.Helper.LASER, T.t("Menu przy laserze", "Menu by the laser"), "laser wskaźnik kolor śladu pointer colour"),
+        Triple(HelperStrip.Helper.SNIP, T.t("Menu przy wycinku", "Menu by the snip"), "wycinek nożyczki kształt prostokąt lasso podpis snip shape caption"),
     )
     for ((h, label, keys) in groups) {
         ToggleRow(label, cfg.menuFor(h), keys = "menu wyskakujące $keys popup") { set.helperMenu = cfg.withMenu(h, it) }
@@ -415,6 +416,8 @@ private fun helperItemName(i: HelperStrip.Item) = when (i) {
     HelperStrip.Item.LASSO_SHAPE -> T.t("Kształt pętli", "Loop shape")
     HelperStrip.Item.LASSO_MODE -> T.t("Co zaznacza", "What it selects")
     HelperStrip.Item.LASER_COLORS -> T.t("Kolory", "Colours")
+    HelperStrip.Item.SNIP_SHAPE -> T.t("Kształt wycinka", "Snip shape")
+    HelperStrip.Item.SNIP_CAPTION -> T.t("Podpis źródła", "Source caption")
 }
 
 @Composable

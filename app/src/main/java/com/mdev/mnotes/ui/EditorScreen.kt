@@ -65,6 +65,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.FormatColorFill
+import androidx.compose.material.icons.rounded.Subtitles
+import androidx.compose.material.icons.rounded.ArrowDropDown
 import androidx.compose.material.icons.rounded.FormatPaint
 import androidx.compose.material.icons.rounded.CropLandscape
 import androidx.compose.material.icons.rounded.CropPortrait
@@ -241,6 +243,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import com.mdev.mnotes.editor.CropRatio
 import com.mdev.mnotes.editor.Editor
 import com.mdev.mnotes.editor.NoteView
+import com.mdev.mnotes.editor.SnipShot
 import com.mdev.mnotes.editor.Station
 import com.mdev.mnotes.editor.T
 import com.mdev.mnotes.editor.Tool
@@ -402,6 +405,7 @@ fun EditorScreen(main: Editor, tabs: TabsCtl, onExit: () -> Unit, onSettings: ()
                         if (ed.pipette != null) Box(Modifier.align(Alignment.TopCenter).padding(top = 50.dp).panelEnter()) { PipetteCard(set) }
                         if (ed.cut != null) CutBarHost(ed)
                         if (ed.crop != null) CropBarHost(ed)
+                        SnipBarHost(st)
                         if (set.undoDock != 0) UndoCapsule(ed, set.undoDock, Modifier.align(undoCorner(set.undoDock)).padding(8.dp).padding(start = if (!ed.chrome && set.undoDock == 1) 48.dp else 0.dp))
                         if (ed.chrome) {
                             panel?.takeIf { it == Panel.PEN || it == Panel.ERASER || it == Panel.LASSO || it == Panel.TAPE || it == Panel.PAINTER || it == Panel.FILL }?.let { p ->
@@ -726,6 +730,10 @@ private fun ToolBar(ed: Editor, set: com.mdev.mnotes.data.Settings, vertical: Bo
         LassoGlyph(set.lassoRect, c, Modifier.size(s + 2.dp))
     }
     tool("text", 7, Icons.Rounded.TextFields, T.t("Tekst", "Text"), "T", Tool.TEXT, null)
+    // 3c-B4: Wycinek — także w dokumencie do odczytu (slajdy wykładu są źródłem, nie celem).
+    items += BarItem("snip", 2, 9, T.t("Wycinek — zaznacz fragment strony i przenieś go do zeszytu jako obraz", "Snip — mark an area of the page and move it into a notebook as an image"), null, true, ed.tool == Tool.SNIP, ed.tool == Tool.SNIP, { pickTool(Tool.SNIP, null) }) { c, s ->
+        SnipGlyph(!set.snipRect, c, Modifier.size(s + 2.dp))
+    }
     tool("laser", 14, Icons.Rounded.TrackChanges, T.t("Laser", "Laser"), "O", Tool.LASER, null, enabled = true)
     tool("hand", 10, Icons.Rounded.PanTool, T.t("Ręka (przewijanie)", "Hand (pan)"), "H", Tool.HAND, null, enabled = true)
     // F17: krzywa Béziera — kreska aktywnym piórem staje się gładką krzywą z uchwytami.
@@ -884,6 +892,7 @@ private fun PenStripItems(ed: Editor, set: com.mdev.mnotes.data.Settings, vertic
         HelperStrip.Helper.ERASER -> { EraserStripItems(ed, set, vertical, panel, toggle, back = true); return }
         HelperStrip.Helper.LASSO -> { LassoStripItems(ed, set, vertical, panel, toggle, back = true); return }
         HelperStrip.Helper.LASER -> { LaserStripItems(ed, set, vertical, back = true); return }
+        HelperStrip.Helper.SNIP -> { SnipStripItems(ed, set, vertical, back = true); return }
         null -> {}
     }
     val kit = ed.kit
@@ -1019,12 +1028,13 @@ private fun androidx.compose.foundation.layout.BoxScope.CurveHint(ed: Editor) {
 }
 
 /** Pozycje paska, przy których wyskakuje menu opcji narzędzia pomocniczego (2b-A2). */
-private val HELPER_IDS = mapOf("eraser" to HelperStrip.Helper.ERASER, "lasso" to HelperStrip.Helper.LASSO, "laser" to HelperStrip.Helper.LASER)
+private val HELPER_IDS = mapOf("eraser" to HelperStrip.Helper.ERASER, "lasso" to HelperStrip.Helper.LASSO, "laser" to HelperStrip.Helper.LASER, "snip" to HelperStrip.Helper.SNIP)
 
 private fun helperOf(t: Tool): HelperStrip.Helper? = when (t) {
     Tool.ERASER -> HelperStrip.Helper.ERASER
     Tool.LASSO -> HelperStrip.Helper.LASSO
     Tool.LASER -> HelperStrip.Helper.LASER
+    Tool.SNIP -> HelperStrip.Helper.SNIP
     else -> null
 }
 
@@ -1110,6 +1120,26 @@ private fun LassoStripItems(
     }
 }
 
+/** Opcje Wycinka (3c-B4): kształt (prostokąt / lasso z maską) i podpis źródła; [items], [back] jak przy gumce. */
+@Composable
+private fun SnipStripItems(
+    ed: Editor, set: com.mdev.mnotes.data.Settings, vertical: Boolean,
+    items: List<HelperStrip.Item> = allItems(HelperStrip.Helper.SNIP), back: Boolean = false,
+) {
+    val sz = barSize(set); val isz = barIcon(set)
+    Lin(vertical, Modifier.padding(4.dp)) {
+        if (HelperStrip.Item.SNIP_SHAPE in items) {
+            ToolBtn(T.t("Wycinek prostokątem — ostre krawędzie", "Rectangle snip — sharp edges"), { set.snipRect = true }, selected = set.snipRect, size = sz) { c -> SnipGlyph(false, c, Modifier.size(isz + 2.dp)) }
+            ToolBtn(T.t("Wycinek lassem — przezroczysto poza obrysem", "Lasso snip — transparent outside the loop"), { set.snipRect = false }, selected = !set.snipRect, size = sz) { c -> SnipGlyph(true, c, Modifier.size(isz + 2.dp)) }
+            BarSep(vertical)
+        }
+        if (HelperStrip.Item.SNIP_CAPTION in items) {
+            IconBtn(Icons.Rounded.Subtitles, T.t("Podpis źródła pod wycinkiem („slajd 12 · plik”)", "Source caption under the snip (“slide 12 · file”)"), { set.snipCaption = !set.snipCaption }, selected = set.snipCaption, size = sz, iconSize = isz)
+        }
+        if (back) { BarSep(vertical); WriteBackBtn(ed, set) }
+    }
+}
+
 /** Opcje lasera (F7): kolor śladu; [back] jak przy gumce. */
 @Composable
 private fun LaserStripItems(ed: Editor, set: com.mdev.mnotes.data.Settings, vertical: Boolean, back: Boolean = false) {
@@ -1128,9 +1158,9 @@ private fun LaserStripItems(ed: Editor, set: com.mdev.mnotes.data.Settings, vert
 private fun HelperMenu(ed: Editor, set: com.mdev.mnotes.data.Settings, panel: Panel?, h: HelperStrip.Helper, holdTool: (Tool, Panel) -> Unit) {
     val m = mint
     val cfg = set.helperMenu
-    val ownPanel = when (h) { HelperStrip.Helper.ERASER -> Panel.ERASER; HelperStrip.Helper.LASSO -> Panel.LASSO; HelperStrip.Helper.LASER -> null }
+    val ownPanel = when (h) { HelperStrip.Helper.ERASER -> Panel.ERASER; HelperStrip.Helper.LASSO -> Panel.LASSO; HelperStrip.Helper.LASER, HelperStrip.Helper.SNIP -> null }
     val state = remember { MutableTransitionState(false) }
-    state.targetState = helperOf(ed.tool) == h && !ed.readOnly && HelperStrip.menuVisible(set.helperStrip, h, cfg, ownPanel != null && panel == ownPanel)
+    state.targetState = helperOf(ed.tool) == h && (!ed.readOnly || h == HelperStrip.Helper.SNIP) && HelperStrip.menuVisible(set.helperStrip, h, cfg, ownPanel != null && panel == ownPanel)
     if (!state.currentState && !state.targetState) return
     val pos = set.toolbarPos
     val place = rememberBarPopupPlace(pos)
@@ -1146,6 +1176,7 @@ private fun HelperMenu(ed: Editor, set: com.mdev.mnotes.data.Settings, panel: Pa
                     HelperStrip.Helper.ERASER -> EraserStripItems(ed, set, vertical, panel, open, items)
                     HelperStrip.Helper.LASSO -> LassoStripItems(ed, set, vertical, panel, open, items)
                     HelperStrip.Helper.LASER -> LaserStripItems(ed, set, vertical)
+                    HelperStrip.Helper.SNIP -> SnipStripItems(ed, set, vertical, items)
                 }
             }
         }
@@ -1491,6 +1522,50 @@ private fun StyleHost(ed: Editor, close: () -> Unit) {
             }
         },
     ) { Box(Modifier.panelEnter()) { StylePanel(ed, close) } }
+}
+
+/** 3c-B4: pasek przy czekającym wycinku — w którymkolwiek rzędzie stanowiska (wycina się też w nieaktywnym). */
+@Composable
+private fun SnipBarHost(st: Station) {
+    val src = st.rows.firstOrNull { it.snipShot != null } ?: return
+    val shot = src.snipShot ?: return
+    src.viewTick; st.active.viewTick
+    NearHost(src.view?.snipScreenRect()) { SnipBar(st, src, shot) }
+}
+
+/**
+ * „Wstaw do: <dokument>” (domyślnie ten, w którym ostatnio pisano; inne pod strzałką), „Wstaw tutaj”, „Kopiuj” i
+ * odrzucenie. Wstawienie idzie na widoczny fragment strony celu, który staje się aktywny (cofnij działa tam od razu),
+ * a narzędzie zostaje Wycinkiem do kolejnych fragmentów.
+ */
+@Composable
+private fun SnipBar(st: Station, src: Editor, shot: SnipShot) {
+    val others = st.rows.filter { it !== src && !it.readOnly }.sortedByDescending { it.lastEditAt }
+    var more by remember { mutableStateOf(false) }
+    fun title(e: Editor) = e.repo.meta(e.nbId)?.title?.trim().orEmpty().ifEmpty { T.t("Bez tytułu", "Untitled") }
+    fun into(t: Editor) = t.insertSnip(shot) { ok -> if (ok) { if (src.snipShot === shot) src.snipShot = null; st.activate(t) } }
+    FloatingCard {
+        Row(Modifier.padding(horizontal = 4.dp, vertical = 2.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+            val first = others.firstOrNull()
+            if (first != null) {
+                androidx.compose.material3.TextButton({ into(first) }, contentPadding = PaddingValues(horizontal = 8.dp)) {
+                    Icon(Icons.AutoMirrored.Rounded.ArrowForward, null, Modifier.size(16.dp)); Spacer(Modifier.width(4.dp))
+                    Text(T.t("Wstaw do: ", "Insert into: ") + title(first), style = MaterialTheme.typography.labelLarge, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, modifier = Modifier.widthIn(max = 220.dp))
+                }
+                if (others.size > 1) Box {
+                    IconBtn(Icons.Rounded.ArrowDropDown, T.t("Wstaw do innego dokumentu", "Insert into another document"), { more = true }, size = 30.dp, iconSize = 18.dp)
+                    DropdownMenu(more, { more = false }) {
+                        for (o in others.drop(1)) DropdownMenuItem(text = { Text(title(o)) }, onClick = { more = false; into(o) })
+                    }
+                }
+            }
+            if (!src.readOnly) androidx.compose.material3.TextButton({ src.insertSnip(shot) { ok -> if (ok && src.snipShot === shot) src.snipShot = null } }, contentPadding = PaddingValues(horizontal = 8.dp)) {
+                Text(if (first == null) T.t("Wstaw", "Insert") else T.t("Tutaj", "Here"), style = MaterialTheme.typography.labelLarge)
+            }
+            IconBtn(Icons.Rounded.ContentCopy, T.t("Kopiuj jako obraz (do innych aplikacji)", "Copy as an image (for other apps)"), { src.copySnip(shot) }, size = 32.dp, iconSize = 18.dp)
+            IconBtn(Icons.Rounded.Close, T.t("Odrzuć wycinek", "Discard snip"), { src.snipShot = null; src.view?.invalidate() }, size = 32.dp, iconSize = 18.dp)
+        }
+    }
 }
 
 @Composable

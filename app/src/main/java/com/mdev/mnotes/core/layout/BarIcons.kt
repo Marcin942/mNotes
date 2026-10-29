@@ -8,7 +8,7 @@ import com.mdev.mnotes.core.model.PenKind
  * miały inne ikony niż na pasku).
  */
 object BarIcons {
-    enum class Kind { PEN, ERASER, LASSO, CURVE, PROTRACTOR, VECTOR }
+    enum class Kind { PEN, ERASER, LASSO, CURVE, PROTRACTOR, SNIP, VECTOR }
 
     /** Pozycje z ikoną Material. */
     val VECTOR_IDS = setOf("undo", "redo", "painter", "fill", "pipette", "text", "laser", "hand", "tape", "space", "ruler", "geometry")
@@ -19,6 +19,7 @@ object BarIcons {
         id == "lasso" -> Kind.LASSO
         id == "curve" -> Kind.CURVE
         id == "protractor" -> Kind.PROTRACTOR
+        id == "snip" -> Kind.SNIP
         id in VECTOR_IDS -> Kind.VECTOR
         else -> null
     }

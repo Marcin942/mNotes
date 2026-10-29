@@ -142,6 +142,10 @@ class Settings(ctx: Context) {
     var eraserSize by Pref("eraser.size", 14f)       // promień w pt
     var eraserKeepHighlighter by Pref("eraser.ignore_highlighter", false)
     var lassoRect by Pref("lasso.rect", false)
+    /** 3c-B4: kształt „Wycinka” — prostokąt (domyślnie, slajdy są prostokątne) albo lasso z maską. */
+    var snipRect by Pref("snip.rect", true)
+    /** 3c-B4: podpis źródła („slajd 12 · wykład.pdf”) pod wstawianym wycinkiem. */
+    var snipCaption by Pref("snip.caption", false)
     var lassoTouch by Pref("lasso.touch", false)     // lasso „tylko zahacz”: wystarczy musnąć obiekt pętlą; domyślnie zbalansowane (połowa obiektu w pętli)
     // 2c-A15: dawny „toolbar.tool_strip” przechodzi na listwę przy pierwszym uruchomieniu — przed odczytem helperStrip.
     init {

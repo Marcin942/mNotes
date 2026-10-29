@@ -374,6 +374,26 @@ object Guide {
                         )
                     }
                 },
+                // 3c-A8, 3c-A9: notatki z tabletu na telefonie — folder wymiany i tryb do odczytu.
+                Lesson(1, t("Telefon: folder wymiany i tryb do odczytu", "Phone: exchange folder and reading mode"),
+                    t("Tablet zapisuje zeszyty do folderu, aplikacja synchronizująca przenosi folder, a telefon wczytuje nowsze wersje do czytania.", "The tablet writes notebooks to a folder, a sync app moves the folder, and the phone reads the newer versions."),
+                    listOf(
+                        t("Tablet: Ustawienia → „Folder synchronizacji” → wybierz folder i włącz kopię po wyjściu z aplikacji.", "Tablet: Settings → “Sync folder” → choose a folder and turn on copying when leaving the app."),
+                        t("Telefon: Ustawienia → „Folder wymiany: wczytuj z innego urządzenia” → ten sam folder. Kopie trafią do folderu „Folder wymiany”.", "Phone: Settings → “Exchange folder: read from another device” → the same folder. Copies land in the “Exchange folder” folder."),
+                        t("Na telefonie zeszyt otwiera się bez pasków: palec przewija, dwa palce powiększają. „Edytuj” w kapsule wraca do pasków.", "On a phone a notebook opens without bars: a finger scrolls, two fingers zoom. “Edit” in the capsule brings the bars back."),
+                    ),
+                    t("Dysk Google często nie daje się wybrać jako folder: wybierz folder w pamięci urządzenia i synchronizuj go osobną aplikacją.", "Google Drive often can't be picked as a folder: choose a folder on the device and sync it with a separate app."),
+                ) { y ->
+                    listOf(
+                        stroke(floatArrayOf(MARGIN, y + 8f, MARGIN + 150f, y + 8f, MARGIN + 150f, y + 108f, MARGIN, y + 108f, MARGIN, y + 8f), INK, LineStyle.SOLID, true).withStyle(width = 1.4f),
+                        text(MARGIN + 12f, y + 116f, t("tablet", "tablet"), 10f, INK, bold = true),
+                        stroke(floatArrayOf(MARGIN + 170f, y + 58f, MARGIN + 260f, y + 58f), ACCENT, LineStyle.DASHED, true).withStyle(width = 1.4f),
+                        stroke(floatArrayOf(MARGIN + 250f, y + 50f, MARGIN + 260f, y + 58f, MARGIN + 250f, y + 66f), ACCENT, LineStyle.SOLID, true).withStyle(width = 1.4f),
+                        text(MARGIN + 172f, y + 36f, ".mnotes", 10f, ACCENT, bold = true),
+                        stroke(floatArrayOf(MARGIN + 280f, y + 18f, MARGIN + 330f, y + 18f, MARGIN + 330f, y + 108f, MARGIN + 280f, y + 108f, MARGIN + 280f, y + 18f), INK, LineStyle.SOLID, true).withStyle(width = 1.4f),
+                        text(MARGIN + 278f, y + 116f, t("telefon", "phone"), 10f, INK, bold = true),
+                    )
+                },
 
                 // — Sprawdzian rozdziału II: zadania łączące funkcje z nauką, odpowiedzi pod taśmą (A2-11, 2c-A14) —
                 Lesson(1, t("Sprawdź się: zaawansowane", "Try it yourself: advanced"),

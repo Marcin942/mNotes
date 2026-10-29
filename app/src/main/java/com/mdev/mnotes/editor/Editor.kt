@@ -700,7 +700,6 @@ class Editor(val ctx: Context, val nbId: String) {
         }
     }
 
-    /** PNG do schowka przez FileProvider: inne aplikacje wklejają obraz, a nie ścieżkę. Wołane z wątku tła. */
     /** FB13: zaznaczenie jako kod TikZ w schowku (tekst, więc wkleja się w każdym edytorze LaTeX-a, też w przeglądarce). */
     fun copySelAsTikz() {
         val raw = selElements()
@@ -719,6 +718,7 @@ class Editor(val ctx: Context, val nbId: String) {
         )
     }
 
+    /** PNG do schowka przez FileProvider: inne aplikacje wklejają obraz, a nie ścieżkę. Wołane z wątku tła. */
     private fun pngToClipboard(png: ByteArray, name: String): Boolean = runCatching {
         // obrazy ze schowka zostawały w cache/share do następnego eksportu (dostępne pod starym adresem schowka)
         val dir = java.io.File(ctx.cacheDir, "share").apply { mkdirs() }
@@ -835,9 +835,12 @@ class Editor(val ctx: Context, val nbId: String) {
     }
 
     /** Przesuwa zaznaczenie o (dx, dy) pt — strzałki (Shift = 10 pt). */
-    fun nudgeSel(dx: Float, dy: Float) = replaceSel { it.transformed(com.mdev.mnotes.core.geom.Affine.translation(dx, dy)) }
+    /** Strzałki: przesunięcie zaznaczenia; jak przeciąganie — nie, gdy coś w nim jest zablokowane (np. tło strony). */
+    fun nudgeSel(dx: Float, dy: Float) {
+        if (canFlipSel()) replaceSel { it.transformed(com.mdev.mnotes.core.geom.Affine.translation(dx, dy)) }
+    }
 
-    /** Czy zaznaczenie da się odbić: jak przy obrocie, żaden zaznaczony element nie może być zablokowany. */
+    /** Czy zaznaczenie da się odbić (albo przesunąć strzałkami): żaden zaznaczony element nie może być zablokowany. */
     fun canFlipSel(): Boolean = !readOnly && selElements().let { it.isNotEmpty() && it.none { e -> e.locked } }
 
     /**
@@ -938,10 +941,10 @@ class Editor(val ctx: Context, val nbId: String) {
         textReq = TextRequest(page.id, null, target.second - 120f, target.third - 10f, text)
     }
 
-    /** Wstawia obraz wskazany przez URI (galeria, schowek, przeciągnięcie); zwraca false, gdy to nie obraz lub nie da się go otworzyć. */
     /** Następny wstawiany obraz zostanie podkładem bieżącej strony (PAG-009). */
     var imageAsBackground = false
 
+    /** Wstawia obraz wskazany przez URI (galeria, schowek, przeciągnięcie); zwraca false, gdy to nie obraz lub nie da się go otworzyć. */
     fun insertFromUri(uri: android.net.Uri): Boolean {
         val cr = ctx.contentResolver
         val mime = runCatching { cr.getType(uri) }.getOrNull().orEmpty()
@@ -957,14 +960,15 @@ class Editor(val ctx: Context, val nbId: String) {
         val v = view ?: return
         val asBackground = imageAsBackground
         imageAsBackground = false
-        val target = v.viewCenterOnPage() ?: return
+        val (pi, cx, cy) = v.viewCenterOnPage() ?: return
+        // Strona po identyfikatorze, nie numerze: w trakcie wczytywania dużego zdjęcia mogła przybyć lub ubyć strona przed nią.
+        val pageId = doc.pages.getOrNull(pi)?.id ?: return
         repo.io.execute {
             val name = runCatching { repo.importAsset(nbId, input, ext) }.getOrNull()
             val size = name?.let { Assets.imageSize(repo.assetFile(nbId, it)) }
             v.post {
                 if (name == null || size == null) { say(T.t("Nie udało się wczytać obrazu", "Could not load the image")); return@post }
-                val (pi, cx, cy) = target
-                val page = doc.pages.getOrNull(pi) ?: return@post
+                val page = doc.page(pageId) ?: return@post
                 if (asBackground) {
                     // PAG-009: obraz wpisany w stronę, zablokowany i na samym spodzie (pod pismem)
                     val k = min(page.spec.w / size.first, page.spec.h / size.second)
@@ -1378,7 +1382,7 @@ class Editor(val ctx: Context, val nbId: String) {
     fun duplicatePage(i: Int = curIndex()) {
         if (refuseBoardPage()) return
         val p = doc.pages.getOrNull(i) ?: return
-        val snap = PageSnapshot(newId(), p.spec, doc.content(p))
+        val snap = PageSnapshot(newId(), p.spec, doc.content(p).copyWithNewIds())
         exec(DocEdit.InsertPages(listOf((i + 1) to snap)))
         view?.goToPage(i + 1)
     }
@@ -1626,7 +1630,7 @@ class Editor(val ctx: Context, val nbId: String) {
                 content = PageContent.of(content.elements.map { e -> if (e is ImageEl) e.copy(asset = carry(e.asset)) else e })
             }
         }
-        exec(DocEdit.InsertPages(listOf((after + 1) to PageSnapshot(newId(), spec, content))))
+        exec(DocEdit.InsertPages(listOf((after + 1) to PageSnapshot(newId(), spec, content.copyWithNewIds()))))
         view?.goToPage(after + 1)
     }
 

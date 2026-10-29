@@ -55,7 +55,10 @@ class Repository(ctx: Context) {
             nbRoot.listFiles()?.forEach { d ->
                 if (!d.isDirectory) return@forEach
                 d.walkTopDown().filter { it.name.endsWith(".tmp") }.forEach { it.delete() }
-                readText(File(d, "meta.json"))?.let { runCatching { NotebookMeta.fromJson(it) }.getOrNull() }?.let { nbs.add(it) }
+                // Identyfikator = nazwa folderu (3c-A16): przerwana kopia lub import zostawiały w nowym folderze meta.json
+                // źródła; z jego identyfikatorem dwa zeszyty dzieliły jeden folder, a „Usuń na zawsze” kasowało oryginał.
+                readText(File(d, "meta.json"))?.let { runCatching { NotebookMeta.fromJson(it) }.getOrNull() }
+                    ?.let { nbs.add(if (it.id == d.name) it else it.copy(id = d.name)) }
             }
             val fl = ArrayList<Folder>()
             readText(File(root, "folders.json"))?.let { s ->
@@ -113,8 +116,15 @@ class Repository(ctx: Context) {
         val now = System.currentTimeMillis()
         val copy = src.copy(id = newId(), title = src.title + suffix, created = now, modified = now, opened = now, favorite = false, trashedAt = 0L)
         io.execute {
-            dir(id).copyRecursively(dir(copy.id), overwrite = true)
-            writeAtomic(File(dir(copy.id), "meta.json"), copy.toJson().toByteArray(), false)
+            val dst = dir(copy.id)
+            // Najpierw własny meta.json, potem reszta bez meta.json źródła: przerwana kopia (pełny dysk, zamknięcie
+            // aplikacji) nie udaje oryginału. Nieudana — sprzątana, zamiast wywracać aplikację wyjątkiem w wątku io.
+            val ok = runCatching {
+                dst.mkdirs()
+                writeAtomic(File(dst, "meta.json"), copy.toJson().toByteArray(), false)
+                dir(id).listFiles()?.forEach { f -> if (!f.name.startsWith("meta.json")) f.copyRecursively(File(dst, f.name), overwrite = true) }
+            }.isSuccess
+            if (!ok) { dst.deleteRecursively(); notice?.invoke(T.t("Nie udało się skopiować zeszytu (brak miejsca?)", "Could not copy the notebook (out of space?)")); return@execute }
             main.post { notebooks = notebooks + copy }
         }
     }

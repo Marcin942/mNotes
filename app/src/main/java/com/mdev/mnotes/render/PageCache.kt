@@ -657,7 +657,6 @@ class PageCache(
         }.getOrDefault(0)
     }
 
-    /** Tło PDF strony (niska skala) dla lupy; zleca renderowanie bazy, jeśli jej jeszcze nie ma. */
     /** Bitmapa całej strony w skali bazy (papier i treść) — do mini-mapy; null, dopóki baza się nie wyrenderuje. */
     fun overview(page: PageState): Bitmap? {
         val e = entry(page)
@@ -666,6 +665,7 @@ class PageCache(
         return e.base.bmp
     }
 
+    /** Tło PDF strony (niska skala) dla lupy; zleca renderowanie bazy, jeśli jej jeszcze nie ma. */
     fun backdrop(page: PageState): Bitmap? {
         val e = entry(page)
         e.base.stamp = frame
@@ -767,10 +767,8 @@ class Thumbs(private val repo: Repository, assets: Assets, private val pdf: PdfP
         }
     }
 
-    /** Renderuje stronę do bitmapy o szerokości [wPx]. Wywoływać poza wątkiem UI. */
-    /** Miniatura strony; [paper] = false — same elementy na przezroczystym tle (podgląd naklejki, 2b-A5). */
     /**
-     * Miniatura strony; [paper] = false — same elementy na przezroczystym tle (podgląd naklejki, 2b-A5); [theme] —
+     * Renderuje stronę do bitmapy o szerokości [wPx] (wywoływać poza wątkiem UI). Miniatura strony; [paper] = false — same elementy na przezroczystym tle (podgląd naklejki, 2b-A5); [theme] —
      * przekształcenie trybu ciemnego/jasnego (2b-A9), żeby miniatura wyglądała jak strona w edytorze.
      */
     fun render(nb: String, spec: PageSpec, content: PageContent, wPx: Int, paper: Boolean = true, theme: com.mdev.mnotes.core.color.ThemeMap.Transform? = null, photos: Boolean = false): Bitmap {
@@ -793,10 +791,22 @@ class Thumbs(private val repo: Repository, assets: Assets, private val pdf: PdfP
     /** Okładka: miniatura pierwszej strony z pliku lub świeżo wyrenderowana (i zapisana). */
     fun cover(nb: NotebookMeta, wPx: Int): Bitmap? {
         val f: File = repo.thumbFile(nb.id)
-        if (f.exists()) Assets.decodeFile(f, 1024)?.let { return it }
-        val first = nb.pages.firstOrNull() ?: return null
-        val bmp = render(nb.id, first.spec, repo.readPage(nb.id, first.id), wPx.coerceAtLeast(160))
-        runCatching { f.parentFile?.mkdirs(); f.outputStream().use { bmp.compress(Bitmap.CompressFormat.PNG, 90, it) } }
+        val first = nb.pages.firstOrNull()
+        // Odczyt w kolejce wątku io, po zaległych zapisach: wyjście z zeszytu od razu zmienia `modified` (nowy klucz
+        // okładki), a zapis stron i skasowanie thumb.png dopiero kolejkuje — wcześniej okładka brała jeszcze stary plik
+        // albo starą treść strony (i zapisywała ją jako thumb.png), więc biblioteka pokazywała stan sprzed edycji.
+        val (old, content) = repo.io.submit<Pair<Bitmap?, PageContent?>> {
+            val b = if (f.exists()) Assets.decodeFile(f, 1024) else null
+            b to if (b == null && first != null) repo.readPage(nb.id, first.id) else null
+        }.get()
+        if (old != null) return old
+        if (first == null || content == null) return null
+        val bmp = render(nb.id, first.spec, content, wPx.coerceAtLeast(160))
+        repo.io.execute {
+            // Zeszyt zmieniony w trakcie renderu: ta okładka jest już nieaktualna, nie zostaje w pliku.
+            if (repo.meta(nb.id)?.modified == nb.modified)
+                runCatching { f.parentFile?.mkdirs(); f.outputStream().use { bmp.compress(Bitmap.CompressFormat.PNG, 90, it) } }
+        }
         return bmp
     }
 }

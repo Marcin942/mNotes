@@ -306,7 +306,7 @@ private fun Sidebar(st: LibState, onSettings: () -> Unit, afterNav: () -> Unit, 
         repo.notebooks.count { it.isTrashed && !repo.folderTrashed(it.folderId) } + repo.folders.count { it.trashedAt > 0 && !repo.folderTrashed(it.parentId) }
     }
     val tags = remember(repo.notebooks, repo.tagColors) {
-        (repo.tagColors.keys + repo.notebooks.filter { !it.isTrashed }.flatMap { it.tags }).distinct().sortedBy { it.lowercase() }
+        (repo.tagColors.keys + repo.notebooks.filter { !it.isTrashed }.flatMap { it.tags }).distinct().sortedWith(com.mdev.mnotes.core.text.NameOrder)
     }
     Column(modifier.background(m.sidebar).statusBarsPadding().navigationBarsPadding()) {
         Row(Modifier.padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 10.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -323,7 +323,7 @@ private fun Sidebar(st: LibState, onSettings: () -> Unit, afterNav: () -> Unit, 
             SideItem(Icons.Rounded.Star, T.t("Ulubione", "Favorites"), st.place == Place.FAV) { st.go(Place.FAV); afterNav() }
             SideItem(Icons.Rounded.Delete, T.t("Kosz", "Trash"), st.place == Place.TRASH, count = trashCount) { st.go(Place.TRASH); afterNav() }
 
-            val roots = repo.folders.filter { it.parentId == null && it.trashedAt == 0L }.sortedBy { it.name.lowercase() }
+            val roots = repo.folders.filter { it.parentId == null && it.trashedAt == 0L }.sortedWith(compareBy(com.mdev.mnotes.core.text.NameOrder) { it.name })
             if (roots.isNotEmpty()) {
                 SectionLabel(T.t("Foldery", "Folders"), Modifier.padding(horizontal = 8.dp))
                 for (f in roots) FolderNode(st, repo, f, 0, afterNav)
@@ -350,7 +350,7 @@ private fun Sidebar(st: LibState, onSettings: () -> Unit, afterNav: () -> Unit, 
 
 @Composable
 private fun FolderNode(st: LibState, repo: Repository, f: Folder, depth: Int, afterNav: () -> Unit) {
-    val kids = repo.folders.filter { it.parentId == f.id && it.trashedAt == 0L }.sortedBy { it.name.lowercase() }
+    val kids = repo.folders.filter { it.parentId == f.id && it.trashedAt == 0L }.sortedWith(compareBy(com.mdev.mnotes.core.text.NameOrder) { it.name })
     val open = st.place == Place.LIB && st.folderId != null && (st.folderId == f.id || repo.isFolderDescendant(st.folderId, f.id))
     SideItem(
         Icons.Rounded.Folder, f.name, st.place == Place.LIB && st.folderId == f.id, indent = depth, iconTint = Color(f.color),
@@ -410,7 +410,7 @@ private fun LibMain(st: LibState, wide: Boolean, onOpen: (String) -> Unit, openD
     val liveFolders = remember(repo.folders) { repo.folders.filter { it.trashedAt == 0L && !repo.folderTrashed(it.parentId) } }
 
     val cmp: Comparator<NotebookMeta> = when (set.libSort) {
-        0 -> compareBy(String.CASE_INSENSITIVE_ORDER) { it.title }
+        0 -> compareBy(com.mdev.mnotes.core.text.NameOrder) { it.title }
         2 -> compareBy { it.created }
         else -> compareBy { it.modified }
     }
@@ -421,21 +421,21 @@ private fun LibMain(st: LibState, wide: Boolean, onOpen: (String) -> Unit, openD
     val inTrash = st.place == Place.TRASH && q.isEmpty()
     when {
         q.isNotEmpty() -> {
-            folders = liveFolders.filter { it.name.contains(q, true) || TextSearch.containsAll(TextSearch.fold(it.name), words) }.sortedBy { it.name.lowercase() }
+            folders = liveFolders.filter { it.name.contains(q, true) || TextSearch.containsAll(TextSearch.fold(it.name), words) }.sortedWith(compareBy(com.mdev.mnotes.core.text.NameOrder) { it.name })
             books = vis.filter { n ->
                 n.title.contains(q, true) || n.tags.any { it.contains(q, true) } || n.id in textHits ||
                     TextSearch.containsAll(TextSearch.fold(n.title + " " + n.tags.joinToString(" ")), words)
             }.userSorted()
         }
         st.place == Place.LIB -> {
-            folders = liveFolders.filter { it.parentId == st.folderId }.sortedBy { it.name.lowercase() }
+            folders = liveFolders.filter { it.parentId == st.folderId }.sortedWith(compareBy(com.mdev.mnotes.core.text.NameOrder) { it.name })
             books = vis.filter { it.folderId == st.folderId }.userSorted()
         }
         st.place == Place.RECENT -> { folders = emptyList(); books = vis.sortedByDescending { it.opened }.take(60) }
         st.place == Place.FAV -> { folders = emptyList(); books = vis.filter { it.favorite }.userSorted() }
         st.place == Place.TAG -> { folders = emptyList(); books = vis.filter { st.tag in it.tags }.userSorted() }
         else -> {
-            folders = repo.folders.filter { it.trashedAt > 0 && !repo.folderTrashed(it.parentId) }.sortedBy { it.name.lowercase() }
+            folders = repo.folders.filter { it.trashedAt > 0 && !repo.folderTrashed(it.parentId) }.sortedWith(compareBy(com.mdev.mnotes.core.text.NameOrder) { it.name })
             books = repo.notebooks.filter { it.isTrashed && !repo.folderTrashed(it.folderId) }.sortedByDescending { it.trashedAt }
         }
     }

@@ -2035,10 +2035,12 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
         val ox = layout.left(pi); val oy = layout.top(pi)
         fun sx(x: Float) = (ox + x) * zoom + tx
         fun sy(y: Float) = (oy + y) * zoom + ty
-        // podgląd wyniku w kolorze akcentu
+        // podgląd wyniku w kolorze akcentu, przez motyw strony jak wszystko na niej (3c-A1)
         if (pr.ghost.isNotEmpty()) {
             c.save(); c.translate(tx, ty); c.scale(zoom, zoom); c.translate(ox, oy)
+            renderer.theme = themeFor(spec); renderer.themePhotos = settings.pageThemePhotos
             for (el in pr.ghost) renderer.drawElement(c, doc.id, el, zoom, false, spec.darkPaper)
+            renderer.theme = null
             c.restore()
         }
         drawGeoTarget(c, pr.picked, ::sx, ::sy, 1f)
@@ -2103,8 +2105,8 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
         renderer.drawPaper(c, spec, z, cache.backdrop(page))
         val half = r / z
         renderer.drawElements(c, doc.id, doc.content(page), 0, Bounds(px - half, py - half, px + half, py + half), z, false, spec.darkPaper)
-        renderer.theme = null
         for (el in pr.ghost) renderer.drawElement(c, doc.id, el, z, false, spec.darkPaper)
+        renderer.theme = null
         c.restoreToCount(sc)
         // w lupie współrzędne strony → ekran lupy
         drawGeoTarget(c, pr.picked, { x -> lx + (x - px) * z }, { y -> ly + (y - py) * z }, 0.8f)

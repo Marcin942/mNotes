@@ -3,6 +3,7 @@ package com.mdev.mnotes.ui
 import com.mdev.mnotes.core.edit.AngleSnap
 import com.mdev.mnotes.core.layout.HelperStrip
 import com.mdev.mnotes.core.layout.MiniMap
+import com.mdev.mnotes.core.layout.ToolPopups
 import kotlin.math.roundToInt
 import com.mdev.mnotes.core.layout.PageShift
 import androidx.activity.compose.BackHandler
@@ -38,6 +39,7 @@ import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.ColorLens
 import androidx.compose.material.icons.rounded.Extension
 import androidx.compose.material.icons.rounded.Search
+import androidx.compose.material.icons.rounded.Explore
 import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.Keyboard
 import androidx.compose.material.icons.rounded.Lock
@@ -145,6 +147,8 @@ fun SettingsScreen(onBack: () -> Unit, startCat: Int = 0, startQuery: String = "
                 )
             }
             if (query.isNotEmpty()) IconBtn(Icons.Rounded.Close, T.t("Wyczyść wyszukiwanie", "Clear search"), { query = "" })
+            // 3c-A10: przewodnik zawsze pod ręką — najważniejsze wybory strona po stronie.
+            IconBtn(Icons.Rounded.Explore, T.t("Przewodnik po ustawieniach", "Settings guide"), LocalOpenGuide.current)
         }
         HorizontalDivider(color = m.line)
         BoxWithConstraints(Modifier.fillMaxSize()) {
@@ -333,6 +337,10 @@ private fun Appearance(set: com.mdev.mnotes.data.Settings) {
         ToggleRow(T.t("Zagęszczony interfejs (desktopowy)", "Compact interface (desktop-like)"), set.compact, keys = "compact gęsty kompaktowy desktop małe odstępy") { set.compact = it }
         ToggleRow(T.t("Delikatna wibracja przy dotknięciu przycisków", "Light vibration when tapping buttons"), set.haptics, keys = "haptyka drgania wibracje vibration haptic") { set.haptics = it }
         ToggleRow(T.t("Podpowiedź z nazwą przycisku (najechanie, przytrzymanie)", "Button name tooltip (hover, long press)"), set.tooltips, keys = "podpowiedź dymek napis nazwa tooltip hover") { set.tooltips = it }
+        ToggleRow(
+            T.t("Przytrzymanie otwiera ustawienia (menu przycisku paska: „Ustawienia tej funkcji”)", "Long press opens settings (toolbar button menu: “Settings for this feature”)"), set.holdSettings,
+            keys = "przytrzymanie przytrzymaj długie naciśnięcie ustawienia funkcji skrót zębatka long press hold",
+        ) { set.holdSettings = it }
         ToggleRow(T.t("Pokazuj dymki o narzędziach po ich wybraniu", "Show tool tips after picking a tool"), set.toolHints, keys = "dymki komunikaty napis wybrane narzędzie podpowiedź toast hint") { set.toolHints = it }
         HelperStripPrefs(set)
         ToggleRow(
@@ -368,7 +376,7 @@ private fun Appearance(set: com.mdev.mnotes.data.Settings) {
         }
         ToggleRow(T.t("Otwieraj zeszyty jako karty (pasek kart w nagłówku, bez dodatkowego miejsca; Ctrl+Tab przełącza)", "Open notebooks as tabs (tab strip inside the header, no extra space; Ctrl+Tab switches)"), set.tabs, keys = "zakładki tabs przełączanie notatek wiele zeszytów") { set.tabs = it }
         ToggleRow(T.t("Zadokuj panel stron z lewej na szerokim oknie (≥ 840 dp, DeX)", "Dock the page panel on the left in wide windows (≥ 840 dp, DeX)"), set.dockPages, keys = "panel stron miniatury dex szeroki ekran okno tablet") { set.dockPages = it }
-        Opt(T.t("Język", "Language"), "language polski angielski english") { Choice(listOf(T.t("Systemowy", "System"), "Polski", "English"), set.lang) { set.lang = it } }
+        Opt(T.t("Język", "Language"), "language polski angielski english język aplikacji app language lokalizacja tłumaczenie translation") { Choice(listOf(T.t("Systemowy", "System"), "Polski", "English"), set.lang) { set.lang = it } }
         Opt(T.t("Jednostki", "Units"), "units mm cale milimetry centymetry inches") { Choice(listOf(T.t("Milimetry", "Millimeters"), T.t("Cale", "Inches")), if (set.unitsMm) 0 else 1) { set.unitsMm = it == 0 } }
     }
 }
@@ -396,14 +404,27 @@ private fun HelperStripPrefs(set: com.mdev.mnotes.data.Settings) {
         Triple(HelperStrip.Helper.ERASER, T.t("Menu przy gumce", "Menu by the eraser"), "gumka mazanie ścieranie tryby rozmiar zakreślacz eraser"),
         Triple(HelperStrip.Helper.LASSO, T.t("Menu przy lassie", "Menu by the lasso"), "lasso zaznaczanie kształt prostokąt pętla lasso shape"),
         Triple(HelperStrip.Helper.LASER, T.t("Menu przy laserze", "Menu by the laser"), "laser wskaźnik kolor śladu pointer colour"),
+        Triple(HelperStrip.Helper.SNIP, T.t("Menu przy wycinku", "Menu by the snip"), "wycinek nożyczki kształt prostokąt lasso podpis snip shape caption"),
     )
     for ((h, label, keys) in groups) {
         ToggleRow(label, cfg.menuFor(h), keys = "menu wyskakujące $keys popup") { set.helperMenu = cfg.withMenu(h, it) }
         if (cfg.menuFor(h)) {
+            FadeChoice(set, ToolPopups.of(h), keys)
             val items = HelperStrip.Item.entries.filter { it.helper == h }
             if (items.size > 1 && rowVisible(label, keys)) FlowRow(Modifier.padding(bottom = 6.dp), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 for (i in items) Chip(helperItemName(i), cfg.shows(i), { set.helperMenu = cfg.withItem(i, !cfg.shows(i)) })
             }
+        }
+    }
+}
+
+/** 3c-A17a: po ilu sekundach gasną wyskakujące opcje narzędzia [t] — ten sam wybór dla pędzla, gumki, lassa i lasera. */
+@Composable
+private fun FadeChoice(set: com.mdev.mnotes.data.Settings, t: ToolPopups.Tool, keys: String) {
+    val r = set.popup(t)
+    Opt(T.t("Gaśnie po", "Fades after"), "gaśnie znika czas sekundy opóźnienie wyskakujące menu fade timeout $keys") {
+        Choice(ToolPopups.STEPS.map { if (it == 0) T.t("Nie gaśnie", "Never") else "$it s" }, ToolPopups.stepOf(r.sec)) {
+            set.setPopup(t, r.copy(sec = ToolPopups.STEPS[it]))
         }
     }
 }
@@ -415,6 +436,8 @@ private fun helperItemName(i: HelperStrip.Item) = when (i) {
     HelperStrip.Item.LASSO_SHAPE -> T.t("Kształt pętli", "Loop shape")
     HelperStrip.Item.LASSO_MODE -> T.t("Co zaznacza", "What it selects")
     HelperStrip.Item.LASER_COLORS -> T.t("Kolory", "Colours")
+    HelperStrip.Item.SNIP_SHAPE -> T.t("Kształt wycinka", "Snip shape")
+    HelperStrip.Item.SNIP_CAPTION -> T.t("Podpis źródła", "Source caption")
 }
 
 @Composable
@@ -499,10 +522,7 @@ private fun EditorPrefs(set: com.mdev.mnotes.data.Settings) {
             )
             ToggleRow(T.t("Gaś przy pierwszym malowaniu", "Fade when painting starts"), set.painterQuickFadeUse, keys = "pobierz format przycisk gaśnie znika malowanie użycie pędzel") { set.painterQuickFadeUse = it }
             ToggleRow(T.t("Gaś po pobraniu formatu", "Fade after taking a format"), set.painterQuickFadeTake, keys = "pobierz format przycisk gaśnie znika po pobraniu pędzel") { set.painterQuickFadeTake = it }
-            Opt(
-                if (set.painterQuickSec == 0) T.t("Gaś po czasie: nigdy", "Fade after time: never") else T.t("Gaś po czasie: ${set.painterQuickSec} s", "Fade after time: ${set.painterQuickSec} s"),
-                "pobierz format przycisk gaśnie znika czas sekundy opóźnienie pędzel",
-            ) { MSlider(set.painterQuickSec.toFloat(), 0f, 30f) { set.painterQuickSec = it.toInt() } }
+            FadeChoice(set, ToolPopups.Tool.PAINTER, "pobierz format przycisk pędzel")
         }
     }
     Group(T.t("Wypełnienie", "Fill"), keys = "wiaderko wypełnianie fill") {
@@ -515,7 +535,7 @@ private fun EditorPrefs(set: com.mdev.mnotes.data.Settings) {
             style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(bottom = 6.dp),
         )
     }
-    Group(T.t("Gumka i lasso", "Eraser & lasso"), keys = "wymaż zaznaczanie") {
+    Group(T.t("Gumka, lasso i wycinek", "Eraser, lasso & snip"), keys = "wymaż zaznaczanie wycinek") {
         Opt(T.t("Domyślny tryb gumki", "Default eraser mode"), "eraser wymaż kasowanie pikselowa obiektowa wycinanie lasso nożyczki cut out") { Choice(listOf(T.t("Obiektowa", "Object"), T.t("Pikselowa", "Pixel"), "Lasso", T.t("Wycinanie", "Cut out")), set.eraserMode) { set.eraserMode = it } }
         Opt(T.t("Rozmiar gumki: ${set.eraserSize.toInt()} pt", "Eraser size: ${set.eraserSize.toInt()} pt"), "eraser grubość wymaż") { MSlider(set.eraserSize, 1f, 60f) { set.eraserSize = it } }
         ToggleRow(T.t("Gumka pomija zakreślacz", "Eraser ignores highlighter"), set.eraserKeepHighlighter, keys = "eraser wymaż zakreślacz marker") { set.eraserKeepHighlighter = it }
@@ -524,6 +544,11 @@ private fun EditorPrefs(set: com.mdev.mnotes.data.Settings) {
             Choice(listOf(T.t("Połowa w pętli", "Half in the loop"), T.t("Wystarczy dotknąć", "Just touch")), if (set.lassoTouch) 1 else 0) { set.lassoTouch = it == 1 }
         }
         Text(lassoModeHint(set.lassoTouch), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(bottom = 6.dp))
+        // 3c-B4: Wycinek — fragment strony (np. slajdu) jako obraz do zeszytu.
+        Opt(T.t("Kształt wycinka", "Snip shape"), "wycinek nożyczki fragment slajd obraz prostokąt lasso maska snip scissors slide image rectangle") {
+            Choice(listOf(T.t("Prostokąt", "Rectangle"), T.t("Lasso (przezroczyste tło)", "Lasso (transparent outside)")), if (set.snipRect) 0 else 1) { set.snipRect = it == 0 }
+        }
+        ToggleRow(T.t("Podpis źródła pod wycinkiem („slajd 12 · plik”)", "Source caption under the snip (“slide 12 · file”)"), set.snipCaption, keys = "wycinek podpis źródło slajd numer nazwa pliku snip caption source") { set.snipCaption = it }
         ToggleRow(T.t("Przyciągaj do siatki", "Snap to grid"), set.snapGrid, keys = "grid siatka magnes snap") { set.snapGrid = it }
         // F22 był tylko w „⋮” edytora (przegląd Fable §3.2): rodzeństwo przyciągania do siatki.
         ToggleRow(T.t("Przyczep do figur (końce linii i punkty)", "Attach to shapes (line ends and points)"), set.attach, keys = "przyczep magnes wierzchołek końce punkty figury attach snap vertex") { set.attach = it }

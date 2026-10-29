@@ -1,6 +1,7 @@
 package com.mdev.mnotes.editor
 
 import android.content.Context
+import android.os.SystemClock
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import com.mdev.mnotes.core.layout.DocLayout
@@ -66,7 +67,7 @@ import kotlin.math.max
 import kotlin.math.min
 
 enum class Tool {
-    PEN, ERASER, LASSO, TEXT, LASER, HAND, SPACE, TAPE, PAINTER, FILL, CURVE, GEO;
+    PEN, ERASER, LASSO, TEXT, LASER, HAND, SPACE, TAPE, PAINTER, FILL, CURVE, GEO, SNIP;
 
     /** Narzędzie pracuje aktywnym piórem (kolor, grubość), więc zmiana pióra z listwy go nie zmienia. */
     val usesPen: Boolean get() = this == PEN || this == PAINTER || this == FILL || this == CURVE
@@ -76,6 +77,12 @@ enum class Tool {
 }
 
 class Sel(val pageId: String, val ids: Set<Int>)
+
+/**
+ * 3c-B4: wycinek czekający na wstawienie — pływa nad stroną źródła w miejscu wycięcia ([rect], pt strony [pageId]),
+ * można go przeciągnąć na stronę (także drugiego dokumentu stanowiska), wstawić przyciskiem albo skopiować.
+ */
+class SnipShot(val srcNb: String, val pageId: String, val rect: Bounds, val bmp: android.graphics.Bitmap, val png: ByteArray, val caption: String)
 
 /** Trwające przecinanie obrazu: linie czekają na zatwierdzenie, dopiero wtedy powstają kawałki (jedno cofnięcie). */
 class CutSession(val pageId: String, val imageId: Int) {
@@ -165,10 +172,14 @@ class Editor(val ctx: Context, val nbId: String) {
     }
 
     private var toolState by mutableStateOf(Tool.PEN)
+    /** 3c-B4: wycinek gotowy do wstawienia (null — brak) i czy właśnie się renderuje. */
+    var snipShot by mutableStateOf<SnipShot?>(null)
+    var snipBusy by mutableStateOf(false)
     var tool: Tool
         get() = toolState
         // 2b-A10: odejście od Krzywej zapisuje rozpoczętą krzywą (punkty postawione palcem się nie gubią).
-        set(v) { if (toolState == Tool.CURVE && v != Tool.CURVE) curveCommit(); toolState = v }
+        // 3c-B4: odejście od Wycinka chowa niewstawiony wycinek.
+        set(v) { if (toolState == Tool.CURVE && v != Tool.CURVE) curveCommit(); if (v != Tool.SNIP) snipShot = null; toolState = v }
     var ruler by mutableStateOf(false)
     /** Okno powiększenia (EXT-003): pisanie w powiększonej ramce u dołu, zapis na stronie w skali 1:1. */
     var zoomWin by mutableStateOf(false)
@@ -189,6 +200,9 @@ class Editor(val ctx: Context, val nbId: String) {
         set(v) { if (transformModeState != v) { transformModeState = v; view?.invalidate() } }
     private var transformModeState by mutableStateOf(false)
     var undoTick by mutableIntStateOf(0)
+    /** Czas ostatniej zmiany dokumentu — „Wstaw do:” wybiera dokument, w którym ostatnio pisano. */
+    var lastEditAt = 0L
+        private set
     var structTick by mutableIntStateOf(0)
     var pageIndex by mutableIntStateOf(0)
     var pageCount by mutableIntStateOf(doc.pages.size)
@@ -320,6 +334,7 @@ class Editor(val ctx: Context, val nbId: String) {
         val follow = liveFollow(edit, after = false)
         val grown = boardGrowth(edit, follow)
         doc.exec(grown?.first ?: follow?.let { DocEdit.Group(listOf(edit, it)) } ?: edit); undoTick++
+        lastEditAt = SystemClock.uptimeMillis()
         grown?.second?.let { (dx, dy) -> view?.boardShifted(dx, dy) }
     }
 
@@ -580,7 +595,14 @@ class Editor(val ctx: Context, val nbId: String) {
      * Prostokąt strony z planu [plan] jako PNG: papier, wzór, tło PDF i elementy; [theme] — tryb stron z [ThemeMap]
      * (null = kolory zapisane w stronie). Wołane z wątku tła; null przy błędzie.
      */
-    private fun renderPng(spec: PageSpec, content: PageContent, plan: Snip.Plan, theme: Int?): ByteArray? = runCatching {
+    private fun renderPng(spec: PageSpec, content: PageContent, plan: Snip.Plan, theme: Int?): ByteArray? =
+        renderBitmap(spec, content, plan, theme)?.let { bmp -> runCatching { pngOf(bmp) }.getOrNull().also { bmp.recycle() } }
+
+    private fun pngOf(bmp: android.graphics.Bitmap): ByteArray =
+        java.io.ByteArrayOutputStream().also { bmp.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it) }.toByteArray()
+
+    /** Prostokąt strony z planu [plan] jako bitmapa (jak [renderPng]); null przy błędzie (np. brak pamięci). */
+    private fun renderBitmap(spec: PageSpec, content: PageContent, plan: Snip.Plan, theme: Int?): android.graphics.Bitmap? = runCatching {
         val bmp = android.graphics.Bitmap.createBitmap(plan.wPx, plan.hPx, android.graphics.Bitmap.Config.ARGB_8888)
         val c = android.graphics.Canvas(bmp)
         val r = plan.rect; val sc = plan.scale
@@ -597,8 +619,86 @@ class Editor(val ctx: Context, val nbId: String) {
             }
         }
         renderer.drawElements(c, nbId, content, 0, r, sc, true, t?.toDark ?: spec.darkPaper)
-        java.io.ByteArrayOutputStream().also { bmp.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it); bmp.recycle() }.toByteArray()
+        bmp
     }.getOrNull()
+
+    // ───────────────────────── 3c-B4: narzędzie „Wycinek” ─────────────────────────
+
+    /**
+     * Wycina obszar [poly] (pt strony [pageIdx]; [lasso] — maska poza kształtem, inaczej prostokąt) jako obraz z renderu
+     * strony w skali 2× powiększenia [zoom] (co najmniej 3 px/pt; slajdy PDF z ich renderu). Wynik czeka w [snipShot].
+     */
+    fun snipCut(pageIdx: Int, poly: FloatArray, lasso: Boolean, zoom: Float) {
+        val p = doc.pages.getOrNull(pageIdx) ?: return
+        val spec = p.spec
+        val plan = com.mdev.mnotes.core.edit.SnipCut.plan(poly, spec.w, spec.h, zoom) ?: return
+        val content = doc.content(p)
+        for (e in station?.rows ?: listOf(this)) e.snipShot = null
+        val caption = com.mdev.mnotes.core.edit.SnipCut.caption(pageIdx, repo.meta(nbId)?.title.orEmpty(), spec.pdf != null, T.t("pl", "en") == "pl")
+        snipBusy = true
+        repo.io.execute {
+            val bmp = renderBitmap(spec, content, plan, null)
+            val shot = bmp?.let { b ->
+                runCatching {
+                    if (lasso) applyMask(b, com.mdev.mnotes.core.edit.SnipCut.coverage(com.mdev.mnotes.core.edit.SnipCut.toPixels(poly, plan), plan.wPx, plan.hPx))
+                    SnipShot(nbId, p.id, plan.rect, b, pngOf(b), caption)
+                }.getOrNull()
+            }
+            view?.post {
+                snipBusy = false
+                if (shot == null) say(T.t("Nie udało się wyciąć fragmentu", "Could not cut the area")) else snipShot = shot
+                view?.invalidate()
+            }
+        }
+    }
+
+    /** Krycie bitmapy razy maska [cov] (wiersz po wierszu, bez drugiej pełnej kopii pikseli). */
+    private fun applyMask(b: android.graphics.Bitmap, cov: ByteArray) {
+        val w = b.width
+        val row = IntArray(w)
+        for (y in 0 until b.height) {
+            b.getPixels(row, 0, w, 0, y, w, 1)
+            for (x in 0 until w) {
+                val k = cov[y * w + x].toInt() and 255
+                if (k == 255) continue
+                val a = ((row[x] ushr 24) * k + 127) / 255
+                row[x] = (a shl 24) or (row[x] and 0xFFFFFF)
+            }
+            b.setPixels(row, 0, w, 0, y, w, 1)
+        }
+    }
+
+    /**
+     * Wstawia wycinek [shot] do tego dokumentu jako zwykły obraz: środkiem w [at] (strona, x, y w pt) albo na widocznym
+     * fragmencie bieżącej strony. Rozmiar 1:1 z kartką źródła, zmniejszony, gdy nie mieści się na stronie; z
+     * „Podpisem źródła” pod spodem pole tekstu. Jeden krok cofania. False — nie wstawiono.
+     */
+    fun insertSnip(shot: SnipShot, at: Triple<Int, Float, Float>? = null, onDone: (Boolean) -> Unit = {}) {
+        if (readOnly) return onDone(false)
+        val (pi, cx, cy) = at ?: view?.viewCenterOnPage() ?: return onDone(false)
+        val pageId = doc.pages.getOrNull(pi)?.id ?: return onDone(false)
+        repo.io.execute {
+            val name = runCatching { repo.importAsset(nbId, java.io.ByteArrayInputStream(shot.png), "png") }.getOrNull()
+            view?.post {
+                val page = doc.page(pageId)
+                val i = doc.pages.indexOf(page)
+                if (name == null || page == null || i < 0) { say(T.t("Nie udało się zapisać wycinka", "Could not save the snip")); onDone(false); return@post }
+                val wh = com.mdev.mnotes.core.edit.SnipCut.fit(shot.rect.w, shot.rect.h, page.spec.w, page.spec.h)
+                val els = com.mdev.mnotes.core.edit.SnipCut.elements(name, wh[0], wh[1], cx, cy, if (settings.snipCaption) shot.caption else null, Ids::next)
+                val ok = pasteElements(els, nbId, Triple(i, cx, cy)) != null
+                if (ok) say(T.t("Wycinek wstawiony — przesuń go albo zmień rozmiar jak obraz", "Snip inserted — move or resize it like any image"))
+                onDone(ok)
+            }
+        }
+    }
+
+    /** Wycinek [shot] jako PNG do schowka systemu (wklejanie w innych aplikacjach). */
+    fun copySnip(shot: SnipShot) {
+        repo.io.execute {
+            val ok = pngToClipboard(shot.png, "wycinek")
+            view?.post { say(if (ok) T.t("Wycinek skopiowany jako obraz", "Snip copied as an image") else T.t("Nie udało się skopiować wycinka", "Could not copy the snip")) }
+        }
+    }
 
     /** PNG do schowka przez FileProvider: inne aplikacje wklejają obraz, a nie ścieżkę. Wołane z wątku tła. */
     /** FB13: zaznaczenie jako kod TikZ w schowku (tekst, więc wkleja się w każdym edytorze LaTeX-a, też w przeglądarce). */
@@ -1667,6 +1767,7 @@ class Editor(val ctx: Context, val nbId: String) {
         quickFormat = t == Tool.PAINTER && settings.painterQuick
         // Dymki z opisem narzędzia można wyłączyć (F2): po kilku razach już tylko zasłaniają kartkę.
         if (!settings.toolHints) return
+        if (t == Tool.SNIP) toast = T.t("Zaznacz fragment strony — potem przeciągnij go na stronę albo wybierz „Wstaw do”", "Mark an area of the page — then drag it onto a page or pick “Insert into”")
         if (t == Tool.TAPE) toast = T.t("Przeciągnij, aby zakryć fragment · dotknij taśmy, aby odkryć", "Drag to cover an area · tap a tape to reveal it")
         if (t == Tool.PAINTER) toast = if (settings.painterMode == 1) T.t("Obrysuj obiekty — przejmą kolor i styl aktywnego pióra", "Circle objects to give them the active pen's colour and style")
             else T.t("Przeciągnij po obiektach — przejmą kolor i styl aktywnego pióra", "Swipe over objects to give them the active pen's colour and style")

@@ -70,7 +70,8 @@ class Settings(ctx: Context) {
     var accent by Pref("ui.accent", 0)               // indeks w Accents
     var compact by Pref("ui.compact", false)
     var haptics by Pref("ui.haptics", true)          // delikatne wibracje przy dotknięciu przycisków paska narzędzi
-    var tooltips by Pref("ui.tooltips", true)        // podpowiedź z nazwą przycisku po najechaniu (mysz, rysik) albo przytrzymaniu
+    var holdSettings by Pref("ui.hold_settings", true) // 3c-A17b: przytrzymany przycisk paska ma „Ustawienia tej funkcji”
+    var tooltips by Pref("ui.tooltips", true)       // podpowiedź z nazwą przycisku po najechaniu (mysz, rysik) albo przytrzymaniu
     var pageAnim by Pref("anim.pages", true)          // strony dojeżdżają na nowe miejsce po zmianie kolejności (F6)
     var pageAnimMs by Pref("anim.pages_ms", com.mdev.mnotes.core.layout.PageShift.DEFAULT_MS)  // czas tej animacji (ms), A2-7: 180 zamiast 260
     var toolHints by Pref("ui.tool_hints", true)     // dymek z opisem po wybraniu narzędzia (taśma, pędzel formatu, wiaderko, odstęp)
@@ -97,6 +98,9 @@ class Settings(ctx: Context) {
         set(v) { langPref = v; com.mdev.mnotes.editor.T.mode = v }
 
     init { com.mdev.mnotes.editor.T.mode = langPref }
+
+    /** Tag z ostatniego uzgodnienia z systemowym „Językiem aplikacji” (3c-A15, `AppLanguage.reconcile`); "?" — nigdy. */
+    var langSys by Pref("ui.lang_sys", "?")
 
     // — Wejście —
     private var handPref by Pref("input.hand", com.mdev.mnotes.core.layout.Handedness.RIGHT)
@@ -142,6 +146,10 @@ class Settings(ctx: Context) {
     var eraserSize by Pref("eraser.size", 14f)       // promień w pt
     var eraserKeepHighlighter by Pref("eraser.ignore_highlighter", false)
     var lassoRect by Pref("lasso.rect", false)
+    /** 3c-B4: kształt „Wycinka” — prostokąt (domyślnie, slajdy są prostokątne) albo lasso z maską. */
+    var snipRect by Pref("snip.rect", true)
+    /** 3c-B4: podpis źródła („slajd 12 · wykład.pdf”) pod wstawianym wycinkiem. */
+    var snipCaption by Pref("snip.caption", false)
     var lassoTouch by Pref("lasso.touch", false)     // lasso „tylko zahacz”: wystarczy musnąć obiekt pętlą; domyślnie zbalansowane (połowa obiektu w pętli)
     // 2c-A15: dawny „toolbar.tool_strip” przechodzi na listwę przy pierwszym uruchomieniu — przed odczytem helperStrip.
     init {
@@ -158,11 +166,31 @@ class Settings(ctx: Context) {
     var helperMenu: com.mdev.mnotes.core.layout.HelperStrip.Config
         get() = com.mdev.mnotes.core.layout.HelperStrip.Config.parse(helperMenuPref)
         set(v) { helperMenuPref = v.encode() }
+    private var helperFadePref by Pref("toolbar.helper_fade", "")   // 3c-A17a: gaśnięcie menu gumki/lassa/lasera (ToolPopups.Fades)
+
+    /** 3c-A17a: wyskakujące opcje narzędzia [t] — jeden model dla pędzla i narzędzi pomocniczych. */
+    fun popup(t: com.mdev.mnotes.core.layout.ToolPopups.Tool): com.mdev.mnotes.core.layout.ToolPopups.Rule {
+        val h = com.mdev.mnotes.core.layout.ToolPopups.helper(t)
+            ?: return com.mdev.mnotes.core.layout.ToolPopups.Rule(painterQuick, painterQuickSec)
+        return com.mdev.mnotes.core.layout.ToolPopups.Rule(helperMenu.menuFor(h), com.mdev.mnotes.core.layout.ToolPopups.Fades.parse(helperFadePref).of(t))
+    }
+
+    fun setPopup(t: com.mdev.mnotes.core.layout.ToolPopups.Tool, r: com.mdev.mnotes.core.layout.ToolPopups.Rule) {
+        val h = com.mdev.mnotes.core.layout.ToolPopups.helper(t)
+        if (h == null) { painterQuick = r.show; painterQuickSec = r.sec; return }
+        helperMenu = helperMenu.withMenu(h, r.show)
+        helperFadePref = com.mdev.mnotes.core.layout.ToolPopups.Fades.parse(helperFadePref).with(t, r.sec).encode()
+    }
     var laserColor by Pref("laser.color", 0xFF3B30)    // RGB śladu lasera (LaserColors.PALETTE)
     var axesLast by Pref("axes.last", "")            // ostatnio wstawiony układ współrzędnych (AxesSpec.encode), F8
     var axesSnap by Pref("axes.snap", false)         // 2b-A6: układ na kratce i kreski w nim dociskane do siatki; 2c-A3: wyłączone do testu na tablecie
     var axesSnapDp by Pref("axes.snap_dp", 3f)       // próg docisku kresek do linii siatki układu (dp ekranu; 0 = bez)
     var guideOffered by Pref("guide.offered", false) // zeszyt-przewodnik był już proponowany (F20)
+    /** 3c-A10: aplikacja działała tu już przed tym uruchomieniem (zeszyt-przewodnik zapisuje to przy pierwszym starcie). */
+    val oldInstall: Boolean = guideOffered
+    var setupState by Pref("setup.state", "")          // stan przewodnika po ustawieniach (SetupGuide.State.encode); pusty = nie otwierany
+    var setupDismissed by Pref("setup.dismissed", false) // propozycja przewodnika odrzucona („Nie teraz”)
+    var setupUse by Pref("setup.use", 0)               // do czego głównie (SetupGuide.USE_*): tylko do zaleceń przewodnika
     var attach by Pref("snap.attach", false)         // F22: końce linii i przeciągane punkty przyczepiają się do innych figur
     var zoomMaxFactor by Pref("zoom.max_factor", 6f)     // F25: największe powiększenie = mnożnik „100 %” (6 = dawne)
     var returnToPen by Pref("tools.return_to_pen", false) // F26: ponowne dotknięcie lasera/ręki/lassa albo puste miejsce wraca do pisania

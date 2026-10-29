@@ -72,6 +72,7 @@ import androidx.compose.material.icons.rounded.RestoreFromTrash
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.SelectAll
 import androidx.compose.material.icons.rounded.Settings
+import androidx.compose.material.icons.rounded.Explore
 import androidx.compose.material.icons.rounded.Sort
 import androidx.compose.material.icons.rounded.Star
 import androidx.compose.material.icons.rounded.StarBorder
@@ -339,7 +340,11 @@ private fun Sidebar(st: LibState, onSettings: () -> Unit, afterNav: () -> Unit, 
             }
         }
         Box(Modifier.fillMaxWidth().height(1.dp).background(m.line))
-        Box(Modifier.padding(8.dp)) { SideItem(Icons.Rounded.Settings, T.t("Ustawienia", "Settings"), false) { onSettings(); afterNav() } }
+        val openGuide = LocalOpenGuide.current
+        Column(Modifier.padding(8.dp)) {
+            SideItem(Icons.Rounded.Explore, T.t("Przewodnik po ustawieniach", "Settings guide"), false) { openGuide(); afterNav() }
+            SideItem(Icons.Rounded.Settings, T.t("Ustawienia", "Settings"), false) { onSettings(); afterNav() }
+        }
     }
 }
 

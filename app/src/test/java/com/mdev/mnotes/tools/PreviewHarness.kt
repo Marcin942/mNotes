@@ -1,6 +1,8 @@
 package com.mdev.mnotes.tools
 
 import com.mdev.mnotes.core.geom.FloatList
+import com.mdev.mnotes.core.guide.SetupGuide as G
+import com.mdev.mnotes.core.guide.SetupScenes as S
 import com.mdev.mnotes.core.model.PageSpec
 import com.mdev.mnotes.core.model.Paper
 import com.mdev.mnotes.core.model.PenKind
@@ -330,10 +332,245 @@ class PreviewHarness {
         File(dir, "guide-overflow.txt").writeText(report.toString())
     }
 
+    /**
+     * 3c-A10: strony przewodnika po ustawieniach — układ jak `SetupGuideScreen` (wymiary w dp), próbki z tych samych
+     * `SetupScenes`. Tablet poziomo (1280×800 dp) i telefon pionowo (400×840 dp), motyw jasny i ciemny.
+     */
+    /** `MNOTES_PREVIEW_ONLY=setup-docs` — tylko wybrane strony przewodnika po ustawieniach, wprost do katalogu. */
+    private val docsOnly get() = System.getenv("MNOTES_PREVIEW_ONLY") == "setup-docs"
+
+    private fun setupSheet(dir: String) {
+        class Mem : G.Store {
+            val m = HashMap(mapOf("new.template" to 1, "toolbar.size" to 1, "pen.smoothing" to 1, "ui.tooltips" to 1, "ui.haptics" to 1, "ui.tool_hints" to 1, "view.minimap" to 1))
+            override fun get(key: String) = m[key] ?: 0
+            override fun set(key: String, v: Int) { m[key] = v }
+        }
+        val accent = 0xFF87CF3E.toInt()
+        fun mix(a: Int, b: Int, t: Float): Int {
+            fun ch(sh: Int) = (((a shr sh) and 255) + (((b shr sh) and 255) - ((a shr sh) and 255)) * t).toInt().coerceIn(0, 255)
+            return (0xFF shl 24) or (ch(16) shl 16) or (ch(8) shl 8) or ch(0)
+        }
+        class Pal(dark: Boolean) {
+            val bg = if (dark) 0xFF2A2C2F.toInt() else 0xFFF4F5F6.toInt()
+            val surface = if (dark) 0xFF34363A.toInt() else 0xFFFFFFFF.toInt()
+            val line = if (dark) 0xFF55585E.toInt() else 0xFFD0D3D8.toInt()
+            val on = if (dark) 0xFFE8E9EB.toInt() else 0xFF24272B.toInt()
+            val onVar = if (dark) 0xFFA9AEB5.toInt() else 0xFF5C626B.toInt()
+            val soft = mix(surface, accent, if (dark) 0.2f else 0.18f)
+            val accentText = if (dark) mix(accent, 0xFFFFFFFF.toInt(), 0.18f) else mix(accent, 0xFF000000.toInt(), 0.42f)
+            val onAccent = 0xFF10180A.toInt()
+        }
+        fun font(sp: Float, bold: Int = java.awt.Font.PLAIN) = java.awt.Font("SansSerif", bold, 1).deriveFont(sp)
+        fun wrap(g: java.awt.Graphics2D, text: String, f: java.awt.Font, w: Float): List<String> {
+            val fm = g.getFontMetrics(f); val out = ArrayList<String>(); var cur = ""
+            for (word in text.split(' ')) {
+                val t = if (cur.isEmpty()) word else "$cur $word"
+                if (fm.stringWidth(t) > w && cur.isNotEmpty()) { out += cur; cur = word } else cur = t
+            }
+            if (cur.isNotEmpty()) out += cur
+            return out
+        }
+        fun text(g: java.awt.Graphics2D, s: String, f: java.awt.Font, c: Int, x: Float, y: Float, w: Float, lh: Float): Float {
+            g.font = f; g.color = col(c); var yy = y
+            for (l in wrap(g, s, f, w)) { g.drawString(l, x, yy + f.size2D); yy += lh }
+            return yy - y
+        }
+        fun scene(g: java.awt.Graphics2D, shapes: List<S.Shape>, dark: Boolean, x: Float, y: Float, w: Float) {
+            val k = w / S.W
+            val t = g.transform; val clip = g.clip
+            g.translate(x.toDouble(), y.toDouble()); g.scale(k.toDouble(), k.toDouble())
+            g.clip(Rectangle2D.Float(0f, 0f, S.W, S.H))   // jak `clipToBounds` przy Canvas
+            for (sh in shapes) {
+                g.color = col(S.color(sh.role, dark, accent))
+                when (sh) {
+                    is S.Box -> { val r = java.awt.geom.RoundRectangle2D.Float(sh.l, sh.t, sh.r - sh.l, sh.b - sh.t, 2 * sh.radius, 2 * sh.radius); if (sh.outline) { g.stroke = BasicStroke(1.2f); g.draw(r) } else g.fill(r) }
+                    is S.Dot -> { val e = Ellipse2D.Float(sh.cx - sh.rad, sh.cy - sh.rad, 2 * sh.rad, 2 * sh.rad); if (sh.outline) { g.stroke = BasicStroke(1.4f); g.draw(e) } else g.fill(e) }
+                    is S.Line -> {
+                        val p = Path2D.Float(); p.moveTo(sh.pts[0], sh.pts[1]); var i = 2
+                        while (i + 1 < sh.pts.size) { p.lineTo(sh.pts[i], sh.pts[i + 1]); i += 2 }
+                        g.stroke = BasicStroke(sh.width, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND); g.draw(p)
+                    }
+                    is S.Label -> { g.font = font(sh.size, java.awt.Font.BOLD); g.drawString(sh.pl, sh.x, sh.y) }
+                }
+            }
+            g.transform = t; g.clip = clip
+        }
+        /** Strona „Gotowe”: podsumowanie wyborów jak `Summary` w aplikacji. */
+        fun summary(g: java.awt.Graphics2D, p: Pal, store: Mem, x: Float, y: Float, w: Float): Float {
+            val rows = G.summary(store)
+            val h = 14f + 26f + rows.size * 28f + 28f + 14f
+            val r = java.awt.geom.RoundRectangle2D.Float(x, y, w, h, 32f, 32f)
+            g.color = col(p.surface); g.fill(r); g.color = col(p.line); g.stroke = BasicStroke(1f); g.draw(r)
+            g.font = font(15f, java.awt.Font.BOLD); g.color = col(p.on); g.drawString("Twoje wybory", x + 20f, y + 32f)
+            var yy = y + 40f
+            for ((pg, i) in rows) {
+                g.font = font(13.5f); g.color = col(p.onVar); g.drawString(pg.short!!.first, x + 20f, yy + 19f)
+                g.font = font(15f, java.awt.Font.BOLD); g.color = col(p.on); g.drawString(pg.options.getOrNull(i)?.pl ?: "ustawione w Ustawieniach", x + 116f, yy + 19f)
+                yy += 28f
+            }
+            g.font = font(12f); g.color = col(p.onVar); g.drawString("Wszystko zmienisz w Ustawieniach.", x + 20f, yy + 22f)
+            return h
+        }
+        /** Jedna strona: zwraca obraz [w]×[h] dp przy [sc] px/dp. */
+        fun page(st: G.State, store: Mem, dark: Boolean, w: Int, h: Int, sc: Float): BufferedImage {
+            val p = Pal(dark)
+            val img = BufferedImage((w * sc).toInt(), (h * sc).toInt(), BufferedImage.TYPE_INT_ARGB)
+            val g = g2(img); g.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON); g.scale(sc.toDouble(), sc.toDouble())
+            g.color = col(p.bg); g.fillRect(0, 0, w, h)
+            val pg = st.page
+            // Górny pasek
+            val head = when (st.path) { G.START -> "Pierwsze kroki"; G.HUB -> "Poznaj więcej"; else -> G.TOPICS.first { it.id == st.path }.titlePl }
+            g.font = font(13.5f); g.color = col(p.onVar); g.drawString(head, 20f, 36f)
+            if (st.path != G.HUB) {
+                val n = st.count; val dw = n * 8f + (n - 1) * 6f + 12f; var x = w / 2f - dw / 2
+                for (i in 0 until n) { val d = if (i == st.index) 20f else 8f; g.color = col(if (i <= st.index) accent else p.line); g.fill(java.awt.geom.RoundRectangle2D.Float(x, 27f, d, 8f, 8f, 8f)); x += d + 6f }
+            }
+            g.color = col(p.on); g.stroke = BasicStroke(2f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND)
+            g.draw(Line2D.Float(w - 34f, 24f, w - 22f, 36f)); g.draw(Line2D.Float(w - 22f, 24f, w - 34f, 36f))
+            val top = 56f; val navH = 68f; val bottom = h - navH
+            val wide = w > h - 124 && w >= 560
+            val shapes = S.of(pg, store)
+            val tf = font(24f, java.awt.Font.BOLD); val bf = font(15f); val cf = font(15f, java.awt.Font.BOLD); val nf = font(13.5f)
+            // Wysokość bloku tekst+opcje, żeby w szerokim układzie wyśrodkować go w pionie.
+            fun block(x: Float, y0: Float, cw: Float, draw: Boolean): Float {
+                var y = y0
+                val gg = if (draw) g else g2(BufferedImage(1, 1, BufferedImage.TYPE_INT_ARGB))
+                y += text(gg, pg.titlePl, tf, p.on, x, y, cw, 30f) + 8f
+                y += text(gg, pg.bodyPl, bf, p.onVar, x, y, cw, 21f) + 16f
+                val cards: List<Triple<String, String, Pair<Boolean, Boolean>>> = if (pg.sample == G.Sample.DONE) {
+                    y += text(gg, "Poznaj więcej", font(15f, java.awt.Font.BOLD), p.on, x, y, cw, 20f) + 8f
+                    G.topics(store).map { Triple(it.titlePl, it.descPl, false to (it.id in st.seen)) }
+                } else {
+                    val cur = G.current(pg, store); val rec = pg.recommended(store)
+                    pg.options.mapIndexed { i, o -> Triple(o.pl, o.notePl, (i == cur) to (i == rec)) }
+                }
+                val nav = pg.sample == G.Sample.DONE
+                for ((idx, c) in cards.withIndex()) {
+                    val (t, note, flags) = c
+                    val done = nav && flags.second
+                    val sel = !nav && flags.first
+                    val rec = !nav && flags.second
+                    val badgeW = if (rec) gg.getFontMetrics(font(12f)).stringWidth("Zalecane") + 20f + 8f else 0f
+                    val lead = if (nav) 0f else 22f + 14f
+                    val textW = cw - 16f - lead - 16f - badgeW - (if (nav) 48f else 0f)
+                    val tl = wrap(gg, t, cf, textW); val nl = if (note.isEmpty()) emptyList() else wrap(gg, note, nf, textW)
+                    val ch = maxOf(56f, 20f + tl.size * 20f + nl.size * 18f)
+                    if (draw) {
+                        val r = java.awt.geom.RoundRectangle2D.Float(x, y, cw, ch, 24f, 24f)
+                        g.color = col(if (sel) p.soft else p.surface); g.fill(r)
+                        g.color = col(if (sel) accent else p.line); g.stroke = BasicStroke(if (sel) 2f else 1f); g.draw(r)
+                        val cx = x + 16f + 11f; val cy = y + ch / 2
+                        val ring = Ellipse2D.Float(cx - 10f, cy - 10f, 20f, 20f)
+                        if (sel) {
+                            g.color = col(accent); g.fill(Ellipse2D.Float(cx - 11f, cy - 11f, 22f, 22f))
+                            g.color = col(p.onAccent); g.stroke = BasicStroke(2f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND)
+                            g.draw(Path2D.Float().apply { moveTo(cx - 5f, cy); lineTo(cx - 1.5f, cy + 3.5f); lineTo(cx + 5f, cy - 3.5f) })
+                        } else if (!nav) { g.color = col(p.line); g.stroke = BasicStroke(2f); g.draw(ring) }
+                        if (nav) {
+                            // Strzałka „›” jak `KeyboardArrowRight`: temat otwiera się, nie wybiera; ✓ przed nią — przejrzany.
+                            val ax = x + cw - 24f
+                            g.color = col(p.onVar); g.stroke = BasicStroke(2f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND)
+                            g.draw(Path2D.Float().apply { moveTo(ax - 3f, cy - 6f); lineTo(ax + 3f, cy); lineTo(ax - 3f, cy + 6f) })
+                            if (done) { g.color = col(p.accentText); g.draw(Path2D.Float().apply { moveTo(ax - 26f, cy); lineTo(ax - 22f, cy + 4f); lineTo(ax - 14f, cy - 4f) }) }
+                        }
+                        val tx = x + 16f + lead
+                        var ty = y + (ch - tl.size * 20f - nl.size * 18f) / 2
+                        g.font = cf; g.color = col(p.on); for (l in tl) { g.drawString(l, tx, ty + 15f); ty += 20f }
+                        g.font = nf; g.color = col(p.onVar); for (l in nl) { g.drawString(l, tx, ty + 13.5f); ty += 18f }
+                        if (rec) {
+                            val bw = badgeW - 8f; val bx = x + cw - 16f - bw; val by = cy - 12f
+                            g.color = col(accent); g.stroke = BasicStroke(1f); g.draw(java.awt.geom.RoundRectangle2D.Float(bx, by, bw, 24f, 24f, 24f))
+                            g.font = font(12f); g.color = col(p.accentText); g.drawString("Zalecane", bx + 10f, by + 16.5f)
+                        }
+                    }
+                    y += ch + if (idx < cards.size - 1) 8f else 0f
+                }
+                if (!nav && G.current(pg, store) < 0) y += 8f + text(gg, "Teraz ustawione inaczej (w Ustawieniach) — wybierz, aby zmienić.", font(12f), p.onVar, x, y + 8f, cw, 16f)
+                return y - y0
+            }
+            val isDone = pg.sample == G.Sample.DONE
+            if (wide) {
+                // Kolumny jak w aplikacji: tekst do 480 dp (waga 1), próbka waga 1,15, odstęp 40 dp.
+                val avail = w - 64f - 40f
+                val cw = minOf(480f, avail / 2.15f); val sc2 = avail * 1.15f / 2.15f
+                val bh = block(32f, 0f, cw, false)
+                block(32f, top + 12f + maxOf(0f, (bottom - top - 24f - bh) / 2), cw, true)
+                val sx = 32f + avail / 2.15f + 40f
+                if (isDone) {
+                    val sh = summary(g2(BufferedImage(1, 1, BufferedImage.TYPE_INT_ARGB)), p, store, 0f, 0f, sc2)
+                    summary(g, p, store, sx, top + (bottom - top - sh) / 2, sc2)
+                } else {
+                    val sw = minOf(sc2, (bottom - top - 24f) * S.W / S.H)
+                    scene(g, shapes, dark, sx + (sc2 - sw) / 2, top + (bottom - top - sw * S.H / S.W) / 2, sw)
+                }
+            } else {
+                val sw = minOf(w - 40f, 420f)
+                val sh = if (isDone) summary(g, p, store, (w - sw) / 2, top + 8f, sw) else { scene(g, shapes, dark, (w - sw) / 2, top + 8f, sw); sw * S.H / S.W }
+                val cw = minOf(w - 40f, 560f)
+                block((w - cw) / 2, top + 8f + sh + 16f, cw, true)
+            }
+            // Dolny pasek (nad zawartością, jak w aplikacji przewijana treść znika pod nim)
+            g.color = col(p.bg); g.fill(Rectangle2D.Float(0f, bottom, w.toFloat(), navH))
+            g.color = col(p.line); g.fill(Rectangle2D.Float(0f, bottom, w.toFloat(), 1f))
+            val by = bottom + 10f + 24f
+            fun btn(label: String, right: Float, filled: Boolean): Float {
+                val f = font(13.5f, java.awt.Font.BOLD); val bw = g.getFontMetrics(f).stringWidth(label) + 48f
+                val x = right - bw
+                if (filled) { g.color = col(accent); g.fill(java.awt.geom.RoundRectangle2D.Float(x, by - 20f, bw, 40f, 40f, 40f)) }
+                g.font = f; g.color = col(if (filled) p.onAccent else p.accentText); g.drawString(label, x + 24f, by + 5f)
+                return x
+            }
+            if (!st.first) { g.font = font(13.5f, java.awt.Font.BOLD); g.color = col(p.accentText); g.drawString("Wstecz", 36f, by + 5f) }
+            when {
+                st.path == G.HUB || pg.sample == G.Sample.DONE -> btn("Zacznij pisać", w - 12f, true)
+                else -> {
+                    val x = btn(if (st.last) "Gotowe" else "Dalej", w - 12f, true)
+                    if (!(st.last && st.path != G.START)) btn(if (st.path == G.START) "Pomiń przewodnik" else "Wróć do tematów", x - 8f, false)
+                }
+            }
+            g.dispose()
+            return img
+        }
+        val states = ArrayList<Pair<String, G.State>>()
+        var s0 = G.State(); repeat(G.START_PAGES.size) { states += "start-${it + 1}-${s0.page.id}" to s0; s0 = s0.next() }
+        var hub = s0
+        for (t in G.TOPICS) { var s = hub.open(t.id); while (s.path == t.id) { states += "temat-${t.id}-${s.page.id}" to s; s = s.next() } ; hub = s }
+        if (docsOnly) {
+            // Wybór do `docs/podglad`: kilka stron zamiast pełnego zestawu (ten idzie do katalogu roboczego).
+            fun one(id: String, file: String, dark: Boolean, w: Int, h: Int, k: Float) {
+                val st = states.first { it.second.page.id == id }.second
+                val store = Mem().also { m -> G.choose(st.page, st.page.recommended(m), m) }
+                ImageIO.write(page(st, store, dark, w, h, k), "png", File(dir, "przewodnik-ustawienia-$file.png"))
+            }
+            one("hand", "reka-jasny", false, 1280, 800, 1f)
+            one("input", "palec-ciemny", true, 1280, 800, 1f)
+            one("theme", "motyw-telefon", true, 400, 840, 1.5f)
+            one("done", "gotowe-ciemny", true, 1280, 800, 1f)
+            one("hold_settings", "przytrzymanie", true, 1280, 800, 1f)
+            return
+        }
+        val out = File(dir, "przewodnik-ustawienia"); out.mkdirs()
+        for ((name, st) in states) {
+            val store = Mem().also { m -> G.choose(st.page, st.page.recommended(m), m) }
+            for (dark in listOf(false, true)) {
+                val th = if (dark) "ciemny" else "jasny"
+                ImageIO.write(page(st, store, dark, 1280, 800, 1f), "png", File(out, "$name-tablet-$th.png"))
+                if (name.startsWith("start")) ImageIO.write(page(st, store, dark, 400, 840, 1.5f), "png", File(out, "$name-telefon-$th.png"))
+            }
+        }
+        // Tablet pionowo i telefon poziomo — po jednej stronie z najdłuższym opisem.
+        val th = states.first { it.second.page.id == "theme" }.second
+        val ts = Mem().also { G.choose(th.page, 0, it) }
+        ImageIO.write(page(th, ts, false, 800, 1280, 1f), "png", File(out, "pion-tablet-theme-jasny.png"))
+        ImageIO.write(page(th, ts, true, 840, 400, 1.5f), "png", File(out, "poziom-telefon-theme-ciemny.png"))
+    }
+
     @Test fun render() {
         val dir = System.getenv("MNOTES_PREVIEW_DIR") ?: return assumeTrue(false)
         System.setProperty("java.awt.headless", "true")
         File(dir).mkdirs()
+        setupSheet(dir)
+        if (docsOnly) return
         guideSheet(dir)
         glyphSheet(dir)
         toolSheet(dir)

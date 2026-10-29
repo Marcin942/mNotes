@@ -350,8 +350,9 @@ class Editor(val ctx: Context, val nbId: String) {
     // — Cofanie —
     // 2c-A1: cofnięcie wzrostu tablicy przesuwa treść z powrotem, więc widok idzie za nią (bez skoku na ekranie)
     /** Cofnięcie; przeniesienie między dokumentami stanowiska cofa się w obu naraz (2c-A5). */
-    fun undo() { val st = station; if (st == null) undoHere() else st.linked.undo(this, st::stackOf) { it.undoHere() } }
-    fun redo() { val st = station; if (st == null) redoHere() else st.linked.redo(this, st::stackOf) { it.redoHere() } }
+    // 3c-B3: blokada edycji obejmuje też cofanie (gest dwoma palcami, Ctrl+Z) — inaczej „tylko do odczytu” zmieniało zeszyt.
+    fun undo() { if (readOnly) return; val st = station; if (st == null) undoHere() else st.linked.undo(this, st::stackOf) { it.undoHere() } }
+    fun redo() { if (readOnly) return; val st = station; if (st == null) redoHere() else st.linked.redo(this, st::stackOf) { it.redoHere() } }
     private fun undoHere() { commitSelPreview(); cancelCut(); cancelCrop(); clearSel(); val e = doc.doUndo(); undoTick++; e?.let { DocEdit.shiftOf(it) }?.let { (dx, dy) -> view?.boardShifted(-dx, -dy) }; e?.pageIds?.firstOrNull()?.let { view?.ensureVisible(it) } }
     private fun redoHere() { commitSelPreview(); cancelCut(); cancelCrop(); clearSel(); val e = doc.doRedo(); undoTick++; e?.let { DocEdit.shiftOf(it) }?.let { (dx, dy) -> view?.boardShifted(dx, dy) }; e?.pageIds?.firstOrNull()?.let { view?.ensureVisible(it) } }
 

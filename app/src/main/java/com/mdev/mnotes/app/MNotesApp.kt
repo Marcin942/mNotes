@@ -32,6 +32,7 @@ class MNotesApp : Application() {
         com.mdev.mnotes.render.AppFonts.init(resources.assets)
         repo = Repository(this)
         settings = Settings(this)
+        runCatching { settings.addNewBuiltInProfiles() }
         assets = Assets(repo)
         pdf = PdfPool(repo)
         thumbs = Thumbs(repo, assets, pdf)

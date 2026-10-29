@@ -347,6 +347,15 @@ private fun Appearance(set: com.mdev.mnotes.data.Settings) {
             T.t("Przewijanie o pół ekranu poza brzeg stron (wygodniej pisać przy brzegu, np. leworęcznym)", "Scroll half a screen past the page edges (easier writing near an edge, e.g. left-handed)"),
             set.scrollMargin, keys = "leworęczny lewa ręka dłoń przewijanie margines zapas brzeg pierwsza strona przesuń left handed scroll margin overscroll",
         ) { set.scrollMargin = it }
+        // 3c-A9: tryb do odczytu — zawsze (też z profilu „Do odczytu”) albo sam na telefonie.
+        ToggleRow(
+            T.t("Otwieraj zeszyty w trybie do odczytu (bez pasków, palec i rysik tylko przewijają)", "Open notebooks in reading mode (no bars, finger and stylus only scroll)"),
+            set.reader, keys = "tryb do odczytu czytanie przeglądanie telefon blokada edycji podgląd reading mode read only viewer phone",
+        ) { set.reader = it }
+        ToggleRow(
+            T.t("Na telefonie sam włączaj tryb do odczytu (przycisk „Edytuj” go wyłącza)", "On a phone, turn on reading mode automatically (the “Edit” button leaves it)"),
+            set.readerAuto, keys = "tryb do odczytu telefon mały ekran automatycznie czytanie reading mode phone small screen automatic",
+        ) { set.readerAuto = it }
         ToggleRow(
             T.t("Mini-mapa strony po przewinięciu przy dużym powiększeniu (przesuwana palcem)", "Page mini-map after scrolling when zoomed in (moved with a finger)"),
             set.miniMap, keys = "mini mapa podgląd strony nawigacja powiększenie zoom róg minimap overview",

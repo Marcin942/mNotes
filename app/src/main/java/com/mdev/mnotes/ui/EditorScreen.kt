@@ -104,6 +104,7 @@ import androidx.compose.material.icons.rounded.ContentCut
 import androidx.compose.material.icons.rounded.ContentPaste
 import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.Edit
+import androidx.compose.material.icons.rounded.AutoStories
 import androidx.compose.material.icons.rounded.WidthFull
 import androidx.compose.material.icons.rounded.FitScreen
 import androidx.compose.material.icons.rounded.Flip
@@ -295,6 +296,16 @@ fun EditorScreen(main: Editor, tabs: TabsCtl, onExit: () -> Unit, onSettings: ()
     val m = mint
     // 2c-A11: profil przypięty do zeszytu albo stanowiska włącza się przy otwarciu, a wyjście (Editor.close) go zdejmuje.
     LaunchedEffect(main.nbId) { st.pinOnOpen() }
+    // 3c-A9: tryb do odczytu raz przy pierwszym pokazaniu dokumentu (ustawienie, profil, telefon, kopia z folderu wymiany),
+    // a potem tylko po zmianie ustawienia — „Edytuj” nie wraca do trybu przy przełączaniu rzędów stanowiska.
+    val sw = androidx.compose.ui.platform.LocalConfiguration.current.smallestScreenWidthDp
+    LaunchedEffect(ed) { ed.readerOnOpen(set.reader, set.readerAuto, sw) }
+    var readerPref by remember { mutableStateOf(set.reader) }
+    LaunchedEffect(set.reader) {
+        if (set.reader == readerPref) return@LaunchedEffect
+        readerPref = set.reader
+        if (set.reader) ed.enterReader() else if (ed.reader) ed.leaveReader()
+    }
     // 2c-A11: ręczna zmiana ustawienia z profilu — pytanie, czy zapisać ją w profilu (inaczej zniknie po jego wyłączeniu).
     val profileEdits = set.profileEdits.toMap()
     LaunchedEffect(profileEdits) {
@@ -372,6 +383,7 @@ fun EditorScreen(main: Editor, tabs: TabsCtl, onExit: () -> Unit, onSettings: ()
             ed.searchOpen -> ed.closeSearch()
             ed.ctxMenu != null -> ed.ctxMenu = null
             ed.sel != null -> ed.clearSel()
+            ed.reader -> onExit()
             !ed.chrome -> ed.chrome = true
             else -> onExit()
         }
@@ -425,6 +437,8 @@ fun EditorScreen(main: Editor, tabs: TabsCtl, onExit: () -> Unit, onSettings: ()
                             if (panel == Panel.STYLE) StyleHost(ed) { panel = null }
                             if (panel == Panel.PAGES && !dock) Box(Modifier.align(Alignment.CenterEnd).padding(vertical = 8.dp).panelEnter()) { PagesPanel(ed, { panel = null }, ::pickImage) }
                             if (panel == Panel.MORE) Box(Modifier.align(Alignment.TopEnd).padding(8.dp).panelEnter()) { MoreMenu(ed, set, { panel = null }, ::applyLayout, { panel = Panel.STYLE }, { palette = true }, onSettings) }
+                        } else if (ed.reader) {
+                            ReaderBar(ed, onExit, Modifier.align(Alignment.TopStart).padding(8.dp))
                         } else {
                             IconBtn(
                                 Icons.Rounded.Fullscreen, T.t("Pokaż pasek narzędzi", "Show toolbar"), { ed.chrome = true }, shortcut = "F11",
@@ -463,6 +477,23 @@ fun EditorScreen(main: Editor, tabs: TabsCtl, onExit: () -> Unit, onSettings: ()
         if (panel == Panel.PHONE) Flavor.lab?.PhonePanel(ed) { panel = null }
         Flavor.lab?.Overlay(ed)
         if (palette) PaletteDialog(cmds) { palette = false }
+    }
+}
+
+/**
+ * 3c-A9: kapsuła trybu do odczytu zamiast pasków — powrót do biblioteki, numer strony i „Edytuj” (wyjście z trybu).
+ * Półprzezroczysta i mała, żeby na telefonie nie zasłaniała kartki.
+ */
+@Composable
+private fun ReaderBar(ed: Editor, onExit: () -> Unit, modifier: Modifier) {
+    val m = mint
+    Row(
+        modifier.clip(RoundedCornerShape(50)).background(m.chrome.copy(alpha = 0.78f)).padding(horizontal = 2.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        IconBtn(Icons.AutoMirrored.Rounded.ArrowBack, T.t("Biblioteka", "Library"), onExit)
+        Text("${ed.pageIndex + 1} / ${ed.pageCount}", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 4.dp))
+        IconBtn(Icons.Rounded.Edit, if (ed.mirror) T.t("Pokaż paski", "Show bars") else T.t("Edytuj", "Edit"), { ed.leaveReader() })
     }
 }
 
@@ -2260,7 +2291,8 @@ private fun MoreMenu(ed: Editor, set: com.mdev.mnotes.data.Settings, close: () -
             MenuRow(Icons.Rounded.Insights, T.t("Statystyki zeszytu…", "Notebook statistics…"), "") { close(); ed.statsOpen = true }
             MenuRow(Icons.Rounded.Fullscreen, T.t("Ukryj paski (tryb skupienia)", "Hide bars (focus mode)"), "F11") { ed.chrome = false; close() }
             ToggleRow(T.t("Okno powiększenia (pisz w powiększeniu)", "Zoom window (write magnified)"), ed.zoomWin) { ed.toggleZoomWin(); close() }
-            ToggleRow(T.t("Tylko do odczytu", "Read-only"), ed.readOnly) { ed.readOnly = it }
+            MenuRow(Icons.Rounded.AutoStories, T.t("Tryb do odczytu (bez pasków, palec przewija)", "Reading mode (no bars, finger scrolls)"), "") { close(); ed.enterReader() }
+            ToggleRow(T.t("Tylko do odczytu", "Read-only"), ed.readOnly) { if (ed.mirror) ed.leaveReader() else ed.readOnly = it }
             if (!ed.readOnly) {
                 SectionLabel(T.t("Wstaw", "Insert"))
                 MenuRow(Icons.Rounded.ShowChart, T.t("Układ współrzędnych…", "Coordinate axes…"), "") { close(); ed.axesOpen = true }

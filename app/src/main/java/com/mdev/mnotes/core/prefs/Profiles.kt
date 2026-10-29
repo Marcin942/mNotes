@@ -57,6 +57,7 @@ object Profiles {
         Key("toolbar.order", 2), Key("toolbar.modes", 2), Key("toolbar.position", 2), Key("toolbar.size", 2), Key("toolbar.options", 2), Key("ui.undo_dock", 2),
         Key("toolbar.helper_strip", 3), Key("toolbar.helper_menu", 3),
         Key("view.minimap", 4), Key("view.scroll_margin", 4),Key("pages.theme", 4), Key("ui.compact", 4), Key("snap.attach", 4), Key("axes.snap", 4),
+        Key(Reader.KEY, 4),
     )
 
     private val known = KEYS.map { it.key }.toSet()
@@ -185,7 +186,24 @@ object Profiles {
                 FINGER to PVal.I(FINGER_OFF), "input.palm_rejection" to PVal.B(true), "input.two_finger_undo" to PVal.B(false),
                 "input.double_tap" to PVal.I(3), "input.triple_tap" to PVal.I(3), "input.pull_add_page" to PVal.B(false),
             )),
+            // 3c-A9: przeglądanie notatek (telefon, powtórka): bez pasków, palec przewija, nic się nie zmieni przypadkiem.
+            Profile(READER_ID, t("Do odczytu", "Reading"), linkedMapOf(
+                Reader.KEY to PVal.B(true), FINGER to PVal.I(FINGER_SCROLL), "input.double_tap" to PVal.I(2), "input.triple_tap" to PVal.I(3),
+                "view.minimap" to PVal.B(false),
+            )),
         )
+    }
+
+    const val READER_ID = "odczyt"
+
+    /**
+     * Gotowe profile dodane w nowszej wersji trafiają też do istniejącej listy, ale tylko raz: [seen] — id już
+     * zaproponowanych. Usunięty przez użytkownika profil nie wraca. Zwraca nową listę i nowy zbiór [seen].
+     */
+    fun addNewBuiltIns(list: List<Profile>, seen: Set<String>, builtIns: List<Profile>): Pair<List<Profile>, Set<String>> {
+        val ids = list.map { it.id }.toSet()
+        val add = builtIns.filter { it.id !in seen && it.id !in ids }
+        return (list + add) to (seen + builtIns.map { it.id })
     }
 
     // — 2c-A11: ręczne zmiany przy włączonym profilu i przypięcie na czas pracy —

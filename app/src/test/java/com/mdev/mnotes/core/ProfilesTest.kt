@@ -90,7 +90,7 @@ class ProfilesTest {
         assertEquals(l[0], Profiles.next(l, null))
         assertEquals(l[1], Profiles.next(l, l[0].id))
         assertNull(Profiles.next(l, l.last().id))
-        assertEquals(listOf("Wykład", "Rysowanie", "Tylko rysik"), l.map { it.name })
+        assertEquals(listOf("Wykład", "Rysowanie", "Tylko rysik", "Do odczytu"), l.map { it.name })
         assertTrue(l.all { p -> p.values.keys.all(Profiles::known) })
         assertEquals(PVal.I(Profiles.FINGER_OFF), l[2].values[Profiles.FINGER])
     }

@@ -118,6 +118,7 @@ object CmdDefs {
         CmdDef("pagesPanel", 2, "Panel stron", "Pages panel", "F9"),
         CmdDef("focusMode", 2, "Tryb skupienia (ukryj paski)", "Focus mode (hide bars)", "F11"),
         CmdDef("readOnly", 2, "Tryb tylko do odczytu", "Read-only mode"),
+        CmdDef("reader", 2, "Tryb do odczytu (bez pasków, palec przewija)", "Reading mode (no bars, finger scrolls)"),
         CmdDef("tbTop", 2, "Pasek narzędzi: góra", "Toolbar: top"),
         CmdDef("tbBottom", 2, "Pasek narzędzi: dół", "Toolbar: bottom"),
         CmdDef("tbLeft", 2, "Pasek narzędzi: lewo", "Toolbar: left"),

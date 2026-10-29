@@ -214,7 +214,7 @@ object Guide {
                         t("„Symetralna odcinka”: dotknij odcinka AB.", "“Perpendicular bisector”: tap segment AB."),
                         t("„Kąt: łuk i miara”: dotknij obu ramion kąta po prawej.", "“Angle: arc and value”: tap both arms of the angle on the right."),
                     ),
-                    t("To samo jest w menu zaznaczenia (przytrzymaj → „Konstrukcja ▸”). Kątomierz z paska mierzy kąty ręcznie.", "The same is in the selection menu (long-press → “Construction ▸”). The protractor on the toolbar measures angles by hand."),
+                    t("Punkt łapie wierzchołki, środki i przecięcia: przesuń palec, patrząc na lupę, i podnieś. To samo jest w menu „Konstrukcja ▸”.", "Points snap to vertices, midpoints and intersections: slide your finger watching the loupe, then lift. The same is in the “Construction ▸” menu."),
                 ) { y ->
                     listOf(
                         ring(MARGIN + 60f, y + 70f, 50f), ring(MARGIN + 125f, y + 70f, 50f),

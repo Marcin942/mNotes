@@ -684,6 +684,7 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
         drawLasso(c)
         drawSelection(c)
         drawGeoPicks(c)
+        drawGeoProbe(c)
         drawCurveDraft(c)
         drawShapeLabel(c)
         drawAttachMark(c)
@@ -851,6 +852,7 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
             c.restoreToCount(s1)
         }
         if (lLifting && lPage in 0 until layout.count && !liftOut) drawLifted(c, true)
+        drawLivePreview(c)
         drawGhost(c)
     }
 
@@ -1336,6 +1338,10 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
             hoverX = ev.x; hoverY = ev.y
             if (isStylus(t)) { stylusNear = true; lastStylusT = ev.eventTime }
             hoverTool = effectiveTool(ev, 0)
+        }
+        // 3c-B2: rysik nad stroną w Geometrii pokazuje, co wskaże (punkt, przecięcie, podgląd wyniku), zanim dotknie.
+        if (mode == Mode.NONE) {
+            if (hoverOn && hoverTool == Tool.GEO && !ed.readOnly) geoProbeAt(hoverX, hoverY, false) else geoProbe = null
         }
         invalidate()
     }
@@ -2000,6 +2006,118 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
         }
     }
 
+    // ───────────────────────── Geometria: podgląd pod palcem (3c-B2) ─────────────────────────
+
+    /** Co wskaże dotknięcie w miejscu palca lub rysika ([geoPX], [geoPY] na ekranie); [geoTouch] — dotyk (z lupą), nie zawis. */
+    private var geoProbe: Editor.GeoProbe? = null
+    private var geoPX = 0f; private var geoPY = 0f
+    private var geoTouch = false
+    private val geoLoupe = Path()
+
+    private fun geoTol() = GEO_SNAP_DP * dp / zoom
+
+    private fun geoProbeAt(sx: Float, sy: Float, touch: Boolean) {
+        val pi = pageIdxAt(sx, sy)
+        val was = geoProbe?.picked?.snap
+        geoProbe = if (pi < 0) null else ed.geoProbe(doc.pages[pi].id, pgX(pi, sx), pgY(pi, sy), geoTol(), rgbA(accent, 0xB0))
+        geoPX = sx; geoPY = sy; geoTouch = touch
+        // lekkie stuknięcie, gdy palec wskoczy na nowy punkt (wierzchołek, przecięcie…) — bez patrzenia na ekran
+        val now = geoProbe?.picked?.snap
+        if (touch && now != null && now.kind != com.mdev.mnotes.core.geom.GeoSnap.Kind.ON && (was == null || was.p != now.p)) performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
+    }
+
+    private fun drawGeoProbe(c: Canvas) {
+        val pr = geoProbe ?: return
+        if (ed.tool != Tool.GEO) { geoProbe = null; return }
+        val pi = doc.indexOf(pr.pageId)
+        if (pi !in 0 until layout.count) return
+        val spec = doc.pages[pi].spec
+        val ox = layout.left(pi); val oy = layout.top(pi)
+        fun sx(x: Float) = (ox + x) * zoom + tx
+        fun sy(y: Float) = (oy + y) * zoom + ty
+        // podgląd wyniku w kolorze akcentu, przez motyw strony jak wszystko na niej (3c-A1)
+        if (pr.ghost.isNotEmpty()) {
+            c.save(); c.translate(tx, ty); c.scale(zoom, zoom); c.translate(ox, oy)
+            renderer.theme = themeFor(spec); renderer.themePhotos = settings.pageThemePhotos
+            for (el in pr.ghost) renderer.drawElement(c, doc.id, el, zoom, false, spec.darkPaper)
+            renderer.theme = null
+            c.restore()
+        }
+        drawGeoTarget(c, pr.picked, ::sx, ::sy, 1f)
+        val snap = pr.picked?.snap
+        if (snap != null) {
+            val label = T.t(snap.kind.pl, snap.kind.en)
+            rulerText.color = 0xFFFFFFFF.toInt()
+            val w = rulerText.measureText(label) + 14f * dp; val h = 18f * dp
+            val lx = sx(snap.p.x) + 14f * dp; val ly = sy(snap.p.y) - 14f * dp - h
+            rulerFill.color = rgbA(0xFF1F2933.toInt(), 0xD8)
+            c.drawRoundRect(lx, ly, lx + w, ly + h, h / 2, h / 2, rulerFill)
+            c.drawText(label, lx + w / 2, ly + h / 2 + 3.4f * dp, rulerText)
+        }
+        if (geoTouch) drawGeoLoupe(c, pi, pr)
+    }
+
+    /** Wskazywane wejście: punkt pierścieniem, odcinek i okrąg pogrubionym obrysem, obiekt ramką ([k] — skala grubości). */
+    private fun drawGeoTarget(c: Canvas, pk: com.mdev.mnotes.core.geom.GeoTool.Picked?, sx: (Float) -> Float, sy: (Float) -> Float, k: Float) {
+        val inp = pk?.input ?: return
+        geoPaint.style = Paint.Style.STROKE
+        geoPaint.color = rgbA(accent, 0xE6); geoPaint.strokeWidth = 2.2f * dp * k
+        when (inp) {
+            is com.mdev.mnotes.core.geom.GeoTool.Input.Point -> {
+                val x = sx(inp.p.x); val y = sy(inp.p.y)
+                if (pk.snap == null) { val a = 6f * dp * k; c.drawLine(x - a, y, x + a, y, geoPaint); c.drawLine(x, y - a, x, y + a, geoPaint) }
+                else { c.drawCircle(x, y, 9f * dp * k, geoPaint); geoPaint.style = Paint.Style.FILL; c.drawCircle(x, y, 2.6f * dp * k, geoPaint) }
+            }
+            is com.mdev.mnotes.core.geom.GeoTool.Input.Ln -> { geoPaint.color = rgbA(accent, 0x80); geoPaint.strokeWidth = 4f * dp * k; c.drawLine(sx(inp.l.a.x), sy(inp.l.a.y), sx(inp.l.b.x), sy(inp.l.b.y), geoPaint) }
+            is com.mdev.mnotes.core.geom.GeoTool.Input.Circ -> {
+                geoPaint.color = rgbA(accent, 0x80); geoPaint.strokeWidth = 4f * dp * k
+                val cx = sx(inp.c.c.x); c.drawCircle(cx, sy(inp.c.c.y), sx(inp.c.c.x + inp.c.r) - cx, geoPaint)
+            }
+            is com.mdev.mnotes.core.geom.GeoTool.Input.Tri -> {
+                geoPaint.color = rgbA(accent, 0x80); geoPaint.strokeWidth = 4f * dp * k
+                tmpPath.rewind(); tmpPath.moveTo(sx(inp.a.x), sy(inp.a.y)); tmpPath.lineTo(sx(inp.b.x), sy(inp.b.y)); tmpPath.lineTo(sx(inp.c.x), sy(inp.c.y)); tmpPath.close()
+                c.drawPath(tmpPath, geoPaint)
+            }
+            is com.mdev.mnotes.core.geom.GeoTool.Input.Obj -> { val b = inp.el.bounds; geoPaint.color = rgbA(accent, 0x99); c.drawRect(sx(b.l), sy(b.t), sx(b.r), sy(b.b), geoPaint) }
+        }
+        geoPaint.style = Paint.Style.STROKE
+    }
+
+    /**
+     * Lupa nad palcem: kawałek strony pod palcem w powiększeniu [GEO_LOUPE_ZOOM]× z podświetlonym punktem i podglądem —
+     * palec zasłania dokładnie to miejsce, w które celuje.
+     */
+    private fun drawGeoLoupe(c: Canvas, pi: Int, pr: Editor.GeoProbe) {
+        val r = GEO_LOUPE_DP * dp
+        val lx = geoPX.coerceIn(r + 6f * dp, width - r - 6f * dp)
+        val lift = GEO_LOUPE_LIFT_DP * dp
+        val ly = if (geoPY - lift > r) geoPY - lift else geoPY + lift
+        val page = doc.pages[pi]; val spec = page.spec
+        val z = zoom * GEO_LOUPE_ZOOM
+        val px = pgX(pi, geoPX); val py = pgY(pi, geoPY)
+        geoLoupe.rewind(); geoLoupe.addCircle(lx, ly, r, Path.Direction.CW)
+        pickFill.color = viewBg; c.drawCircle(lx, ly, r, pickFill)
+        val sc = c.save()
+        c.clipPath(geoLoupe)
+        c.translate(lx, ly); c.scale(z, z); c.translate(-px, -py)
+        c.clipRect(0f, 0f, spec.w, spec.h)
+        renderer.theme = themeFor(spec); renderer.themePhotos = settings.pageThemePhotos
+        renderer.drawPaper(c, spec, z, cache.backdrop(page))
+        val half = r / z
+        renderer.drawElements(c, doc.id, doc.content(page), 0, Bounds(px - half, py - half, px + half, py + half), z, false, spec.darkPaper)
+        for (el in pr.ghost) renderer.drawElement(c, doc.id, el, z, false, spec.darkPaper)
+        renderer.theme = null
+        c.restoreToCount(sc)
+        // w lupie współrzędne strony → ekran lupy
+        drawGeoTarget(c, pr.picked, { x -> lx + (x - px) * z }, { y -> ly + (y - py) * z }, 0.8f)
+        // celownik w miejscu palca
+        geoPaint.color = rgbA(if (darkUi) 0xFFFFFFFF.toInt() else 0xFF1F2933.toInt(), 0x80); geoPaint.strokeWidth = 1f * dp
+        val a = 5f * dp
+        c.drawLine(lx - a, ly, lx + a, ly, geoPaint); c.drawLine(lx, ly - a, lx, ly + a, geoPaint)
+        pickRing.strokeWidth = 3f * dp; pickRing.color = 0xFFFFFFFF.toInt(); c.drawCircle(lx, ly, r, pickRing)
+        pickRing.strokeWidth = 1.2f * dp; pickRing.color = rgbA(accent, 0xCC); c.drawCircle(lx, ly, r + 1.5f * dp, pickRing)
+    }
+
     // ───────────────────────── kątomierz (FB4, A2-13) ─────────────────────────
 
     private val prot = Protractor(0f, 0f, 0f, 150f)
@@ -2474,7 +2592,8 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
             Tool.SPACE -> spaceDown()
             Tool.TAPE -> tapeDown()
             Tool.PAINTER -> paintDown()
-            Tool.FILL, Tool.GEO -> if (ed.readOnly || pageIdxAt(curX, curY) < 0) mode = Mode.IGNORE
+            Tool.FILL -> if (ed.readOnly || pageIdxAt(curX, curY) < 0) mode = Mode.IGNORE
+            Tool.GEO -> if (ed.readOnly || pageIdxAt(curX, curY) < 0) mode = Mode.IGNORE else geoProbeAt(curX, curY, true)
             Tool.LASER -> { laser.begin(System.currentTimeMillis()); addLaser(curX, curY) }
             else -> {}
         }
@@ -2499,6 +2618,7 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
                 paintTo(curX, curY)
             }
             Tool.LASER -> { for (h in 0 until ev.historySize) addLaser(ev.getHistoricalX(idx, h), ev.getHistoricalY(idx, h)); addLaser(curX, curY) }
+            Tool.GEO -> geoProbeAt(curX, curY, true)
             else -> {}
         }
         invalidate()
@@ -2515,9 +2635,11 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
             Tool.TAPE -> tapeUp(cancel)
             Tool.PAINTER -> paintUp(cancel)
             Tool.FILL -> if (!cancel && !toolMoved) fillTap()
-            Tool.GEO -> if (!cancel && !toolMoved) {
+            // 3c-B2: wskazuje się przy podniesieniu — palec można dosunąć, patrząc na lupę i podświetlony punkt.
+            Tool.GEO -> {
+                geoProbe = null
                 val pi = pageIdxAt(curX, curY)
-                if (pi >= 0) ed.geoTap(doc.pages[pi].id, pgX(pi, curX), pgY(pi, curY), 14f * dp / zoom)
+                if (!cancel && pi >= 0) ed.geoTap(doc.pages[pi].id, pgX(pi, curX), pgY(pi, curY), geoTol())
             }
             Tool.TEXT -> if (!cancel && !toolMoved) textTap()
             Tool.LASER -> { laser.end(System.currentTimeMillis()); if (!cancel && !toolMoved && ToolReturn.shouldReturn(settings.returnToPen, true, false, true, false)) ed.returnToWriting() }
@@ -3649,18 +3771,49 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
                         Affine.rotation(a, lBounds.cx, lBounds.cy)
                     }
                 }
+                updateLivePreview()
                 ed.viewTick++
             }
             LM.VERTEX -> {
                 if (!lLifting) { if (!toolMoved) return; liftSelection() }
                 vertexDrag(px, py)
+                updateLivePreview()
             }
             LM.RESIZE -> {
                 if (!lLifting) { if (!toolMoved) return; liftSelection() }
                 resizeDrag(px, py)
+                updateLivePreview()
             }
             LM.NONE -> {}
         }
+    }
+
+    /** 3c-B2: wyniki żywych konstrukcji (NAU-3) przeliczone dla przeciąganego zaznaczenia — podgląd przed puszczeniem. */
+    private var livePreview: List<Element> = emptyList()
+
+    private fun updateLivePreview() {
+        val orig = lOrig; val page = doc.pages.getOrNull(lPage)
+        if (orig == null || page == null || !ed.live.drives(page.id, lIds) || dropPage() != lPage) { livePreview = emptyList(); return }
+        val vertex = lm == LM.VERTEX || lm == LM.RESIZE
+        val map = HashMap<Int, Element>(lEls.size * 2)
+        for (e in lEls) map[e.id] = if (vertex) e else e.transformed(lM)
+        livePreview = ed.live.preview(page.id, orig, PageContent.of(orig.elements.map { map[it.id] ?: it }))
+    }
+
+    /** Podgląd [livePreview] półprzezroczyście na stronie przeciągania (stare wyniki zostają pod spodem do puszczenia). */
+    private fun drawLivePreview(c: Canvas) {
+        if (livePreview.isEmpty() || !lLifting || lPage !in 0 until layout.count) return
+        val spec = doc.pages[lPage].spec
+        var b = Bounds.EMPTY
+        for (e in livePreview) b = b.union(e.bounds)
+        val s = c.save()
+        c.translate(layout.left(lPage), layout.top(lPage))
+        val pad = 4f / zoom
+        c.saveLayerAlpha(b.l - pad, b.t - pad, b.r + pad, b.b + pad, 0xA0)
+        renderer.theme = themeFor(spec); renderer.themePhotos = settings.pageThemePhotos
+        for (el in livePreview) renderer.drawElement(c, doc.id, el, zoom, false, spec.darkPaper)
+        renderer.theme = null
+        c.restoreToCount(s)
     }
 
     private fun lassoUp(cancel: Boolean) {
@@ -3717,6 +3870,7 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
         val wasMove = lm == LM.MOVE
         val tgt = if (cancel) lPage else dropPage()
         lLifting = false
+        livePreview = emptyList()
         lm = LM.NONE; ln = 0
         vBase = null; rFrame = null; tBase = null; shapeLabel = null
         if (page == null || orig == null || lifted == null) return
@@ -3878,6 +4032,12 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
         private const val ROTATE_HIT_DP = 20f
         /** Dłuższy bok przeciąganego wycinka na ekranie (dp). */
         private const val SNIP_DRAG_DP = 220f
+        /** Zasięg wskazywania w Geometrii (dp ekranu, 3c-B2; dawniej 14 dp): punkty, przecięcia, odcinki, okręgi. */
+        private const val GEO_SNAP_DP = 22f
+        /** Lupa Geometrii: promień (dp), powiększenie względem widoku i odstęp nad palcem (dp). */
+        private const val GEO_LOUPE_DP = 46f
+        private const val GEO_LOUPE_ZOOM = 2.5f
+        private const val GEO_LOUPE_LIFT_DP = 92f
         private val TAP_SLOPS_DP = floatArrayOf(8f, 14f, 22f)
         /** Zapas prostokąta zaznaczenia (dp ekranu): obiekt na samym brzegu ramki też jest w środku. */
         private const val RECT_SLACK_DP = 4f

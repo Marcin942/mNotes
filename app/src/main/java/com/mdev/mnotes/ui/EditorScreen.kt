@@ -966,9 +966,10 @@ private fun GeoStripItems(ed: Editor, set: com.mdev.mnotes.data.Settings, vertic
     val sz = barSize(set); val isz = barIcon(set)
     val scroll = rememberScrollState()
     Lin(vertical, Modifier.padding(4.dp).then(if (vertical) Modifier.verticalScroll(scroll) else Modifier.horizontalScroll(scroll))) {
-        com.mdev.mnotes.core.geom.GeoTool.Kind.entries.forEachIndexed { i, k ->
-            // Grupy: okręgi i punkty, proste i kąty, przecięcia, trójkąt, przekształcenia.
-            if (i == 3 || i == 8 || i == 12 || i == 16) BarSep(vertical)
+        val kinds = com.mdev.mnotes.core.geom.GeoTool.Kind.entries
+        kinds.forEachIndexed { i, k ->
+            // Grupy: okręgi i punkty, proste i kąty, przecięcia, trójkąt i wielokąty, przekształcenia.
+            if (i > 0 && kinds[i - 1].group != k.group) BarSep(vertical)
             ToolBtn(T.t(k.pl, k.en), { ed.geoChoose(k) }, selected = ed.geoKind == k, size = sz) { c -> GlyphCanvas(GeoGlyphParts.parts(k), c, c, Modifier.size(isz + 2.dp)) }
         }
     }
@@ -987,28 +988,48 @@ private fun androidx.compose.foundation.layout.BoxScope.GeoHint(ed: Editor) {
                 if (ed.geoInputs.isNotEmpty()) IconBtn(Icons.Rounded.Close, T.t("Zacznij wskazywanie od nowa", "Start picking again"), { ed.geoReset() }, size = 30.dp, iconSize = 16.dp)
                 else Spacer(Modifier.width(10.dp))
             }
-            // 2c-A8: kąt obrotu — typowe wartości i własna.
-            if (ed.geoKind == com.mdev.mnotes.core.geom.GeoTool.Kind.ROTATE) Row(
+            // 2c-A8: kąt obrotu — typowe wartości i własna; 3c-B2: tak samo części odcinka, boki wielokąta i skala.
+            val param = ed.geoKind.param
+            if (param != com.mdev.mnotes.core.geom.GeoTool.Param.NONE) Row(
                 Modifier.padding(start = 10.dp, end = 10.dp, bottom = 8.dp).horizontalScroll(rememberScrollState()),
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
             ) {
-                for (a in GEO_ANGLES) Chip("${a.toInt()}°", ed.geoAngle == a, { ed.geoAngle = a })
-                val own = ed.geoAngle !in GEO_ANGLES
-                Chip(if (own) com.mdev.mnotes.core.geom.ConstructOps.deg(ed.geoAngle, T.pl) else T.t("Inny…", "Other…"), own, { custom = true })
+                when (param) {
+                    com.mdev.mnotes.core.geom.GeoTool.Param.ANGLE -> {
+                        for (a in GEO_ANGLES) Chip("${a.toInt()}°", ed.geoAngle == a, { ed.geoAngle = a })
+                        val own = ed.geoAngle !in GEO_ANGLES
+                        Chip(if (own) com.mdev.mnotes.core.geom.ConstructOps.deg(ed.geoAngle, T.pl) else T.t("Inny…", "Other…"), own, { custom = true })
+                    }
+                    com.mdev.mnotes.core.geom.GeoTool.Param.PARTS -> for (n in GEO_PARTS) Chip(T.t("na $n", "into $n"), ed.geoParts == n, { ed.geoParts = n })
+                    com.mdev.mnotes.core.geom.GeoTool.Param.SIDES -> for (n in GEO_SIDES) Chip(if (n < 5) T.t("$n boki", "$n sides") else T.t("$n boków", "$n sides"),ed.geoSides == n, { ed.geoSides = n })
+                    com.mdev.mnotes.core.geom.GeoTool.Param.SCALE -> for (s in GEO_SCALES) Chip(GeoScaleLabel(s), ed.geoScale == s, { ed.geoScale = s })
+                    com.mdev.mnotes.core.geom.GeoTool.Param.NONE -> {}
+                }
             }
         }
     }
-    if (custom) GeoAngleDialog(ed.geoAngle, { custom = false }) { ed.geoAngle = it; custom = false }
+    val rotate = ed.geoKind == com.mdev.mnotes.core.geom.GeoTool.Kind.ROTATE
+    if (custom) GeoAngleDialog(ed.geoAngle, rotate, { custom = false }) { ed.geoAngle = it; custom = false }
 }
 
 private val GEO_ANGLES = listOf(30f, 45f, 60f, 90f, 120f, 180f)
+private val GEO_PARTS = listOf(2, 3, 4, 5, 6, 8, 10)
+private val GEO_SIDES = listOf(3, 4, 5, 6, 8, 10, 12)
+private val GEO_SCALES = listOf(-2f, -1f, -0.5f, 0.5f, 1.5f, 2f, 3f)
 
-/** Własny kąt obrotu w stopniach (także ujemny — w drugą stronę). */
+/** Skala jednokładności na chipie: „×2”, „×½”, „×(−1)”. */
+private fun GeoScaleLabel(s: Float): String {
+    val a = kotlin.math.abs(s)
+    val v = when (a) { 0.5f -> "½"; 1.5f -> T.t("1,5", "1.5"); else -> a.toInt().toString() }
+    return if (s < 0) "×(−$v)" else "×$v"
+}
+
+/** Własny kąt w stopniach (także ujemny — w drugą stronę); [rotate] — kąt obrotu, inaczej kąt przy punkcie. */
 @Composable
-private fun GeoAngleDialog(start: Float, onDismiss: () -> Unit, onPick: (Float) -> Unit) {
+private fun GeoAngleDialog(start: Float, rotate: Boolean, onDismiss: () -> Unit, onPick: (Float) -> Unit) {
     var text by remember { mutableStateOf(com.mdev.mnotes.core.geom.ConstructOps.deg(start, T.pl).removeSuffix("°")) }
     val value = text.trim().replace(',', '.').toFloatOrNull()?.takeIf { it.isFinite() && kotlin.math.abs(it) <= 360f && it != 0f }
-    MDialog(T.t("Kąt obrotu", "Rotation angle"), onDismiss, confirm = "OK", onConfirm = { value?.let(onPick) }, confirmEnabled = value != null) {
+    MDialog(if (rotate) T.t("Kąt obrotu", "Rotation angle") else T.t("Miara kąta", "Angle size"), onDismiss, confirm = "OK", onConfirm = { value?.let(onPick) }, confirmEnabled = value != null) {
         androidx.compose.material3.OutlinedTextField(
             text, { text = it }, singleLine = true, suffix = { Text("°") },
             supportingText = { Text(T.t("Od −360 do 360; ujemny obraca w drugą stronę", "From −360 to 360; negative turns the other way")) },

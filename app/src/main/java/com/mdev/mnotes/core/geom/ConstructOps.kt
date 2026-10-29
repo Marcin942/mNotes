@@ -238,7 +238,10 @@ object ConstructOps {
         fun circle(c: Circle) { out += ConstructOps.circle(c, col, w); circs += c }
         /** Okrąg z zaznaczenia (nie rysujemy go, ale nazwa nie może na nim leżeć). */
         fun around(c: Circle) { circs += c }
-        fun dot(p: P, name: String) { out += ConstructOps.dot(p, col, w); marks += Triple(name, p, dotSize(w)) }
+        /** Kropka z nazwą [name]; null — bez nazwy (np. punkty podziału odcinka). */
+        fun dot(p: P, name: String?) { out += ConstructOps.dot(p, col, w); if (name != null) marks += Triple(name, p, dotSize(w)) }
+        /** Wielokąt zamknięty ciągłą kreską (wielokąt foremny, 3c-B2). */
+        fun poly(ps: List<P>) { out += polygon(ps, col, w); for (i in ps.indices) segs += Line(ps[i], ps[(i + 1) % ps.size]) }
         /** Nazwa istniejącego punktu (wierzchołek, kropka z zaznaczenia o średnicy [dot]). */
         fun name(p: P, name: String, dot: Float = 0f) { marks += Triple(name, p, dot) }
         fun done(): List<Element> {
@@ -316,6 +319,12 @@ object ConstructOps {
 
     private fun line(l: Line, color: Int, width: Float, helper: Boolean = false) =
         Stroke(Ids.next(), PenKind.BALLPOINT, color, if (helper) width * 0.7f else width, floatArrayOf(l.a.x, l.a.y, 1f, l.b.x, l.b.y, 1f), poly = true, line = if (helper) LineStyle.DASHED else LineStyle.SOLID)
+
+    private fun polygon(ps: List<P>, color: Int, width: Float): Stroke {
+        val pts = FloatArray(3 * (ps.size + 1))
+        for (k in 0..ps.size) { val p = ps[k % ps.size]; pts[3 * k] = p.x; pts[3 * k + 1] = p.y; pts[3 * k + 2] = 1f }
+        return Stroke(Ids.next(), PenKind.BALLPOINT, color, width, pts, poly = true)
+    }
 
     private fun circle(c: Circle, color: Int, width: Float): Stroke {
         val n = 48

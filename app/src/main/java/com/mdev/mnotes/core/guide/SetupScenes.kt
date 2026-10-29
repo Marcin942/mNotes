@@ -65,6 +65,7 @@ object SetupScenes {
         SetupGuide.Sample.DONE -> emptyList()
         SetupGuide.Sample.WRITE -> if (p.id == "smoothing") smoothing(s.get("pen.smoothing")) else straighten(s.get("input.hold_to_shape") != 0)
         SetupGuide.Sample.ERASER -> if (p.id == "lasso") lasso(s.get("lasso.touch") != 0) else eraser(s.get("eraser.mode"))
+        SetupGuide.Sample.SNIP -> snip(s.get("snip.rect") != 0)
         SetupGuide.Sample.GESTURES -> gestures(p.id, s)
         SetupGuide.Sample.MATH -> math(p.id, s)
         SetupGuide.Sample.VIEW -> if (p.id == "minimap") minimap(s.get("view.minimap") != 0) else margin(s.get("view.scroll_margin") != 0)
@@ -302,6 +303,43 @@ object SetupScenes {
         // Drugi okrąg pętla tylko zahacza: wybrany dopiero przy „wszystko, czego dotknie”.
         out += Line(circle(210f, 110f, 28f), 2f, if (touch) Role.ACCENT else Role.INK)
         out += Line(circle(135f, 110f, 70f, wobble = 4f), 1.5f, Role.MUTED)
+        return out
+    }
+
+    /**
+     * Wycinek (3c-B4): slajd z wykresem po lewej, notatki po prawej. Prostokąt wycina ostry kawałek slajdu z jego tłem
+     * (zakrywa linie notatek), lasso — tylko to, co w pętli (linie notatek widać dookoła).
+     */
+    fun snip(rect: Boolean): List<Shape> {
+        val out = ArrayList<Shape>()
+        frame(out)
+        // Notatki: pionowa kartka w linie z dwoma wierszami pisma.
+        out += Box(170f, 20f, W - 20f, H - 20f, 6f, Role.PAPER)
+        lines(out, 170f, 20f, W - 20f, H - 20f, 1)
+        out += Line(scribble(182f, 288f, 34f, amp = 2.6f, seed = 1), 1.8f, Role.INK)
+        out += Line(scribble(182f, 262f, 50f, amp = 2.6f, seed = 3), 1.8f, Role.INK)
+        // Slajd: poziomy, z tytułem i słupkami.
+        out += Box(20f, 36f, 152f, 120f, 4f, Role.PAPER)
+        out += Box(20f, 36f, 152f, 120f, 4f, Role.FRAME, outline = true)
+        out += Line(scribble(30f, 96f, 47f, amp = 1.8f, seed = 2), 1.6f, Role.MUTED)
+        out += Label(20f, 134f, 9f, "slajd", "slide", Role.MUTED)
+        fun chart(dx: Float, dy: Float) {
+            out += Line(floatArrayOf(46f + dx, 60f + dy, 46f + dx, 106f + dy, 98f + dx, 106f + dy), 1.2f, Role.INK)
+            out += Box(52f + dx, 86f + dy, 62f + dx, 106f + dy, 1f, Role.INK)
+            out += Box(68f + dx, 74f + dy, 78f + dx, 106f + dy, 1f, Role.INK)
+            out += Box(84f + dx, 64f + dy, 94f + dx, 106f + dy, 1f, Role.INK)
+        }
+        chart(0f, 0f)
+        // Wstawiony wycinek przesunięty o (150, 20): tło slajdu tylko w obrysie wycinka.
+        if (rect) {
+            out += Box(188f, 76f, 254f, 134f, 1f, Role.PAPER)
+            out += Box(188f, 76f, 254f, 134f, 1f, Role.MUTED, outline = true)
+        } else out += Dot(221f, 106f, 31f, Role.PAPER)
+        chart(150f, 20f)
+        // Obrys na slajdzie i droga wycinka.
+        if (rect) out += Box(38f, 56f, 104f, 114f, 2f, Role.ACCENT, outline = true)
+        else out += Line(circle(71f, 86f, 32f, wobble = 3f), 1.6f, Role.ACCENT)
+        arrow(out, 110f, 84f, 180f, 98f, Role.ACCENT)
         return out
     }
 

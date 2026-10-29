@@ -226,6 +226,7 @@ Wszystko poniżej: kod + testy JVM, **bez testu na tablecie**. Gałęzie `noc/*`
 - [x] 3c-A6 Wyszukiwanie ustawień frazami podobnymi: wypełniacze, opisy problemu (`SettingsPhrases.RULES`), literówki z „Czy chodziło o…”, ranking (`SettingsSearchTest`, 51 zapytań na prawdziwych wierszach)
 - [x] 3c-A10 Przewodnik po ustawieniach (projekt `docs/features/PRZEWODNIK-USTAWIEN.md`): 7 stron startu po jednej decyzji z żywą próbką, 6 tematów „Poznaj więcej”, wybór od razu jako zwykłe ustawienie, powrót w to samo miejsce, nowa instalacja raz, stara tylko propozycja; podglądy `docs/podglad/przewodnik-ustawienia-*.png` (`core/guide/SetupGuide`, `SetupScenes`, `SetupGuideTest`)
 - [x] 3c-A17a Wyskakujące opcje narzędzi (gumka, lasso, laser, pędzel formatu) gasną po czasie ustawionym osobno dla każdego narzędzia: nie gasną / 2 / 4 / 6 / 8 s, dotknięcie menu liczy od nowa (`core/layout/ToolPopups`, `ToolPopupsTest`)
+- [x] 3c-A15 Język PL/EN: Ustawienia → Język także w systemowym „Języku aplikacji” Androida 13+ (`locales_config.xml`, uzgadnianie w obie strony `core/prefs/AppLanguage`), zmiana bez odtwarzania ekranu, przełącznik „English/Polski” na pierwszej stronie przewodnika; `TranslationsTest` pilnuje, że każdy polski napis UI ma angielską parę (`AppLanguageTest`)
 - [x] 3c-A17b Przytrzymany przycisk paska → „Ustawienia tej funkcji” (wyszukiwarka z kotwicą `core/search/SettingsAnchors`), wyłącznik „Przytrzymanie otwiera ustawienia”, pokazane w przewodniku (`SettingsSearchTest`)
 
 ### Pomysły Fable na później (A2-14; `plan/POMYSLY-FABLE.md`, bez wdrażania w fazie 2)

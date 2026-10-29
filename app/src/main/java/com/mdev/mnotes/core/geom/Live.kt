@@ -41,6 +41,31 @@ class Live {
      */
     fun follow(pageId: String, before: PageContent, after: PageContent): ElementsEdit? {
         val links = pages[pageId] ?: return null
+        val content = run(links, before, after, commit = true) ?: return null
+        if (links.isEmpty()) pages.remove(pageId)
+        return if (content === after) null else ElementsEdit.diff(after, content)
+    }
+
+    /** Czy któreś z [ids] jest wejściem zależności na stronie [pageId] (przeciąganie go coś przeliczy). */
+    fun drives(pageId: String, ids: Set<Int>): Boolean = pages[pageId]?.any { l -> l.inputs.any { it in ids } } == true
+
+    /**
+     * 3c-B2: podgląd w trakcie przeciągania — przeliczone wyniki dla treści [after] (jeszcze nie zapisanej) bez zmiany
+     * stanu: zależności się nie zrywają, a wyniki nie dostają nowych id. Pusta lista — nic do pokazania.
+     */
+    fun preview(pageId: String, before: PageContent, after: PageContent): List<Element> {
+        val links = pages[pageId] ?: return emptyList()
+        val content = run(ArrayList(links), before, after, commit = false) ?: return emptyList()
+        if (content === after) return emptyList()
+        val was = after.elements.associateBy { it.id }
+        return content.elements.filter { was[it.id] !== it }
+    }
+
+    /**
+     * Przeliczenie zależności [links] po zmianie [before] → [after]; null — nic nie dotknęło wejść ani wyników.
+     * [commit]: zerwane zależności znikają z [links], a wyniki o innym składzie dostają nowe id na stałe.
+     */
+    private fun run(links: MutableList<Link>, before: PageContent, after: PageContent, commit: Boolean): PageContent? {
         val ids = HashSet<Int>()
         for (l in links) { ids.addAll(l.inputs); ids.addAll(l.outputs) }
         val was = index(before, ids)
@@ -53,10 +78,10 @@ class Live {
         while (it.hasNext()) {
             val l = it.next()
             val ins = l.inputs.map { cur[it] }
-            if (ins.any { it == null } || l.outputs.any { now[it] == null }) { it.remove(); continue }
+            if (ins.any { it == null } || l.outputs.any { now[it] == null }) { if (commit) it.remove(); continue }
             val moved = l.inputs.any { !sameShape(was[it], cur[it]!!) }
             if (!moved) {
-                if (l.outputs.any { !sameShape(was[it], now[it]!!) }) it.remove()
+                if (commit && l.outputs.any { !sameShape(was[it], now[it]!!) }) it.remove()
                 continue
             }
             val fresh = l.rebuild(ins.map { it!! })
@@ -70,11 +95,10 @@ class Live {
                 content = content.apply(ElementsEdit.remove(content, l.outputs.toSet()))
                 content = content.apply(ElementsEdit.add(content, fresh))
                 for (o in l.outputs) cur.remove(o)
-                l.outputs = fresh.map { it.id }
+                if (commit) l.outputs = fresh.map { it.id }
             }
         }
-        if (links.isEmpty()) pages.remove(pageId)
-        return if (content === after) null else ElementsEdit.diff(after, content)
+        return content
     }
 
     private fun index(c: PageContent, ids: Set<Int>): HashMap<Int, Element> {

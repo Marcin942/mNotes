@@ -115,6 +115,32 @@ class GeoSnapTest {
         assertEquals(60f, centre.bounds.cx, 0.1f); assertEquals(60f, centre.bounds.cy, 0.1f)
     }
 
+    @Test fun dragPreviewMatchesTheResultAndChangesNothing() {
+        // Podgląd w trakcie przeciągania (3c-B2 do NAU-3): te same wyniki co po puszczeniu, a zależność trwa bez zmian.
+        val live = Live()
+        val a = poly(0f, 0f, 100f, 100f); val b = poly(0f, 100f, 100f, 0f)
+        var content = PageContent.of(listOf(a, b))
+        val pk = GeoTool.pickFrom(content.elements, 50f, 50f, 12f, In.POINT)!!
+        val other = GeoTool.pickFrom(content.elements, 90f, 50f, 12f, In.POINT)!!
+        val out = GeoTool.build(Kind.COMPASS, listOf(pk.input, other.input), 0, 1.2f, names = false)
+        content = content.apply(ElementsEdit.add(content, out))
+        live.add(page, pk.ids, out.map { it.id }) { cur ->
+            val byId = cur.associateBy { it.id }
+            GeoTool.build(Kind.COMPASS, listOf(GeoTool.resolvePick(In.POINT, pk, byId) ?: return@add null, other.input), 0, 1.2f, names = false)
+        }
+        assertTrue(live.drives(page, setOf(b.id)))
+        val before = content
+        val after = replaced(before, poly(0f, 60f, 100f, 60f, id = b.id))
+        val shown = live.preview(page, before, after)
+        assertEquals(out.map { it.id }.toSet(), shown.map { it.id }.toSet())
+        val fin = after.apply(live.follow(page, before, after)!!)
+        for (e in shown) assertEquals((fin.byId(e.id) as Stroke).bounds.cx, e.bounds.cx, 1e-3f)
+        // Usunięcie wejścia: podgląd nic nie pokazuje i nie zrywa zależności; dopiero zapis ją zrywa.
+        val gone = before.apply(ElementsEdit.remove(before, setOf(b.id)))
+        assertTrue(live.preview(page, before, gone).isEmpty())
+        assertEquals(1, live.links(page).size)
+    }
+
     @Test fun divideRegularAndSegment() {
         val l = Input.Ln(Construct.Line(P(0f, 0f), P(90f, 0f)))
         val thirds = dots(GeoTool.build(Kind.DIVIDE, listOf(l), 0, 1f, prm = GeoTool.Params(parts = 3)))

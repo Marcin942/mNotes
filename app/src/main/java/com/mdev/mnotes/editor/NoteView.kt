@@ -852,6 +852,7 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
             c.restoreToCount(s1)
         }
         if (lLifting && lPage in 0 until layout.count && !liftOut) drawLifted(c, true)
+        drawLivePreview(c)
         drawGhost(c)
     }
 
@@ -3768,18 +3769,49 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
                         Affine.rotation(a, lBounds.cx, lBounds.cy)
                     }
                 }
+                updateLivePreview()
                 ed.viewTick++
             }
             LM.VERTEX -> {
                 if (!lLifting) { if (!toolMoved) return; liftSelection() }
                 vertexDrag(px, py)
+                updateLivePreview()
             }
             LM.RESIZE -> {
                 if (!lLifting) { if (!toolMoved) return; liftSelection() }
                 resizeDrag(px, py)
+                updateLivePreview()
             }
             LM.NONE -> {}
         }
+    }
+
+    /** 3c-B2: wyniki żywych konstrukcji (NAU-3) przeliczone dla przeciąganego zaznaczenia — podgląd przed puszczeniem. */
+    private var livePreview: List<Element> = emptyList()
+
+    private fun updateLivePreview() {
+        val orig = lOrig; val page = doc.pages.getOrNull(lPage)
+        if (orig == null || page == null || !ed.live.drives(page.id, lIds) || dropPage() != lPage) { livePreview = emptyList(); return }
+        val vertex = lm == LM.VERTEX || lm == LM.RESIZE
+        val map = HashMap<Int, Element>(lEls.size * 2)
+        for (e in lEls) map[e.id] = if (vertex) e else e.transformed(lM)
+        livePreview = ed.live.preview(page.id, orig, PageContent.of(orig.elements.map { map[it.id] ?: it }))
+    }
+
+    /** Podgląd [livePreview] półprzezroczyście na stronie przeciągania (stare wyniki zostają pod spodem do puszczenia). */
+    private fun drawLivePreview(c: Canvas) {
+        if (livePreview.isEmpty() || !lLifting || lPage !in 0 until layout.count) return
+        val spec = doc.pages[lPage].spec
+        var b = Bounds.EMPTY
+        for (e in livePreview) b = b.union(e.bounds)
+        val s = c.save()
+        c.translate(layout.left(lPage), layout.top(lPage))
+        val pad = 4f / zoom
+        c.saveLayerAlpha(b.l - pad, b.t - pad, b.r + pad, b.b + pad, 0xA0)
+        renderer.theme = themeFor(spec); renderer.themePhotos = settings.pageThemePhotos
+        for (el in livePreview) renderer.drawElement(c, doc.id, el, zoom, false, spec.darkPaper)
+        renderer.theme = null
+        c.restoreToCount(s)
     }
 
     private fun lassoUp(cancel: Boolean) {
@@ -3836,6 +3868,7 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
         val wasMove = lm == LM.MOVE
         val tgt = if (cancel) lPage else dropPage()
         lLifting = false
+        livePreview = emptyList()
         lm = LM.NONE; ln = 0
         vBase = null; rFrame = null; tBase = null; shapeLabel = null
         if (page == null || orig == null || lifted == null) return

@@ -176,6 +176,11 @@ class Settings(ctx: Context) {
     var pageTheme by Pref("pages.theme", com.mdev.mnotes.core.color.ThemeMap.MIXED)
     var pageThemePhotos by Pref("pages.theme_photos", false)
     var exportAsScreen by Pref("export.as_screen", false)
+    // 3c-A5: kolory we wszystkich eksportach i w schowku: ThemeMap.MIXED („jak powstały”) / LIGHT / DARK; −1 = z dawnego export.as_screen
+    var exportThemeSaved by Pref("export.theme", -1)
+    var exportTheme: Int
+        get() = com.mdev.mnotes.core.color.ThemeMap.exportMode(exportThemeSaved, exportAsScreen, pageTheme)
+        set(v) { exportThemeSaved = v }
     var mathText by Pref("text.math_unicode", true)      // L2: \alpha, x^2, a_1 → α, x², a₁ w polach tekstu
     var constructNames by Pref("construct.names", true)  // L1 (A2-9): konstrukcje podpisują punkty A, B, C, O, H…
     var paletteRecent by Pref("palette.recent", "")      // pomysł Fable 2: ostatnio użyte polecenia palety (id po przecinku)

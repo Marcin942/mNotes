@@ -539,7 +539,8 @@ class Editor(val ctx: Context, val nbId: String) {
         val content = doc.content(p)
         val pageId = p.id
         repo.io.execute {
-            val png = renderPng(spec, content, plan)
+            // obraz wstawiany na stronę zostaje w jej kolorach (ekran i tak go zamieni); do schowka — w trybie eksportu
+            val png = renderPng(spec, content, plan, if (toClipboard) settings.exportTheme else null)
             if (png == null) { view?.post { say(T.t("Nie udało się utworzyć wycinka", "Could not create the snip")) }; return@execute }
             if (toClipboard) {
                 val ok = pngToClipboard(png, "wycinek")
@@ -560,8 +561,8 @@ class Editor(val ctx: Context, val nbId: String) {
     }
 
     /**
-     * FB6: strona [i] jako PNG do schowka systemu (wklejenie do czatu grupy albo pracy bez eksportu pliku). Strona w
-     * oryginale, jak w eksporcie; tablica w kadrze treści.
+     * FB6: strona [i] jako PNG do schowka systemu (wklejenie do czatu grupy albo pracy bez eksportu pliku). Kolory jak w
+     * eksporcie (3c-A5: ustawienie `export.theme` — jak powstała, jasna albo ciemna); tablica w kadrze treści.
      */
     fun copyPageAsImage(i: Int) {
         val p = doc.pages.getOrNull(i) ?: return
@@ -570,34 +571,46 @@ class Editor(val ctx: Context, val nbId: String) {
         val plan = Snip.pagePlan(spec.w, spec.h, spec.board, content.bounds)
             ?: return say(T.t("Tablica jest pusta — nie ma czego kopiować", "The board is empty — nothing to copy"))
         repo.io.execute {
-            val ok = renderPng(spec, content, plan)?.let { pngToClipboard(it, "strona-${i + 1}") } ?: false
+            val ok = renderPng(spec, content, plan, settings.exportTheme)?.let { pngToClipboard(it, "strona-${i + 1}") } ?: false
             view?.post { say(if (ok) T.t("Strona ${i + 1} skopiowana jako obraz", "Page ${i + 1} copied as an image") else T.t("Nie udało się skopiować strony", "Could not copy the page")) }
         }
     }
 
-    /** Prostokąt strony z planu [plan] jako PNG: papier, wzór, tło PDF i elementy. Wołane z wątku tła; null przy błędzie. */
-    private fun renderPng(spec: PageSpec, content: PageContent, plan: Snip.Plan): ByteArray? = runCatching {
+    /**
+     * Prostokąt strony z planu [plan] jako PNG: papier, wzór, tło PDF i elementy; [theme] — tryb stron z [ThemeMap]
+     * (null = kolory zapisane w stronie). Wołane z wątku tła; null przy błędzie.
+     */
+    private fun renderPng(spec: PageSpec, content: PageContent, plan: Snip.Plan, theme: Int?): ByteArray? = runCatching {
         val bmp = android.graphics.Bitmap.createBitmap(plan.wPx, plan.hPx, android.graphics.Bitmap.Config.ARGB_8888)
         val c = android.graphics.Canvas(bmp)
         val r = plan.rect; val sc = plan.scale
         c.scale(sc, sc); c.translate(-r.l, -r.t)
         val renderer = com.mdev.mnotes.render.PageRenderer(app.assets)
+        val t = theme?.let { com.mdev.mnotes.core.color.ThemeMap.forPage(spec.paper, spec.inverted, it) }
+        renderer.theme = t
+        renderer.themePhotos = settings.pageThemePhotos
         renderer.drawPaper(c, spec, sc, null)
         spec.pdf?.let { pdf ->
             app.pdf.renderTile(nbId, pdf.asset, pdf.page, sc, Math.round(r.l * sc), Math.round(r.t * sc), plan.wPx, plan.hPx)?.let { bg ->
-                c.drawBitmap(bg, null, android.graphics.RectF(r.l, r.t, r.l + plan.wPx / sc, r.t + plan.hPx / sc), null)
+                val paint = renderer.themeImageFilter()?.let { f -> android.graphics.Paint().apply { colorFilter = f } }
+                c.drawBitmap(bg, null, android.graphics.RectF(r.l, r.t, r.l + plan.wPx / sc, r.t + plan.hPx / sc), paint)
             }
         }
-        renderer.drawElements(c, nbId, content, 0, r, sc, true, spec.darkPaper)
+        renderer.drawElements(c, nbId, content, 0, r, sc, true, t?.toDark ?: spec.darkPaper)
         java.io.ByteArrayOutputStream().also { bmp.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it); bmp.recycle() }.toByteArray()
     }.getOrNull()
 
     /** PNG do schowka przez FileProvider: inne aplikacje wklejają obraz, a nie ścieżkę. Wołane z wątku tła. */
     /** FB13: zaznaczenie jako kod TikZ w schowku (tekst, więc wkleja się w każdym edytorze LaTeX-a, też w przeglądarce). */
     fun copySelAsTikz() {
-        val els = selElements()
-        if (els.isEmpty()) return
-        val r = TikzExport.picture(els)
+        val raw = selElements()
+        if (raw.isEmpty()) return
+        // 3c-A5: kolory jak w eksporcie; ciemna strona z tłem pod rysunkiem
+        val spec = selPage()?.spec
+        val t = spec?.let { com.mdev.mnotes.core.color.ThemeMap.forPage(it.paper, it.inverted, settings.exportTheme) }
+        val els = if (t == null) raw else raw.map(t::shown)
+        val paper = if (spec != null && (t?.toDark ?: spec.darkPaper)) t?.dstPaper ?: spec.paper else null
+        val r = TikzExport.picture(els, paper = paper)
         val cm = ctx.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
         cm.setPrimaryClip(clip(android.content.ClipData.newPlainText("TikZ", r.code)))
         say(

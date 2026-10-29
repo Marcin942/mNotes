@@ -127,11 +127,10 @@ fun ExportDialog(nb: String, currentPage: Int, prepare: () -> Unit, onDismiss: (
     val exporter = remember { Exporter(app.repo, app.assets, app.pdf) }
     var fmt by remember { mutableStateOf(ExportFormat.PDF) }
     val set = app.settings
-    // Opcja ma sens tylko, gdy ekran pokazuje strony inaczej, niż powstały (tryb stron albo F11 na którejś stronie)
-    val themed = remember(nb) { set.pageTheme != ThemeMap.MIXED || app.repo.meta(nb)?.pages?.any { it.spec.inverted } == true }
-    var asScreen by remember { mutableStateOf(set.exportAsScreen) }
-    val raster = fmt == ExportFormat.PDF || fmt == ExportFormat.PNG
-    exporter.screenTheme = if (themed && asScreen && raster) set.pageTheme else null
+    // 3c-A5: kolory stron we wszystkich formatach z kolorami (pamiętane, to samo ustawienie co dla schowka)
+    var theme by remember { mutableIntStateOf(set.exportTheme) }
+    val colored = fmt != ExportFormat.MD && fmt != ExportFormat.MNOTES
+    exporter.theme = theme
     exporter.screenPhotos = set.pageThemePhotos
     var scopeMode by remember { mutableStateOf(ExportScope.ALL) }
     var spanText by remember { mutableStateOf("${currentPage + 1}") }
@@ -274,6 +273,22 @@ fun ExportDialog(nb: String, currentPage: Int, prepare: () -> Unit, onDismiss: (
             for (f in ExportFormat.entries) Chip(fmtLabel(f), fmt == f, { if (!busy) fmt = f })
         }
         Text(fmtInfo(fmt), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 8.dp))
+        if (colored) {
+            SectionLabel(T.t("Kolory stron", "Page colours"))
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                for ((m, label) in listOf(ThemeMap.MIXED to T.t("Jak powstały", "As made"), ThemeMap.LIGHT to T.t("Jasne", "Light"), ThemeMap.DARK to T.t("Ciemne", "Dark"))) {
+                    Chip(label, theme == m, { if (!busy) { theme = m; set.exportTheme = m } })
+                }
+            }
+            Text(
+                when (theme) {
+                    ThemeMap.LIGHT -> T.t("Ciemne strony rozjaśnione jak w trybie jasnym (do druku).", "Dark pages lightened as in light mode (for printing).")
+                    ThemeMap.DARK -> T.t("Jasne strony przyciemnione jak w trybie ciemnym (do czytania na ekranie).", "Light pages darkened as in dark mode (for reading on screen).")
+                    else -> T.t("Każda strona w swoich kolorach, jak powstała.", "Each page in its own colours, as made.")
+                } + T.t(" Tak samo kopiowanie do schowka.", " Copying to the clipboard follows this too."),
+                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 4.dp),
+            )
+        }
         if (canScope) {
             SectionLabel(T.t("Zakres", "Range"))
             FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -330,9 +345,6 @@ fun ExportDialog(nb: String, currentPage: Int, prepare: () -> Unit, onDismiss: (
                         ToggleRow(T.t("Osobny plik dla każdej zakładki (ZIP, ${outParts.size} plików)", "Separate file per bookmark (ZIP, ${outParts.size} files)"), splitFiles) { if (!busy) splitFiles = it }
                     }
                 }
-            }
-            if (themed && raster) {
-                ToggleRow(T.t("Kolory jak na ekranie (tryb ciemny/jasny stron)", "Colours as on screen (dark/light pages)"), asScreen) { if (!busy) { asScreen = it; set.exportAsScreen = it } }
             }
             if (blank.isNotEmpty()) {
                 ToggleRow(T.t("Pomijaj puste strony (${blank.size} w zeszycie)", "Skip blank pages (${blank.size} in notebook)"), skipBlank) { if (!busy) skipBlank = it }

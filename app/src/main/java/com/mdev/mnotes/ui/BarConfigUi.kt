@@ -73,6 +73,7 @@ internal fun barName(id: String): String = when (id) {
     "ruler" -> T.t("Linijka", "Ruler")
     "protractor" -> T.t("Kątomierz", "Protractor")
     "geometry" -> T.t("Geometria (konstrukcje)", "Geometry (constructions)")
+    "snip" -> T.t("Wycinek (fragment strony jako obraz)", "Snip (page area as an image)")
     else -> penOf(id)?.let { penName(it) } ?: id
 }
 
@@ -106,6 +107,7 @@ private fun BarIcon(id: String, set: com.mdev.mnotes.data.Settings, ink: android
         BarIcons.Kind.LASSO -> LassoGlyph(set.lassoRect, ink, m)
         BarIcons.Kind.CURVE -> BezierGlyph(ink, m)
         BarIcons.Kind.PROTRACTOR -> ProtractorGlyph(ink, m)
+        BarIcons.Kind.SNIP -> SnipGlyph(!set.snipRect, ink, m)
         BarIcons.Kind.VECTOR -> barVector(id)?.let { Icon(it, null, Modifier.size(22.dp), tint = ink) }
         null -> {}
     }

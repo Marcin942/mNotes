@@ -1,6 +1,8 @@
 package com.mdev.mnotes.ui
 
 import androidx.compose.foundation.Canvas
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.ContentCut
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -12,6 +14,7 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.translate
 
 /*
  * Ikony narzędzi rysowane w kodzie (F7): lasso, cztery tryby gumki, krzywa, kątomierz. Rysunek liczy się w siatce
@@ -20,6 +23,18 @@ import androidx.compose.ui.graphics.drawscope.Stroke
  */
 
 private fun DrawScope.u(v: Float) = v * size.minDimension / 24f
+
+/** Wycinek (3c-B4): nożyczki w przerywanej ramce — prostokątnej albo owalnej (kształt lassa). */
+@Composable
+fun SnipGlyph(lasso: Boolean, color: Color, modifier: Modifier = Modifier) {
+    val cut = androidx.compose.ui.graphics.vector.rememberVectorPainter(Icons.Rounded.ContentCut)
+    Canvas(modifier) {
+        val st = Stroke(u(1.6f), cap = StrokeCap.Round, pathEffect = PathEffect.dashPathEffect(floatArrayOf(u(2.6f), u(2.2f))))
+        if (lasso) drawOval(color, Offset(u(1.5f), u(2.5f)), Size(u(21f), u(19f)), style = st)
+        else drawRect(color, Offset(u(2f), u(2f)), Size(u(20f), u(20f)), style = st)
+        translate(u(5.5f), u(5.5f)) { with(cut) { draw(Size(u(13f), u(13f)), colorFilter = androidx.compose.ui.graphics.ColorFilter.tint(color)) } }
+    }
+}
 
 @Composable
 fun LassoGlyph(rect: Boolean, color: Color, modifier: Modifier = Modifier) = GlyphCanvas(ToolGlyphParts.lasso(rect), color, color, modifier)

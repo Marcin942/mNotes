@@ -21,6 +21,7 @@ object SettingsAnchors {
         "curve" -> "wygładzić w krzywą"
         "ruler", "protractor" -> "przyciągaj do równych kątów"
         "geometry" -> "przyczep do figur"
+        "snip" -> "kształt wycinka"
         else -> null
     }
 }

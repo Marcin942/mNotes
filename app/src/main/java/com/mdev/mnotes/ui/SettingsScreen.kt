@@ -404,6 +404,7 @@ private fun HelperStripPrefs(set: com.mdev.mnotes.data.Settings) {
         Triple(HelperStrip.Helper.ERASER, T.t("Menu przy gumce", "Menu by the eraser"), "gumka mazanie ścieranie tryby rozmiar zakreślacz eraser"),
         Triple(HelperStrip.Helper.LASSO, T.t("Menu przy lassie", "Menu by the lasso"), "lasso zaznaczanie kształt prostokąt pętla lasso shape"),
         Triple(HelperStrip.Helper.LASER, T.t("Menu przy laserze", "Menu by the laser"), "laser wskaźnik kolor śladu pointer colour"),
+        Triple(HelperStrip.Helper.SNIP, T.t("Menu przy wycinku", "Menu by the snip"), "wycinek nożyczki kształt prostokąt lasso podpis snip shape caption"),
     )
     for ((h, label, keys) in groups) {
         ToggleRow(label, cfg.menuFor(h), keys = "menu wyskakujące $keys popup") { set.helperMenu = cfg.withMenu(h, it) }
@@ -435,6 +436,8 @@ private fun helperItemName(i: HelperStrip.Item) = when (i) {
     HelperStrip.Item.LASSO_SHAPE -> T.t("Kształt pętli", "Loop shape")
     HelperStrip.Item.LASSO_MODE -> T.t("Co zaznacza", "What it selects")
     HelperStrip.Item.LASER_COLORS -> T.t("Kolory", "Colours")
+    HelperStrip.Item.SNIP_SHAPE -> T.t("Kształt wycinka", "Snip shape")
+    HelperStrip.Item.SNIP_CAPTION -> T.t("Podpis źródła", "Source caption")
 }
 
 @Composable
@@ -532,7 +535,7 @@ private fun EditorPrefs(set: com.mdev.mnotes.data.Settings) {
             style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(bottom = 6.dp),
         )
     }
-    Group(T.t("Gumka i lasso", "Eraser & lasso"), keys = "wymaż zaznaczanie") {
+    Group(T.t("Gumka, lasso i wycinek", "Eraser, lasso & snip"), keys = "wymaż zaznaczanie wycinek") {
         Opt(T.t("Domyślny tryb gumki", "Default eraser mode"), "eraser wymaż kasowanie pikselowa obiektowa wycinanie lasso nożyczki cut out") { Choice(listOf(T.t("Obiektowa", "Object"), T.t("Pikselowa", "Pixel"), "Lasso", T.t("Wycinanie", "Cut out")), set.eraserMode) { set.eraserMode = it } }
         Opt(T.t("Rozmiar gumki: ${set.eraserSize.toInt()} pt", "Eraser size: ${set.eraserSize.toInt()} pt"), "eraser grubość wymaż") { MSlider(set.eraserSize, 1f, 60f) { set.eraserSize = it } }
         ToggleRow(T.t("Gumka pomija zakreślacz", "Eraser ignores highlighter"), set.eraserKeepHighlighter, keys = "eraser wymaż zakreślacz marker") { set.eraserKeepHighlighter = it }
@@ -541,6 +544,11 @@ private fun EditorPrefs(set: com.mdev.mnotes.data.Settings) {
             Choice(listOf(T.t("Połowa w pętli", "Half in the loop"), T.t("Wystarczy dotknąć", "Just touch")), if (set.lassoTouch) 1 else 0) { set.lassoTouch = it == 1 }
         }
         Text(lassoModeHint(set.lassoTouch), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(bottom = 6.dp))
+        // 3c-B4: Wycinek — fragment strony (np. slajdu) jako obraz do zeszytu.
+        Opt(T.t("Kształt wycinka", "Snip shape"), "wycinek nożyczki fragment slajd obraz prostokąt lasso maska snip scissors slide image rectangle") {
+            Choice(listOf(T.t("Prostokąt", "Rectangle"), T.t("Lasso (przezroczyste tło)", "Lasso (transparent outside)")), if (set.snipRect) 0 else 1) { set.snipRect = it == 0 }
+        }
+        ToggleRow(T.t("Podpis źródła pod wycinkiem („slajd 12 · plik”)", "Source caption under the snip (“slide 12 · file”)"), set.snipCaption, keys = "wycinek podpis źródło slajd numer nazwa pliku snip caption source") { set.snipCaption = it }
         ToggleRow(T.t("Przyciągaj do siatki", "Snap to grid"), set.snapGrid, keys = "grid siatka magnes snap") { set.snapGrid = it }
         // F22 był tylko w „⋮” edytora (przegląd Fable §3.2): rodzeństwo przyciągania do siatki.
         ToggleRow(T.t("Przyczep do figur (końce linii i punkty)", "Attach to shapes (line ends and points)"), set.attach, keys = "przyczep magnes wierzchołek końce punkty figury attach snap vertex") { set.attach = it }

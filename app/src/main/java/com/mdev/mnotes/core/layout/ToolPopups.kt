@@ -6,7 +6,7 @@ package com.mdev.mnotes.core.layout
  * Zgaszone nie przeszkadza: drugie dotknięcie narzędzia i tak otwiera jego panel.
  */
 object ToolPopups {
-    enum class Tool { PAINTER, ERASER, LASSO, LASER }
+    enum class Tool { PAINTER, ERASER, LASSO, LASER, SNIP }
 
     /** Czasy do wyboru w Ustawieniach (s); 0 = nie gaśnie. */
     val STEPS = listOf(0, 2, 4, 6, 8)
@@ -44,6 +44,7 @@ object ToolPopups {
         Tool.ERASER -> HelperStrip.Helper.ERASER
         Tool.LASSO -> HelperStrip.Helper.LASSO
         Tool.LASER -> HelperStrip.Helper.LASER
+        Tool.SNIP -> HelperStrip.Helper.SNIP
         Tool.PAINTER -> null
     }
 
@@ -51,5 +52,6 @@ object ToolPopups {
         HelperStrip.Helper.ERASER -> Tool.ERASER
         HelperStrip.Helper.LASSO -> Tool.LASSO
         HelperStrip.Helper.LASER -> Tool.LASER
+        HelperStrip.Helper.SNIP -> Tool.SNIP
     }
 }

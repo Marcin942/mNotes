@@ -40,7 +40,7 @@ class SettingsSearchTest {
             "eraser" to "Domyślny tryb gumki", "painter" to "Tryb pędzla formatu", "fill" to "Wiaderko domyka",
             "pipette" to "Pobrany kolor zostaje", "lasso" to "Kształt lassa", "text" to "Grecki i indeksy",
             "laser" to "Kolor śladu lasera", "hand" to "Ponowne dotknięcie lasera", "curve" to "Trzymaj dalej",
-            "ruler" to "Przyciągaj do równych kątów", "geometry" to "Przyczep do figur",
+            "ruler" to "Przyciągaj do równych kątów", "geometry" to "Przyczep do figur", "snip" to "Kształt wycinka",
         )
         val misses = expected.mapNotNull { (id, row) ->
             val q = com.mdev.mnotes.core.search.SettingsAnchors.of(id)!!
@@ -69,6 +69,9 @@ class SettingsSearchTest {
             "oczy mnie bolą wieczorem" to "Motyw|Strony zeszytów",
             "motyw ciemny" to "Motyw",
             "gumka" to "gumki",
+            "wycinek" to "Kształt wycinka|Podpis źródła",
+            "nożyczki slajd" to "Kształt wycinka|Podpis źródła",
+            "podpis slajdu" to "Podpis źródła",
             "gumak" to "gumki",
             "rozmiar gumki" to "Rozmiar gumki",
             "gumka zakreślacz" to "Gumka pomija zakreślacz",

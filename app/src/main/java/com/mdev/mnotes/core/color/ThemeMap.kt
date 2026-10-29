@@ -103,6 +103,22 @@ object ThemeMap {
             else -> e
         }
 
+        /**
+         * 3c-A5: element w kolorach pokazanych — dla eksportów wektorowych (SVG, TikZ), które zapisują kolory, a nie
+         * piksele. Te same reguły co `PageRenderer.drawElement`: zakreślacz i wypełnienie krzywej jak zakreślacz, tekst
+         * na tle czytelny względem zamienionego tła, wiaderko jak papier; taśma i obrazy bez zmian.
+         */
+        fun shown(e: Element): Element = when (e) {
+            is Stroke -> {
+                val c = if (e.pen == PenKind.HIGHLIGHTER) highlighter(e.color) else ink(e.color)
+                val f = if (e.fill == 0) 0 else highlighter(e.fill)
+                Stroke(e.id, e.pen, c, e.width, e.pts, e.locked, e.poly, e.ellipse, e.line, e.ctrl, f)
+            }
+            is TextBox -> if (e.fill == 0) e.copy(color = ink(e.color)) else e.copy(color = textOn(e.color, e.fill), fill = surface(e.fill))
+            is FillEl -> e.copy(color = if (e.hl) highlighter(e.color) else surface(e.color))
+            else -> e
+        }
+
         /** Przekształcenie w drugą stronę (pipeta: widoczny kolor → atrament, który tak wygląda). */
         fun reverse(): Transform = transform(dstPaper, !toDark).also { it.origin = this }
     }
@@ -120,6 +136,17 @@ object ThemeMap {
         val native = Paper.isDark(paper)
         val shown = when (mode) { DARK -> true; LIGHT -> false; else -> native != inverted }
         return if (shown == native) null else transform(paper, shown)
+    }
+
+    /**
+     * 3c-A5: tryb eksportu ([MIXED] „jak powstały” = każda strona w swoim trybie, z flagą F11; [LIGHT]; [DARK]) z
+     * zapisanego ustawienia `export.theme` ([saved], −1 = jeszcze nie wybrano). Kto miał włączone dawne „Kolory jak na
+     * ekranie” ([legacyAsScreen]), dostaje tryb stron z ekranu [pageTheme]; reszta — „jak powstały”.
+     */
+    fun exportMode(saved: Int, legacyAsScreen: Boolean, pageTheme: Int): Int = when {
+        saved in MIXED..DARK -> saved
+        legacyAsScreen && pageTheme in MIXED..DARK -> pageTheme
+        else -> MIXED
     }
 
     // — OKLab (Björn Ottosson) —

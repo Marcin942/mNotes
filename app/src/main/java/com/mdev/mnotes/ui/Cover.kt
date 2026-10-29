@@ -39,6 +39,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.mdev.mnotes.editor.T
+import com.mdev.mnotes.data.CoverStars
 import com.mdev.mnotes.data.CoverStyle
 import kotlin.math.hypot
 import kotlin.math.max
@@ -115,6 +116,23 @@ fun CoverArt(color: Int, style: Int, modifier: Modifier = Modifier) {
                     var r = w * 0.2f
                     while (r < far) { drawCircle(pat, r, c, style = Stroke(max(w * 0.01f, px))); r += w * 0.14f }
                 }
+                CoverStyle.STARS, CoverStyle.STARS_BIG, CoverStyle.CONSTELLATIONS -> {
+                    // 3c-A14: gwiazdki trochę wyraźniejsze od innych wzorów (drobne), jasność każdej z układu.
+                    val lay = CoverStars.layout(style)
+                    val top = if (lightBase) 0.15f else 0.24f
+                    for (l in lay.lines) drawLine(ink.copy(alpha = top * 0.6f), Offset(l[0] * w, l[1] * h), Offset(l[2] * w, l[3] * h), max(w * 0.004f, px * 0.7f))
+                    for (s in lay.stars) {
+                        val col = ink.copy(alpha = top * s.a)
+                        val r = max(s.r * w, px * 0.7f)
+                        if (s.shape == CoverStars.Shape.DOT) drawCircle(col, r, Offset(s.x * w, s.y * h))
+                        else {
+                            val o = CoverStars.outline(s.shape, s.x * w, s.y * h, r, s.rot)
+                            val p = Path(); p.moveTo(o[0], o[1])
+                            var k = 2; while (k < o.size) { p.lineTo(o[k], o[k + 1]); k += 2 }
+                            p.close(); drawPath(p, col)
+                        }
+                    }
+                }
             }
         }
 
@@ -163,7 +181,8 @@ fun CoverPicker(cover: Int, style: Int, onCover: (Int) -> Unit, onStyle: (Int) -
     Chip(T.t("Własny kolor", "Custom colour"), open, { open = !open }, Modifier.padding(top = 10.dp))
     if (open) ColorPicker(cover, onCover, Modifier.padding(top = 8.dp))
     FlowRow(Modifier.padding(top = 10.dp), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        val names = listOf(T.t("Gładka", "Plain"), T.t("Pasy", "Stripes"), T.t("Kropki", "Dots"), T.t("Fale", "Waves"), T.t("Kratka", "Grid"), T.t("Len", "Linen"), T.t("Łuki", "Arcs"))
+        val names = listOf(T.t("Gładka", "Plain"), T.t("Pasy", "Stripes"), T.t("Kropki", "Dots"), T.t("Fale", "Waves"), T.t("Kratka", "Grid"), T.t("Len", "Linen"), T.t("Łuki", "Arcs"),
+            T.t("Gwiazdki", "Starry"), T.t("Gwiazdy", "Stars"), T.t("Gwiazdozbiory", "Constellations"))
         for (i in 0 until CoverStyle.COUNT) Chip(names[i], style == i, { onStyle(i) })
     }
 }

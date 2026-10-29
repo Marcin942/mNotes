@@ -38,7 +38,8 @@ object TikzExport {
     /** Kształt, który w TikZ ma własną postać (nie zwykła kreska odręczna). */
     fun isShape(s: Stroke) = s.poly || s.ellipse || s.ctrl != null
 
-    fun picture(els: List<Element>, freehand: Boolean = true): Result {
+    /** [paper] — kolor tła pod rysunkiem (3c-A5: strona ciemna w eksporcie); null — bez tła, jak dotąd. */
+    fun picture(els: List<Element>, freehand: Boolean = true, paper: Int? = null): Result {
         val use = els.filter { e -> if (e is Stroke) freehand || isShape(e) else e is TextBox || e is ImageEl || e is FillEl }
         var box = Bounds.EMPTY
         for (e in use) box = box.union(extent(e))
@@ -54,6 +55,13 @@ object TikzExport {
         sb.append("% mNotes: rysunek w skali 1:1 (cm). Mniejszy: [scale=0.5, every node/.style={scale=0.5}]\n")
         sb.append("\\begin{tikzpicture}[line cap=round, line join=round]\n")
         for ((rgb, name) in w.colors) sb.append(String.format(Locale.ROOT, "\\definecolor{%s}{HTML}{%06X}\n", name, rgb))
+        if (paper != null) {
+            val pad = 0.3
+            val bw = if (box.isEmpty) 0.0 else (box.r - box.l) * CM
+            val bh = if (box.isEmpty) 0.0 else (box.b - box.t) * CM
+            sb.append(String.format(Locale.ROOT, "\\definecolor{mnpaper}{HTML}{%06X}\n", paper and 0xFFFFFF))
+            sb.append("\\fill[mnpaper] (${num(-pad)},${num(-pad)}) rectangle (${num(bw + pad)},${num(bh + pad)});\n")
+        }
         sb.append(w.body)
         sb.append("\\end{tikzpicture}\n")
         return Result(sb.toString(), w.drawn, els.size - w.drawn)
@@ -286,7 +294,7 @@ object TikzExport {
             if (t.text.isBlank()) return
             drawn++
             val font = StringBuilder("\\fontsize{").append(num(t.size.toDouble())).append("}{").append(num(t.size * 1.2)).append("}\\selectfont")
-            font.append(when (t.family) { TextBox.FAMILY_SERIF -> "\\rmfamily"; TextBox.FAMILY_MONO -> "\\ttfamily"; else -> "\\sffamily" })
+            font.append(when (TextBox.generic(t.family)) { TextBox.FAMILY_SERIF -> "\\rmfamily"; TextBox.FAMILY_MONO -> "\\ttfamily"; else -> "\\sffamily" })
             if (t.bold) font.append("\\bfseries")
             if (t.italic) font.append("\\itshape")
             val o = arrayListOf(

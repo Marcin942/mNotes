@@ -318,7 +318,11 @@ class PageRenderer(private val assets: Assets?) {
 
     fun typeface(family: Int, style: Int): Typeface {
         val st = (if (style and TextBox.STYLE_BOLD != 0) Typeface.BOLD else 0) or (if (style and TextBox.STYLE_ITALIC != 0) Typeface.ITALIC else 0)
-        val base = when (family) {
+        // Dołączona rodzina ma pogrubienie we własnej wadze; kursywę pochyla system.
+        AppFonts.typeface(family, style and TextBox.STYLE_BOLD != 0)?.let { tf ->
+            return if (style and TextBox.STYLE_ITALIC != 0) Typeface.create(tf, Typeface.ITALIC) else tf
+        }
+        val base = when (TextBox.generic(family)) {
             TextBox.FAMILY_SERIF -> Typeface.SERIF
             TextBox.FAMILY_MONO -> Typeface.MONOSPACE
             TextBox.FAMILY_HAND -> Typeface.create("cursive", Typeface.NORMAL)

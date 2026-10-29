@@ -66,12 +66,21 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.material.icons.rounded.Checklist
 import androidx.compose.material.icons.rounded.FormatListNumbered
 import androidx.compose.material.icons.rounded.FormatListBulleted
+import androidx.compose.material.icons.rounded.TextDecrease
+import androidx.compose.material.icons.rounded.TextIncrease
+import androidx.compose.material.icons.rounded.ExpandLess
+import androidx.compose.material.icons.rounded.ExpandMore
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.text.style.TextAlign
+import com.mdev.mnotes.core.text.QuickText
 import com.mdev.mnotes.core.text.ListText
 import com.mdev.mnotes.core.search.CommandRank
 import com.mdev.mnotes.core.text.MathText
 import com.mdev.mnotes.core.text.TextFit
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import com.mdev.mnotes.app.app
@@ -266,6 +275,19 @@ fun GoToDialog(ed: Editor, onDismiss: () -> Unit) {
 
 // ─────────────────────────────── Pole tekstowe (TextBox) ───────────────────────────────
 
+/** Czcionki do wyboru w panelu tekstu (3c-A11): dołączone i systemowa bezszeryfowa (dawna domyślna). */
+private val FONT_CHOICES = listOf(
+    TextBox.FAMILY_LITERATA, TextBox.FAMILY_INTER, TextBox.FAMILY_ATKINSON, TextBox.FAMILY_JETBRAINS, TextBox.FAMILY_CAVEAT, TextBox.FAMILY_SANS,
+)
+
+/** Podpis czcionki: nazwa dołączonej albo opis systemowej. */
+internal fun fontLabel(family: Int): String = TextBox.fontName(family)?.let { if (family == TextBox.FAMILY_ATKINSON) "Atkinson" else it } ?: when (family) {
+    TextBox.FAMILY_SERIF -> T.t("Systemowa szeryfowa", "System serif")
+    TextBox.FAMILY_MONO -> T.t("Systemowa mono", "System mono")
+    TextBox.FAMILY_HAND -> T.t("Systemowe pismo ręczne", "System handwriting")
+    else -> T.t("Systemowa", "System")
+}
+
 @Composable
 fun TextDialog(ed: Editor, req: TextRequest) {
     val set = ed.settings
@@ -304,9 +326,15 @@ fun TextDialog(ed: Editor, req: TextRequest) {
         set.textSize = size; set.textColor = color; set.textFamily = family
         ed.commitText(req, fitted)
     }
+    // 3c-A12: rzadsze opcje schowane; stuknięcie obok okna zapisuje wpisany tekst zamiast go gubić („Anuluj” odrzuca).
+    var more by remember { mutableStateOf(false) }
+    fun outside() {
+        val styleChanged = ex != null && (size != ex.size || color != ex.color || family != ex.family || style != ex.style || align != ex.align || fill != ex.fill)
+        if (QuickText.keepOnDismiss(ex == null, ex?.text ?: "", text, styleChanged)) commit() else ed.textReq = null
+    }
     MDialog(
         if (ex == null) T.t("Nowy tekst", "New text") else T.t("Edytuj tekst", "Edit text"), { ed.textReq = null },
-        T.t("Gotowe", "Done"), ::commit, true,
+        T.t("Gotowe", "Done"), ::commit, true, onOutside = ::outside,
     ) {
         MAreaField(field, { nv ->
             // Enter w wierszu listy dopisuje kolejny znacznik (EDT-042)
@@ -322,43 +350,66 @@ fun TextDialog(ed: Editor, req: TextRequest) {
             }
             field = next
         }, Modifier.fillMaxWidth().focusRequester(focus), hint = T.t("Wpisz tekst…", "Type text…"))
+        fun st(bit: Int, icon: androidx.compose.ui.graphics.vector.ImageVector, tip: String) =
+            @Composable { IconBtn(icon, tip, { style = style xor bit }, selected = style and bit != 0, size = 36.dp, iconSize = 20.dp) }
+        val recent = ed.kit.sets.filter { !it.hl }.flatMap { it.colors.take(it.visible) }.distinct()
+        // Jedna krótka listwa: pogrubienie, kursywa, ostatnie kolory, rozmiar skokami, „Więcej”.
         Row(Modifier.padding(top = 10.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-            fun st(bit: Int, icon: androidx.compose.ui.graphics.vector.ImageVector, tip: String) =
-                @Composable { IconBtn(icon, tip, { style = style xor bit }, selected = style and bit != 0, size = 36.dp, iconSize = 20.dp) }
             st(TextBox.STYLE_BOLD, Icons.Rounded.FormatBold, T.t("Pogrubienie", "Bold"))()
             st(TextBox.STYLE_ITALIC, Icons.Rounded.FormatItalic, T.t("Kursywa", "Italic"))()
-            st(TextBox.STYLE_UNDERLINE, Icons.Rounded.FormatUnderlined, T.t("Podkreślenie", "Underline"))()
-            st(TextBox.STYLE_STRIKE, Icons.Rounded.FormatStrikethrough, T.t("Przekreślenie", "Strikethrough"))()
             Box(Modifier.padding(horizontal = 4.dp).height(22.dp).width(1.dp).background(mint.line))
-            fun list(k: ListText.Kind) {
-                val r = ListText.toggle(field.text, field.selection.min, field.selection.max, k)
-                field = TextFieldValue(r.text, TextRange(r.selStart, r.selEnd))
-                runCatching { focus.requestFocus() }
+            for (c in QuickText.swatches(color, recent)) Box(
+                Modifier.size(26.dp).clip(CircleShape).background(Color(c))
+                    .border(if (c == color) 2.5.dp else 1.dp, if (c == color) mint.accent else mint.line, CircleShape)
+                    .clickable { color = c }
+            )
+            Box(Modifier.padding(horizontal = 4.dp).height(22.dp).width(1.dp).background(mint.line))
+            IconBtn(Icons.Rounded.TextDecrease, T.t("Mniejszy", "Smaller"), { size = QuickText.step(size, -1) }, size = 36.dp, iconSize = 20.dp)
+            Text("${size.toInt()}", style = MaterialTheme.typography.labelMedium, modifier = Modifier.width(24.dp), textAlign = TextAlign.Center)
+            IconBtn(Icons.Rounded.TextIncrease, T.t("Większy", "Larger"), { size = QuickText.step(size, +1) }, size = 36.dp, iconSize = 20.dp)
+            Spacer(Modifier.weight(1f))
+            IconBtn(if (more) Icons.Rounded.ExpandLess else Icons.Rounded.ExpandMore, T.t("Więcej", "More"), { more = !more }, selected = more, size = 36.dp, iconSize = 20.dp)
+        }
+        if (more) {
+            Row(Modifier.padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                st(TextBox.STYLE_UNDERLINE, Icons.Rounded.FormatUnderlined, T.t("Podkreślenie", "Underline"))()
+                st(TextBox.STYLE_STRIKE, Icons.Rounded.FormatStrikethrough, T.t("Przekreślenie", "Strikethrough"))()
+                Box(Modifier.padding(horizontal = 4.dp).height(22.dp).width(1.dp).background(mint.line))
+                fun list(k: ListText.Kind) {
+                    val r = ListText.toggle(field.text, field.selection.min, field.selection.max, k)
+                    field = TextFieldValue(r.text, TextRange(r.selStart, r.selEnd))
+                    runCatching { focus.requestFocus() }
+                }
+                IconBtn(Icons.Rounded.FormatListBulleted, T.t("Lista punktowana", "Bulleted list"), { list(ListText.Kind.BULLET) }, size = 36.dp, iconSize = 20.dp)
+                IconBtn(Icons.Rounded.FormatListNumbered, T.t("Lista numerowana", "Numbered list"), { list(ListText.Kind.NUMBER) }, size = 36.dp, iconSize = 20.dp)
+                IconBtn(Icons.Rounded.Checklist, T.t("Lista kontrolna", "Checklist"), { list(ListText.Kind.CHECK) }, size = 36.dp, iconSize = 20.dp)
             }
-            IconBtn(Icons.Rounded.FormatListBulleted, T.t("Lista punktowana", "Bulleted list"), { list(ListText.Kind.BULLET) }, size = 36.dp, iconSize = 20.dp)
-            IconBtn(Icons.Rounded.FormatListNumbered, T.t("Lista numerowana", "Numbered list"), { list(ListText.Kind.NUMBER) }, size = 36.dp, iconSize = 20.dp)
-            IconBtn(Icons.Rounded.Checklist, T.t("Lista kontrolna", "Checklist"), { list(ListText.Kind.CHECK) }, size = 36.dp, iconSize = 20.dp)
-            Box(Modifier.padding(horizontal = 4.dp).height(22.dp).width(1.dp).background(mint.line))
-            IconBtn(Icons.Rounded.FormatAlignLeft, T.t("Do lewej", "Left"), { align = TextBox.ALIGN_START }, selected = align == TextBox.ALIGN_START, size = 36.dp, iconSize = 20.dp)
-            IconBtn(Icons.Rounded.FormatAlignCenter, T.t("Do środka", "Center"), { align = TextBox.ALIGN_CENTER }, selected = align == TextBox.ALIGN_CENTER, size = 36.dp, iconSize = 20.dp)
-            IconBtn(Icons.Rounded.FormatAlignRight, T.t("Do prawej", "Right"), { align = TextBox.ALIGN_END }, selected = align == TextBox.ALIGN_END, size = 36.dp, iconSize = 20.dp)
-            IconBtn(Icons.Rounded.FormatAlignJustify, T.t("Wyjustuj", "Justify"), { align = TextBox.ALIGN_JUSTIFY }, selected = align == TextBox.ALIGN_JUSTIFY, size = 36.dp, iconSize = 20.dp)
+            Row(Modifier.padding(top = 4.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                IconBtn(Icons.Rounded.FormatAlignLeft, T.t("Do lewej", "Left"), { align = TextBox.ALIGN_START }, selected = align == TextBox.ALIGN_START, size = 36.dp, iconSize = 20.dp)
+                IconBtn(Icons.Rounded.FormatAlignCenter, T.t("Do środka", "Center"), { align = TextBox.ALIGN_CENTER }, selected = align == TextBox.ALIGN_CENTER, size = 36.dp, iconSize = 20.dp)
+                IconBtn(Icons.Rounded.FormatAlignRight, T.t("Do prawej", "Right"), { align = TextBox.ALIGN_END }, selected = align == TextBox.ALIGN_END, size = 36.dp, iconSize = 20.dp)
+                IconBtn(Icons.Rounded.FormatAlignJustify, T.t("Wyjustuj", "Justify"), { align = TextBox.ALIGN_JUSTIFY }, selected = align == TextBox.ALIGN_JUSTIFY, size = 36.dp, iconSize = 20.dp)
+            }
+            FlowRow(Modifier.padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                // 3c-A11: czcionki dołączone; systemowe szeryfowa/mono/ręczna tylko wtedy, gdy ma je edytowane pole.
+                val shown = FONT_CHOICES + listOfNotNull(family.takeIf { it in TextBox.FAMILY_SERIF..TextBox.FAMILY_HAND })
+                for (f in shown) Chip(fontLabel(f), family == f, { family = f })
+            }
+            Text(
+                T.t("Zażółć gęślą jaźń · αβγ · x² · 1,25", "The quick brown fox · αβγ · x² · 1.25"),
+                fontFamily = remember(family, style) { FontFamily(renderer.typeface(family, style)) },
+                fontSize = 18.sp, modifier = Modifier.padding(top = 6.dp),
+            )
+            Row(Modifier.padding(top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                SectionLabel(T.t("Rozmiar", "Size")); Spacer(Modifier.weight(1f))
+                Text("${size.toInt()} pt", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            MSlider(size, 8f, 96f) { size = it }
+            SectionLabel(T.t("Kolor", "Color"))
+            ColorPicker(color, { color = it }, recent = recent)
+            ToggleRow(T.t("Dopasuj rozmiar do tekstu", "Fit size to text"), autoFit) { autoFit = it }
+            ToggleRow(T.t("Tło pola", "Box background"), fill != 0) { fill = if (it) 0xFFFFF59D.toInt() else 0 }
+            if (fill != 0) ColorPicker(fill, { fill = it }, withAlpha = true)
         }
-        FlowRow(Modifier.padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            Chip(T.t("Bezszeryfowa", "Sans"), family == TextBox.FAMILY_SANS, { family = TextBox.FAMILY_SANS })
-            Chip(T.t("Szeryfowa", "Serif"), family == TextBox.FAMILY_SERIF, { family = TextBox.FAMILY_SERIF })
-            Chip(T.t("Mono", "Mono"), family == TextBox.FAMILY_MONO, { family = TextBox.FAMILY_MONO })
-            Chip(T.t("Pismo ręczne", "Handwriting"), family == TextBox.FAMILY_HAND, { family = TextBox.FAMILY_HAND })
-        }
-        Row(Modifier.padding(top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-            SectionLabel(T.t("Rozmiar", "Size")); Spacer(Modifier.weight(1f))
-            Text("${size.toInt()} pt", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
-        MSlider(size, 8f, 96f) { size = it }
-        SectionLabel(T.t("Kolor", "Color"))
-        ColorPicker(color, { color = it }, recent = ed.kit.sets.filter { !it.hl }.flatMap { it.colors.take(it.visible) }.distinct())
-        ToggleRow(T.t("Dopasuj rozmiar do tekstu", "Fit size to text"), autoFit) { autoFit = it }
-        ToggleRow(T.t("Tło pola", "Box background"), fill != 0) { fill = if (it) 0xFFFFF59D.toInt() else 0 }
-        if (fill != 0) ColorPicker(fill, { fill = it }, withAlpha = true)
     }
 }

@@ -28,6 +28,8 @@ class MNotesApp : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        // Pole `assets` niżej to cache grafik; czcionki biorą AssetManager z zasobów.
+        com.mdev.mnotes.render.AppFonts.init(resources.assets)
         repo = Repository(this)
         settings = Settings(this)
         assets = Assets(repo)

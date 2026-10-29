@@ -289,8 +289,8 @@ fun penName(k: PenKind) = when (k) {
 fun EditorScreen(main: Editor, tabs: TabsCtl, onExit: () -> Unit, onSettings: () -> Unit, onShortcuts: () -> Unit, onColorSets: () -> Unit) {
     val ctx = LocalContext.current
     // 2b-A7: stanowisko — otwarty zeszyt i dokumenty dołożone pod nim; paski, panele i menu działają na aktywnym rzędzie.
+    // Rzędy zamyka Editor.close() głównego zeszytu (3c-B3), nie zniknięcie ekranu (Ustawienia, blokada).
     val st = remember(main) { main.station ?: Station(ctx, main) }
-    DisposableEffect(st) { onDispose { st.closeAll() } }
     val ed = st.active
     val set = ed.settings
     val m = mint

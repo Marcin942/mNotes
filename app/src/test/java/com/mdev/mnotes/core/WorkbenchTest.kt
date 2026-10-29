@@ -35,6 +35,18 @@ class WorkbenchTest {
         assertEquals(listOf("nb1", "nb3"), alive.ids); assertEquals(listOf(-1f, -3f), alive.offsets); assertEquals(1, alive.active)
     }
 
+    /** 3c-B3: przełączenie stanowiska zostawia tylko rzędy stojące już w kolejności zapisu. */
+    @Test fun keptPrefixFollowsSavedOrder() {
+        assertEquals(2, Workbench.keptPrefix(listOf("b", "c"), listOf("b", "c", "d")))
+        assertEquals(0, Workbench.keptPrefix(listOf("c", "b"), listOf("b", "c")))
+        assertEquals(1, Workbench.keptPrefix(listOf("b", "x", "c"), listOf("b", "c")))
+        assertEquals(0, Workbench.keptPrefix(emptyList(), listOf("b")))
+        // Rząd, który nie stanął (otwarty w innym oknie): stan do odtworzenia tylko dla obecnych.
+        val s = Station("S", listOf("a", "b", "c"), offsets = listOf(-1f, -2f, -3f), active = 2)
+        val now = Workbench.alive(s) { it != "b" }
+        assertEquals(listOf("a", "c"), now.ids); assertEquals(1, now.active)
+    }
+
     /** 3c-B3: puste i powtórzone id w zapisie przesuwały przesunięcia i aktywny pas na sąsiedni dokument. */
     @Test fun droppedIdsKeepOffsetsAndActiveAligned() {
         val saved = """[{"n":"X","ids":["nb1","","nb1","nb2"],"o":[-1,-9,-8,-2],"a":3}]"""

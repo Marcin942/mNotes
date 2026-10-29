@@ -54,6 +54,9 @@ object Workbench {
     /** Lista po zapisaniu [s]: stanowisko o tej samej nazwie jest zastępowane, nowe trafia na początek. */
     fun upsert(list: List<Station>, s: Station): List<Station> = listOf(s) + list.filter { it.name != s.name }
 
+    /** Ile pierwszych pozycji [have] stoi już tak, jak w [want] (te rzędy mogą zostać przy przełączaniu stanowiska). */
+    fun keptPrefix(have: List<String>, want: List<String>): Int = have.zip(want).takeWhile { (a, b) -> a == b }.size
+
     /** Dokumenty stanowiska bez tych, których już nie ma (usunięte, w koszu) — [exists] sprawdza id. */
     fun alive(s: Station, exists: (String) -> Boolean): Station {
         // Przesunięcia i aktywny pas idą za dokumentami, które zostały.

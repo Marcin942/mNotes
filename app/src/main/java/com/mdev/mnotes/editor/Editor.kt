@@ -1796,7 +1796,9 @@ class Editor(val ctx: Context, val nbId: String) {
         // 2c-A10: szkic krzywej przy zamknięciu zeszytu staje się krzywą, zamiast zniknąć.
         if (curveDraft != null) curveCommit()
         // 2c-A11: wyjście z zeszytu zdejmuje przypięty profil (dołożone rzędy stanowiska tego nie robią).
-        station?.takeIf { it.main === this }?.unpinProfile()
+        // 3c-B3: i zamyka dołożone rzędy — dawniej robił to ekran edytora przy zniknięciu, więc wejście w Ustawienia
+        // albo blokada aplikacji rozbierały stanowisko.
+        station?.takeIf { it.main === this }?.let { it.unpinProfile(); it.closeAll() }
         flushWriting()
         doc.flush()
         doc.setLastPage(pageIndex)

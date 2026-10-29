@@ -129,12 +129,14 @@ class UiModel(application: Application) : AndroidViewModel(application) {
         private set
 
     fun open(id: String) {
-        if (app.repo.meta(id) == null) return
+        // 3c-B3: odrzucone otwarcie nie zostawia stanowiska czekającego na ten zeszyt (doszłoby przy innym otwarciu).
+        if (app.repo.meta(id) == null) { app.pendingStation = null; return }
         val useTabs = app.settings.tabs
         if (!useTabs && tabs.size > 0) dropTabs(keep = editor?.nbId)
         if (editor?.nbId == id) { if (useTabs) tabs = tabs.open(id); screen = Screen.EDITOR; return }
         // Karta z tego okna jest już „nasza” w openIds; obcy zeszyt (inne okno) odpada.
         if (!(tabs.has(id) || app.openIds.add(id))) {
+            app.pendingStation = null
             android.widget.Toast.makeText(app, T.t("Ten zeszyt jest otwarty w innym oknie", "This notebook is open in another window"), android.widget.Toast.LENGTH_SHORT).show()
             return
         }
@@ -321,8 +323,8 @@ open class MainActivity : FragmentActivity() {
 
     override fun onStop() {
         super.onStop()
-        ui.editor?.doc?.flush()
-        ui.editor?.flushWriting()
+        // 3c-B3: wszystkie rzędy stanowiska, nie tylko główny (proces w tle może zostać zabity).
+        for (e in ui.editor?.station?.rows ?: listOfNotNull(ui.editor)) { e.flushWriting(); e.doc.flush() }
         if (!isChangingConfigurations) app.sync.auto()
         if (!isChangingConfigurations && app.settings.appLock) ui.locked = true
     }

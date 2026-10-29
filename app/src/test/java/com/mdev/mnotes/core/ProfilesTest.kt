@@ -120,6 +120,40 @@ class ProfilesTest {
         assertEquals(PVal.I(1), p.m["input.finger"]); assertEquals(PVal.B(true), p.m["view.minimap"])
     }
 
+    /** 3c-A16: zmiana ręki przy włączonym profilu — po wyłączeniu pasek zostaje po stronie nowej ręki. */
+    @Test fun handChangeUnderProfileSurvivesSwitchingOff() {
+        val left = com.mdev.mnotes.core.layout.Handedness.LEFT; val right = com.mdev.mnotes.core.layout.Handedness.RIGHT
+        val p = Prefs((start + ("toolbar.position" to PVal.I(2)) + ("toolbar.options" to PVal.I(0))).toMutableMap())
+        var mine = Profiles.capture("m", "Mój", listOf("toolbar.position", "toolbar.options", "input.finger")) { p.m[it] }
+        p.switch(mine)
+        // Jak setter Settings.hand: bieżące położenia, kopia sprzed profilu i profile — odbite.
+        p.m["toolbar.position"] = PVal.I(3); p.m["toolbar.options"] = PVal.I(1)
+        p.backup = Profiles.mirrorHand(p.backup, right, left)
+        mine = mine.copy(values = Profiles.mirrorHand(mine.values, right, left))
+        p.switch(null)
+        assertEquals(PVal.I(3), p.m["toolbar.position"])
+        assertEquals(PVal.I(1), p.m["toolbar.options"])
+        p.switch(mine)
+        assertEquals(PVal.I(3), p.m["toolbar.position"])
+        assertEquals(PVal.I(0), p.m["input.finger"])
+        assertEquals(mine.values, Profiles.mirrorHand(mine.values, left, left))
+    }
+
+    /** 3c-A16: „Nie zapisuj” — zmiana działa do wyłączenia profilu, także dla klucza spoza profilu (mini-mapa zostawała). */
+    @Test fun manualChangeNotSavedRevertsOnOff() {
+        val p = Prefs(start.toMutableMap())
+        val stylus = Profile("x", "Tylko rysik", mapOf("input.finger" to PVal.I(2)))
+        p.switch(stylus)
+        val edits = mapOf("input.finger" to (PVal.I(2) to PVal.I(1)), "view.minimap" to (PVal.B(false) to PVal.B(true)))
+        for ((k, e) in edits) p.m[k] = e.second
+        p.backup = Profiles.keepUntilOff(stylus, p.backup, edits)
+        assertEquals(PVal.B(true), p.m["view.minimap"])    // do wyłączenia działa
+        p.switch(null)
+        assertEquals(start, p.m)
+        p.switch(stylus)
+        assertEquals(PVal.I(2), p.m["input.finger"]); assertEquals(PVal.B(false), p.m["view.minimap"])
+    }
+
     @Test fun leavingPinnedNotebookRestoresStateBefore() {
         val p = Prefs(start.toMutableMap())
         val a = Profile("a", "A", mapOf("view.minimap" to PVal.B(true)))

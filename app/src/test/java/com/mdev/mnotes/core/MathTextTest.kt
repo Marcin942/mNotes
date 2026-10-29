@@ -46,6 +46,28 @@ class MathTextTest {
         assertEquals("a₁₀+b₂₃=", c("a_10+b_23="))
     }
 
+    /** 3c-A16: kursor po zamianie zostaje przy tym samym tekście, także gdy zamiana zaszła za nim. */
+    @Test fun caretFollowsText() {
+        fun at(orig: String, caret: Int): Int = MathText.caret(orig, caret, c(orig))
+        assertEquals(3, at("x^2 ", 4))           // zamiana przed kursorem (koniec): kursor za spacją, „x² ”
+        assertEquals(1, at("Za_1 c", 1))         // zamiana za kursorem: kursor zostaje za „Z”
+        assertEquals(3, at("x^2 y", 4))          // zamiana przed, tekst za kursorem bez zmian
+        assertEquals(2, at("\\alpha b", 7))      // „α b”: kursor przed „b”
+    }
+
+    /** 3c-A16: nazwy plików i adresy z „_litera”, ułamek w wykładniku — bez zamiany; kropka kończąca zdanie dalej działa. */
+    @Test fun filesMailsAndDecimalExponentsStay() {
+        assertEquals("plik_a.pdf ", c("plik_a.pdf "))
+        assertEquals("plik_a.", c("plik_a."))           // kropka na końcu: czeka, może to rozszerzenie
+        assertEquals("jan_k@uni.pl ", c("jan_k@uni.pl "))
+        assertEquals("aᵢ. ", c("a_i. "))                // kropka i spacja: koniec zdania
+        assertEquals("x^1.5 ", c("x^1.5 "))
+        assertEquals("x². ", c("x^2. "))
+        assertEquals("x^2.", c("x^2."))                 // kropka na końcu: czeka na następny znak
+        assertEquals("x².", MathText.convert("x^2.", atEnd = true))
+        assertEquals("aᵢ.", MathText.convert("a_i.", atEnd = true))
+    }
+
     /** Zatwierdzenie („Gotowe”) kończy znacznik na końcu tekstu, ale nie pojedynczą literę. */
     @Test fun finalFlush() {
         assertEquals("x¹⁰", MathText.convert("x^10", atEnd = true))

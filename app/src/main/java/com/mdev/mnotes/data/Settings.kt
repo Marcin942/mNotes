@@ -41,13 +41,16 @@ class Settings(ctx: Context) {
         fun put(v: Any) { if (def != null && v::class == (def as Any)::class) setValue(null, ::key, v as T) }
 
         @Suppress("UNCHECKED_CAST")
-        private fun read(): T = when (def) {
-            is Int -> sp.getInt(key, def) as T
-            is Boolean -> sp.getBoolean(key, def) as T
-            is Float -> sp.getFloat(key, def) as T
-            is String -> (sp.getString(key, def) ?: def) as T
-            else -> def
-        }
+        private fun read(): T = runCatching {
+            when (def) {
+                is Int -> sp.getInt(key, def) as T
+                is Boolean -> sp.getBoolean(key, def) as T
+                is Float -> sp.getFloat(key, def) as T
+                is String -> (sp.getString(key, def) ?: def) as T
+                else -> def
+            }
+            // Zapisane w innym typie (import ustawień sprzed poprawki 3c-A16: 20f jako Int) — przeliczone albo domyślne.
+        }.getOrElse { (com.mdev.mnotes.core.prefs.PrefValue.coerce(def, sp.all[key]) as T?) ?: def }
 
         override fun getValue(thisRef: Any?, property: KProperty<*>): T = state
         override fun setValue(thisRef: Any?, property: KProperty<*>, value: T) {
@@ -111,6 +114,12 @@ class Settings(ctx: Context) {
             val s = com.mdev.mnotes.core.layout.Handedness.switch(
                 com.mdev.mnotes.core.layout.Handedness.Sides(toolbarPos, optionsPos, undoDock, miniMapCorner, scrollMargin), handPref, v)
             toolbarPos = s.toolbar; optionsPos = s.options; undoDock = s.undoDock; miniMapCorner = s.miniMap; scrollMargin = s.scrollMargin
+            // Profile i kopia sprzed profilu też (3c-A16): wyłączenie profilu nie wraca do stron dla poprzedniej ręki.
+            val pr = com.mdev.mnotes.core.prefs.Profiles
+            profileBackup = pr.encodeValues(pr.mirrorHand(pr.decodeValues(profileBackup), handPref, v))
+            val ps = profiles
+            val mirrored = ps.map { it.copy(values = pr.mirrorHand(it.values, handPref, v)) }
+            if (mirrored != ps) profiles = mirrored
             handPref = v
         }
     var fingerMode by Pref("input.finger", 0)        // 0 przewijaj, 1 rysuj, 2 ignoruj
@@ -357,6 +366,9 @@ class Settings(ctx: Context) {
             val (np, nb) = com.mdev.mnotes.core.prefs.Profiles.adopt(p, com.mdev.mnotes.core.prefs.Profiles.decodeValues(profileBackup), profileEdits.toMap())
             profiles = profiles.map { if (it.id == p.id) np else it }
             profileBackup = com.mdev.mnotes.core.prefs.Profiles.encodeValues(nb)
+        } else if (p != null) {
+            val nb = com.mdev.mnotes.core.prefs.Profiles.keepUntilOff(p, com.mdev.mnotes.core.prefs.Profiles.decodeValues(profileBackup), profileEdits.toMap())
+            profileBackup = com.mdev.mnotes.core.prefs.Profiles.encodeValues(nb)
         }
         profileEdits.clear()
     }
@@ -378,11 +390,13 @@ class Settings(ctx: Context) {
     fun importJson(json: String) {
         val o = JSONObject(json)
         val e = sp.edit()
-        for (k in o.keys()) if (!deviceBound(k)) when (val v = o.get(k)) {
+        // Typ według ustawienia, nie pliku: org.json zapisuje 20f jako `20`, a Int pod kluczem Float wywracał start (3c-A16).
+        for (k in o.keys()) if (!deviceBound(k)) when (val v = com.mdev.mnotes.core.prefs.PrefValue.coerce(registry[k]?.def, o.get(k))) {
             is Int -> e.putInt(k, v)
+            is Long -> e.putLong(k, v)
             is Boolean -> e.putBoolean(k, v)
             is String -> e.putString(k, v)
-            is Double -> e.putFloat(k, v.toFloat())
+            is Float -> e.putFloat(k, v)
         }
         e.apply()
     }

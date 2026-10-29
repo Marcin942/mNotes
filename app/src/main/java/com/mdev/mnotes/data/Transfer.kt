@@ -510,7 +510,8 @@ class Importer(private val repo: Repository, private val pdf: PdfPool) {
         val pages = (0 until count).map { i ->
             val (w, h) = pdf.pageSize(id, asset, i) ?: (595f to 842f)
             val paper = if (i < tonePages) pdfPaper(id, asset, i, w, h) ?: Paper.WHITE else Paper.WHITE
-            PageMeta(newId(), PageSpec(w = w, h = h, paper = paper, template = Template.BLANK, pdf = PdfRef(asset, i)))
+            val (pw, ph) = PageSpec.fitSize(w, h)   // w granicach, które zniesie ponowny odczyt (3c-A16)
+            PageMeta(newId(), PageSpec(w = pw, h = ph, paper = paper, template = Template.BLANK, pdf = PdfRef(asset, i)))
         }
         return NotebookMeta(id, title, folderId, now, now, now, cover, CoverStyle.PLAIN, pdfDoc = true, pages = pages)
     }
@@ -528,7 +529,8 @@ class Importer(private val repo: Repository, private val pdf: PdfPool) {
             val asset = open()?.use { repo.importAsset(id, it, ext) } ?: continue
             val (iw, ih) = Assets.imageSize(repo.assetFile(id, asset)) ?: continue
             val k = 842f / max(iw, ih)
-            val w = iw * k; val h = ih * k
+            // Panorama ponad 11,7:1 dawała krótszy bok poniżej 72 pt, który ponowny odczyt rozciągał (3c-A16).
+            val (w, h) = PageSpec.fitSize(iw * k, ih * k)
             val pid = newId()
             val el = ImageEl(com.mdev.mnotes.core.model.Ids.next(), asset, w / 2, h / 2, w, h)
             repo.writePage(id, pid, PageCodec.encode(PageContent.of(listOf(el))))

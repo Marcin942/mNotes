@@ -35,6 +35,7 @@ class ToolPopupsTest {
         assertEquals(ToolPopups.STEPS.indexOf(6), ToolPopups.stepOf(6))   // domyślny czas pędzla
         assertEquals(ToolPopups.STEPS.indexOf(8), ToolPopups.stepOf(30))  // dawny suwak 0–30 s
         assertEquals(ToolPopups.STEPS.indexOf(0), ToolPopups.stepOf(0))
+        assertEquals(ToolPopups.STEPS.indexOf(2), ToolPopups.stepOf(1))   // 3c-A16: gasnące 1 s nie jest „Nie gaśnie”
     }
 
     @Test fun everyHelperMapsBothWays() {

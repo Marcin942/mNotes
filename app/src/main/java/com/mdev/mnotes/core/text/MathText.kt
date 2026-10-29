@@ -45,6 +45,23 @@ object MathText {
     fun unSub(c: Char): Char? = SUB_DST.indexOf(c).let { if (it < 0) null else SUB_SRC[it] }
 
     /**
+     * Kursor po zamianie [orig] → [conv] przy pisaniu: tekst przed kursorem bez zmian — kursor zostaje; tekst za kursorem
+     * bez zmian — ta sama odległość od końca. 3c-A16: wcześniej zawsze od końca, więc zamiana za kursorem (stary
+     * „a_1 c” w polu, dopisane coś na początku) przestawiała kursor w lewo i kolejne litery szły w złe miejsce.
+     */
+    fun caret(orig: String, caret: Int, conv: String): Int {
+        var pre = 0
+        while (pre < orig.length && pre < conv.length && orig[pre] == conv[pre]) pre++
+        if (caret <= pre) return caret.coerceIn(0, conv.length)
+        var suf = 0
+        while (suf < orig.length - pre && suf < conv.length - pre && orig[orig.length - 1 - suf] == conv[conv.length - 1 - suf]) suf++
+        val tail = orig.length - caret
+        if (tail <= suf) return (conv.length - tail).coerceIn(0, conv.length)
+        // Zmiany po obu stronach kursora: długość zamienionego początku.
+        return convert(orig.substring(0, caret)).length.coerceIn(0, conv.length)
+    }
+
+    /**
      * Zamienia wszystkie zakończone znaczniki w [s]. [atEnd] = tekst zatwierdzony („Gotowe”): koniec tekstu też kończy
      * `\alpha` i ciąg cyfr, ale nie pojedynczą literę (`plik_a` zostaje).
      */
@@ -84,9 +101,11 @@ object MathText {
                         while (j < s.length && s[j] in '0'..'9') j++
                         val stop = s.getOrNull(j)
                         // 2c-A15: po „_” kropka z literą za nią to rozszerzenie pliku („img_20.jpg”), kropka na końcu jeszcze czeka.
-                        val dotThen = if (c == '_' && stop == '.') s.getOrNull(j + 1) else null
+                        // 3c-A16: po „^” kropka z cyfrą za nią to ułamek („x^1.5”) — bez zamiany, inaczej wyszłoby „x¹.5”.
+                        val dotThen = if (stop == '.') s.getOrNull(j + 1) else null
                         val closed = when {
                             stop == null -> atEnd
+                            c == '^' && stop == '.' -> if (dotThen == null) atEnd else !dotThen.isDigit()
                             c == '^' -> true
                             stop == '.' -> if (dotThen == null) atEnd else !dotThen.isLetter()
                             else -> !stop.isLetter()
@@ -95,8 +114,13 @@ object MathText {
                     } else if (n != null) {
                         val m = map(n)
                         val after = s.getOrNull(i + 2)
+                        // 3c-A16: „plik_a.pdf”, „jan_k@uni.pl” — po „_litera” kropka z literą (albo na końcu, w trakcie
+                        // pisania) i „@” to nazwa pliku lub adres, nie indeks.
+                        val dotThen = s.getOrNull(i + 3)
+                        val name = c == '_' && n.isLetter() &&
+                            (after == '@' || (after == '.' && (if (dotThen == null) !atEnd else dotThen.isLetter())))
                         // Pozostałe znaki od razu; litera tylko przed nieliterą (żeby „nazwa_pliku” zostało).
-                        if (m != null && (!n.isLetter() || (after != null && !after.isLetter()))) { out.append(m); i += 2; continue }
+                        if (m != null && !name && (!n.isLetter() || (after != null && !after.isLetter()))) { out.append(m); i += 2; continue }
                     }
                     out.append(c); i++
                 }

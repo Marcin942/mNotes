@@ -204,6 +204,32 @@ object Profiles {
         return p.copy(values = vals) to b
     }
 
+    /**
+     * „Nie zapisuj w profilu”: zmiany działają do wyłączenia profilu. Klucze spoza profilu dostają w kopii wartość sprzed
+     * zmiany, więc wyłączenie je cofa (3c-A16: zostawały na stałe, a „Tak” — przez [adopt] — cofało je poprawnie).
+     */
+    fun keepUntilOff(p: Profile, backup: Map<String, PVal>, edits: Map<String, Pair<PVal, PVal>>): Map<String, PVal> {
+        val b = LinkedHashMap(backup)
+        for ((k, e) in edits) if (known(k) && k !in p.values && k !in b) b[k] = e.first
+        return b
+    }
+
+    /**
+     * Zmiana ręki (3c-A13) odbija położenia zależne od strony także w profilach i w kopii sprzed profilu. 3c-A16: bez tego
+     * po wyłączeniu profilu pasek i listwa wracały na stronę dla poprzedniej ręki, a ręka zostawała nowa.
+     */
+    fun mirrorHand(values: Map<String, PVal>, from: Int, to: Int): Map<String, PVal> {
+        if (from == to) return values
+        val out = LinkedHashMap(values)
+        fun int(k: String, f: (Int) -> Int) { (out[k] as? PVal.I)?.let { out[k] = PVal.I(f(it.v)) } }
+        int("toolbar.position", com.mdev.mnotes.core.layout.Handedness::toolbar)
+        int("toolbar.options", com.mdev.mnotes.core.layout.Handedness::options)
+        int("ui.undo_dock", com.mdev.mnotes.core.layout.Handedness::undoDock)
+        int("view.minimap_corner", com.mdev.mnotes.core.layout.Handedness::miniMap)
+        if (to == com.mdev.mnotes.core.layout.Handedness.LEFT && "view.scroll_margin" in out) out["view.scroll_margin"] = PVal.B(true)
+        return out
+    }
+
     /** Profil przypięty na czas pracy: [pinned] włączony przy otwarciu, [before] — aktywny wcześniej ("" — żaden). */
     data class Pin(val pinned: String, val before: String)
 

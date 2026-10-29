@@ -120,6 +120,19 @@ data class PageSpec(
         const val MIN_SIZE = 72f
         const val MAX_SIZE = 8000f
 
+        /**
+         * Rozmiar strony z importu (PDF, obraz) w granicach [MIN_SIZE]..[MAX_SIZE] z zachowaniem proporcji. 3c-A16: bez
+         * tego np. długa strona PDF 595×12000 działała do restartu, a potem [fromJson] przycinał ją do 8000 (tło
+         * zgniecione, notatki niżej poza stroną). Proporcje ponad 8000:72 — krótszy bok przycięty, bo inaczej się nie da.
+         */
+        fun fitSize(w: Float, h: Float): Pair<Float, Float> {
+            if (!(w > 0f && h > 0f && w.isFinite() && h.isFinite())) return PageFormat.A4.w to PageFormat.A4.h
+            var k = 1f
+            if (maxOf(w, h) > MAX_SIZE) k = MAX_SIZE / maxOf(w, h)
+            if (minOf(w, h) * k < MIN_SIZE) k = minOf(MIN_SIZE / minOf(w, h), MAX_SIZE / maxOf(w, h))
+            return (w * k).coerceIn(MIN_SIZE, MAX_SIZE) to (h * k).coerceIn(MIN_SIZE, MAX_SIZE)
+        }
+
         /** Brak pola, NaN i nieskończoność dają [default] (optDouble bez domyślnej zwraca NaN). */
         private fun finite(v: Double, default: Float): Float = v.toFloat().takeIf { it.isFinite() } ?: default
 

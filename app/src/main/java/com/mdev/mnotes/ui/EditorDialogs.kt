@@ -331,7 +331,9 @@ fun TextDialog(ed: Editor, req: TextRequest) {
     // 3c-A12: rzadsze opcje schowane; stuknięcie obok okna zapisuje wpisany tekst zamiast go gubić („Anuluj” odrzuca).
     var more by remember { mutableStateOf(false) }
     fun outside() {
-        val styleChanged = ex != null && (size != ex.size || color != ex.color || family != ex.family || style != ex.style || align != ex.align || fill != ex.fill)
+        // Przełącznik „Dopasuj rozmiar do tekstu” też (3c-A16: jego zmiana ginęła po stuknięciu obok okna).
+        val styleChanged = ex != null && (size != ex.size || color != ex.color || family != ex.family || style != ex.style || align != ex.align || fill != ex.fill ||
+            autoFit != (ex.fit == TextBox.FIT_AUTO))
         if (QuickText.keepOnDismiss(ex == null, ex?.text ?: "", text, styleChanged)) commit() else ed.textReq = null
     }
     MDialog(
@@ -342,12 +344,11 @@ fun TextDialog(ed: Editor, req: TextRequest) {
             // Enter w wierszu listy dopisuje kolejny znacznik (EDT-042)
             val r = if (nv.selection.collapsed) ListText.onEnter(field.text, nv.text, nv.selection.start) else null
             var next = if (r != null) TextFieldValue(r.text, TextRange(r.selStart, r.selEnd)) else nv
-            // L2: \alpha → α, x^2 → x², a_1 → a₁ przy pisaniu; kursor zostaje w tej samej odległości od końca.
+            // L2: \alpha → α, x^2 → x², a_1 → a₁ przy pisaniu; kursor zostaje przy tym samym tekście (MathText.caret).
             if (ed.settings.mathText && next.selection.collapsed && next.text.length > field.text.length) {
                 val conv = MathText.convert(next.text)
                 if (conv != next.text) {
-                    val pos = (conv.length - (next.text.length - next.selection.start)).coerceIn(0, conv.length)
-                    next = TextFieldValue(conv, TextRange(pos))
+                    next = TextFieldValue(conv, TextRange(MathText.caret(next.text, next.selection.start, conv)))
                 }
             }
             field = next

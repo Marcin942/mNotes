@@ -184,7 +184,7 @@ private fun MoveDialog(st: LibState, d: LibDialog.Move) {
         f.trashedAt == 0L && f.id !in folderIds && folderIds.none { repo.isFolderDescendant(f.id, it) }
 
     fun flatten(parent: String?, depth: Int, out: MutableList<Pair<com.mdev.mnotes.data.Folder, Int>>) {
-        for (f in repo.folders.filter { it.parentId == parent && allowed(it) }.sortedBy { it.name.lowercase() }) { out += f to depth; flatten(f.id, depth + 1, out) }
+        for (f in repo.folders.filter { it.parentId == parent && allowed(it) }.sortedWith(compareBy(com.mdev.mnotes.core.text.NameOrder) { it.name })) { out += f to depth; flatten(f.id, depth + 1, out) }
     }
     val rows = remember(repo.folders) { ArrayList<Pair<com.mdev.mnotes.data.Folder, Int>>().also { flatten(null, 0, it) } }
 
@@ -227,7 +227,7 @@ private fun TagsDialog(st: LibState, d: LibDialog.Tags) {
     val m = mint
     val repo = LocalContext.current.app.repo
     val all = remember(repo.tagColors, repo.notebooks) {
-        (repo.tagColors.keys + repo.notebooks.flatMap { it.tags }).distinct().sortedBy { it.lowercase() }
+        (repo.tagColors.keys + repo.notebooks.flatMap { it.tags }).distinct().sortedWith(com.mdev.mnotes.core.text.NameOrder)
     }
     var newName by remember { mutableStateOf("") }
     var newColor by remember { mutableStateOf(TagPalette[0]) }
@@ -351,7 +351,7 @@ private fun ManageTagsDialog(st: LibState) {
     val m = mint
     val repo = LocalContext.current.app.repo
     val all = remember(repo.tagColors, repo.notebooks) {
-        (repo.tagColors.keys + repo.notebooks.flatMap { it.tags }).distinct().sortedBy { it.lowercase() }
+        (repo.tagColors.keys + repo.notebooks.flatMap { it.tags }).distinct().sortedWith(com.mdev.mnotes.core.text.NameOrder)
     }
     var open by remember { mutableStateOf<String?>(null) }
     var name by remember { mutableStateOf("") }

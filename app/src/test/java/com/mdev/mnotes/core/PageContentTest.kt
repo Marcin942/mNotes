@@ -42,6 +42,22 @@ class PageContentTest {
         assertEquals(ids(c), ids(after.revert(e)))
     }
 
+    /** 3c-A16: kopia strony (powielenie, wklejenie) z tymi samymi numerami — przeniesienie na nią i cofnięcie kasowało bliźniaka. */
+    @Test
+    fun pageCopyGetsFreshIdsSoMoveAndUndoKeepTwin() {
+        val (src, l) = sample(2)
+        val copy = src.copyWithNewIds()
+        assertEquals(src.size, copy.size)
+        assertTrue(ids(copy).none { it in ids(src) })
+        assertEquals((l[0] as Stroke).pts.toList(), (copy.elements[0] as Stroke).pts.toList())
+        // Przeniesienie l[0] ze strony źródłowej na kopię i cofnięcie dodania: na kopii zostają oba jej elementy.
+        val add = ElementsEdit.add(copy, listOf(l[0]))
+        val target = copy.apply(add)
+        assertEquals(3, target.size)
+        assertEquals(ids(copy), ids(target.revert(add)))
+        assertSame(PageContent.EMPTY, PageContent.EMPTY.copyWithNewIds())
+    }
+
     @Test
     fun removeKeepsOrderOnRevert() {
         val (c, l) = sample(5)

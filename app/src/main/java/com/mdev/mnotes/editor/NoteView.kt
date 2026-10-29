@@ -877,7 +877,6 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
         }
     }
 
-    /** Etykieta regulacji kształtu (długość i kąt / wymiary) przy piórze. */
     /** Miejsce przyczepienia (strona, x, y w pt) pokazywane kółkiem w trakcie przeciągania (F22). */
     private var attachMark: FloatArray? = null
 
@@ -902,6 +901,7 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
         c.drawCircle(sx, sy, 9f * dp, handleArm); c.drawCircle(sx, sy, 2.5f * dp, handleStroke)
     }
 
+    /** Etykieta regulacji kształtu (długość i kąt / wymiary) przy piórze. */
     private fun drawShapeLabel(c: Canvas) {
         val label = shapeLabel ?: return
         if (!(liveActive && shapeSnapped) && !(lLifting && lm == LM.RESIZE)) return
@@ -2914,7 +2914,7 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
         val s = ed.sel ?: return null
         if (s.ids.size != 1) return null
         val e = ed.selElements().singleOrNull() as? Stroke ?: return null
-        return if (ShapeBox.frameOf(e) != null) e else null
+        return if (!e.locked && ShapeBox.frameOf(e) != null) e else null
     }
 
     /** Promień chwytu uchwytów kształtu: najwyżej 24 dp, a przy małym kształcie mniejszy, by środek zostawał do przesuwania. */

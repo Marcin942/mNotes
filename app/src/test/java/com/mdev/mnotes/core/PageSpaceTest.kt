@@ -39,6 +39,16 @@ class PageSpaceTest {
         assertEquals(-(below.bounds.t - above.bounds.b), d, 0.01f)
     }
 
+    /** 3c-A16: zablokowane tło na całą stronę (środek w połowie) nie blokuje usuwania odstępu w dolnej połowie. */
+    @Test fun lockedPageBackgroundDoesNotBlockRemovalInLowerHalf() {
+        val bg = stroke(0f, 0f, 595f, 842f).withLocked(true)
+        val lo = stroke(10f, 700f, 60f, 710f)
+        val mid = stroke(10f, 500f, 60f, 510f)
+        val c = PageContent.of(listOf(bg, mid, lo))
+        val d = PageSpace.clamp(c, 842f, 600f, -1000f)
+        assertEquals(-(lo.bounds.t - mid.bounds.b), d, 0.01f)
+    }
+
     @Test fun nothingBelowMeansNoShift() {
         assertEquals(0f, PageSpace.clamp(content, 842f, 400f, 50f), 0f)
     }

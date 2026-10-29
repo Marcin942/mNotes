@@ -13,8 +13,12 @@ object ToolPopups {
 
     data class Rule(val show: Boolean, val sec: Int)
 
-    /** Indeks najbliższego kroku dla zapisanego czasu (stare wersje pędzla pozwalały na 0–30 s). */
-    fun stepOf(sec: Int): Int = STEPS.indices.minBy { kotlin.math.abs(STEPS[it] - sec) }
+    /**
+     * Indeks najbliższego kroku dla zapisanego czasu (stare wersje pędzla pozwalały na 0–30 s). Czas dodatni nigdy nie
+     * pokazuje się jako „Nie gaśnie” (1 s był w połowie między 0 a 2 i wybierało się 0, choć okienko gasło).
+     */
+    fun stepOf(sec: Int): Int =
+        if (sec <= 0) 0 else STEPS.indices.filter { STEPS[it] > 0 }.minBy { kotlin.math.abs(STEPS[it] - sec) }
 
     /** Czy okienko jeszcze widać: pokazane i bez gaśnięcia albo krócej niż [Rule.sec] od ostatniego dotknięcia. */
     fun visible(r: Rule, idleMs: Long): Boolean = r.show && (r.sec <= 0 || idleMs < r.sec * 1000L)

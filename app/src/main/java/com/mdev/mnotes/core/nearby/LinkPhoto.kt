@@ -57,7 +57,14 @@ class PhotoSender(
      * Po [MAX_TRIES] wysłaniach jednej części [failed] = true i nic już nie wychodzi.
      */
     fun due(now: Long): List<SyncMsg.PhotoPart> {
-        if (failed || done) return emptyList()
+        if (failed) return emptyList()
+        if (done) {
+            // 3c-B3: wszystko potwierdzone, a „gotowe” nie przyszło (zgubione albo odbiorca zaczął od nowa) — po limicie
+            // czasu wysyłamy całość jeszcze raz: odbiorca, który ją ma, odpowie „gotowe”, nowy złoży od zera.
+            if (doneAt < 0) doneAt = now
+            if (now - doneAt < timeout()) return emptyList()
+            startOver()
+        }
         val out = ArrayList<SyncMsg.PhotoPart>()
         val limit = timeout()
         var inFlight = (0 until count).count { !acked[it] && sentAt[it] >= 0 && now - sentAt[it] < limit }
@@ -89,12 +96,28 @@ class PhotoSender(
             rtt = if (rtt < 0) sample else 0.7 * rtt + 0.3 * sample
         }
         acked[index] = true
+        if (done) doneAt = now
         return true
     }
 
-    /** Po zerwaniu łącza: wszystko niepotwierdzone wyjdzie od nowa przy następnym [due] (bez liczenia jako próba). */
+    /** Potwierdzenie z łącza: tylko dla tego zdjęcia (3c-B3 — spóźnione potwierdzenie poprzedniego trafiało w to). */
+    fun ack(photoId: String, index: Int, now: Long = -1): Boolean = photoId == id && ack(index, now)
+
+    /** Kiedy potwierdzono ostatnią część (-1: jeszcze nie albo nieznane — liczy się od pierwszego [due]). */
+    private var doneAt = -1L
+
+    /**
+     * Po zerwaniu łącza: wszystko niepotwierdzone wyjdzie od nowa przy następnym [due] (bez liczenia jako próba).
+     * Gdy wszystko było już potwierdzone, a „gotowe” nie przyszło, odbiorca mógł zacząć od nowa (okno zamknięte), więc
+     * wysyłka zaczyna się od zera — odbiorca, który ma całość, i tak odpowie „gotowe” na pierwszą część.
+     */
     fun reset() {
+        if (done) startOver()
         for (i in 0 until count) if (!acked[i]) { sentAt[i] = -1L; tries[i] = 0 }
+    }
+
+    private fun startOver() {
+        acked.fill(false); sentAt.fill(-1L); tries.fill(0); doneAt = -1L
     }
 
     /** Ile razy zdjęcie utknęło ([failed]) i wróciło do kolejki. */
@@ -143,6 +166,8 @@ class PhotoReceiver(private val maxBytes: Int = LinkChunks.MAX_MESSAGE, private 
 
     private val open = LinkedHashMap<String, Assembly>()
     private val finished = LinkedHashSet<String>()
+    /** 3c-B3: odrzucone składania — spóźniona część (było ich w drodze kilka) nie otwiera nowego pliku ani nie dostaje potwierdzenia. */
+    private val rejected = LinkedHashSet<String>()
     /** Więcej części nie zmieści się w [maxBytes] przy części [PhotoSender.PART]; `count` z ramki nie przydziela tablic na ślepo. */
     private val maxParts = maxBytes / PhotoSender.PART + 1
 
@@ -153,6 +178,7 @@ class PhotoReceiver(private val maxBytes: Int = LinkChunks.MAX_MESSAGE, private 
     fun accept(p: SyncMsg.PhotoPart): Result {
         val ack = SyncMsg.PhotoAck(p.id, p.index)
         if (p.id in finished) return Result(listOf(ack, SyncMsg.PhotoDone(p.id, true)))
+        if (p.id in rejected) return Result(listOf(SyncMsg.PhotoDone(p.id, false)), bad = true)
         if (p.count <= 0 || p.count > maxParts || p.index !in 0 until p.count) return Result(emptyList(), bad = true)
         // Najwyżej OPEN_MAX zdjęć składanych naraz (nadawca wysyła po kolei): najstarsze porzucone składanie wypada.
         if (p.id !in open && open.size >= OPEN_MAX) open.remove(open.keys.first())?.file?.delete()
@@ -163,6 +189,8 @@ class PhotoReceiver(private val maxBytes: Int = LinkChunks.MAX_MESSAGE, private 
             a.bytes += p.bytes.size
             if (a.bytes > maxBytes || !place(a, p)) {
                 open.remove(p.id); a.file.delete()
+                rejected += p.id
+                while (rejected.size > 64) rejected.remove(rejected.first())
                 return Result(listOf(SyncMsg.PhotoDone(p.id, false)), bad = true)
             }
             a.got[p.index] = true

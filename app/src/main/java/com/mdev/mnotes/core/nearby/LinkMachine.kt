@@ -356,7 +356,7 @@ class LinkMachine(
             is SyncMsg.PhotoAck -> {
                 current?.let { s ->
                     val ms = s.sinceSent(m.index, clock())
-                    if (s.ack(m.index, clock())) trace("część ${m.index + 1}/${s.count} potwierdzona" + (ms?.let { " po $it ms" } ?: ""))
+                    if (s.ack(m.id, m.index, clock())) trace("część ${m.index + 1}/${s.count} potwierdzona" + (ms?.let { " po $it ms" } ?: ""))
                 }
                 pump()
             }

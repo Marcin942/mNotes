@@ -634,7 +634,7 @@ class Editor(val ctx: Context, val nbId: String) {
         val plan = com.mdev.mnotes.core.edit.SnipCut.plan(poly, spec.w, spec.h, zoom) ?: return
         val content = doc.content(p)
         for (e in station?.rows ?: listOf(this)) e.snipShot = null
-        val caption = com.mdev.mnotes.core.edit.SnipCut.caption(pageIdx, repo.meta(nbId)?.title.orEmpty(), spec.pdf != null, T.t("pl", "en") == "pl")
+        val caption = com.mdev.mnotes.core.edit.SnipCut.caption(pageIdx, repo.meta(nbId)?.title.orEmpty(), spec.pdf != null, T.pl)
         snipBusy = true
         repo.io.execute {
             val bmp = renderBitmap(spec, content, plan, null)

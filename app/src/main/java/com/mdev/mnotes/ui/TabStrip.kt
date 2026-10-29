@@ -45,6 +45,8 @@ class TabsCtl(
     val step: (Int) -> Unit,
     val library: () -> Unit,
     val title: (String) -> String,
+    /** 3c-A7: dane zeszytu karty do ikonki (okładka, PDF); null — sam tytuł. */
+    val meta: (String) -> com.mdev.mnotes.data.NotebookMeta? = { null },
 ) {
     /** Tryb kart jest włączony i jest co zamykać — wtedy Ctrl+W zamyka kartę zamiast zeszytu. */
     val on get() = enabled && tabs.size > 0
@@ -73,9 +75,13 @@ fun TabStrip(ctl: TabsCtl, modifier: Modifier = Modifier, showNew: Boolean = tru
                     .background(if (active) m.accentSoft else androidx.compose.ui.graphics.Color.Transparent)
                     .border(0.5.dp, if (active) m.accent.copy(alpha = 0.45f) else m.line, shape)
                     .clickable(role = Role.Tab) { if (!active || openActive) { tick(); ctl.open(id) } }
-                    .padding(start = 10.dp),
+                    .padding(start = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
+                ctl.meta(id)?.let { nb ->
+                    DocIcon(nb.cover, nb.coverStyle, if (nb.pdfDoc) com.mdev.mnotes.core.layout.LaneLabel.Kind.PDF else com.mdev.mnotes.core.layout.LaneLabel.Kind.NOTEBOOK)
+                    androidx.compose.foundation.layout.Spacer(Modifier.padding(start = 6.dp))
+                }
                 Text(
                     ctl.title(id).ifBlank { T.t("Bez tytułu", "Untitled") }, maxLines = 1, overflow = TextOverflow.Ellipsis,
                     style = MaterialTheme.typography.labelLarge, fontWeight = if (active) FontWeight.SemiBold else FontWeight.Normal,

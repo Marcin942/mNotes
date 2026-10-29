@@ -33,6 +33,29 @@ class SettingsSearchTest {
             .sortedByDescending { it.second }.take(n).map { it.first.pl }
     }
 
+    /** 3c-A17b: „Ustawienia tej funkcji” z przytrzymanego przycisku paska trafiają we właściwy wiersz. */
+    @Test fun barAnchorsLandOnTheirSetting() {
+        val expected = mapOf(
+            "undo" to "Cofnij dotknięciem dwóch palców", "ballpoint" to "Wygładzanie", "highlighter" to "Wygładzanie",
+            "eraser" to "Domyślny tryb gumki", "painter" to "Tryb pędzla formatu", "fill" to "Wiaderko domyka",
+            "pipette" to "Pobrany kolor zostaje", "lasso" to "Kształt lassa", "text" to "Grecki i indeksy",
+            "laser" to "Kolor śladu lasera", "hand" to "Ponowne dotknięcie lasera", "curve" to "Trzymaj dalej",
+            "ruler" to "Przyciągaj do równych kątów", "geometry" to "Przyczep do figur",
+        )
+        val misses = expected.mapNotNull { (id, row) ->
+            val q = com.mdev.mnotes.core.search.SettingsAnchors.of(id)!!
+            if (top(q).any { it.startsWith(row) }) null else "$id („$q”) → $row: ${top(q)}"
+        }
+        assertEquals(emptyList<String>(), misses)
+        assertNull("taśma nie ma własnych ustawień", com.mdev.mnotes.core.search.SettingsAnchors.of("tape"))
+        // Każdy przycisk paska z kotwicą istnieje w źródle paska (literówka w id po cichu wyłączyłaby pozycję menu).
+        val bar = File("src/main/java/com/mdev/mnotes/ui/EditorScreen.kt").readText()
+        for (id in expected.keys + listOf("redo", "fountain", "pencil", "brush", "protractor")) {
+            val pen = com.mdev.mnotes.core.model.PenKind.entries.any { it.name.lowercase() == id }
+            assertTrue(id, pen || bar.contains("\"$id\""))
+        }
+    }
+
     @Test fun typicalQueriesFindTheRightSettingFirst() {
         val cases = listOf(
             "żeby ręka nie zasłaniała" to "Piszę",

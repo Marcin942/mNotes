@@ -70,7 +70,8 @@ class Settings(ctx: Context) {
     var accent by Pref("ui.accent", 0)               // indeks w Accents
     var compact by Pref("ui.compact", false)
     var haptics by Pref("ui.haptics", true)          // delikatne wibracje przy dotknięciu przycisków paska narzędzi
-    var tooltips by Pref("ui.tooltips", true)        // podpowiedź z nazwą przycisku po najechaniu (mysz, rysik) albo przytrzymaniu
+    var holdSettings by Pref("ui.hold_settings", true) // 3c-A17b: przytrzymany przycisk paska ma „Ustawienia tej funkcji”
+    var tooltips by Pref("ui.tooltips", true)       // podpowiedź z nazwą przycisku po najechaniu (mysz, rysik) albo przytrzymaniu
     var pageAnim by Pref("anim.pages", true)          // strony dojeżdżają na nowe miejsce po zmianie kolejności (F6)
     var pageAnimMs by Pref("anim.pages_ms", com.mdev.mnotes.core.layout.PageShift.DEFAULT_MS)  // czas tej animacji (ms), A2-7: 180 zamiast 260
     var toolHints by Pref("ui.tool_hints", true)     // dymek z opisem po wybraniu narzędzia (taśma, pędzel formatu, wiaderko, odstęp)

@@ -337,6 +337,10 @@ private fun Appearance(set: com.mdev.mnotes.data.Settings) {
         ToggleRow(T.t("Zagęszczony interfejs (desktopowy)", "Compact interface (desktop-like)"), set.compact, keys = "compact gęsty kompaktowy desktop małe odstępy") { set.compact = it }
         ToggleRow(T.t("Delikatna wibracja przy dotknięciu przycisków", "Light vibration when tapping buttons"), set.haptics, keys = "haptyka drgania wibracje vibration haptic") { set.haptics = it }
         ToggleRow(T.t("Podpowiedź z nazwą przycisku (najechanie, przytrzymanie)", "Button name tooltip (hover, long press)"), set.tooltips, keys = "podpowiedź dymek napis nazwa tooltip hover") { set.tooltips = it }
+        ToggleRow(
+            T.t("Przytrzymanie otwiera ustawienia (menu przycisku paska: „Ustawienia tej funkcji”)", "Long press opens settings (toolbar button menu: “Settings for this feature”)"), set.holdSettings,
+            keys = "przytrzymanie przytrzymaj długie naciśnięcie ustawienia funkcji skrót zębatka long press hold",
+        ) { set.holdSettings = it }
         ToggleRow(T.t("Pokazuj dymki o narzędziach po ich wybraniu", "Show tool tips after picking a tool"), set.toolHints, keys = "dymki komunikaty napis wybrane narzędzie podpowiedź toast hint") { set.toolHints = it }
         HelperStripPrefs(set)
         ToggleRow(

@@ -23,7 +23,11 @@ object CoverStyle {
     const val GRID = 4
     const val LINEN = 5
     const val ARCS = 6
-    const val COUNT = 7
+    /** 3c-A14: gwiazdki ([CoverStars]); starsza wersja aplikacji pokaże te okładki jako gładkie. */
+    const val STARS = 7
+    const val STARS_BIG = 8
+    const val CONSTELLATIONS = 9
+    const val COUNT = 10
 }
 
 data class Folder(

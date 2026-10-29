@@ -34,4 +34,15 @@ class WorkbenchTest {
         val alive = Workbench.alive(three) { it != "nb2" }
         assertEquals(listOf("nb1", "nb3"), alive.ids); assertEquals(listOf(-1f, -3f), alive.offsets); assertEquals(1, alive.active)
     }
+
+    /** 3c-B3: puste i powtórzone id w zapisie przesuwały przesunięcia i aktywny pas na sąsiedni dokument. */
+    @Test fun droppedIdsKeepOffsetsAndActiveAligned() {
+        val saved = """[{"n":"X","ids":["nb1","","nb1","nb2"],"o":[-1,-9,-8,-2],"a":3}]"""
+        val s = Workbench.decode(saved).single()
+        assertEquals(listOf("nb1", "nb2"), s.ids)
+        assertEquals(listOf(-1f, -2f), s.offsets)
+        assertEquals(1, s.active)
+        // Aktywny pas wskazywał odrzucony duplikat — wraca na pierwszy.
+        assertEquals(0, Workbench.decode("""[{"n":"X","ids":["nb1","nb1","nb2"],"a":1}]""").single().active)
+    }
 }

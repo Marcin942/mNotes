@@ -255,6 +255,24 @@ object GeoGlyphParts {
         com.mdev.mnotes.core.geom.GeoTool.Kind.TANGENTS -> listOf(ring(GlyphRole.MARK, 15f, 12f, 6f), xy(GlyphRole.DASH, 3f, 12f, 13.4f, 6f), xy(GlyphRole.DASH, 3f, 12f, 13.4f, 18f), dot(3f, 12f), dot(12f, 6.8f), dot(12f, 17.2f))
         com.mdev.mnotes.core.geom.GeoTool.Kind.PREFLECT -> listOf(xy(GlyphRole.DASH, 6f, 6f, 18f, 18f), xy(GlyphRole.MARK, 3f, 3f, 10f, 3f, 3f, 10f, closed = true), xy(GlyphRole.DETAIL, 21f, 21f, 14f, 21f, 21f, 14f, closed = true), dot(12f, 12f, 1.8f))
         com.mdev.mnotes.core.geom.GeoTool.Kind.REFLECT -> listOf(xy(GlyphRole.DASH, 12f, 2.5f, 12f, 21.5f), xy(GlyphRole.MARK, 3f, 17f, 9f, 17f, 9f, 7f, closed = true), xy(GlyphRole.DETAIL, 21f, 17f, 15f, 17f, 15f, 7f, closed = true))
+        // 3c-B2
+        com.mdev.mnotes.core.geom.GeoTool.Kind.COPY_RADIUS -> listOf(xy(GlyphRole.MARK, 2.5f, 21.5f, 10.5f, 21.5f), dot(2.5f, 21.5f, 1.2f), dot(10.5f, 21.5f, 1.2f), ring(GlyphRole.DASH, 14f, 10f, 8f), xy(GlyphRole.DETAIL, 14f, 10f, 22f, 10f), dot(14f, 10f))
+        com.mdev.mnotes.core.geom.GeoTool.Kind.DIVIDE -> listOf(xy(GlyphRole.MARK, 3f, 14f, 21f, 14f), dot(3f, 14f, 1.2f), dot(21f, 14f, 1.2f), xy(GlyphRole.DETAIL, 9f, 10.5f, 9f, 17.5f), xy(GlyphRole.DETAIL, 15f, 10.5f, 15f, 17.5f), dot(9f, 14f), dot(15f, 14f))
+        com.mdev.mnotes.core.geom.GeoTool.Kind.SEGMENT -> listOf(xy(GlyphRole.MARK, 4f, 19f, 20f, 5f), dot(4f, 19f, 2f), dot(20f, 5f, 2f))
+        com.mdev.mnotes.core.geom.GeoTool.Kind.TANGENT_AT -> listOf(ring(GlyphRole.MARK, 12f, 14f, 7.5f), xy(GlyphRole.DETAIL, 12f, 14f, 12f, 6.5f), xy(GlyphRole.DASH, 2.5f, 6.5f, 21.5f, 6.5f), dot(12f, 6.5f))
+        com.mdev.mnotes.core.geom.GeoTool.Kind.ANGLE_AT -> listOf(xy(GlyphRole.MARK, 4f, 19f, 21f, 19f), xy(GlyphRole.DASH, 4f, 19f, 15f, 5.5f), arc(4f, 19f, 8f, -51f, 0f), dot(4f, 19f))
+        com.mdev.mnotes.core.geom.GeoTool.Kind.REGULAR -> listOf(
+            xy(GlyphRole.DASH, 8f, 20f, 16f, 20f, 20f, 13.07f, 16f, 6.14f, 8f, 6.14f, 4f, 13.07f, closed = true),
+            xy(GlyphRole.MARK, 8f, 20f, 16f, 20f), dot(8f, 20f, 1.4f), dot(16f, 20f, 1.4f),
+        )
+        com.mdev.mnotes.core.geom.GeoTool.Kind.TRANSLATE -> listOf(
+            xy(GlyphRole.MARK, 3f, 20f, 9.5f, 20f, 3f, 13f, closed = true), xy(GlyphRole.DETAIL, 14f, 11f, 20.5f, 11f, 14f, 4f, closed = true),
+            xy(GlyphRole.DASH, 6.5f, 16f, 15.5f, 8.5f), xy(GlyphRole.MARK, 12.4f, 8.2f, 16.6f, 7.6f, 15.6f, 11.6f),
+        )
+        com.mdev.mnotes.core.geom.GeoTool.Kind.HOMOTHETY -> listOf(
+            dot(3f, 21f, 1.8f), xy(GlyphRole.MARK, 7f, 18f, 11f, 18f, 7f, 14f, closed = true), xy(GlyphRole.DETAIL, 11f, 15f, 19f, 15f, 11f, 7f, closed = true),
+            xy(GlyphRole.DASH, 3f, 21f, 21f, 14.25f), xy(GlyphRole.DASH, 3f, 21f, 12f, 4.5f),
+        )
         com.mdev.mnotes.core.geom.GeoTool.Kind.ROTATE -> listOf(
             dot(12f, 13f, 1.8f), xy(GlyphRole.MARK, 8f, 16.5f, 16f, 16.5f, 16f, 21.5f, 8f, 21.5f, closed = true),
             arc(12f, 13f, 8f, 190f, 350f), xy(GlyphRole.MARK, 20.9f, 8.8f, 19.9f, 11.6f, 17.9f, 9.3f),

@@ -1109,9 +1109,33 @@ class Editor(val ctx: Context, val nbId: String) {
 
     /** Kąt obrotu narzędzia Geometria w stopniach (2c-A8: chipy 30–180° i własna wartość; dawniej tylko 90°). */
     var geoAngle by mutableStateOf(90f)
+    /** 3c-B2: na ile części dzielić odcinek, ile boków ma wielokąt foremny, skala jednokładności (chipy nad płótnem). */
+    var geoParts by mutableStateOf(2)
+    var geoSides by mutableStateOf(6)
+    var geoScale by mutableStateOf(2f)
+    fun geoParams() = GeoTool.Params(geoAngle, geoParts, geoSides, geoScale)
 
     fun geoChoose(k: GeoTool.Kind) { geoKind = k; geoReset() }
     fun geoReset() { geoInputs.clear(); geoPicks.clear(); geoPage = null; view?.invalidate() }
+
+    /**
+     * 3c-B2: co wskazałoby dotknięcie ([picked]; null — nic pasującego) i podgląd wyniku [ghost], gdy to ostatnie wejście
+     * konstrukcji — do rysowania pod palcem lub rysikiem, zanim się go podniesie.
+     */
+    class GeoProbe(val pageId: String, val picked: GeoTool.Picked?, val ghost: List<Element>)
+
+    fun geoProbe(pageId: String, x: Float, y: Float, tol: Float): GeoProbe? {
+        if (readOnly) return null
+        val page = doc.page(pageId) ?: return null
+        val have = if (geoPage == null || geoPage == pageId) geoInputs.toList() else emptyList()
+        val want = geoKind.inputs.getOrNull(have.size) ?: return null
+        val picked = GeoTool.pickFrom(doc.content(page).elements, x, y, tol, want)
+        val ins = if (picked == null) have else have + picked.input
+        val ghost = if (ins.size < geoKind.inputs.size) emptyList()
+            else GeoTool.build(geoKind, ins, 0, pen.width.coerceIn(0.6f, 3f), names = false, pl = T.pl, prm = geoParams())
+                .takeUnless { ConstructOps.tooFar(it, page.spec.w, page.spec.h) }.orEmpty()
+        return GeoProbe(pageId, picked, ghost)
+    }
 
     /**
      * Dotknięcie strony [pageId] w ([x], [y]) narzędziem Geometria: następne wejście wybranej konstrukcji; po ostatnim —
@@ -1128,9 +1152,9 @@ class Editor(val ctx: Context, val nbId: String) {
         geoInputs += picked.input; geoPicks += picked
         if (geoInputs.size < geoKind.inputs.size) { view?.invalidate(); return }
         val ink = native(page, (if (pen.kind == PenKind.HIGHLIGHTER) 0xFF37474F.toInt() else pen.color) or (0xFF shl 24))
-        val kind = geoKind; val w = pen.width.coerceIn(0.6f, 3f); val names = settings.constructNames; val pl = T.pl; val angle = geoAngle
+        val kind = geoKind; val w = pen.width.coerceIn(0.6f, 3f); val names = settings.constructNames; val pl = T.pl; val prm = geoParams()
         val picks = geoPicks.toList()
-        val built = GeoTool.build(kind, geoInputs.toList(), ink, w, names, pl, angle)
+        val built = GeoTool.build(kind, geoInputs.toList(), ink, w, names, pl, prm = prm)
         geoReset()
         val els = constructed(page, built, GeoTool.failOf(kind))
             ?: return say(T.t("Ta konstrukcja nie ma rozwiązania dla wskazanych kształtów", "This construction has no solution for the picked shapes"))
@@ -1138,10 +1162,12 @@ class Editor(val ctx: Context, val nbId: String) {
         exec(DocEdit.Elements(page.id, ElementsEdit.add(doc.content(page), els)))
         // NAU-3: wejście z wolnego miejsca strony jest stałe; wskazane kropki, wierzchołki i kształty ciągną wynik za sobą.
         val pid = page.id
-        live.add(pid, picks.mapNotNull { it.id }, els.map { it.id }) { cur ->
+        // 3c-B2: przecięcie zależy od dwóch kształtów, środek odcinka od odcinka — Live dostaje je wszystkie.
+        val ids = picks.flatMap { it.ids }.distinct()
+        live.add(pid, ids, els.map { it.id }) { cur ->
             val byId = cur.associateBy { it.id }
-            val ins = picks.mapIndexed { i, pk -> if (pk.id == null) pk.input else GeoTool.resolve(kind.inputs[i], byId[pk.id] ?: return@add null, pk.part) ?: return@add null }
-            GeoTool.build(kind, ins, ink, w, names, pl, angle).takeUnless { it.isEmpty() || liveTooFar(pid, it) }
+            val ins = picks.mapIndexed { i, pk -> GeoTool.resolvePick(kind.inputs[i], pk, byId) ?: return@add null }
+            GeoTool.build(kind, ins, ink, w, names, pl, prm = prm).takeUnless { it.isEmpty() || liveTooFar(pid, it) }
         }
     }
 

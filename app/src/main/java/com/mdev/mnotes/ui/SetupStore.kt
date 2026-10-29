@@ -25,6 +25,7 @@ class SetupStore(private val s: Settings) : SetupGuide.Store {
         "pen.smoothing" -> when { s.smoothing < 0.75f -> 0; s.smoothing < 1.3f -> 1; else -> 2 }
         "eraser.mode" -> s.eraserMode
         "lasso.touch" -> b(s.lassoTouch)
+        "snip.rect" -> b(s.snipRect)
         "input.double_tap" -> s.doubleTap
         "input.two_finger_undo" -> b(s.twoFingerUndo)
         "input.pen_button" -> s.penButton
@@ -53,6 +54,7 @@ class SetupStore(private val s: Settings) : SetupGuide.Store {
             "pen.smoothing" -> s.smoothing = when (v) { 0 -> 0.5f; 1 -> 1f; else -> 1.6f }
             "eraser.mode" -> s.eraserMode = v
             "lasso.touch" -> s.lassoTouch = v != 0
+            "snip.rect" -> s.snipRect = v != 0
             "input.double_tap" -> s.doubleTap = v
             "input.two_finger_undo" -> s.twoFingerUndo = v != 0
             "input.pen_button" -> s.penButton = v

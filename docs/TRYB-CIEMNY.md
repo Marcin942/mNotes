@@ -79,8 +79,16 @@ przekształcenia do ciemnego; symetrycznie do jasnego).
   eksporcie. Dotyczy pióra, pędzla, kształtów, krzywych, konstrukcji, tekstu (kolor i tło), wiaderka, przefarbowania i
   pędzla formatu; zakreślacz zostaje (czarny przygasłby na ciemnym do niewidocznego). Stare zeszyty się nie zmieniają —
   zapisany tam prawie biały na jasnej stronie jest w trybie ciemnym widoczny jak biały.
-- **Eksport PDF/PNG i druk**: oryginał; w oknie eksportu przełącznik „Kolory jak na ekranie” (pamiętany, ustawienie
-  `export.as_screen`; pokazuje się tylko, gdy ekran różni się od oryginału). SVG i Markdown zawsze w oryginale.
+- **Eksport (3c-A5)**: wybór „Kolory stron” w oknie eksportu działa w PDF, PNG, SVG i TikZ, przy wydruku i w schowku.
+  Ustawienie `export.theme` jest pamiętane; schowek to obraz strony, wycinek albo zaznaczenie jako TikZ.
+  - „Jak powstały” (domyślnie): każda strona w swoim trybie, z flagą F11.
+  - „Jasne” albo „Ciemne”: przekształcenie jak na ekranie.
+  - Wektory (SVG, TikZ) dostają kolory przez `Transform.shown(e)`, czyli według tych samych reguł co płótno.
+  - Tło PDF i rysunki w SVG: `feColorMatrix` z `imageMatrix`. Zdjęcia tylko przy „Odwracaj też zdjęcia”.
+  - Ciemna strona w TikZ dostaje prostokąt tła `mnpaper` pod rysunkiem.
+  - Kto miał dawne „Kolory jak na ekranie” (`export.as_screen`), dostaje na start tryb stron z ekranu.
+  - Markdown jest bez kolorów.
+  - Wycinek wstawiany z powrotem na stronę zostaje w kolorach strony, bo ekran i tak go zamieni.
 
 ## Gdzie się przełącza
 

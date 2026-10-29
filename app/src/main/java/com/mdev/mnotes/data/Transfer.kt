@@ -54,9 +54,14 @@ enum class ExportFormat(val ext: String, val mime: String, val multi: Boolean) {
 class Exporter(private val repo: Repository, private val assets: Assets, private val pdf: PdfPool) {
     private val renderer = PageRenderer(assets)
 
-    /** „Jak na ekranie” (PDF i PNG): tryb stron z [ThemeMap]; null — strony w oryginale, jak powstały. */
-    var screenTheme: Int? = null
+    /**
+     * 3c-A5: kolory stron we wszystkich formatach z kolorami (PDF, PNG, SVG, TikZ): [ThemeMap.MIXED] — każda strona jak
+     * powstała (z flagą F11), [ThemeMap.LIGHT] / [ThemeMap.DARK] — wszystkie jasne / ciemne, jak tryb stron na ekranie.
+     */
+    var theme: Int = ThemeMap.MIXED
     var screenPhotos = false
+
+    private fun themeOf(spec: PageSpec): ThemeMap.Transform? = ThemeMap.forPage(spec.paper, spec.inverted, theme)
 
     /** Czeka, aż wszystkie zaplanowane zapisy stron trafią na dysk. */
     fun awaitWrites() { runCatching { repo.io.submit {}.get() } }
@@ -157,7 +162,7 @@ class Exporter(private val repo: Repository, private val assets: Assets, private
     private fun drawPage(c: Canvas, nb: String, p: PageMeta, scale: Float, bgScale: Float) {
         val spec = p.spec
         val bg = spec.pdf?.let { pdf.render(nb, it.asset, it.page, (spec.w * bgScale).roundToInt(), (spec.h * bgScale).roundToInt()) }
-        val t = screenTheme?.let { ThemeMap.forPage(spec.paper, spec.inverted, it) }
+        val t = themeOf(spec)
         renderer.theme = t
         renderer.themePhotos = screenPhotos
         try {
@@ -222,16 +227,20 @@ class Exporter(private val repo: Repository, private val assets: Assets, private
         val fr = frameOf(nb, p)
         if (fr != null) sb.append("<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:xlink=\"http://www.w3.org/1999/xlink\" width=\"${f(fr.w)}pt\" height=\"${f(fr.h)}pt\" viewBox=\"${f(fr.l)} ${f(fr.t)} ${f(fr.w)} ${f(fr.h)}\">\n")
         else sb.append("<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:xlink=\"http://www.w3.org/1999/xlink\" width=\"${f(spec.w)}pt\" height=\"${f(spec.h)}pt\" viewBox=\"0 0 ${f(spec.w)} ${f(spec.h)}\">\n")
-        sb.append("<rect width=\"${f(spec.w)}\" height=\"${f(spec.h)}\" fill=\"${hex(spec.paper)}\"/>\n")
+        val t = themeOf(spec)
+        val dark = t?.toDark ?: spec.darkPaper
+        // 3c-A5: tło PDF i rysunki (a zdjęcia na życzenie) przez tę samą macierz co na ekranie
+        val themed = t?.let { svgMatrix(sb, "theme", it.imageMatrix) }.orEmpty()
+        sb.append("<rect width=\"${f(spec.w)}\" height=\"${f(spec.h)}\" fill=\"${hex(t?.dstPaper ?: spec.paper)}\"/>\n")
         val ref: PdfRef? = spec.pdf
         if (ref != null) {
             pdf.render(nb, ref.asset, ref.page, (spec.w * 2).roundToInt(), (spec.h * 2).roundToInt())?.let {
-                sb.append("<image width=\"${f(spec.w)}\" height=\"${f(spec.h)}\" xlink:href=\"data:image/png;base64,${pngB64(it)}\"/>\n")
+                sb.append("<image width=\"${f(spec.w)}\" height=\"${f(spec.h)}\"$themed xlink:href=\"data:image/png;base64,${pngB64(it)}\"/>\n")
             }
-        } else svgTemplate(sb, spec)
+        } else svgTemplate(sb, spec, t?.ink(spec.line) ?: spec.line)
         val fl = FloatList()
-        for (e in repo.readPage(nb, p.id).elements) when (e) {
-            is Stroke -> svgStroke(sb, e, fl, spec.darkPaper)
+        for (raw in repo.readPage(nb, p.id).elements) when (val e = t?.shown(raw) ?: raw) {
+            is Stroke -> svgStroke(sb, e, fl, dark)
             is TextBox -> svgText(sb, e)
             is TapeEl -> {
                 val tr = svgBoxTransform(e)
@@ -239,7 +248,7 @@ class Exporter(private val repo: Repository, private val assets: Assets, private
                 sb.append("<rect x=\"${f(e.cx - e.w / 2)}\" y=\"${f(e.cy - e.h / 2)}\" width=\"${f(e.w)}\" height=\"${f(e.h)}\" rx=\"$rad\" fill=\"${hex(e.color)}\" fill-opacity=\"${if (e.hidden) "1" else "0.18"}\"$tr/>\n")
             }
             is FillEl -> {
-                val hl = if (e.hl) " opacity=\"${f(PenSpec.of(PenKind.HIGHLIGHTER).alpha * (if (spec.darkPaper) 0.84f else 1f))}\" style=\"mix-blend-mode:${if (spec.darkPaper) "screen" else "multiply"}\"" else ""
+                val hl = if (e.hl) " opacity=\"${f(PenSpec.of(PenKind.HIGHLIGHTER).alpha * (if (dark) 0.84f else 1f))}\" style=\"mix-blend-mode:${if (dark) "screen" else "multiply"}\"" else ""
                 sb.append("<path fill=\"${hex(e.color)}\" fill-rule=\"evenodd\"$hl d=\"")
                 for (ring in e.rings) if (ring.size >= 6) {
                     sb.append("M${f(ring[0])} ${f(ring[1])}")
@@ -250,6 +259,8 @@ class Exporter(private val repo: Repository, private val assets: Assets, private
                 sb.append("\"/>\n")
             }
             is ImageEl -> assets.load(nb, e.asset)?.let { b ->
+                val inv = t != null && (screenPhotos || assets.isDrawing(nb, e.asset, b))
+                if (inv) sb.append("<g$themed>\n")
                 val tr = svgBoxTransform(e)
                 val cr = e.crop
                 val filter = svgFx(sb, e.fx)
@@ -262,6 +273,7 @@ class Exporter(private val repo: Repository, private val assets: Assets, private
                         sb.append("<image x=\"${f(e.cx - e.w / 2)}\" y=\"${f(e.cy - e.h / 2)}\" width=\"${f(e.w)}\" height=\"${f(e.h)}\" opacity=\"${f(e.alpha)}\"$tr$filter preserveAspectRatio=\"none\" xlink:href=\"data:image/png;base64,${pngB64(kept)}\"/>\n")
                     } finally { kept.recycle() }
                 }
+                if (inv) sb.append("</g>\n")
             }
         }
         sb.append("</svg>\n")
@@ -269,20 +281,21 @@ class Exporter(private val repo: Repository, private val assets: Assets, private
     }
 
     /** Dopisuje do [sb] filtr macierzy kolorów obrazu (przesunięcia w skali 0..1, jak w SVG) i zwraca atrybut `filter`; pusty bez efektów. */
-    private fun svgFx(sb: StringBuilder, fx: com.mdev.mnotes.core.model.ImageFx): String {
-        if (fx.isNone) return ""
-        val m = fx.matrix()
+    private fun svgFx(sb: StringBuilder, fx: com.mdev.mnotes.core.model.ImageFx): String =
+        if (fx.isNone) "" else svgMatrix(sb, "fx${fx.hashCode().toUInt()}", fx.matrix())
+
+    /** Filtr `feColorMatrix` z macierzy Androida 4×5 (przesunięcia 0..255 → 0..1, jak w SVG); zwraca atrybut `filter`. */
+    private fun svgMatrix(sb: StringBuilder, id: String, m: FloatArray): String {
         val values = (0 until 4).joinToString(" ") { r -> (0 until 5).joinToString(" ") { c -> f(if (c == 4) m[r * 5 + c] / 255f else m[r * 5 + c]) } }
-        val id = "fx${fx.hashCode().toUInt()}"
         sb.append("<filter id=\"$id\" color-interpolation-filters=\"sRGB\"><feColorMatrix type=\"matrix\" values=\"$values\"/></filter>\n")
         return " filter=\"url(#$id)\""
     }
 
-    private fun svgTemplate(sb: StringBuilder, spec: PageSpec) {
+    private fun svgTemplate(sb: StringBuilder, spec: PageSpec, line: Int) {
         val g = renderer.geom(spec)
         if (g.isEmpty) return
         val lw = spec.lineWidth
-        val col = hex(spec.line)
+        val col = hex(line)
         fun lines(a: FloatArray, w: Float) {
             if (a.isEmpty()) return
             sb.append("<path stroke=\"$col\" stroke-width=\"${f(w)}\" fill=\"none\" d=\"")
@@ -403,7 +416,13 @@ class Exporter(private val repo: Repository, private val assets: Assets, private
     /** FB13: rysunek na stronę w jednym pliku `.tex` (`standalone`); pusta strona daje pusty rysunek, żeby numery się zgadzały. */
     private fun tikz(nb: String, meta: NotebookMeta, idx: List<Int>): String =
         com.mdev.mnotes.core.export.TikzExport.document(
-            idx.mapNotNull { i -> meta.pages.getOrNull(i) }.map { p -> com.mdev.mnotes.core.export.TikzExport.picture(repo.readPage(nb, p.id).elements).code },
+            idx.mapNotNull { i -> meta.pages.getOrNull(i) }.map { p ->
+                val t = themeOf(p.spec)
+                val els = repo.readPage(nb, p.id).elements.let { e -> if (t == null) e else e.map(t::shown) }
+                // ciemna strona dostaje tło, inaczej jasne pismo zniknęłoby na białej kartce LaTeX-a
+                val paper = if (t?.toDark ?: p.spec.darkPaper) t?.dstPaper ?: p.spec.paper else null
+                com.mdev.mnotes.core.export.TikzExport.picture(els, paper = paper).code
+            },
             meta.title,
         )
 

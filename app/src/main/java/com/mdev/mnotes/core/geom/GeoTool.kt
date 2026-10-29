@@ -226,6 +226,15 @@ object GeoTool {
         return (d1 >= 0 && d2 >= 0 && d3 >= 0) || (d1 <= 0 && d2 <= 0 && d3 <= 0)
     }
 
+    /**
+     * 3c-B3: dopuszczalna miara kąta dla narzędzia [k]: obrót do ±360°, kąt przy punkcie do ±180° (łuk z podpisem
+     * pokazuje kąt wypukły, więc 270° wychodziło jako „90°”).
+     */
+    fun angleOk(k: Kind, a: Float): Boolean = a.isFinite() && a != 0f && abs(a) <= (if (k == Kind.ROTATE) 360f else 180f)
+
+    /** Odcinek krótszy niż 1 px nie wyznacza kierunku (prosta zwinięta do punktu). */
+    private fun collapsed(l: Line) = l.a.dist(l.b) < 1f
+
     /** Powód braku wyniku (albo wyniku daleko poza stroną) dla dymku, jak [ConstructOps.failOf] (2c-A8). */
     fun failOf(k: Kind): ConstructOps.Fail = when (k) {
         Kind.XLL -> ConstructOps.Fail.PARALLEL
@@ -265,7 +274,7 @@ object GeoTool {
                 val l = ln(0); val v = pt(1)
                 val far = if (l.a.dist(v) >= l.b.dist(v)) l.a else l.b
                 val u = far.dist(v)
-                if (u < 1f || abs(deg) < 0.01f || abs(deg) >= 360f) emptyList() else {
+                if (u < 1f || abs(deg) < 0.01f || !angleOk(k, deg)) emptyList() else {
                     // y w dół: obrót o −α na ekranie idzie przeciwnie do wskazówek zegara, jak kąt na kartce
                     val rot = Construct.rotate(far, v, (-deg * PI / 180).toFloat())
                     val end = v + (rot - v) * (max(u, 40f) / u)
@@ -293,8 +302,8 @@ object GeoTool {
                 ConstructOps.compose(col, w, names) { circle(cc); dot(cc.c, "O"); name(pt(0), "A", 4f); name(pt(1), "B", 4f); name(pt(2), "C", 4f) }
             } ?: emptyList()
             Kind.CENTER -> ConstructOps.compose(col, w, names) { around(cir(0)); dot(cir(0).c, "O") }
-            Kind.BISECTOR -> { val l = ln(0); ConstructOps.compose(col, w, names, listOf(l)) { dot(Construct.midpoint(l.a, l.b), "M"); line(Construct.bisector(l.a, l.b, l.a.dist(l.b)), true) } }
-            Kind.PERP -> {
+            Kind.BISECTOR -> { val l = ln(0); if (collapsed(l)) emptyList() else ConstructOps.compose(col, w, names, listOf(l)) { dot(Construct.midpoint(l.a, l.b), "M"); line(Construct.bisector(l.a, l.b, l.a.dist(l.b)), true) } }
+            Kind.PERP -> if (collapsed(ln(0))) emptyList() else {
                 val l = ln(0); val p = pt(1)
                 val f = Construct.project(p, l)
                 val d = l.b - l.a; val len = hypot(d.x, d.y).coerceAtLeast(1e-6f)
@@ -302,7 +311,7 @@ object GeoTool {
                 val half = max(p.dist(f) * 1.2f, len * 0.5f)
                 ConstructOps.compose(col, w, names, listOf(l)) { line(Line(f - n * half, f + n * half), true); dot(f, "F") }
             }
-            Kind.PARALLEL -> {
+            Kind.PARALLEL -> if (collapsed(ln(0))) emptyList() else {
                 val l = ln(0); val p = pt(1)
                 val d = l.b - l.a
                 ConstructOps.compose(col, w, names, listOf(l)) { line(Line(p - d * 0.6f, p + d * 0.6f), true) }
@@ -332,8 +341,9 @@ object GeoTool {
                     floatArrayOf(t.a.x, t.a.y, 1f, t.b.x, t.b.y, 1f, t.c.x, t.c.y, 1f, t.a.x, t.a.y, 1f), poly = true)
                 ConstructOps.ops(listOf(tr), names, pl).firstOrNull { it.id == id }?.build?.invoke(col, w) ?: emptyList()
             }
-            Kind.REFLECT -> listOf((ins[1] as Input.Obj).el.transformed(ConstructOps.reflection(ln(0))).withId(Ids.next()))
-            Kind.ROTATE -> { val c = pt(0); listOf((ins[1] as Input.Obj).el.transformed(Affine.rotation((deg * PI / 180).toFloat(), c.x, c.y)).withId(Ids.next())) }
+            Kind.REFLECT -> if (collapsed(ln(0))) emptyList() else listOf((ins[1] as Input.Obj).el.transformed(ConstructOps.reflection(ln(0))).withId(Ids.next()))
+            // 3c-B3: y w dół, więc −α — dodatni kąt obraca przeciwnie do wskazówek zegara, jak w szkole i w ANGLE_AT.
+            Kind.ROTATE -> { val c = pt(0); if (!angleOk(k, deg)) emptyList() else listOf((ins[1] as Input.Obj).el.transformed(Affine.rotation((-deg * PI / 180).toFloat(), c.x, c.y)).withId(Ids.next())) }
             Kind.PREFLECT -> { val c = pt(0); listOf((ins[1] as Input.Obj).el.transformed(Affine.scale(-1f, -1f, c.x, c.y)).withId(Ids.next())) }
             Kind.TANGENTS -> {
                 val p = pt(0); val c = cir(1)

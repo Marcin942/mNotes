@@ -14,7 +14,7 @@ cd /home/mdev/AndroidStudioProjects/mNotes
 ./gradlew --offline :app:compileDebugKotlin -q 2>&1 | grep -E "^e:|error:|FAIL"        # sama kompilacja (brak wyjścia = OK)
 ./gradlew --offline :app:testDebugUnitTest :app:assembleDebug -q 2>&1 | grep -E "^e:|error:|FAIL|BUILD"
 ```
-Wyniki testów: `app/build/test-results/testDebugUnitTest/*.xml`. Stan: **493 testy (1 pominięty), 0 błędów** (2026-10-22) (m.in. `AngleSnapTest`, `SkillSamsungFormatTest`, `RulerTest`, `PageSpaceTest`, `TapeTest`, `ListTextTest`, `ZoomRegionTest`). Używać ścieżek absolutnych.
+Od importu z drugiego komputera (2026-11-03) są dwa warianty: `foss` (OSS, bez usług Google) i `gms` (z Nearby); zadania z wariantem to np. `:app:compileFossDebugKotlin`, `:app:testFossDebugUnitTest`, `:app:assembleFossDebug`. Wyniki testów: `app/build/test-results/testFossDebugUnitTest/*.xml` (dawniej `testDebugUnitTest`). Stan: **1166 testów (10 pominiętych), 0 błędów** (2026-11-03, `:app:testFossDebugUnitTest` po imporcie z drugiego komputera; wcześniej 493 z 2026-10-22) (m.in. `AngleSnapTest`, `SkillSamsungFormatTest`, `RulerTest`, `PageSpaceTest`, `TapeTest`, `ListTextTest`, `ZoomRegionTest`). Używać ścieżek absolutnych.
 
 ## ⚠ Tablet użytkownika (adb `R5GL12C1HMT`, Galaxy Tab S10+) jest REALNIE używany
 Nie jest sprzętem testowym. Przed `install -r` / `am start` / `input …`:

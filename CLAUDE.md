@@ -18,6 +18,11 @@ i stylu kodu są wspólne i leżą w mChochliku (jedno źródło, zmiana działa
 - Testy: `~/AndroidStudioProjects/mChochlik/bin/gradle :app:assembleDebug :app:testDebugUnitTest` (kolejka Gradle'a;
   gołe `./gradlew` zatrzymuje hook). Gotową gałąź kończysz własnym `land` (polecenie wyżej), bez czekania na prośbę.
 - Snapshot na życzenie: `~/AndroidStudioProjects/mChochlik/bin/snapshot --app mnotes`.
+- **Warianty `foss` i `gms`** (po imporcie z drugiego komputera, 2026-11-03). `foss` to wersja OSS bez usług Google, `gms` dodaje
+  `play-services-nearby` (tylko w `gmsImplementation`, kod w `src/gms/`); kreda siedzi w `src/kreda/`. Zadania: `:app:assembleDebug`
+  i `:app:testDebugUnitTest` obejmują oba warianty; w trakcie pracy wystarczy `:app:compileFossDebugKotlin` albo
+  `:app:testFossDebugUnitTest`. APK leży w `app/build/outputs/apk/<wariant>/debug/`, a rejestr demona zakłada jeszcze ścieżkę
+  bez wariantu (`apk_rel`): do poprawienia osobną gałęzią w mChochliku, zanim zadziała instalacja przez mStore.
 - **Wersje jeszcze nie z gita.** `versionCode`/`versionName` w `app/build.gradle.kts` są na sztywno (1 i `0.1.0`),
   więc mStore nie odróżnia snapshotów, a „Wydanie” nie zadziała. Do czasu wdrożenia formuły z
   `PORZADEK-PROJEKTOW.md` §3 (osobna gałąź, potem `version_prop` w rejestrze) nie obiecuj właścicielowi działających

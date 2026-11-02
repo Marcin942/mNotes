@@ -80,3 +80,20 @@ dependencies {
     testImplementation(libs.org.json)
     debugImplementation(libs.androidx.compose.ui.tooling)
 }
+
+// Demon Chochlik i mStore znają jedno zadanie testów (`:app:testDebugUnitTest`) i jeden plik APK
+// (`app/build/outputs/apk/debug/app-debug.apk`), a dwa warianty dają po dwa tych samych. Zadanie zbiorcze nosi dokładnie tę
+// nazwę (Gradle nie szuka wtedy skrótów), a instalowanym snapshotem jest wariant gms, czyli aplikacja z łączem Nearby.
+tasks.register("testDebugUnitTest") {
+    group = "verification"
+    description = "Testy jednostkowe obu wariantów (foss i gms)."
+    dependsOn("testFossDebugUnitTest", "testGmsDebugUnitTest")
+}
+
+val kopiujApkDebug = tasks.register<Copy>("kopiujApkDebug") {
+    description = "Kopiuje APK wariantu gms pod nazwę, której szukają demon i mStore."
+    from(layout.buildDirectory.file("outputs/apk/gms/debug/app-gms-debug.apk"))
+    into(layout.buildDirectory.dir("outputs/apk/debug"))
+    rename { "app-debug.apk" }
+}
+tasks.matching { it.name == "assembleDebug" }.configureEach { finalizedBy(kopiujApkDebug) }

@@ -63,7 +63,7 @@ class SettingsSearchTest {
             "leworęczny" to "Piszę",
             "mańkut" to "Piszę",
             "piszę lewą" to "Piszę",
-            "przewiń stronę dalej od brzegu" to "Przewijanie o pół ekranu",
+            "przewiń stronę dalej od brzegu" to "Odsuwanie początku kartki",
             "ciemne tło" to "Strony zeszytów|Motyw",
             "ciemny ekran" to "Motyw|Strony zeszytów",
             "oczy mnie bolą wieczorem" to "Motyw|Strony zeszytów",

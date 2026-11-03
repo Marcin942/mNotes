@@ -226,7 +226,7 @@ class Settings(ctx: Context) {
     var mathText by Pref("text.math_unicode", true)      // L2: \alpha, x^2, a_1 → α, x², a₁ w polach tekstu
     var constructNames by Pref("construct.names", true)  // L1 (A2-9): konstrukcje podpisują punkty A, B, C, O, H…
     var paletteRecent by Pref("palette.recent", "")      // pomysł Fable 2: ostatnio użyte polecenia palety (id po przecinku)
-    var scrollMargin by Pref("view.scroll_margin", true)  // 3c-A4: dokument da się przewinąć o pół ekranu poza brzeg (np. dla leworęcznych)
+    var scrollMargin by Pref("view.scroll_margin", true)  // 3c-A4: lewy początek dokumentu da się odsunąć do połowy ekranu (np. dla leworęcznych); inne brzegi bez zapasu
     // 3c-A9: tryb „do odczytu” (core.prefs.Reader): na stałe (też z profilu) albo sam na telefonie
     var reader by Pref("view.reader", false)
     var readerAuto by Pref("view.reader_auto", true)

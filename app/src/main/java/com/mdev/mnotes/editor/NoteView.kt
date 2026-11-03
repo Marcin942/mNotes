@@ -350,11 +350,11 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
     private fun maxZoom() = lane?.maxZoom() ?: ZoomLimits.maxZoom(baseZoom(), settings.zoomMaxFactor)
 
     // 2d-A1: w pasie stanowiska oś wspólna należy do modelu (widok ma wysokość okna, nie pasa) — tu tylko oś stron.
-    private fun clampX(x: Float, z: Float): Float { if (lane != null && ed.layoutMode != 1) return x; return ScrollRange.clamp(x, layout.docWidth * z, width.toFloat(), marginX()) }
-    private fun clampY(y: Float, z: Float): Float { if (lane != null && ed.layoutMode == 1) return y; return ScrollRange.clamp(y, layout.docHeight * z, height.toFloat(), marginY()) }
-    // 3c-A4: zapas przewijania wokół dokumentu (pół ekranu); na stanowisku pasy liczy model, tam bez zapasu.
-    private fun marginX() = if (lane == null && settings.scrollMargin) width * ScrollRange.MARGIN else 0f
-    private fun marginY() = if (lane == null && settings.scrollMargin) height * ScrollRange.MARGIN else 0f
+    private fun clampX(x: Float, z: Float): Float { if (lane != null && ed.layoutMode != 1) return x; return ScrollRange.clamp(x, layout.docWidth * z, width.toFloat(), startReachX()) }
+    private fun clampY(y: Float, z: Float): Float { if (lane != null && ed.layoutMode == 1) return y; return ScrollRange.clamp(y, layout.docHeight * z, height.toFloat()) }
+    // 3c-A4: tylko lewy początek dokumentu da się odsunąć, najdalej na połowę ekranu; góra, dół i prawy brzeg bez zapasu.
+    // Na stanowisku pasy liczy model, tam bez zapasu.
+    private fun startReachX() = if (lane == null && settings.scrollMargin) width * ScrollRange.MARGIN else 0f
 
     private fun docX(sx: Float) = (sx - tx) / zoom
     private fun docY(sy: Float) = (sy - ty) / zoom
@@ -1614,8 +1614,8 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
                 val vx = tracker.getXVelocity(navPid); val vy = tracker.getYVelocity(navPid)
                 if (hypot(vx, vy) > cfg.scaledMinimumFlingVelocity) {
                     // Scroller liczy -tx/-ty, więc zakres z [ScrollRange] odwrócony.
-                    val rx = ScrollRange.of(layout.docWidth * zoom, width.toFloat(), marginX())
-                    val ry = ScrollRange.of(layout.docHeight * zoom, height.toFloat(), marginY())
+                    val rx = ScrollRange.of(layout.docWidth * zoom, width.toFloat(), startReachX())
+                    val ry = ScrollRange.of(layout.docHeight * zoom, height.toFloat())
                     val minX = (-rx[1]).toInt(); val maxX = (-rx[0]).toInt()
                     val minY = (-ry[1]).toInt(); val maxY = (-ry[0]).toInt()
                     // 2d-A1: na stanowisku rzut liczy model (oba kierunki naraz, ten sam wzór co OverScroller).

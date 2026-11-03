@@ -344,7 +344,7 @@ private fun Appearance(set: com.mdev.mnotes.data.Settings) {
         ToggleRow(T.t("Pokazuj dymki o narzędziach po ich wybraniu", "Show tool tips after picking a tool"), set.toolHints, keys = "dymki komunikaty napis wybrane narzędzie podpowiedź toast hint") { set.toolHints = it }
         HelperStripPrefs(set)
         ToggleRow(
-            T.t("Przewijanie o pół ekranu poza brzeg stron (wygodniej pisać przy brzegu, np. leworęcznym)", "Scroll half a screen past the page edges (easier writing near an edge, e.g. left-handed)"),
+            T.t("Odsuwanie początku kartki przy przewijaniu: lewy brzeg pierwszej strony do połowy ekranu (np. dla leworęcznych)", "Pulling the start of the page aside when scrolling: left edge of the first page to the middle of the screen (e.g. for left-handed)"),
             set.scrollMargin, keys = "leworęczny lewa ręka dłoń przewijanie margines zapas brzeg pierwsza strona przesuń left handed scroll margin overscroll",
         ) { set.scrollMargin = it }
         // 3c-A9: tryb do odczytu — zawsze (też z profilu „Do odczytu”) albo sam na telefonie.

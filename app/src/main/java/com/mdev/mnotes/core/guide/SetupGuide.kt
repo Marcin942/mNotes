@@ -256,8 +256,8 @@ object SetupGuide {
             listOf(
                 Page(
                     "scroll_margin", "Odsuwanie kartki", "Pushing the page aside",
-                    "Kartkę da się przewinąć o pół ekranu poza brzeg — wygodniej pisać przy brzegu, gdy dłoń leży na ekranie.",
-                    "The page can scroll half a screen past its edge — easier to write near the edge with your palm on the screen.",
+                    "Początek kartki da się odsunąć w prawo, aż jej lewy brzeg stanie na połowie ekranu — wygodniej pisać przy lewym brzegu, gdy dłoń leży na ekranie.",
+                    "The start of the page can be pulled right until its left edge sits at the middle of the screen — easier to write near the left edge with your palm on the screen.",
                     Sample.VIEW, onOff("view.scroll_margin", "Włączone", "On", "Wyłączone", "Off"),
                 ),
                 Page(

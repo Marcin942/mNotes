@@ -23,10 +23,9 @@ i stylu kodu są wspólne i leżą w mChochliku (jedno źródło, zmiana działa
   i `:app:testDebugUnitTest` obejmują oba warianty; w trakcie pracy wystarczy `:app:compileFossDebugKotlin` albo
   `:app:testFossDebugUnitTest`. APK leży w `app/build/outputs/apk/<wariant>/debug/`, a rejestr demona zakłada jeszcze ścieżkę
   bez wariantu (`apk_rel`): do poprawienia osobną gałęzią w mChochliku, zanim zadziała instalacja przez mStore.
-- **Wersje jeszcze nie z gita.** `versionCode`/`versionName` w `app/build.gradle.kts` są na sztywno (1 i `0.1.0`),
-  więc mStore nie odróżnia snapshotów, a „Wydanie” nie zadziała. Do czasu wdrożenia formuły z
-  `PORZADEK-PROJEKTOW.md` §3 (osobna gałąź, potem `version_prop` w rejestrze) nie obiecuj właścicielowi działających
-  snapshotów i nie wpisuj tych wersji ręcznie jako obejścia.
+- **Wersje z gita** (od 2026-11-03, formuła jak w mGPS, `PORZADEK-PROJEKTOW.md` §3): `versionCode` to minuty od 2026-01-01 UTC
+  ostatniego commitu, `versionName` z `git describe` (`0.1.0+N.sha`). Podbity kod (`chochlik.versionCode`) przyjmuje tylko build
+  demona; nie wpisuj wersji ręcznie.
 - **Zakres i stan prac:** `docs/features/BACKLOG.md` (jedyne źródło prawdy o zakresie) i `docs/STAN-PRACY.md`
   (zacznij tutaj po wznowieniu sesji; aktualizuj oba na końcu partii zmian).
 - **Formaty przyjmowane przez mNotes („Udostępnij”, „Otwórz w aplikacji”, importy).** Decyzja właściciela (2026-10-18):

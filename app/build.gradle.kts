@@ -3,6 +3,31 @@ plugins {
     alias(libs.plugins.kotlin.compose)
 }
 
+// Wersja z ostatniego commitu (jak w mChochliku, D-018): versionCode to minuty od 2026-01-01 UTC.
+// providers.exec, bo configuration cache nie pozwala uruchamiać procesów wprost.
+val gitHead = providers.exec {
+    commandLine("git", "log", "-1", "--format=%ct %h")
+    isIgnoreExitValue = true
+}.standardOutput.asText.map { it.trim() }.orElse("")
+val gitParts = gitHead.get().split(" ").filter { it.isNotEmpty() }
+val naturalVersionCode = gitParts.getOrNull(0)?.toLongOrNull()
+    ?.let { ((it - 1_767_225_600L) / 60).toInt().coerceAtLeast(1) } ?: 1
+// Build ratunkowy demona (D-039) dostaje podbity kod, żeby system przyjął go jako aktualizację.
+// Ręcznie podbity kod blokuje telefon (incydent 99999999), więc większy skok przechodzi tylko z flagą demona.
+val appVersionCode = providers.gradleProperty("chochlik.versionCode").orNull?.toIntOrNull() ?: naturalVersionCode
+check(providers.gradleProperty("chochlik.rescue").isPresent || appVersionCode <= naturalVersionCode + 1_000_000) {
+    "chochlik.versionCode=$appVersionCode przekracza kod naturalny o ponad 1 000 000 (WERSJE.md)"
+}
+// D-034: wersja z ostatniego tagu wydania; po nim `+N.sha` (snapshot), na samym tagu `+sha`.
+val gitDescribe = providers.exec {
+    commandLine("git", "describe", "--tags", "--match", "v[0-9]*", "--long", "--abbrev=7")
+    isIgnoreExitValue = true
+}.standardOutput.asText.map { it.trim() }.orElse("")
+val appVersionName = Regex("""^v(.+)-(\d+)-g([0-9a-f]+)$""").matchEntire(gitDescribe.get())?.let { m ->
+    val (tag, ahead, sha) = m.destructured
+    if (ahead == "0") "$tag+$sha" else "$tag+$ahead.$sha"
+} ?: ("0.0.0" + (gitParts.getOrNull(1)?.let { "+$it" } ?: ""))
+
 android {
     namespace = "com.mdev.mnotes"
     compileSdk {
@@ -15,8 +40,8 @@ android {
         applicationId = "com.mdev.mnotes"
         minSdk = 26
         targetSdk = 36
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = appVersionCode
+        versionName = appVersionName
     }
 
     // Dwa warianty z jednego kodu: `foss` bez żadnej niewolnej biblioteki (F-Droid), `gms` dokłada łącze z telefonem

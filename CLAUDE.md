@@ -21,8 +21,8 @@ i stylu kodu są wspólne i leżą w mChochliku (jedno źródło, zmiana działa
 - **Warianty `foss` i `gms`** (po imporcie z drugiego komputera, 2026-11-03). `foss` to wersja OSS bez usług Google, `gms` dodaje
   `play-services-nearby` (tylko w `gmsImplementation`, kod w `src/gms/`); kreda siedzi w `src/kreda/`. Zadania: `:app:assembleDebug`
   i `:app:testDebugUnitTest` obejmują oba warianty; w trakcie pracy wystarczy `:app:compileFossDebugKotlin` albo
-  `:app:testFossDebugUnitTest`. APK leży w `app/build/outputs/apk/<wariant>/debug/`, a rejestr demona zakłada jeszcze ścieżkę
-  bez wariantu (`apk_rel`): do poprawienia osobną gałęzią w mChochliku, zanim zadziała instalacja przez mStore.
+  `:app:testFossDebugUnitTest`. APK leży w `app/build/outputs/apk/<wariant>/debug/`; demon (mStore) buduje i instaluje
+  wariant `gms` (`:app:assembleGmsDebug`, decyzja właściciela 2026-11-03, rejestr w mChochliku c5c5241).
 - **Wersje z gita** (od 2026-11-03, formuła jak w mGPS, `PORZADEK-PROJEKTOW.md` §3): `versionCode` to minuty od 2026-01-01 UTC
   ostatniego commitu, `versionName` z `git describe` (`0.1.0+N.sha`). Podbity kod (`chochlik.versionCode`) przyjmuje tylko build
   demona; nie wpisuj wersji ręcznie.

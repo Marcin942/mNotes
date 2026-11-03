@@ -115,6 +115,7 @@ Założenie projektowe: „Linux Mint user” = osoba ceniąca kontrolę, skrót
 - [~] FIL-004 Folder synchronizacji (SAF) — lustro w otwartych plikach dla Syncthing/Nextcloud/rsync; kopia ręczna i automatyczna _(folder synchronizacji (SAF, lustro PDF/MD/.mnotes) zaimplementowany; brak testu zeszytów zablokowanych i zagnieżdżonych folderów)_
 - [~] FIL-005 Drukowanie (PrintManager) _(PrintManager zaimplementowany — brak testu na urządzeniu)_
 - [x] FIL-006 Przeciągnij i upuść obrazy/PDF do aplikacji _(edytor: obrazy; biblioteka: PDF/obrazy/.mnotes; bez testu na urządzeniu)_
+- [~] FIL-007 Eksport do schowka systemu (2026-11-03, gałąź `feat/schowek-obrazy`): w oknie eksportu „Kopiuj do schowka”: PNG/SVG po obrazie na stronę (do 20, dalej jedno archiwum ZIP), Markdown/TikZ jako tekst, PDF i `.mnotes` jako plik (FileProvider, `cache/share/clip`, sprzątane po dobie; przy blokadzie aplikacji schowek oznaczony jako poufny). Narzędzie „Wycinek” ma opcję „Od razu do schowka” (okno narzędzia, „⋮”, paleta poleceń, Ustawienia): wycinek trafia do schowka zamiast paska wstawiania; wycinek lassem zostaje z przezroczystością, a w Ustawieniach można wybrać tło czarne albo białe dla aplikacji, które źle wklejają alfę (`core/export/ClipExport`, `ClipExportTest`) _(bez testu na urządzeniu)_
 
 ## G. Bezpieczeństwo i prywatność (SEC)
 - [x] SEC-001 Brak uprawnienia INTERNET, brak telemetrii (zrobione w manifeście)

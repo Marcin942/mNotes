@@ -671,9 +671,16 @@ class Editor(val ctx: Context, val nbId: String) {
                     SnipShot(nbId, p.id, plan.rect, b, pngOf(b), caption)
                 }.getOrNull()
             }
+            // opcja „Od razu do schowka”: bez paska wstawiania, wycinek idzie wprost do innych aplikacji
+            val direct = shot != null && settings.snipToClipboard
+            val copied = direct && pngToClipboard(snipPng(shot!!), "wycinek")
             view?.post {
                 snipBusy = false
-                if (shot == null) say(T.t("Nie udało się wyciąć fragmentu", "Could not cut the area")) else snipShot = shot
+                when {
+                    shot == null -> say(T.t("Nie udało się wyciąć fragmentu", "Could not cut the area"))
+                    direct -> say(if (copied) T.t("Wycinek skopiowany do schowka", "Snip copied to the clipboard") else T.t("Nie udało się skopiować wycinka", "Could not copy the snip"))
+                    else -> snipShot = shot
+                }
                 view?.invalidate()
             }
         }
@@ -722,7 +729,7 @@ class Editor(val ctx: Context, val nbId: String) {
     /** Wycinek [shot] jako PNG do schowka systemu (wklejanie w innych aplikacjach). */
     fun copySnip(shot: SnipShot) {
         repo.io.execute {
-            val ok = pngToClipboard(shot.png, "wycinek")
+            val ok = pngToClipboard(snipPng(shot), "wycinek")
             view?.post { say(if (ok) T.t("Wycinek skopiowany jako obraz", "Snip copied as an image") else T.t("Nie udało się skopiować wycinka", "Could not copy the snip")) }
         }
     }
@@ -745,16 +752,30 @@ class Editor(val ctx: Context, val nbId: String) {
         )
     }
 
+    /**
+     * PNG wycinka do schowka: przezroczystość poza obrysem lassa zostaje, chyba że w Ustawieniach wybrano tło (czarne
+     * albo białe) — dla aplikacji, które przezroczyste piksele pokazują po swojemu. Wołane z wątku tła.
+     */
+    private fun snipPng(shot: SnipShot): ByteArray {
+        val bg = com.mdev.mnotes.core.export.ClipExport.background(settings.snipClipBg) ?: return shot.png
+        val src = shot.bmp.takeIf { !it.isRecycled } ?: return shot.png
+        return runCatching {
+            val w = src.width
+            val out = android.graphics.Bitmap.createBitmap(w, src.height, android.graphics.Bitmap.Config.ARGB_8888)
+            val row = IntArray(w)
+            for (y in 0 until src.height) {
+                src.getPixels(row, 0, w, 0, y, w, 1)
+                for (x in 0 until w) row[x] = com.mdev.mnotes.core.export.ClipExport.over(row[x], bg)
+                out.setPixels(row, 0, w, 0, y, w, 1)
+            }
+            pngOf(out).also { out.recycle() }
+        }.getOrDefault(shot.png)
+    }
+
     /** PNG do schowka przez FileProvider: inne aplikacje wklejają obraz, a nie ścieżkę. Wołane z wątku tła. */
     private fun pngToClipboard(png: ByteArray, name: String): Boolean = runCatching {
-        // obrazy ze schowka zostawały w cache/share do następnego eksportu (dostępne pod starym adresem schowka)
-        val dir = java.io.File(ctx.cacheDir, "share").apply { mkdirs() }
-        val old = System.currentTimeMillis() - 24 * 3600_000L
-        dir.listFiles()?.filter { it.name.endsWith(".png") && it.lastModified() < old }?.forEach { it.delete() }
-        val f = java.io.File(dir, "$name-${System.currentTimeMillis()}.png").apply { writeBytes(png) }
-        val uri = androidx.core.content.FileProvider.getUriForFile(ctx, "${ctx.packageName}.files", f)
-        val cm = ctx.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
-        view?.post { cm.setPrimaryClip(clip(android.content.ClipData.newUri(ctx.contentResolver, "mNotes", uri))) }
+        val f = com.mdev.mnotes.data.ClipOut.file(ctx, "$name.png").apply { writeBytes(png) }
+        view?.post { com.mdev.mnotes.data.ClipOut.files(ctx, listOf(f), "image/png", settings.appLock) }
     }.isSuccess
 
     /** Przy blokadzie aplikacji system nie pokazuje treści schowka w podglądzie (Android 13+): notatka jest prywatna. */

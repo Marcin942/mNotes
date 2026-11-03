@@ -29,7 +29,7 @@ object HelperStrip {
         ERASER_MODES(Helper.ERASER), ERASER_SIZES(Helper.ERASER), ERASER_HIGHLIGHTER(Helper.ERASER),
         LASSO_SHAPE(Helper.LASSO), LASSO_MODE(Helper.LASSO),
         LASER_COLORS(Helper.LASER),
-        SNIP_SHAPE(Helper.SNIP), SNIP_CAPTION(Helper.SNIP),
+        SNIP_SHAPE(Helper.SNIP), SNIP_CAPTION(Helper.SNIP), SNIP_CLIPBOARD(Helper.SNIP),
     }
 
     /**

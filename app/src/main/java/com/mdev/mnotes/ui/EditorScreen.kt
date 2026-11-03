@@ -1198,6 +1198,9 @@ private fun SnipStripItems(
         if (HelperStrip.Item.SNIP_CAPTION in items) {
             IconBtn(Icons.Rounded.Subtitles, T.t("Podpis źródła pod wycinkiem („slajd 12 · plik”)", "Source caption under the snip (“slide 12 · file”)"), { set.snipCaption = !set.snipCaption }, selected = set.snipCaption, size = sz, iconSize = isz)
         }
+        if (HelperStrip.Item.SNIP_CLIPBOARD in items) {
+            IconBtn(Icons.Rounded.ContentCopy, T.t("Od razu do schowka — wycinek wklejasz w innej aplikacji, bez wstawiania do zeszytu", "Straight to the clipboard — paste the snip in another app, nothing is inserted"), { set.snipToClipboard = !set.snipToClipboard }, selected = set.snipToClipboard, size = sz, iconSize = isz)
+        }
         if (back) { BarSep(vertical); WriteBackBtn(ed, set) }
     }
 }
@@ -2294,6 +2297,8 @@ private fun MoreMenu(ed: Editor, set: com.mdev.mnotes.data.Settings, close: () -
             ToggleRow(T.t("Okno powiększenia (pisz w powiększeniu)", "Zoom window (write magnified)"), ed.zoomWin) { ed.toggleZoomWin(); close() }
             MenuRow(Icons.Rounded.AutoStories, T.t("Tryb do odczytu (bez pasków, palec przewija)", "Reading mode (no bars, finger scrolls)"), "") { close(); ed.enterReader() }
             ToggleRow(T.t("Tylko do odczytu", "Read-only"), ed.readOnly) { if (ed.mirror) ed.leaveReader() else ed.readOnly = it }
+            // Wycinek działa też w dokumencie do odczytu, więc przełącznik stoi poza „Wstaw”.
+            ToggleRow(T.t("Wycinek od razu do schowka", "Snip straight to the clipboard"), ed.settings.snipToClipboard) { ed.settings.snipToClipboard = it }
             if (!ed.readOnly) {
                 SectionLabel(T.t("Wstaw", "Insert"))
                 MenuRow(Icons.Rounded.ShowChart, T.t("Układ współrzędnych…", "Coordinate axes…"), "") { close(); ed.axesOpen = true }

@@ -26,6 +26,8 @@ import androidx.compose.material3.RadioButtonDefaults
 import androidx.compose.runtime.produceState
 import androidx.compose.ui.text.style.TextOverflow
 import com.mdev.mnotes.core.color.ThemeMap
+import com.mdev.mnotes.core.export.ClipExport
+import com.mdev.mnotes.data.ClipOut
 import com.mdev.mnotes.core.nav.BookmarkSections
 import com.mdev.mnotes.core.nav.Mark
 import com.mdev.mnotes.core.nav.SectionEnd
@@ -36,6 +38,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.ContentCopy
 import androidx.compose.material.icons.rounded.IosShare
 import androidx.compose.material.icons.rounded.Print
 import androidx.compose.material3.CircularProgressIndicator
@@ -238,6 +241,53 @@ fun ExportDialog(nb: String, currentPage: Int, prepare: () -> Unit, onDismiss: (
         }
     }
 
+    /**
+     * Eksport do schowka: obrazy (PNG, SVG) po jednym na stronę — wklejają się jak zdjęcia; Markdown i TikZ jako tekst;
+     * reszta (PDF, .mnotes, archiwum) jako plik dla aplikacji przyjmujących pliki.
+     */
+    fun copyToClipboard() {
+        busy = true
+        scope.launch {
+            val text = fmt == ExportFormat.MD || fmt == ExportFormat.TEX
+            val list = pages ?: (0 until pageCount).toList()
+            val mode = ClipExport.mode(text, !fmt.multi, if (fmt == ExportFormat.MNOTES) 1 else list.size, split)
+            val msg = withContext(Dispatchers.IO) {
+                exporter.awaitWrites()
+                runCatching {
+                    when (mode) {
+                        ClipExport.Mode.TEXT -> {
+                            val bo = java.io.ByteArrayOutputStream()
+                            if (!write(bo)) return@runCatching null
+                            val s = bo.toString(Charsets.UTF_8.name())
+                            withContext(Dispatchers.Main) { ClipOut.text(ctx, title, s, set.appLock) }
+                            T.t("Skopiowano do schowka jako tekst", "Copied to the clipboard as text")
+                        }
+                        ClipExport.Mode.IMAGE_PER_PAGE -> {
+                            val files = list.map { i ->
+                                val f = ClipOut.file(ctx, exporter.fileName(title, fmt, if (pageCount > 1) i else null))
+                                if (!FileOutputStream(f).use { exporter.write(nb, fmt, listOf(i), it) }) return@runCatching null
+                                f
+                            }
+                            withContext(Dispatchers.Main) { ClipOut.files(ctx, files, fmt.mime, set.appLock) }
+                            if (files.size == 1) T.t("Skopiowano do schowka jako obraz", "Copied to the clipboard as an image")
+                            else T.t("Skopiowano do schowka ${files.size} obrazów (wkleja się zależnie od aplikacji: wszystkie albo pierwszy)", "Copied ${files.size} images to the clipboard (the app decides: all or the first)")
+                        }
+                        ClipExport.Mode.FILE -> {
+                            val f = ClipOut.file(ctx, name)
+                            if (!FileOutputStream(f).use { write(it) }) return@runCatching null
+                            withContext(Dispatchers.Main) { ClipOut.files(ctx, listOf(f), mime, set.appLock) }
+                            if (!fmt.multi && zip) T.t("Skopiowano do schowka archiwum ZIP (więcej niż ${ClipExport.MAX_IMAGES} stron)", "Copied a ZIP archive to the clipboard (more than ${ClipExport.MAX_IMAGES} pages)")
+                            else T.t("Skopiowano do schowka plik: $name", "Copied the file to the clipboard: $name")
+                        }
+                    }
+                }.getOrNull()
+            }
+            busy = false
+            ctx.toast(msg ?: T.t("Kopiowanie do schowka nie powiodło się", "Copying to the clipboard failed"))
+            if (msg != null) onDismiss()
+        }
+    }
+
     fun print() {
         busy = true
         scope.launch {
@@ -363,8 +413,9 @@ fun ExportDialog(nb: String, currentPage: Int, prepare: () -> Unit, onDismiss: (
             if (scopeMode != ExportScope.ALL || dropBlank) Text(name, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 4.dp))
         }
         SectionLabel(T.t("Inne działania", "Other actions"))
-        Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp), itemVerticalAlignment = Alignment.CenterVertically) {
             Chip(T.t("Udostępnij…", "Share…"), false, { if (!busy && !invalid) share() }, icon = Icons.Rounded.IosShare)
+            Chip(T.t("Kopiuj do schowka", "Copy to clipboard"), false, { if (!busy && !invalid) copyToClipboard() }, icon = Icons.Rounded.ContentCopy)
             if (fmt == ExportFormat.PDF) Chip(T.t("Drukuj…", "Print…"), false, { if (!busy && !invalid) print() }, icon = Icons.Rounded.Print)
             if (busy) {
                 CircularProgressIndicator(Modifier.padding(start = 8.dp).size(20.dp), strokeWidth = 2.dp, color = mint.accent)

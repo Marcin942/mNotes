@@ -168,6 +168,7 @@ object CmdDefs {
         CmdDef("toolCurve", 5, "Narzędzie: krzywa Béziera", "Tool: Bézier curve", ""),
         CmdDef("toolSnip", 5, "Narzędzie: wycinek (fragment strony jako obraz)", "Tool: snip (page area as an image)", ""),
         CmdDef("attach", 5, "Przyczep do figur", "Attach to shapes", ""),
+        CmdDef("snipClipboard", 5, "Wycinek od razu do schowka", "Snip straight to the clipboard", ""),
         CmdDef("toolSpace", 5, "Wstaw / usuń odstęp", "Insert / remove space", "X"),
         CmdDef("ruler", 5, "Linijka", "Ruler", "R"),
         CmdDef("protractor", 5, "Kątomierz", "Protractor", ""),

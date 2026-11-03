@@ -160,6 +160,10 @@ class Settings(ctx: Context) {
     var snipRect by Pref("snip.rect", true)
     /** 3c-B4: podpis źródła („slajd 12 · wykład.pdf”) pod wstawianym wycinkiem. */
     var snipCaption by Pref("snip.caption", false)
+    /** Wycinek od razu do schowka systemu (wklejanie w innych aplikacjach) zamiast paska „Wstaw do…”. */
+    var snipToClipboard by Pref("snip.clipboard", false)
+    /** Tło poza obrysem lassa przy kopiowaniu wycinka do schowka: `ClipExport.BG_NONE`/`BG_BLACK`/`BG_WHITE`. */
+    var snipClipBg by Pref("snip.clip_bg", 0)
     var lassoTouch by Pref("lasso.touch", false)     // lasso „tylko zahacz”: wystarczy musnąć obiekt pętlą; domyślnie zbalansowane (połowa obiektu w pętli)
     // 2c-A15: dawny „toolbar.tool_strip” przechodzi na listwę przy pierwszym uruchomieniu — przed odczytem helperStrip.
     init {

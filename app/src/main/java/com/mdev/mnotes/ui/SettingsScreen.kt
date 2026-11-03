@@ -447,6 +447,7 @@ private fun helperItemName(i: HelperStrip.Item) = when (i) {
     HelperStrip.Item.LASER_COLORS -> T.t("Kolory", "Colours")
     HelperStrip.Item.SNIP_SHAPE -> T.t("Kształt wycinka", "Snip shape")
     HelperStrip.Item.SNIP_CAPTION -> T.t("Podpis źródła", "Source caption")
+    HelperStrip.Item.SNIP_CLIPBOARD -> T.t("Od razu do schowka", "Straight to the clipboard")
 }
 
 @Composable
@@ -558,6 +559,10 @@ private fun EditorPrefs(set: com.mdev.mnotes.data.Settings) {
             Choice(listOf(T.t("Prostokąt", "Rectangle"), T.t("Lasso (przezroczyste tło)", "Lasso (transparent outside)")), if (set.snipRect) 0 else 1) { set.snipRect = it == 0 }
         }
         ToggleRow(T.t("Podpis źródła pod wycinkiem („slajd 12 · plik”)", "Source caption under the snip (“slide 12 · file”)"), set.snipCaption, keys = "wycinek podpis źródło slajd numer nazwa pliku snip caption source") { set.snipCaption = it }
+        ToggleRow(T.t("Wycinek od razu do schowka (zamiast wstawiania do zeszytu)", "Snip straight to the clipboard (instead of inserting it)"), set.snipToClipboard, keys = "wycinek schowek kopiuj zrzut ekranu wklej obraz zdjęcie snip clipboard copy screenshot paste") { set.snipToClipboard = it }
+        Opt(T.t("Tło wycinka lassem w schowku", "Lasso snip background in the clipboard"), "wycinek lasso schowek tło przezroczyste czarne białe kopiuj snip clipboard background transparent black white") {
+            Choice(listOf(T.t("Przezroczyste", "Transparent"), T.t("Czarne", "Black"), T.t("Białe", "White")), set.snipClipBg.coerceIn(0, 2)) { set.snipClipBg = it }
+        }
         ToggleRow(T.t("Przyciągaj do siatki", "Snap to grid"), set.snapGrid, keys = "grid siatka magnes snap") { set.snapGrid = it }
         // F22 był tylko w „⋮” edytora (przegląd Fable §3.2): rodzeństwo przyciągania do siatki.
         ToggleRow(T.t("Przyczep do figur (końce linii i punkty)", "Attach to shapes (line ends and points)"), set.attach, keys = "przyczep magnes wierzchołek końce punkty figury attach snap vertex") { set.attach = it }

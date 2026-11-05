@@ -77,6 +77,8 @@ class WorkspaceView(ctx: Context, private val st: Station) : ViewGroup(ctx), Lan
     fun sync(editors: List<Editor>, accent: Int, bg: Int, dark: Boolean) {
         // Przesunięcia pasów idą za dokumentami, nie za indeksami (zamknięcie środkowego nie przestawia pozostałych).
         val before = ws?.let { w -> lanes.withIndex().associate { (i, v) -> v to w.main.getOrElse(i) { 0f } } }
+        // LP-1: miejsce pasów na ekranie, żeby dokument dołożony powyżej nie zepchnął widocznych.
+        val seen = ws?.let { w -> lanes.withIndex().associate { (i, v) -> v to w.laneStart(i) * w.zoom + w.cross } }
         for (v in lanes.toList()) if (editors.none { it === v.ed }) { removeView(v); lanes.remove(v); placed.remove(v); v.lane = null }
         val ordered = editors.map { e ->
             lanes.firstOrNull { it.ed === e } ?: NoteView(context, e).also { addView(it, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT)) }
@@ -94,9 +96,30 @@ class WorkspaceView(ctx: Context, private val st: Station) : ViewGroup(ctx), Lan
         if (changed) {
             structure(lanes[0])
             val w = ws
-            if (w != null && before != null) { w.set(Workspace.Pose(w.zoom, w.cross, FloatArray(w.size) { before[lanes[it]] ?: Float.POSITIVE_INFINITY })); push() }
+            if (w != null && before != null) {
+                val shift = seen?.let { s -> lanes.withIndex().firstOrNull { it.value in s }?.let { (i, v) -> s.getValue(v) - (w.laneStart(i) * w.zoom + w.cross) } } ?: 0f
+                w.set(Workspace.Pose(w.zoom, w.cross + shift, FloatArray(w.size) { before[lanes[it]] ?: Float.POSITIVE_INFINITY })); push()
+            }
         }
         invalidate()
+    }
+
+    /** LP-1: pas na środku okna; -1 bez stanowiska. */
+    fun centerLane(): Int = ws?.centerLane() ?: -1
+
+    /** LP-1: płynnie przewija stanowisko tak, by pas [i] stanął na środku (dotknięcie jego karty). */
+    fun scrollToLane(i: Int) {
+        val w = ensure() ?: return
+        if (i !in 0 until w.size) return
+        stop()
+        val a = w.pose()
+        val b = w.poseCentering(i)
+        anim = ValueAnimator.ofFloat(0f, 1f).apply {
+            duration = 280
+            interpolator = DecelerateInterpolator(1.8f)
+            addUpdateListener { if (ws === w) { w.set(w.lerp(a, b, it.animatedFraction)); push() } }
+            start()
+        }
     }
 
     /** Prostokąt pasa [i] na ekranie (dla nagłówków); null — poza ekranem albo bez stanowiska. */

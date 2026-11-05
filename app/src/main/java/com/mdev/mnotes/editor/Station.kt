@@ -24,14 +24,20 @@ class Station(private val ctx: Context, val main: Editor) {
     var horizontal by mutableStateOf(true)
         private set
     /** Widok stanowiska (stan widoku do zapisu); ustawia go płótno. */
-    var view: WorkspaceView? = null
+    var view: WorkspaceView? by mutableStateOf(null)
     /** Zapisane stanowisko czekające na ułożenie pasów (powiększenie, przewinięcie, przesunięcia, aktywny pas). */
     private var restore: Workbench.Station? = null
     /** Otwarte okno wyboru zeszytu do dołożenia i okno zapisanych stanowisk. */
     var picking by mutableStateOf(false)
     var listing by mutableStateOf(false)
 
-    val rows: List<Editor> get() = listOf(main) + extra
+    /** LP-1: miejsce głównego zeszytu wśród rzędów (dokument dołożony „powyżej” staje przed nim). */
+    var mainAt by mutableStateOf(0)
+        private set
+    val rows: List<Editor> get() = extra.take(mainAt) + main + extra.drop(mainAt)
+
+    /** LP-1: czy [id] to karta tego okna (jej zeszyt jest „nasz” w `openIds`, więc może stanąć na stanowisku). */
+    var ownTab: (String) -> Boolean = { false }
     val on: Boolean get() = extra.isNotEmpty()
 
     /** 2c-A11: profil przypięty do zeszytu albo stanowiska — włączony przy otwarciu, zdejmowany przy wyjściu. */
@@ -100,18 +106,22 @@ class Station(private val ctx: Context, val main: Editor) {
         for (e in rows) e.forceLayout(if (h) 1 else 0)
     }
 
-    /** Dokłada zeszyt [id] jako rząd na dole; false, gdy już jest albo jest otwarty w innym oknie. */
-    fun add(id: String): Boolean {
+    /**
+     * Dokłada zeszyt [id] jako rząd na pozycji [at] wśród [rows] (domyślnie na dole); false, gdy już jest albo jest
+     * otwarty w innym oknie. Karta z tego okna (LP-1) nie jest „innym oknem”: przechodzi na stanowisko.
+     */
+    fun add(id: String, at: Int = rows.size): Boolean {
         if (id == main.nbId || extra.any { it.nbId == id }) return false
         if (main.repo.meta(id) == null) return false
-        if (!main.app.openIds.add(id)) { main.say(T.t("Ten zeszyt jest otwarty w innym oknie", "This notebook is open in another window")); return false }
+        if (!ownTab(id) && !main.app.openIds.add(id)) { main.say(T.t("Ten zeszyt jest otwarty w innym oknie", "This notebook is open in another window")); return false }
         val e = Editor(ctx, id)
         e.station = this
         e.tool = main.tool
         // Kierunek jak pierwszy dokument: pionowy → kolumny, poziomy i „strona po stronie” → rzędy.
         if (extra.isEmpty()) { horizontal = main.ownLayoutMode != 0; main.forceLayout(if (horizontal) 1 else 0) }
         e.forceLayout(if (horizontal) 1 else 0)
-        extra += e
+        val pos = at.coerceIn(0, rows.size)
+        if (pos <= mainAt) { extra.add(pos, e); mainAt++ } else extra.add(pos - 1, e)
         return true
     }
 
@@ -119,17 +129,28 @@ class Station(private val ctx: Context, val main: Editor) {
     fun remove(e: Editor) {
         if (e === main || e !in extra) return
         if (active === e) activate(main)
+        if (extra.indexOf(e) < mainAt) mainAt--
         extra.remove(e)
         e.close()
-        main.app.openIds.remove(e.nbId)
+        if (!ownTab(e.nbId)) main.app.openIds.remove(e.nbId)
         if (extra.isEmpty()) main.forceLayout(null)
     }
 
     /** Przy wyjściu z edytora: zamyka wszystkie dołożone rzędy. */
     fun closeAll() {
-        for (e in extra.toList()) { e.close(); main.app.openIds.remove(e.nbId) }
+        for (e in extra.toList()) { e.close(); if (!ownTab(e.nbId)) main.app.openIds.remove(e.nbId) }
         extra.clear()
+        mainAt = 0
         active = main
+    }
+
+    /** LP-1: indeks rzędu najbliżej środka widoku (podświetlona karta); bez widoku — aktywny. */
+    fun centerIndex(): Int = view?.centerLane()?.takeIf { it >= 0 } ?: rows.indexOf(active)
+
+    /** LP-1: przewija stanowisko do rzędu [e] i robi go aktywnym (dotknięcie jego karty). */
+    fun focus(e: Editor) {
+        activate(e)
+        view?.scrollToLane(rows.indexOf(e))
     }
 
     /** Rząd [e] staje się aktywny i dostaje narzędzie poprzedniego (pióro i narzędzie są wspólne dla pola). */
@@ -174,7 +195,8 @@ class Station(private val ctx: Context, val main: Editor) {
             // 3c-B3: zostają tylko rzędy stojące już w kolejności zapisu; reszta wychodzi i dochodzi na swoje miejsce
             // (dawniej stare rzędy zostawały wyżej, kolejność się nie zgadzała i zapisany stan nigdy się nie stosował).
             val want = s.ids.drop(1)
-            val keep = Workbench.keptPrefix(extra.map { it.nbId }, want)
+            // zapis zawsze zaczyna się od głównego; rzędy nad nim wychodzą i dochodzą pod nim
+            val keep = if (mainAt > 0) 0 else Workbench.keptPrefix(extra.map { it.nbId }, want)
             for (e in extra.drop(keep)) remove(e)
             want.drop(keep).forEach { add(it) }
             applyMode(s); restore = present(s)

@@ -811,7 +811,7 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
     /** Przekształcenie strony o stylu [spec] w bieżącym trybie (Ustawienia / „⋮”); null — strona jak powstała. */
     private fun themeFor(spec: com.mdev.mnotes.core.model.PageSpec) = ThemeMap.forPage(spec.paper, spec.inverted, settings.pageTheme)
 
-    /** Po zmianie trybu kafelki (z wypalonym przekształceniem) liczą się od nowa. */
+    /** Po zmianie trybu kafelki (z wypalonym przekształceniem) idą do wyrzucenia i liczą się od nowa (bez błysku starego trybu). */
     private fun syncTheme() {
         val k = settings.pageTheme * 2 + (if (settings.pageThemePhotos) 1 else 0)
         if (k == themeKey) return
@@ -819,7 +819,7 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
         themeKey = k
         cache.themeOf = { s -> themeFor(s) }
         cache.themePhotos = settings.pageThemePhotos
-        if (!first) cache.invalidateAll()
+        if (!first) cache.dropAll()
     }
 
     private fun drawLive(c: Canvas) {

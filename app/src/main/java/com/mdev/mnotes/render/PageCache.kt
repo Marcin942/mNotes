@@ -78,7 +78,7 @@ class PageCache(
     private val ui = PageRenderer(assets)
     /**
      * 2b-A9: przekształcenie trybu ciemnego/jasnego dla strony o danym stylu (null — jak w pliku) i odwracanie zdjęć;
-     * ustawia je widok z ustawień, a po zmianie czyści kafelki ([invalidateAll]) — przekształcenie jest w nich wypalone.
+     * ustawia je widok z ustawień, a po zmianie wyrzuca kafelki ([dropAll]) — przekształcenie jest w nich wypalone.
      */
     @Volatile var themeOf: (PageSpec) -> com.mdev.mnotes.core.color.ThemeMap.Transform? = { null }
     @Volatile var themePhotos = false
@@ -620,6 +620,14 @@ class PageCache(
             for (lv in e.levels) for (t in lv.tiles.values) { t.version = -1; t.pending = Bounds.EMPTY }
         }
     }
+
+    /**
+     * Zmiana trybu ciemnego/jasnego: przekształcenie jest wypalone w bitmapach, więc wszystkie idą do wyrzucenia, a nie
+     * tylko do odnowienia. Stare zostawione do przerysowania błyskały jasną stroną przy przewijaniu na stronę, której
+     * kafelek jeszcze się nie odnowił, a render trwający w chwili przełączenia wracał ze starym trybem jako aktualny
+     * ([alive] odrzuca go, gdy wpisu strony już nie ma). Do czasu nowej bazy widok rysuje stronę wektorowo, w nowym trybie.
+     */
+    fun dropAll() { for (id in entries.keys.toList()) forget(id) }
 
     fun forget(pageId: String) { entries.remove(pageId)?.let { for (lv in it.levels) release(lv); drop(it.base) } }
 

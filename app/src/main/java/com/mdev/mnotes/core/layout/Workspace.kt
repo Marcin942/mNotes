@@ -201,6 +201,20 @@ class Workspace(val horizontal: Boolean, lanes: List<DocLayout>, viewW: Float, v
         return size - 1
     }
 
+    /** LP-1: pas na środku okna (podświetlona karta stanowiska). */
+    fun centerLane(): Int = laneAt(viewW / 2f, viewH / 2f)
+
+    /** LP-1: stan widoku z pasem [i] na środku okna w osi wspólnej (powiększenie i przesunięcia stron bez zmian). */
+    fun poseCentering(i: Int): Pose {
+        if (i !in 0 until size) return pose()
+        val save = pose()
+        cross = viewCross / 2f - (starts[i] + sizes[i] / 2f) * zoom
+        clamp()
+        val out = pose()
+        set(save)
+        return out
+    }
+
     /** Prostokąt pasa [i] na ekranie (l, t, r, b) przycięty do okna; null — pas poza ekranem. */
     fun laneRect(i: Int): FloatArray? {
         if (i !in 0 until size) return null

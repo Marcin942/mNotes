@@ -188,7 +188,7 @@ fun commandList(
         // 3c-B4: wycinać można też z dokumentu do odczytu (slajdy) — wstawia się do drugiego.
         "toolSnip" to ({ true } to { pickTool(Tool.SNIP, null) }),
         "attach" to ({ true } to { set.attach = !set.attach; ed.say(if (set.attach) T.t("Przyczepianie do figur włączone", "Attach to shapes on") else T.t("Przyczepianie do figur wyłączone", "Attach to shapes off")) }),
-        "snipClipboard" to ({ true } to { set.snipToClipboard = !set.snipToClipboard; ed.say(if (set.snipToClipboard) T.t("Wycinek trafi od razu do schowka", "Snips go straight to the clipboard") else T.t("Wycinek wstawia się do zeszytu", "Snips are inserted into the notebook")) }),
+        "snipClipboard" to ({ true } to { set.snipMode = com.mdev.mnotes.core.edit.SnipMode.toggleClipboard(set.snipMode); ed.say(if (set.snipMode == com.mdev.mnotes.core.edit.SnipMode.CLIPBOARD) T.t("Wycinek trafi od razu do schowka", "Snips go straight to the clipboard") else T.t("Po wycinku zapytam, co z nim zrobić", "After a snip you choose what to do with it")) }),
         "toolSpace" to ({ !ed.readOnly } to { pickTool(Tool.SPACE, null) }),
         "ruler" to ({ !ed.readOnly } to { ed.toggleRuler() }),
         "protractor" to ({ !ed.readOnly } to { ed.toggleProtractor() }),

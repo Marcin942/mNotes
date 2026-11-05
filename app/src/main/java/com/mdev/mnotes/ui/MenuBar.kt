@@ -69,7 +69,7 @@ private fun checked(ed: Editor, set: com.mdev.mnotes.data.Settings, id: String):
     "toolCurve" -> ed.tool == Tool.CURVE
     "toolSnip" -> ed.tool == Tool.SNIP
     "attach" -> ed.settings.attach
-    "snipClipboard" -> ed.settings.snipToClipboard
+    "snipClipboard" -> ed.settings.snipMode == com.mdev.mnotes.core.edit.SnipMode.CLIPBOARD
     "toolSpace" -> ed.tool == Tool.SPACE
     "toolTape" -> ed.tool == Tool.TAPE
     "ruler" -> ed.ruler

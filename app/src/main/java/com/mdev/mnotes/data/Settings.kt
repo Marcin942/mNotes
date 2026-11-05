@@ -160,8 +160,19 @@ class Settings(ctx: Context) {
     var snipRect by Pref("snip.rect", true)
     /** 3c-B4: podpis źródła („slajd 12 · wykład.pdf”) pod wstawianym wycinkiem. */
     var snipCaption by Pref("snip.caption", false)
-    /** Wycinek od razu do schowka systemu (wklejanie w innych aplikacjach) zamiast paska „Wstaw do…”. */
-    var snipToClipboard by Pref("snip.clipboard", false)
+    // LP-2: dawny przełącznik „snip.clipboard” przechodzi na tryb wycinka — przed odczytem snipMode.
+    init {
+        if (sp.contains("snip.clipboard")) {
+            val e = sp.edit()
+            if (!sp.contains("snip.mode")) e.putInt("snip.mode", com.mdev.mnotes.core.edit.SnipMode.fromLegacy(sp.getBoolean("snip.clipboard", false)))
+            e.remove("snip.clipboard").apply()
+        }
+    }
+    /** LP-2: co robi gotowy wycinek — `SnipMode` (pytaj / wstaw / do schowka / udostępnij). */
+    private var snipModePref by Pref("snip.mode", com.mdev.mnotes.core.edit.SnipMode.ASK)
+    var snipMode: Int
+        get() = com.mdev.mnotes.core.edit.SnipMode.of(snipModePref)
+        set(v) { snipModePref = com.mdev.mnotes.core.edit.SnipMode.of(v) }
     /** Tło poza obrysem lassa przy kopiowaniu wycinka do schowka: `ClipExport.BG_NONE`/`BG_BLACK`/`BG_WHITE`. */
     var snipClipBg by Pref("snip.clip_bg", 0)
     var lassoTouch by Pref("lasso.touch", false)     // lasso „tylko zahacz”: wystarczy musnąć obiekt pętlą; domyślnie zbalansowane (połowa obiektu w pętli)

@@ -447,7 +447,7 @@ private fun helperItemName(i: HelperStrip.Item) = when (i) {
     HelperStrip.Item.LASER_COLORS -> T.t("Kolory", "Colours")
     HelperStrip.Item.SNIP_SHAPE -> T.t("Kształt wycinka", "Snip shape")
     HelperStrip.Item.SNIP_CAPTION -> T.t("Podpis źródła", "Source caption")
-    HelperStrip.Item.SNIP_CLIPBOARD -> T.t("Od razu do schowka", "Straight to the clipboard")
+    HelperStrip.Item.SNIP_CLIPBOARD -> T.t("Co zrobić z wycinkiem (pytaj / wstaw / schowek / udostępnij)", "What to do with a snip (ask / insert / clipboard / share)")
 }
 
 @Composable
@@ -559,7 +559,10 @@ private fun EditorPrefs(set: com.mdev.mnotes.data.Settings) {
             Choice(listOf(T.t("Prostokąt", "Rectangle"), T.t("Lasso (przezroczyste tło)", "Lasso (transparent outside)")), if (set.snipRect) 0 else 1) { set.snipRect = it == 0 }
         }
         ToggleRow(T.t("Podpis źródła pod wycinkiem („slajd 12 · plik”)", "Source caption under the snip (“slide 12 · file”)"), set.snipCaption, keys = "wycinek podpis źródło slajd numer nazwa pliku snip caption source") { set.snipCaption = it }
-        ToggleRow(T.t("Wycinek od razu do schowka (zamiast wstawiania do zeszytu)", "Snip straight to the clipboard (instead of inserting it)"), set.snipToClipboard, keys = "wycinek schowek kopiuj zrzut ekranu wklej obraz zdjęcie snip clipboard copy screenshot paste") { set.snipToClipboard = it }
+        // LP-2: domyślnie pyta, bo jeden wycinek idzie do notatek, a następny do czatu
+        Opt(T.t("Co zrobić z wycinkiem", "What to do with a snip"), "wycinek schowek kopiuj udostępnij wyślij wstaw pytaj zrzut ekranu wklej obraz zdjęcie snip clipboard copy share send insert ask screenshot paste") {
+            Choice(listOf(T.t("Pytaj za każdym razem", "Ask every time"), T.t("Wstaw do zeszytu", "Insert into the notebook"), T.t("Do schowka", "To the clipboard"), T.t("Udostępnij", "Share")), set.snipMode) { set.snipMode = it }
+        }
         Opt(T.t("Tło wycinka lassem w schowku", "Lasso snip background in the clipboard"), "wycinek lasso schowek tło przezroczyste czarne białe kopiuj snip clipboard background transparent black white") {
             Choice(listOf(T.t("Przezroczyste", "Transparent"), T.t("Czarne", "Black"), T.t("Białe", "White")), set.snipClipBg.coerceIn(0, 2)) { set.snipClipBg = it }
         }

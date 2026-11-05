@@ -64,6 +64,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Share
+import androidx.compose.material.icons.rounded.QuestionMark
 import androidx.compose.material.icons.rounded.FormatColorFill
 import androidx.compose.material.icons.rounded.Subtitles
 import androidx.compose.material.icons.rounded.ArrowDropDown
@@ -1199,11 +1201,21 @@ private fun SnipStripItems(
             IconBtn(Icons.Rounded.Subtitles, T.t("Podpis źródła pod wycinkiem („slajd 12 · plik”)", "Source caption under the snip (“slide 12 · file”)"), { set.snipCaption = !set.snipCaption }, selected = set.snipCaption, size = sz, iconSize = isz)
         }
         if (HelperStrip.Item.SNIP_CLIPBOARD in items) {
-            IconBtn(Icons.Rounded.ContentCopy, T.t("Od razu do schowka — wycinek wklejasz w innej aplikacji, bez wstawiania do zeszytu", "Straight to the clipboard — paste the snip in another app, nothing is inserted"), { set.snipToClipboard = !set.snipToClipboard }, selected = set.snipToClipboard, size = sz, iconSize = isz)
+            // LP-2: co robi gotowy wycinek; pozycja paska ma dawną nazwę, bo siedzi w zapisanych układach pasków
+            BarSep(vertical)
+            for ((m, icon, hint) in snipModeButtons()) IconBtn(icon, hint, { set.snipMode = m }, selected = set.snipMode == m, size = sz, iconSize = isz)
         }
         if (back) { BarSep(vertical); WriteBackBtn(ed, set) }
     }
 }
+
+/** LP-2: przyciski trybów wycinka (tryb, ikona, opis) — pasek pomocniczy i szybkie menu. */
+private fun snipModeButtons() = listOf(
+    Triple(com.mdev.mnotes.core.edit.SnipMode.ASK, Icons.Rounded.QuestionMark, T.t("Pytaj za każdym razem — przy wycinku pasek: wstaw, kopiuj, udostępnij", "Ask every time — a bar by the snip: insert, copy, share")),
+    Triple(com.mdev.mnotes.core.edit.SnipMode.INSERT, Icons.Rounded.AddPhotoAlternate, T.t("Od razu wstaw do zeszytu (tam, gdzie ostatnio pisano)", "Insert into the notebook right away (where you last wrote)")),
+    Triple(com.mdev.mnotes.core.edit.SnipMode.CLIPBOARD, Icons.Rounded.ContentCopy, T.t("Od razu do schowka — wklejasz w innej aplikacji", "Straight to the clipboard — paste in another app")),
+    Triple(com.mdev.mnotes.core.edit.SnipMode.SHARE, Icons.Rounded.Share, T.t("Od razu udostępnij (komunikator, poczta…)", "Share right away (messenger, mail…)")),
+)
 
 /** Opcje lasera (F7): kolor śladu; [back] jak przy gumce. */
 @Composable
@@ -1640,6 +1652,7 @@ private fun SnipBar(st: Station, src: Editor, shot: SnipShot) {
                 Text(if (first == null) T.t("Wstaw", "Insert") else T.t("Tutaj", "Here"), style = MaterialTheme.typography.labelLarge)
             }
             IconBtn(Icons.Rounded.ContentCopy, T.t("Kopiuj jako obraz (do innych aplikacji)", "Copy as an image (for other apps)"), { src.copySnip(shot) }, size = 32.dp, iconSize = 18.dp)
+            IconBtn(Icons.Rounded.Share, T.t("Udostępnij (komunikator, poczta…)", "Share (messenger, mail…)"), { src.shareSnip(shot) }, size = 32.dp, iconSize = 18.dp)
             IconBtn(Icons.Rounded.Close, T.t("Odrzuć wycinek", "Discard snip"), { src.snipShot = null; src.view?.invalidate() }, size = 32.dp, iconSize = 18.dp)
         }
     }
@@ -2298,7 +2311,7 @@ private fun MoreMenu(ed: Editor, set: com.mdev.mnotes.data.Settings, close: () -
             MenuRow(Icons.Rounded.AutoStories, T.t("Tryb do odczytu (bez pasków, palec przewija)", "Reading mode (no bars, finger scrolls)"), "") { close(); ed.enterReader() }
             ToggleRow(T.t("Tylko do odczytu", "Read-only"), ed.readOnly) { if (ed.mirror) ed.leaveReader() else ed.readOnly = it }
             // Wycinek działa też w dokumencie do odczytu, więc przełącznik stoi poza „Wstaw”.
-            ToggleRow(T.t("Wycinek od razu do schowka", "Snip straight to the clipboard"), ed.settings.snipToClipboard) { ed.settings.snipToClipboard = it }
+            ToggleRow(T.t("Wycinek od razu do schowka", "Snip straight to the clipboard"), ed.settings.snipMode == com.mdev.mnotes.core.edit.SnipMode.CLIPBOARD) { ed.settings.snipMode = if (it) com.mdev.mnotes.core.edit.SnipMode.CLIPBOARD else com.mdev.mnotes.core.edit.SnipMode.ASK }
             if (!ed.readOnly) {
                 SectionLabel(T.t("Wstaw", "Insert"))
                 MenuRow(Icons.Rounded.ShowChart, T.t("Układ współrzędnych…", "Coordinate axes…"), "") { close(); ed.axesOpen = true }

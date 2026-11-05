@@ -1,5 +1,6 @@
 package com.mdev.mnotes.editor
 
+import com.mdev.mnotes.core.edit.SnipMode
 import android.content.Context
 import android.os.SystemClock
 import androidx.compose.runtime.getValue
@@ -671,14 +672,17 @@ class Editor(val ctx: Context, val nbId: String) {
                     SnipShot(nbId, p.id, plan.rect, b, pngOf(b), caption)
                 }.getOrNull()
             }
-            // opcja „Od razu do schowka”: bez paska wstawiania, wycinek idzie wprost do innych aplikacji
-            val direct = shot != null && settings.snipToClipboard
-            val copied = direct && pngToClipboard(snipPng(shot!!), "wycinek")
+            // LP-2: tryb inny niż „Pytaj” kończy wycinek od razu, bez paska przy nim
+            val mode = settings.snipMode
+            val copied = shot != null && mode == SnipMode.CLIPBOARD && pngToClipboard(snipPng(shot), "wycinek")
+            val shared = if (shot != null && mode == SnipMode.SHARE) shareFile(snipPng(shot)) else null
             view?.post {
                 snipBusy = false
                 when {
                     shot == null -> say(T.t("Nie udało się wyciąć fragmentu", "Could not cut the area"))
-                    direct -> say(if (copied) T.t("Wycinek skopiowany do schowka", "Snip copied to the clipboard") else T.t("Nie udało się skopiować wycinka", "Could not copy the snip"))
+                    mode == SnipMode.CLIPBOARD -> say(if (copied) T.t("Wycinek skopiowany do schowka", "Snip copied to the clipboard") else T.t("Nie udało się skopiować wycinka", "Could not copy the snip"))
+                    mode == SnipMode.SHARE -> if (shared == null) say(T.t("Nie udało się udostępnić wycinka", "Could not share the snip")) else startShare(shared)
+                    mode == SnipMode.INSERT -> insertSnipNow(shot)
                     else -> snipShot = shot
                 }
                 view?.invalidate()
@@ -724,6 +728,41 @@ class Editor(val ctx: Context, val nbId: String) {
                 onDone(ok)
             }
         }
+    }
+
+    /**
+     * LP-2, tryb „Wstaw do zeszytu”: od razu tam, gdzie wstawiłby domyślny przycisk paska (dokument, w którym ostatnio
+     * pisano, inaczej ten), i ten dokument staje się aktywny. Gdy wszystkie są do odczytu, wycinek czeka na pasku.
+     */
+    private fun insertSnipNow(shot: SnipShot) {
+        val rows = station?.rows ?: listOf(this)
+        val i = SnipMode.insertTarget(rows.indexOf(this).coerceAtLeast(0), rows.map { !it.readOnly }, rows.map { it.lastEditAt })
+        val t = rows.getOrNull(i) ?: run { snipShot = shot; return }
+        t.insertSnip(shot) { ok -> if (ok) station?.activate(t) else snipShot = shot }
+    }
+
+    /** Wycinek [shot] do systemowego okna „Udostępnij” (komunikator, poczta…). */
+    fun shareSnip(shot: SnipShot) {
+        repo.io.execute {
+            val f = shareFile(snipPng(shot))
+            view?.post { if (f == null) say(T.t("Nie udało się udostępnić wycinka", "Could not share the snip")) else startShare(f) }
+        }
+    }
+
+    /** PNG w katalogu schowka (FileProvider), bo aplikacja docelowa czyta plik dopiero po wyborze w oknie udostępniania. */
+    private fun shareFile(png: ByteArray): java.io.File? = runCatching {
+        com.mdev.mnotes.data.ClipOut.file(ctx, "wycinek.png").apply { writeBytes(png) }
+    }.getOrNull()
+
+    private fun startShare(f: java.io.File) {
+        val uri = androidx.core.content.FileProvider.getUriForFile(ctx, "${ctx.packageName}.files", f)
+        val send = android.content.Intent(android.content.Intent.ACTION_SEND).setType("image/png")
+            .putExtra(android.content.Intent.EXTRA_STREAM, uri)
+            .addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            .apply { clipData = android.content.ClipData.newRawUri("", uri) }
+        val chooser = android.content.Intent.createChooser(send, T.t("Udostępnij wycinek", "Share snip"))
+        if (ctx !is android.app.Activity) chooser.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+        runCatching { ctx.startActivity(chooser) }.onFailure { say(T.t("Brak aplikacji do udostępniania", "No app to share with")) }
     }
 
     /** Wycinek [shot] jako PNG do schowka systemu (wklejanie w innych aplikacjach). */

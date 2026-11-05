@@ -870,10 +870,16 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
             c.translate(layout.left(tgt), layout.top(tgt))
             if (clip) c.clipRect(0f, 0f, spec.w, spec.h)
             // 3c-A2: podgląd stoi tam, gdzie zaznaczenie wyląduje (na innej stronie dosunięte w całości na nią).
-            c.concat(matrixOf(PageDrop.intoTarget(layout, lPage, tgt, lM, lBounds)))
-            val z = zoom * lM.scaleFactor
             renderer.theme = themeFor(spec); renderer.themePhotos = settings.pageThemePhotos
-            for (el in lEls) renderer.drawElement(c, doc.id, el, z, false, spec.darkPaper)
+            if (lm == LM.SCALE && lStretch) {
+                // Rozciąganie w jedną oś: macierz zniekształciłaby też grubość kreski (jak obrazek), więc podgląd
+                // rysuje elementy przeliczone tak samo jak przy zatwierdzeniu (grubość się nie rozciąga).
+                for (el in lEls) renderer.drawElement(c, doc.id, el.transformed(lM), zoom, false, spec.darkPaper)
+            } else {
+                c.concat(matrixOf(PageDrop.intoTarget(layout, lPage, tgt, lM, lBounds)))
+                val z = zoom * lM.scaleFactor
+                for (el in lEls) renderer.drawElement(c, doc.id, el, z, false, spec.darkPaper)
+            }
             renderer.theme = null
             c.restoreToCount(s2)
             lMShown = lM
@@ -2925,6 +2931,8 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
         val s = ed.sel ?: return null
         if (s.ids.size != 1 || lLifting) return null
         val e = ed.selElements().singleOrNull() as? Stroke ?: return null
+        // W trybie „Skaluj i obracaj” łamana ma zwykłą ramkę (rogi, boki, obrót); wierzchołki edytuje się poza nim.
+        if (ed.transformMode && !ed.pointEdit) return null
         return if (e.poly && !e.locked && e.count >= 2 && (ed.pointEdit || ShapeBox.frameOf(e) == null)) e else null
     }
 

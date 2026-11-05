@@ -349,6 +349,9 @@ fun EditorScreen(main: Editor, tabs: TabsCtl, onExit: () -> Unit, onSettings: ()
         if (ed.quickFormat && !ed.formatPick && set.painterQuickSec > 0) { delay(set.painterQuickSec * 1000L); ed.quickFormat = false }
     }
     LaunchedEffect(ed.pipette != null) { if (ed.pipette != null) panel = null }
+    // LP-5: narzędzie wyłączone w Ustawieniach nie zostaje w ręku (także pióro po pobraniu formatu, linijka, pipeta).
+    val barCfg = set.barConfig
+    LaunchedEffect(ed, barCfg.modesString(), ed.tool, ed.kit.active, ed.ruler, ed.protractor, ed.pipette != null) { ed.dropOffTools(barCfg) }
     fun applyLayout(mode: Int) = ed.chooseLayoutMode(mode)
     fun pickTool(t: Tool, p: Panel?) {
         val temporary = t == Tool.LASER || t == Tool.HAND || t == Tool.LASSO
@@ -378,8 +381,9 @@ fun EditorScreen(main: Editor, tabs: TabsCtl, onExit: () -> Unit, onSettings: ()
         else -> set.optionsPos
     }
 
-    val cmds = remember(set.keyMap, tabs.on, ed) {
+    val cmds = remember(set.keyMap, tabs.on, ed, barCfg.modesString()) {
         commandList(ed, set, ::pickTool, { panel = it }, ::pickImage, { goTo = true }, ::applyLayout, onSettings, onShortcuts, { palette = true }, onExit, tabs)
+            .filter { barCfg.allows(it.def.id) }
     }
 
     BackHandler {
@@ -677,7 +681,7 @@ private class BarItem(
 /** Liczba przycisków paska w układzie [cfg]: nagłówek ocenia nią, czy pasek zmieści się obok tytułu. */
 private fun barItemCount(cfg: BarConfig, undoDocked: Boolean): Int {
     // Cofnij i Ponów w rogu strony nie zajmują miejsca na pasku.
-    val order = if (undoDocked) cfg.order.filter { it != "undo" && it != "redo" } else cfg.order
+    val order = (if (undoDocked) cfg.order.filter { it != "undo" && it != "redo" } else cfg.order).filter { !cfg.isOff(it) }
     val shown = order.count { cfg.mode(it) != BarMode.MENU }
     return if (shown < order.size) shown + 1 else shown
 }
@@ -795,7 +799,7 @@ private fun ToolBar(ed: Editor, set: com.mdev.mnotes.data.Settings, vertical: Bo
     // Kolejność i tryby wybiera użytkownik (Ustawienia albo przytrzymanie przycisku); pozycje zbudowane wyżej mają
     // kolejność domyślną, więc tu tylko się je układa.
     val cfg = set.barConfig
-    val shown = items.filter { set.undoDock == 0 || (it.id != "undo" && it.id != "redo") }.sortedBy { cfg.order.indexOf(it.id) }
+    val shown = items.filter { (set.undoDock == 0 || (it.id != "undo" && it.id != "redo")) && !cfg.isOff(it.id) }.sortedBy { cfg.order.indexOf(it.id) }
     val openSettings = LocalBarSettings.current
     val settingsAt = LocalSettingsAt.current
     BoxWithConstraints(contentAlignment = Alignment.Center) {
@@ -813,7 +817,10 @@ private fun ToolBar(ed: Editor, set: com.mdev.mnotes.data.Settings, vertical: Bo
                     group = b.group
                     Box {
                         ToolBtn(b.tip, b.onClick, enabled = b.enabled, selected = b.selected, size = sz, shortcut = b.shortcut, onLong = { b.onHold?.invoke() ?: run { menuFor = b.id } }) { c -> b.glyph(c, isz) }
-                        if (menuFor == b.id) BarItemMenu(b.id, cfg, vertical, { set.barConfig = it }, { menuFor = null }, openSettings, if (set.holdSettings) settingsAt else null)
+                        if (menuFor == b.id) BarItemMenu(b.id, cfg, vertical, {
+                            set.barConfig = it
+                            if (it.isOff(b.id)) ed.say(T.t("Wyłączone. Włączysz je w Ustawieniach → Układ paska narzędzi", "Turned off. Turn it back on in Settings → Toolbar layout"))
+                        }, { menuFor = null }, openSettings, if (set.holdSettings) settingsAt else null)
                         if (b.id == "painter") QuickFormat(ed, set, panel, sz, isz)
                         HELPER_IDS[b.id]?.let { HelperMenu(ed, set, panel, it, holdTool) }
                     }
@@ -872,7 +879,7 @@ private fun QuickFormat(ed: Editor, set: com.mdev.mnotes.data.Settings, panel: P
 }
 
 /**
- * Menu przytrzymanego przycisku paska: gdzie ma stać (zawsze, gdy jest miejsce, pod „⋯”) i o jedno miejsce dalej.
+ * Menu przytrzymanego przycisku paska: gdzie ma stać (zawsze, gdy jest miejsce, pod „⋯”, wyłączone) i o jedno miejsce dalej.
  * Zmiana działa od razu, bez wchodzenia w Ustawienia.
  */
 @Composable
@@ -893,6 +900,7 @@ private fun BarItemMenu(id: String, cfg: BarConfig, vertical: Boolean, save: (Ba
         mode(T.t("Zawsze na pasku", "Always on the bar"), BarMode.ALWAYS)
         mode(T.t("Gdy jest miejsce", "When there is room"), BarMode.AUTO)
         mode(T.t("Tylko pod „⋯”", "Only under “⋯”"), BarMode.MENU)
+        if (cfg.canTurnOff(id)) mode(T.t("Wyłączone (wróci w Ustawieniach)", "Turned off (back via Settings)"), BarMode.OFF)
         HorizontalDivider()
         val back = if (vertical) T.t("Przesuń w górę", "Move up") else T.t("Przesuń w lewo", "Move left")
         val fwd = if (vertical) T.t("Przesuń w dół", "Move down") else T.t("Przesuń w prawo", "Move right")

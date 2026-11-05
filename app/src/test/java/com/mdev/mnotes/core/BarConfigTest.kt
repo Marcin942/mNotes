@@ -58,3 +58,59 @@ class BarConfigTest {
         assertTrue(BarConfig.DEFAULT.move("ruler", -5).withMode("tape", BarMode.ALWAYS).reset().isDefault)
     }
 }
+
+class BarConfigOffTest {
+    private val ids = BarConfig.DEFAULT_ORDER
+
+    @Test fun offSurvivesRoundTripAndOlderValuesStayValid() {
+        val c = BarConfig.DEFAULT.withMode("lasso", BarMode.OFF).withMode("tape", BarMode.MENU)
+        val back = BarConfig.parse(c.orderString(), c.modesString())
+        assertTrue(back.isOff("lasso")); assertEquals(BarMode.MENU, back.mode("tape"))
+        assertFalse(back.isOff("tape"))
+        // Nieznana wartość z przyszłej wersji — bezpiecznie „gdy jest miejsce”.
+        assertEquals(BarMode.AUTO, BarConfig.parse("", "lasso:9").mode("lasso"))
+    }
+
+    @Test fun undoAndRedoCannotBeTurnedOff() {
+        assertFalse(BarConfig.DEFAULT.withMode("undo", BarMode.OFF).isOff("undo"))
+        assertFalse(BarConfig.parse("", "redo:3").isOff("redo"))
+        assertFalse(BarConfig.DEFAULT.canTurnOff("undo"))
+        assertTrue(BarConfig.DEFAULT.canTurnOff("eraser"))
+    }
+
+    @Test fun lastPenStaysOn() {
+        var c = BarConfig.DEFAULT
+        for (p in BarConfig.PENS) c = c.withMode(p, BarMode.OFF)
+        assertEquals(1, BarConfig.PENS.count { !c.isOff(it) })
+        assertEquals("highlighter", c.firstPen())
+        assertFalse(c.canTurnOff("highlighter"))
+        val all = BarConfig.PENS.joinToString(",") { "$it:3" }
+        val parsed = BarConfig.parse("", all)
+        assertEquals(1, BarConfig.PENS.count { !parsed.isOff(it) })
+        assertEquals("ballpoint", parsed.firstPen())
+    }
+
+    @Test fun firstPenFollowsBarOrder() {
+        val c = BarConfig.DEFAULT.move("pencil", -2).withMode("ballpoint", BarMode.OFF)
+        assertEquals("pencil", c.firstPen())
+    }
+
+    @Test fun commandsOfOffToolAreBlocked() {
+        val c = BarConfig.DEFAULT.withMode("eraser", BarMode.OFF).withMode("ruler", BarMode.OFF)
+        assertFalse(c.allows("toolEraser")); assertFalse(c.allows("eraserPixel")); assertFalse(c.allows("ruler"))
+        assertTrue(c.allows("toolLasso")); assertTrue(c.allows("undo")); assertTrue(c.allows("tapesToggle"))
+        assertTrue(BarConfig.DEFAULT.allows("toolEraser"))
+    }
+
+    @Test fun mapsPointAtRealIds() {
+        for (id in BarConfig.TOOLS.values + BarConfig.COMMANDS.values + BarConfig.PENS) assertTrue(id, id in ids)
+        for (t in com.mdev.mnotes.editor.Tool.entries) assertEquals(t.name, t != com.mdev.mnotes.editor.Tool.PEN, t.name in BarConfig.TOOLS)
+        for (k in BarConfig.COMMANDS.keys) assertTrue(k, com.mdev.mnotes.ui.CmdDefs.byId.containsKey(k))
+        for (p in BarConfig.PENS) assertTrue(p, com.mdev.mnotes.core.model.PenKind.entries.any { it.name.lowercase() == p })
+    }
+
+    @Test fun moveSkipsOffItems() {
+        val c = BarConfig.DEFAULT.withMode("ballpoint", BarMode.OFF).move("redo", 1)
+        assertEquals(listOf("undo", "ballpoint", "fountain", "redo"), c.order.take(4))
+    }
+}

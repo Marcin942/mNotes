@@ -139,13 +139,15 @@ internal fun BarLayoutPrefs(set: com.mdev.mnotes.data.Settings) {
             names.forEachIndexed { i, n -> Chip(n, set.undoDock == i, { set.undoDock = i }) }
         }
     } }
-    Group(T.t("Układ paska narzędzi", "Toolbar layout"), keys = "kolejność narzędzia ukryj schowaj menu order tools hide") { Extra {
+    Group(T.t("Układ paska narzędzi", "Toolbar layout"), keys = "kolejność narzędzia ukryj schowaj menu wyłącz wyłączone order tools hide disable off") { Extra {
         Text(
             T.t(
                 "„Gdy jest miejsce” chowa narzędzie pod „⋯” dopiero przy ciasnocie (np. przy kartach), „Zawsze” nigdy go nie chowa, " +
-                    "a „Pod ⋯” trzyma je w menu. To samo zrobisz na pasku, przytrzymując przycisk.",
+                    "a „Pod ⋯” trzyma je w menu. To samo zrobisz na pasku, przytrzymując przycisk. „Wyłączone” usuwa narzędzie " +
+                    "wszędzie: z paska, spod „⋯”, z palety poleceń, skrótów i przycisku rysika; wraca tylko tutaj.",
                 "“When there is room” moves a tool under “⋯” only when the bar is tight (e.g. with tabs), “Always” never hides it, " +
-                    "and “Under ⋯” keeps it in the menu. You can do the same on the bar by long-pressing a button.",
+                    "and “Under ⋯” keeps it in the menu. You can do the same on the bar by long-pressing a button. “Off” removes " +
+                    "the tool everywhere: the bar, “⋯”, the command palette, shortcuts and the pen button; it only comes back here.",
             ),
             style = MaterialTheme.typography.bodySmall, color = dim, modifier = Modifier.padding(bottom = 6.dp),
         )
@@ -157,7 +159,7 @@ internal fun BarLayoutPrefs(set: com.mdev.mnotes.data.Settings) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Box(Modifier.size(28.dp), contentAlignment = Alignment.Center) { BarIcon(id, set, ink) }
                     Spacer(Modifier.width(10.dp))
-                    Text(barName(id), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+                    Text(barName(id), style = MaterialTheme.typography.bodyMedium, color = if (cfg.isOff(id)) dim else ink, modifier = Modifier.weight(1f))
                     IconBtn(Icons.Rounded.ArrowUpward, T.t("Przesuń wcześniej", "Move earlier"), { set.barConfig = cfg.move(id, -1) }, enabled = i > 0, size = 34.dp, iconSize = 18.dp)
                     IconBtn(Icons.Rounded.ArrowDownward, T.t("Przesuń później", "Move later"), { set.barConfig = cfg.move(id, 1) }, enabled = i < cfg.order.size - 1, size = 34.dp, iconSize = 18.dp)
                 }
@@ -165,6 +167,7 @@ internal fun BarLayoutPrefs(set: com.mdev.mnotes.data.Settings) {
                     Chip(T.t("Zawsze", "Always"), cfg.mode(id) == BarMode.ALWAYS, { set.barConfig = cfg.withMode(id, BarMode.ALWAYS) })
                     Chip(T.t("Gdy jest miejsce", "When there is room"), cfg.mode(id) == BarMode.AUTO, { set.barConfig = cfg.withMode(id, BarMode.AUTO) })
                     Chip(T.t("Pod ⋯", "Under ⋯"), cfg.mode(id) == BarMode.MENU, { set.barConfig = cfg.withMode(id, BarMode.MENU) })
+                    if (cfg.canTurnOff(id) || cfg.isOff(id)) Chip(T.t("Wyłączone", "Off"), cfg.isOff(id), { set.barConfig = cfg.withMode(id, BarMode.OFF) })
                 }
             }
         }

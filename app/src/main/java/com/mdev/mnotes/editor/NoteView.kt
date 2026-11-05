@@ -1407,14 +1407,19 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
         return dt < Handedness.PALM_SIDE_MS && !lastStylusX.isNaN() && Handedness.palmSide(settings.hand, x, y, lastStylusX, lastStylusY, dp)
     }
 
-    /** Narzędzie dla bieżącego gestu: gumka rysika, przycisk S Pen, albo wybrane w pasku. */
+    /**
+     * Narzędzie dla bieżącego gestu: gumka rysika, przycisk S Pen, albo wybrane w pasku. Narzędzie wyłączone w
+     * Ustawieniach (LP-5) nie przychodzi z rysika — gest idzie wtedy narzędziem z paska.
+     */
     private fun effectiveTool(ev: MotionEvent, idx: Int): Tool {
         val t = ev.getToolType(idx)
-        if (t == MotionEvent.TOOL_TYPE_ERASER) return Tool.ERASER
-        if (t == MotionEvent.TOOL_TYPE_STYLUS && ev.buttonState and MotionEvent.BUTTON_STYLUS_PRIMARY != 0) {
-            when (settings.penButton) { 0 -> return Tool.ERASER; 1 -> return Tool.LASSO; 3 -> return Tool.LASER }
+        val side = when {
+            t == MotionEvent.TOOL_TYPE_ERASER -> Tool.ERASER
+            t == MotionEvent.TOOL_TYPE_STYLUS && ev.buttonState and MotionEvent.BUTTON_STYLUS_PRIMARY != 0 ->
+                when (settings.penButton) { 0 -> Tool.ERASER; 1 -> Tool.LASSO; 3 -> Tool.LASER; else -> null }
+            else -> null
         }
-        return ed.tool
+        return if (side != null && side.barId?.let(settings.barConfig::isOff) != true) side else ed.tool
     }
 
     private fun onDown(ev: MotionEvent) {

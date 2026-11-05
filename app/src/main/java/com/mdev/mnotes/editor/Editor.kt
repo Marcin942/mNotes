@@ -75,6 +75,9 @@ enum class Tool {
 
     /** Narzędzie po zmianie pióra z listwy ([Editor.tunePen]): gumka, lasso i reszta ustępują ostatniemu piszącemu. */
     fun afterTune(lastWrite: Tool): Tool = if (usesPen) this else lastWrite
+
+    /** LP-5: id pozycji paska, którą można wyłączyć w Ustawieniach (pióro: null — zależy od rodzaju). */
+    val barId: String? get() = com.mdev.mnotes.core.layout.BarConfig.TOOLS[name]
 }
 
 class Sel(val pageId: String, val ids: Set<Int>)
@@ -1880,6 +1883,22 @@ class Editor(val ctx: Context, val nbId: String) {
             else T.t("Profil „${p.name}”${if (pinned) " (przypięty)" else ""} — $finger", "Profile “${p.name}”${if (pinned) " (pinned)" else ""} — $finger"),
         )
         (station?.rows ?: listOf(this)).forEach { it.view?.invalidate() }
+    }
+
+    /**
+     * LP-5: zdejmuje z ręki to, co użytkownik wyłączył w Ustawieniach — narzędzie przechodzi na pióro, wyłączone
+     * pióro na pierwsze włączone, a linijka, kątomierz i pipeta się chowają.
+     */
+    fun dropOffTools(cfg: com.mdev.mnotes.core.layout.BarConfig) {
+        if (cfg.isOff(kit.active.name.lowercase())) {
+            val pen = cfg.firstPen()
+            PenKind.entries.firstOrNull { it.name.lowercase() == pen }?.let { k -> editKit { it.withActive(k) } }
+        }
+        if (tool.barId?.let(cfg::isOff) == true) { tool = Tool.PEN; clearSelIfNotLasso(); noteTool(Tool.PEN) }
+        if (lastWriteTool.barId?.let(cfg::isOff) == true) noteTool(Tool.PEN)
+        if (ruler && cfg.isOff("ruler")) toggleRuler()
+        if (protractor && cfg.isOff("protractor")) toggleProtractor()
+        if (pipette != null && cfg.isOff("pipette")) cancelPipette()
     }
 
     // — Skróty klawiszowe wspólne z paletą poleceń —

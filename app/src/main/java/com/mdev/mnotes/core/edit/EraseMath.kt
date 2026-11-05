@@ -62,7 +62,12 @@ object EraseMath {
     }
 
     /** Wynik gumki pikselowej: pozostałe kawałki kreski i obszar strony, którego wygląd się zmienił. */
-    class Erased(val pieces: List<FloatArray>, val dirty: Bounds)
+    /**
+     * [spans]: dla każdego kawałka para ułamkowych indeksów punktów kreski źródłowej (pierwszy i ostatni punkt kawałka),
+     * np. 3.25 = ćwierć drogi między punktem 3 a 4. Z nich kawałek krzywej dostaje swój odcinek krzywej (LP-3). Null,
+     * gdy nieznane.
+     */
+    class Erased(val pieces: List<FloatArray>, val dirty: Bounds, val spans: FloatArray? = null)
 
     /**
      * Gumka pikselowa: usuwa z kreski wszystko, co leży w okręgu (cx, cy, r), i zwraca pozostałe kawałki
@@ -96,7 +101,8 @@ object EraseMath {
         val all = s.poly
         val src = FloatList(p.size + 64)
         val near = BooleanArray(n)
-        src.add(p[0], p[1], p[2])
+        val at = FloatList(n + 64)
+        src.add(p[0], p[1], p[2]); at.add(0f)
         for (i in 1 until n) {
             val x0 = p[3 * i - 3]; val y0 = p[3 * i - 2]; val p0 = p[3 * i - 1]
             val x1 = p[3 * i]; val y1 = p[3 * i + 1]; val p1 = p[3 * i + 2]
@@ -107,18 +113,19 @@ object EraseMath {
                 val k = (hypot(x1 - x0, y1 - y0) / step).toInt().coerceAtMost(400)
                 for (j in 1..k) {
                     val t = j.toFloat() / (k + 1)
-                    src.add(x0 + (x1 - x0) * t, y0 + (y1 - y0) * t, p0 + (p1 - p0) * t)
+                    src.add(x0 + (x1 - x0) * t, y0 + (y1 - y0) * t, p0 + (p1 - p0) * t); at.add(i - 1 + t)
                 }
             }
-            src.add(x1, y1, p1)
+            src.add(x1, y1, p1); at.add(i.toFloat())
         }
         val a = src.a
         val m = src.size / 3
         val out = ArrayList<FloatArray>()
+        val spans = FloatList()
         var removed = false
         var runStart = -1
         fun flush(endExcl: Int) {
-            if (runStart >= 0 && endExcl - runStart >= 2) out.add(a.copyOfRange(3 * runStart, 3 * endExcl))
+            if (runStart >= 0 && endExcl - runStart >= 2) { out.add(a.copyOfRange(3 * runStart, 3 * endExcl)); spans.add(at[runStart], at[endExcl - 1]) }
             runStart = -1
         }
         for (i in 0 until m) {
@@ -129,9 +136,9 @@ object EraseMath {
         }
         flush(m)
         if (!removed) return null
-        if (all || out.isEmpty()) return Erased(out, s.bounds)
+        if (all || out.isEmpty()) return Erased(out, s.bounds, spans.toArray())
         val dirty = localDirty(s, near, min(ax, bx) - r, min(ay, by) - r, max(ax, bx) + r, max(ay, by) + r, half * pMax)
-        return Erased(out, if (needsFullRepaint(s, out, dirty)) s.bounds else dirty)
+        return Erased(out, if (needsFullRepaint(s, out, dirty)) s.bounds else dirty, spans.toArray())
     }
 
     /**

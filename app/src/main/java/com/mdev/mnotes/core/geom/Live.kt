@@ -123,7 +123,7 @@ class Live {
          * bierze nowy tekst — dawniej po ruchu wierzchołka kąt dalej pokazywał starą liczbę.
          */
         fun keepStyle(old: Element, fresh: Element): Element = when {
-            old is Stroke && fresh is Stroke -> Stroke(old.id, old.pen, old.color, old.width, fresh.pts, old.locked, fresh.poly, fresh.ellipse, old.line, fresh.ctrl, old.fill)
+            old is Stroke && fresh is Stroke -> Stroke(old.id, old.pen, old.color, old.width, fresh.pts, old.locked, fresh.poly, fresh.ellipse, old.line, fresh.ctrl, old.fill, fresh.memo)
             old is TextBox && fresh is TextBox -> old.copy(cx = fresh.cx, cy = fresh.cy, text = if (isMeasure(old.text) && isMeasure(fresh.text)) fresh.text else old.text)
             else -> fresh.withId(old.id)
         }

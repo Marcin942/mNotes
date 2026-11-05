@@ -35,6 +35,7 @@ import com.mdev.mnotes.core.edit.ImageArrange
 import com.mdev.mnotes.core.edit.GridFit
 import com.mdev.mnotes.core.edit.Snip
 import com.mdev.mnotes.core.edit.Sticker
+import com.mdev.mnotes.core.shapes.CurveMemo
 import com.mdev.mnotes.core.shapes.PointEdit
 import com.mdev.mnotes.core.model.ImageCrop
 import com.mdev.mnotes.core.model.ImageEl
@@ -1396,6 +1397,22 @@ class Editor(val ctx: Context, val nbId: String) {
         exec(DocEdit.Elements(p.id, ElementsEdit.replace(doc.content(p), mapOf(st.id to c))))
         selTick++
         say(T.t("Edycja punktów: przeciągnij kotwice i uchwyty, przytrzymaj kotwicę po więcej opcji", "Point editing: drag anchors and handles, long-press an anchor for more"))
+    }
+
+    /**
+     * Zaznaczona krzywa staje się zwykłą kreską, która wygląda tak samo i pamięta punkty krzywej (LP-3): „Punkty i
+     * uchwyty” przywraca potem tę samą krzywą, bez wygładzania. Jedno cofnięcie.
+     */
+    fun curveToStroke() {
+        val p = selPage() ?: return
+        val st = selElements().singleOrNull() as? Stroke ?: return
+        if (st.locked || readOnly) return
+        val plain = CurveMemo.toPlain(st) ?: return
+        pointEdit = false
+        exec(DocEdit.Elements(p.id, ElementsEdit.replace(doc.content(p), mapOf(st.id to plain))))
+        selTick++
+        view?.invalidate()
+        say(T.t("Zwykła kreska; „Punkty i uchwyty” przywróci tę samą krzywą", "Plain stroke; “Points and handles” restores the same curve"))
     }
 
     /** Akcja z menu punktu: zamienia element [m] wynikiem [f] (null = bez zmian). */

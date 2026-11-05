@@ -80,6 +80,13 @@ class Stroke(
      * widać pismo, na ciemnym papierze nie świeci); 0 = bez wypełnienia. Liczone z [pts], więc po edycji uchwytów idzie za krzywą.
      */
     val fill: Int = 0,
+    /**
+     * Pamięć krzywej (LP-3): punkty kontrolne krzywej Béziera, z której powstała ta zwykła kreska (zapis jak [ctrl]).
+     * Powrót do krzywej przywraca je bez wygładzania ([com.mdev.mnotes.core.shapes.CurveMemo]). Przekształcenia
+     * afiniczne przenoszą ją razem z [pts]; zmiana, której krzywa nie opisze (dorysowanie, edycja punktów), ją gubi.
+     * Tylko przy [ctrl] == null; null = kreska nic nie pamięta.
+     */
+    val memo: FloatArray? = null,
 ) : Element() {
 
     val count: Int get() = pts.size / 3
@@ -115,11 +122,11 @@ class Stroke(
     /** Zakreślacz leży we własnej warstwie i miesza się z papierem mnożeniem (patrz renderer). */
     val multiply: Boolean get() = pen == PenKind.HIGHLIGHTER
 
-    override fun withId(newId: Int): Stroke = Stroke(newId, pen, color, width, pts, locked, poly, ellipse, line, ctrl, fill)
-    override fun withLocked(value: Boolean): Stroke = Stroke(id, pen, color, width, pts, value, poly, ellipse, line, ctrl, fill)
+    override fun withId(newId: Int): Stroke = Stroke(newId, pen, color, width, pts, locked, poly, ellipse, line, ctrl, fill, memo)
+    override fun withLocked(value: Boolean): Stroke = Stroke(id, pen, color, width, pts, value, poly, ellipse, line, ctrl, fill, memo)
 
     fun withStyle(color: Int = this.color, width: Float = this.width, pen: PenKind = this.pen, line: LineStyle = this.line): Stroke =
-        Stroke(id, pen, color, width, pts, locked, poly, ellipse, line, ctrl, if (fill != 0 && color != this.color) color else fill)
+        Stroke(id, pen, color, width, pts, locked, poly, ellipse, line, ctrl, if (fill != 0 && color != this.color) color else fill, memo)
 
     override fun transformed(m: Affine): Stroke {
         val out = FloatArray(pts.size)
@@ -131,9 +138,12 @@ class Stroke(
             out[i + 2] = pts[i + 2]
             i += 3
         }
-        val c = ctrl?.let { src -> FloatArray(src.size) { k -> if (k % 2 == 0) m.mapX(src[k], src[k + 1]) else m.mapY(src[k - 1], src[k]) } }
-        return Stroke(id, pen, color, width * m.scaleFactor, out, locked, poly, ellipse, line, c, fill)
+        return Stroke(id, pen, color, width * m.scaleFactor, out, locked, poly, ellipse, line, ctrl?.let { mapXY(it, m) }, fill, memo?.let { mapXY(it, m) })
     }
+
+    /** Pary x, y przekształcone [m]: punkty kontrolne krzywej i pamięć krzywej idą tą samą macierzą co kreska. */
+    private fun mapXY(src: FloatArray, m: Affine): FloatArray =
+        FloatArray(src.size) { k -> if (k % 2 == 0) m.mapX(src[k], src[k + 1]) else m.mapY(src[k - 1], src[k]) }
 }
 
 /**

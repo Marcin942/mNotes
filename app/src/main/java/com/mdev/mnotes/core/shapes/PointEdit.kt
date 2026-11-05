@@ -30,6 +30,8 @@ object PointEdit {
      */
     fun toCurve(s: Stroke): Stroke? {
         if (s.ctrl != null) return null
+        // Kreska z krzywej (LP-3) wraca do tych samych punktów kontrolnych, bez ponownego dopasowania i wygładzania.
+        CurveMemo.restore(s)?.let { return it }
         if (s.ellipse) { val f = ShapeBox.frameOf(s) ?: return null; return Bezier.withCtrl(s, ellipseCtrl(f)) }
         if (s.poly) return null
         val xy = FloatArray(2 * s.count) { i -> s.pts[3 * (i / 2) + i % 2] }

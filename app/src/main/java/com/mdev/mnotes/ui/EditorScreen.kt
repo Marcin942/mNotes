@@ -1988,6 +1988,11 @@ private fun SelectionButtons(ed: Editor, panel: Panel?, toggle: (Panel) -> Unit,
                 Icons.Rounded.Timeline, T.t("Punkty i uchwyty (lub dotknij kreski dwa razy)", "Points and handles (or double-tap the stroke)"),
                 { ed.editPoints() }, selected = ed.pointEdit, size = 36.dp, iconSize = 20.dp,
             )
+            // LP-3: krzywa → zwykła kreska, która pamięta punkty; „Punkty i uchwyty” przywraca tę samą krzywą.
+            if (one?.ctrl != null && !locked && !ed.readOnly) IconBtn(
+                Icons.Rounded.Gesture, T.t("Zamień w zwykłą kreskę", "Convert to a plain stroke"),
+                { ed.curveToStroke() }, size = 36.dp, iconSize = 20.dp,
+            )
             if (!locked && els.size == 1 && els[0] is ImageEl && !ed.readOnly) IconBtn(Icons.Rounded.Crop, T.t("Przytnij", "Crop"), { ed.startCrop() }, size = 36.dp, iconSize = 20.dp)
             if (ed.canFlipSel()) {
                 IconBtn(Icons.Rounded.Flip, T.t("Odbij w poziomie", "Flip horizontally"), { ed.flipSel(true) }, size = 36.dp, iconSize = 20.dp)

@@ -1,5 +1,6 @@
 package com.mdev.mnotes.core.edit
 
+import com.mdev.mnotes.core.shapes.CurveMemo
 import com.mdev.mnotes.core.geom.Bounds
 import com.mdev.mnotes.core.geom.BoundsGrid
 import com.mdev.mnotes.core.model.Element
@@ -89,7 +90,12 @@ class EraseSession(
                 val poly = e.poly && !e.ellipse
                 val res = (if (poly) EraseMath.erasePoly(e, ax, ay, bx, by, r) else EraseMath.eraseSwept(e, ax, ay, bx, by, r)) ?: return null
                 dirty = dirty.union(res.dirty)
-                res.pieces.map { Stroke(Ids.next(), e.pen, e.color, e.width, it, false, poly = poly, line = e.line) }
+                // Kawałek krzywej albo kreski z pamięcią krzywej pamięta swój dokładny odcinek krzywej (LP-3).
+                val spans = res.spans
+                val memos = if (!poly && (e.ctrl != null || e.memo != null) && spans != null && spans.size == 2 * res.pieces.size) {
+                    CurveMemo.pieces(e, spans)
+                } else null
+                res.pieces.mapIndexed { k, it -> Stroke(Ids.next(), e.pen, e.color, e.width, it, false, poly = poly, line = e.line, memo = memos?.get(k)) }
             }
             is FillEl -> {
                 // Wypełnienia są rzadkie i mają własną, dokładną matematykę koła: ruch idzie krokami jak dawniej.

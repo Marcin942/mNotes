@@ -61,6 +61,11 @@ object PageCodec {
     private const val FLAG_BEZIER = 64
     /** Wypełnienie zamkniętej krzywej (2b-A10): i32 ARGB na samym końcu rekordu kreski; starsza wersja go pomija. */
     private const val FLAG_STROKE_FILL = 128
+    /**
+     * Pamięć krzywej w zwykłej kresce (LP-3): punkty kontrolne jak przy [FLAG_BEZIER], dopisane po wypełnieniu, na samym
+     * końcu rekordu. Starsza wersja pomija ten ogon i ma zwykłą kreskę — wygląda tak samo, tylko nie pamięta krzywej.
+     */
+    private const val FLAG_CURVE_MEMO = 256
     // Tryb rozmiaru pola tekstowego; brak obu bitów = TextBox.FIT_HEIGHT, czyli zapis sprzed trybów.
     private const val FLAG_TEXT_AUTO = 64
     private const val FLAG_TEXT_FIXED = 128
@@ -161,7 +166,8 @@ object PageCodec {
         w.i32(s.color)
         val line = when (s.line) { LineStyle.DASHED -> FLAG_DASHED; LineStyle.DOTTED -> FLAG_DOTTED; LineStyle.SOLID -> 0 }
         val ctrl = s.ctrl
-        w.varint((if (s.locked) FLAG_LOCKED else 0) or (if (s.poly) FLAG_POLY else 0) or (if (s.ellipse) FLAG_ELLIPSE else 0) or line or (if (ctrl != null) FLAG_BEZIER else 0) or (if (s.fill != 0) FLAG_STROKE_FILL else 0))
+        val memo = if (ctrl == null) s.memo else null
+        w.varint((if (s.locked) FLAG_LOCKED else 0) or (if (s.poly) FLAG_POLY else 0) or (if (s.ellipse) FLAG_ELLIPSE else 0) or line or (if (ctrl != null) FLAG_BEZIER else 0) or (if (s.fill != 0) FLAG_STROKE_FILL else 0) or (if (memo != null) FLAG_CURVE_MEMO else 0))
         w.varint((s.width * Q).roundToInt().coerceAtLeast(1))
         val n = s.count
         w.varint(n)
@@ -175,16 +181,28 @@ object PageCodec {
             w.u8((p[3 * i + 2].coerceIn(0f, 1f) * 255f).roundToInt())
             px = x; py = y
         }
-        if (ctrl != null) {
-            w.varint(ctrl.size / 2)
-            var cx = 0; var cy = 0
-            for (i in 0 until ctrl.size / 2) {
-                val x = (ctrl[2 * i] * Q).roundToInt(); val y = (ctrl[2 * i + 1] * Q).roundToInt()
-                w.zigzag(x - cx); w.zigzag(y - cy)
-                cx = x; cy = y
-            }
-        }
+        if (ctrl != null) writeCtrl(w, ctrl)
         if (s.fill != 0) w.i32(s.fill)
+        if (memo != null) writeCtrl(w, memo)
+    }
+
+    private fun writeCtrl(w: ByteWriter, ctrl: FloatArray) {
+        w.varint(ctrl.size / 2)
+        var cx = 0; var cy = 0
+        for (i in 0 until ctrl.size / 2) {
+            val x = (ctrl[2 * i] * Q).roundToInt(); val y = (ctrl[2 * i + 1] * Q).roundToInt()
+            w.zigzag(x - cx); w.zigzag(y - cy)
+            cx = x; cy = y
+        }
+    }
+
+    private fun readCtrl(r: ByteReader): FloatArray {
+        val m = r.varint()
+        if (m < 0 || m > r.remaining) throw CodecException("Zła liczba punktów kontrolnych")
+        val c = FloatArray(2 * m)
+        var cx = 0; var cy = 0
+        for (i in 0 until m) { cx += r.zigzag(); cy += r.zigzag(); c[2 * i] = cx / Q; c[2 * i + 1] = cy / Q }
+        return c
     }
 
     private fun readStroke(r: ByteReader): Stroke {
@@ -204,17 +222,10 @@ object PageCodec {
             pts[3 * i + 2] = r.u8() / 255f
         }
         val line = if (flags and FLAG_DASHED != 0) LineStyle.DASHED else if (flags and FLAG_DOTTED != 0) LineStyle.DOTTED else LineStyle.SOLID
-        var ctrl: FloatArray? = null
-        if (flags and FLAG_BEZIER != 0) {
-            val m = r.varint()
-            if (m < 0 || m > r.remaining) throw CodecException("Zła liczba punktów kontrolnych")
-            val c = FloatArray(2 * m)
-            var cx = 0; var cy = 0
-            for (i in 0 until m) { cx += r.zigzag(); cy += r.zigzag(); c[2 * i] = cx / Q; c[2 * i + 1] = cy / Q }
-            ctrl = c
-        }
+        val ctrl = if (flags and FLAG_BEZIER != 0) readCtrl(r) else null
         val fill = if (flags and FLAG_STROKE_FILL != 0 && r.remaining >= 4) r.i32() else 0
-        return Stroke(Ids.next(), pen, color, width, pts, flags and FLAG_LOCKED != 0, flags and FLAG_POLY != 0, flags and FLAG_ELLIPSE != 0, line, ctrl, fill)
+        val memo = if (ctrl == null && flags and FLAG_CURVE_MEMO != 0 && r.remaining > 0) readCtrl(r) else null
+        return Stroke(Ids.next(), pen, color, width, pts, flags and FLAG_LOCKED != 0, flags and FLAG_POLY != 0, flags and FLAG_ELLIPSE != 0, line, ctrl, fill, memo)
     }
 
     private fun writeText(w: ByteWriter, t: TextBox) {

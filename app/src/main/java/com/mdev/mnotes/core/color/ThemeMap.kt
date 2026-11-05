@@ -93,7 +93,7 @@ object ThemeMap {
             is Stroke -> {
                 val c = if (e.pen == PenKind.HIGHLIGHTER) e.color else native(e.color)
                 val f = if (e.fill == 0) 0 else native(e.fill)
-                if (c == e.color && f == e.fill) e else Stroke(e.id, e.pen, c, e.width, e.pts, e.locked, e.poly, e.ellipse, e.line, e.ctrl, f)
+                if (c == e.color && f == e.fill) e else Stroke(e.id, e.pen, c, e.width, e.pts, e.locked, e.poly, e.ellipse, e.line, e.ctrl, f, e.memo)
             }
             is TextBox -> {
                 val c = native(e.color); val f = if (e.fill == 0) 0 else native(e.fill)
@@ -112,7 +112,7 @@ object ThemeMap {
             is Stroke -> {
                 val c = if (e.pen == PenKind.HIGHLIGHTER) highlighter(e.color) else ink(e.color)
                 val f = if (e.fill == 0) 0 else highlighter(e.fill)
-                Stroke(e.id, e.pen, c, e.width, e.pts, e.locked, e.poly, e.ellipse, e.line, e.ctrl, f)
+                Stroke(e.id, e.pen, c, e.width, e.pts, e.locked, e.poly, e.ellipse, e.line, e.ctrl, f, e.memo)
             }
             is TextBox -> if (e.fill == 0) e.copy(color = ink(e.color)) else e.copy(color = textOn(e.color, e.fill), fill = surface(e.fill))
             is FillEl -> e.copy(color = if (e.hl) highlighter(e.color) else surface(e.color))

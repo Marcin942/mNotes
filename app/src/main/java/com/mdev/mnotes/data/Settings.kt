@@ -28,6 +28,9 @@ class Settings(ctx: Context) {
     /** 2c-A11: ręczne zmiany ustawień z profilu przy włączonym profilu (klucz → przed i po); edytor pyta, czy je zapisać. */
     val profileEdits = mutableStateMapOf<String, Pair<com.mdev.mnotes.core.prefs.PVal, com.mdev.mnotes.core.prefs.PVal>>()
     private var applyingProfile = false
+    /** LP-6: wybory z szybkiego menu narzędzia na czas trzymania narzędzia; czyści je [dropQuick]. */
+    private var quickOverlay by mutableStateOf(com.mdev.mnotes.core.prefs.QuickOverlay.EMPTY)
+    private var quickWrite = false
 
     private inner class Pref<T>(val key: String, val def: T) : ReadWriteProperty<Any?, T> {
         private var state by mutableStateOf(read())
@@ -52,8 +55,10 @@ class Settings(ctx: Context) {
             // Zapisane w innym typie (import ustawień sprzed poprawki 3c-A16: 20f jako Int) — przeliczone albo domyślne.
         }.getOrElse { (com.mdev.mnotes.core.prefs.PrefValue.coerce(def, sp.all[key]) as T?) ?: def }
 
-        override fun getValue(thisRef: Any?, property: KProperty<*>): T = state
+        override fun getValue(thisRef: Any?, property: KProperty<*>): T = quickOverlay.read(key, state)
         override fun setValue(thisRef: Any?, property: KProperty<*>, value: T) {
+            if (quickWrite && value != null) { quickOverlay = quickOverlay.pick(key, value, state); return }
+            if (key in quickOverlay) quickOverlay = quickOverlay.without(key)
             val old = state
             state = value
             if (old != value) noteEdit(key, old, value)
@@ -185,6 +190,20 @@ class Settings(ctx: Context) {
             e.remove(old).apply()
         }
     }
+
+    /** LP-6: szybkie menu narzędzia (i listwa jego opcji) zmienia ustawienie na stałe, jak przed LP-6; domyślnie tylko do odłożenia narzędzia. */
+    var quickPersist by Pref("toolbar.quick_persist", false)
+
+    /** LP-6: zmiana z szybkiego menu narzędzia — obowiązuje do odłożenia narzędzia, a przy [quickPersist] zapisuje się na stałe. */
+    fun quick(change: Settings.() -> Unit) {
+        if (quickPersist) { change(); return }
+        quickWrite = true
+        try { change() } finally { quickWrite = false }
+    }
+
+    /** LP-6: narzędzie odłożone — wybory z szybkiego menu przestają obowiązywać, wraca domyślne. */
+    fun dropQuick() { if (!quickOverlay.isEmpty) quickOverlay = com.mdev.mnotes.core.prefs.QuickOverlay.EMPTY }
+
     // 2b-A2 (zastępuje przełącznik F7 „toolbar.tool_strip”): HelperStrip.WRITE_AND_MENU albo TOOL_OPTIONS
     var helperStrip by Pref("toolbar.helper_strip", com.mdev.mnotes.core.layout.HelperStrip.WRITE_AND_MENU)
     private var helperMenuPref by Pref("toolbar.helper_menu", "")   // wyłączone pozycje menu (HelperStrip.Config)

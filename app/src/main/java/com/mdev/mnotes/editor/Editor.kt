@@ -180,7 +180,8 @@ class Editor(val ctx: Context, val nbId: String) {
         get() = toolState
         // 2b-A10: odejście od Krzywej zapisuje rozpoczętą krzywą (punkty postawione palcem się nie gubią).
         // 3c-B4: odejście od Wycinka chowa niewstawiony wycinek.
-        set(v) { if (toolState == Tool.CURVE && v != Tool.CURVE) curveCommit(); if (v != Tool.SNIP) snipShot = null; toolState = v }
+        // LP-6: odłożenie narzędzia kończy wybory z jego szybkiego menu.
+        set(v) { if (toolState == Tool.CURVE && v != Tool.CURVE) curveCommit(); if (v != Tool.SNIP) snipShot = null; if (v != toolState) settings.dropQuick(); toolState = v }
     var ruler by mutableStateOf(false)
     /** Okno powiększenia (EXT-003): pisanie w powiększonej ramce u dołu, zapis na stronie w skali 1:1. */
     var zoomWin by mutableStateOf(false)

@@ -407,6 +407,15 @@ private fun HelperStripPrefs(set: com.mdev.mnotes.data.Settings) {
             style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 6.dp),
         )
     }
+    // LP-6: domyślnie wybór z szybkiego menu działa do odłożenia narzędzia; domyślne zmienia pełny panel i Ustawienia.
+    val quickLabel = T.t("Szybkie menu zmienia ustawienie na stałe", "The quick menu changes the setting for good")
+    val quickKeys = "szybkie menu jednorazowo tymczasowo na stałe domyślne odłożenie narzędzia gumka lasso laser wycinek quick menu temporary default"
+    ToggleRow(quickLabel, set.quickPersist, keys = quickKeys) { set.quickPersist = it }
+    if (rowVisible(quickLabel, quickKeys)) Text(
+        if (set.quickPersist) T.t("Wybór w szybkim menu narzędzia zostaje jako domyślny.", "A choice in the tool's quick menu stays as the default.")
+        else T.t("Wybór w szybkim menu obowiązuje do odłożenia narzędzia, potem wraca domyślne. Domyślne zmienia pełny panel narzędzia.", "A choice in the quick menu lasts until you put the tool down, then the default returns. The tool's full panel changes the default."),
+        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(bottom = 6.dp),
+    )
     if (set.helperStrip != HelperStrip.WRITE_AND_MENU) return
     val cfg = set.helperMenu
     val groups = listOf(

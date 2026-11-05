@@ -1139,7 +1139,7 @@ private fun EraserStripItems(
             val names = listOf(T.t("Gumka obiektowa — usuwa całe kreski", "Object eraser — removes whole strokes"), T.t("Gumka pikselowa — ściera tylko to, nad czym przejdzie", "Pixel eraser — erases only what it passes over"), T.t("Lasso gumki — usuwa to, co obrysujesz", "Lasso eraser — removes what you circle"), T.t("Wycinanie — tnie kreski dokładnie na obrysie", "Cut out — cuts strokes exactly along the loop"))
             for (mode in 0..3) {
                 val on = set.eraserMode == mode
-                val pick = { if (on) toggle(Panel.ERASER) else set.eraserMode = mode }
+                val pick = { if (on) toggle(Panel.ERASER) else set.quick { eraserMode = mode } }
                 // 3c-A3: na poziomej listwie symbol z podpisem (sam znak w rogu bywał zagadką); pionowa zostaje wąska.
                 if (vertical) ToolBtn(names[mode], pick, selected = on, size = sz) { c -> EraserModeGlyph(mode, c, Modifier.size(isz + 2.dp)) }
                 else Chip(eraserModeName(mode), on, pick, Modifier.padding(horizontal = 2.dp), glyph = { c -> EraserModeGlyph(mode, c, Modifier.size(isz)) })
@@ -1149,12 +1149,12 @@ private fun EraserStripItems(
         if (HelperStrip.Item.ERASER_SIZES in items && set.eraserMode < 2) {
             for (s in ERASER_SIZES) {
                 val on = kotlin.math.abs(set.eraserSize - s) < 0.5f
-                ToolBtn(T.t("Rozmiar gumki", "Eraser size") + String.format(" %.0f pt", s), { if (on) toggle(Panel.ERASER) else set.eraserSize = s }, selected = on, size = sz) { c -> EraserSizeGlyph(s, c, Modifier.size(isz + 2.dp)) }
+                ToolBtn(T.t("Rozmiar gumki", "Eraser size") + String.format(" %.0f pt", s), { if (on) toggle(Panel.ERASER) else set.quick { eraserSize = s } }, selected = on, size = sz) { c -> EraserSizeGlyph(s, c, Modifier.size(isz + 2.dp)) }
             }
             BarSep(vertical)
         }
         if (HelperStrip.Item.ERASER_HIGHLIGHTER in items) {
-            IconBtn(Icons.Rounded.Highlight, T.t("Gumka pomija zakreślacz", "Eraser ignores highlighter"), { set.eraserKeepHighlighter = !set.eraserKeepHighlighter }, selected = set.eraserKeepHighlighter, size = sz, iconSize = isz)
+            IconBtn(Icons.Rounded.Highlight, T.t("Gumka pomija zakreślacz", "Eraser ignores highlighter"), { set.quick { eraserKeepHighlighter = !eraserKeepHighlighter } }, selected = set.eraserKeepHighlighter, size = sz, iconSize = isz)
         }
         IconBtn(Icons.Rounded.Tune, T.t("Ustawienia gumki", "Eraser settings"), { toggle(Panel.ERASER) }, selected = panel == Panel.ERASER, size = sz, iconSize = isz)
         if (back) { BarSep(vertical); WriteBackBtn(ed, set) }
@@ -1170,13 +1170,13 @@ private fun LassoStripItems(
     val sz = barSize(set); val isz = barIcon(set)
     Lin(vertical, Modifier.padding(4.dp)) {
         if (HelperStrip.Item.LASSO_SHAPE in items) {
-            ToolBtn(T.t("Lasso odręczne", "Freehand lasso"), { if (!set.lassoRect) toggle(Panel.LASSO) else set.lassoRect = false }, selected = !set.lassoRect, size = sz) { c -> LassoGlyph(false, c, Modifier.size(isz + 2.dp)) }
-            ToolBtn(T.t("Zaznaczanie prostokątem", "Rectangle selection"), { if (set.lassoRect) toggle(Panel.LASSO) else set.lassoRect = true }, selected = set.lassoRect, size = sz) { c -> LassoGlyph(true, c, Modifier.size(isz + 2.dp)) }
+            ToolBtn(T.t("Lasso odręczne", "Freehand lasso"), { if (!set.lassoRect) toggle(Panel.LASSO) else set.quick { lassoRect = false } }, selected = !set.lassoRect, size = sz) { c -> LassoGlyph(false, c, Modifier.size(isz + 2.dp)) }
+            ToolBtn(T.t("Zaznaczanie prostokątem", "Rectangle selection"), { if (set.lassoRect) toggle(Panel.LASSO) else set.quick { lassoRect = true } }, selected = set.lassoRect, size = sz) { c -> LassoGlyph(true, c, Modifier.size(isz + 2.dp)) }
             BarSep(vertical)
         }
         if (HelperStrip.Item.LASSO_MODE in items) {
-            IconBtn(Icons.Rounded.SelectAll, T.t("Połowa w pętli — zaznacza obiekt, gdy co najmniej połowa jest w pętli", "Half in the loop — selects an object when at least half is inside"), { set.lassoTouch = false }, selected = !set.lassoTouch, size = sz, iconSize = isz)
-            IconBtn(Icons.Rounded.TouchApp, T.t("Wystarczy dotknąć — wystarczy musnąć obiekt pętlą", "Just touch — brushing the object with the loop is enough"), { set.lassoTouch = true }, selected = set.lassoTouch, size = sz, iconSize = isz)
+            IconBtn(Icons.Rounded.SelectAll, T.t("Połowa w pętli — zaznacza obiekt, gdy co najmniej połowa jest w pętli", "Half in the loop — selects an object when at least half is inside"), { set.quick { lassoTouch = false } }, selected = !set.lassoTouch, size = sz, iconSize = isz)
+            IconBtn(Icons.Rounded.TouchApp, T.t("Wystarczy dotknąć — wystarczy musnąć obiekt pętlą", "Just touch — brushing the object with the loop is enough"), { set.quick { lassoTouch = true } }, selected = set.lassoTouch, size = sz, iconSize = isz)
             BarSep(vertical)
         }
         IconBtn(Icons.Rounded.Tune, T.t("Ustawienia lassa", "Lasso settings"), { toggle(Panel.LASSO) }, selected = panel == Panel.LASSO, size = sz, iconSize = isz)
@@ -1193,17 +1193,17 @@ private fun SnipStripItems(
     val sz = barSize(set); val isz = barIcon(set)
     Lin(vertical, Modifier.padding(4.dp)) {
         if (HelperStrip.Item.SNIP_SHAPE in items) {
-            ToolBtn(T.t("Wycinek prostokątem — ostre krawędzie", "Rectangle snip — sharp edges"), { set.snipRect = true }, selected = set.snipRect, size = sz) { c -> SnipGlyph(false, c, Modifier.size(isz + 2.dp)) }
-            ToolBtn(T.t("Wycinek lassem — przezroczysto poza obrysem", "Lasso snip — transparent outside the loop"), { set.snipRect = false }, selected = !set.snipRect, size = sz) { c -> SnipGlyph(true, c, Modifier.size(isz + 2.dp)) }
+            ToolBtn(T.t("Wycinek prostokątem — ostre krawędzie", "Rectangle snip — sharp edges"), { set.quick { snipRect = true } }, selected = set.snipRect, size = sz) { c -> SnipGlyph(false, c, Modifier.size(isz + 2.dp)) }
+            ToolBtn(T.t("Wycinek lassem — przezroczysto poza obrysem", "Lasso snip — transparent outside the loop"), { set.quick { snipRect = false } }, selected = !set.snipRect, size = sz) { c -> SnipGlyph(true, c, Modifier.size(isz + 2.dp)) }
             BarSep(vertical)
         }
         if (HelperStrip.Item.SNIP_CAPTION in items) {
-            IconBtn(Icons.Rounded.Subtitles, T.t("Podpis źródła pod wycinkiem („slajd 12 · plik”)", "Source caption under the snip (“slide 12 · file”)"), { set.snipCaption = !set.snipCaption }, selected = set.snipCaption, size = sz, iconSize = isz)
+            IconBtn(Icons.Rounded.Subtitles, T.t("Podpis źródła pod wycinkiem („slajd 12 · plik”)", "Source caption under the snip (“slide 12 · file”)"), { set.quick { snipCaption = !snipCaption } }, selected = set.snipCaption, size = sz, iconSize = isz)
         }
         if (HelperStrip.Item.SNIP_CLIPBOARD in items) {
             // LP-2: co robi gotowy wycinek; pozycja paska ma dawną nazwę, bo siedzi w zapisanych układach pasków
             BarSep(vertical)
-            for ((m, icon, hint) in snipModeButtons()) IconBtn(icon, hint, { set.snipMode = m }, selected = set.snipMode == m, size = sz, iconSize = isz)
+            for ((m, icon, hint) in snipModeButtons()) IconBtn(icon, hint, { set.quick { snipMode = m } }, selected = set.snipMode == m, size = sz, iconSize = isz)
         }
         if (back) { BarSep(vertical); WriteBackBtn(ed, set) }
     }
@@ -1222,7 +1222,7 @@ private fun snipModeButtons() = listOf(
 private fun LaserStripItems(ed: Editor, set: com.mdev.mnotes.data.Settings, vertical: Boolean, back: Boolean = false) {
     val sz = barSize(set)
     Lin(vertical, Modifier.padding(4.dp)) {
-        for (c in LaserColors.PALETTE) StripDot(Color(0xFF000000.toInt() or c), set.laserColor == c, sz) { set.laserColor = c }
+        for (c in LaserColors.PALETTE) StripDot(Color(0xFF000000.toInt() or c), set.laserColor == c, sz) { set.quick { laserColor = c } }
         if (back) { BarSep(vertical); WriteBackBtn(ed, set) }
     }
 }

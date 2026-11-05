@@ -1,5 +1,6 @@
 package com.mdev.mnotes.core.color
 
+import com.mdev.mnotes.core.model.PageSpec
 import com.mdev.mnotes.core.model.Paper
 
 /**
@@ -39,6 +40,18 @@ object PageTone {
             if (sum >= COVER * px.size) return i + 1 <= FEW_COLORS
         }
         return false
+    }
+
+    /**
+     * Ręczna korekta tonu strony (stare zeszyty i PDF-y, które pomiar przy imporcie uznał za jasne, choć są ciemne, albo
+     * odwrotnie). Ton strony to jej papier ([PageSpec.darkPaper]), więc korekta zmienia papier: na ciemny — [measured]
+     * (mediana podglądu PDF), gdy jest ciemna, inaczej [Paper.DARK]; na jasny — biały. Linie wzoru idą za papierem.
+     * Strona już w tym tonie zostaje bez zmian (nie gubi wybranego koloru papieru).
+     */
+    fun withTone(spec: PageSpec, dark: Boolean, measured: Int? = null): PageSpec {
+        if (spec.darkPaper == dark) return spec
+        val paper = if (dark) measured?.takeIf { Paper.isDark(it) } ?: Paper.DARK else Paper.WHITE
+        return spec.copy(paper = paper, line = Paper.autoLineColor(paper))
     }
 
     private const val WHITE = 0xFFFFFFFF.toInt()

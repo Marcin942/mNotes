@@ -1855,6 +1855,28 @@ class Editor(val ctx: Context, val nbId: String) {
         if (edits.isNotEmpty()) exec(DocEdit.Group(edits))
     }
 
+    /**
+     * Ręczna korekta, czy strona [i] (albo przy [all] każda strona zeszytu, także PDF) jest jasna czy ciemna — od tego
+     * zależy tryb ciemny/jasny i zakreślacz. Dla jednej strony PDF ciemny papier bierze z podglądu 32 px (jak import);
+     * przy całym zeszycie bez pomiaru, bo tysiące stron mierzyłyby się na wątku UI zbyt długo.
+     */
+    fun setPageTone(all: Boolean, i: Int, dark: Boolean) {
+        if (all) { restyleAll { com.mdev.mnotes.core.color.PageTone.withTone(it, dark) }; return }
+        val spec = doc.pages.getOrNull(i)?.spec ?: return
+        val measured = if (dark && !spec.darkPaper) spec.pdf?.let { pdfMedian(it, spec) } else null
+        setSpec(i, com.mdev.mnotes.core.color.PageTone.withTone(spec, dark, measured))
+    }
+
+    private fun pdfMedian(ref: com.mdev.mnotes.core.model.PdfRef, spec: PageSpec): Int? {
+        val pw = 32; val ph = (32f * spec.h / spec.w.coerceAtLeast(1f)).toInt().coerceIn(8, 96)
+        val bmp = runCatching { app.pdf.render(nbId, ref.asset, ref.page, pw, ph) }.getOrNull() ?: return null
+        return try {
+            val px = IntArray(pw * ph)
+            bmp.getPixels(px, 0, pw, 0, 0, pw, ph)
+            com.mdev.mnotes.core.color.PageTone.median(px)
+        } catch (_: Throwable) { null } finally { bmp.recycle() }
+    }
+
     fun toggleBookmark(i: Int = curIndex()) {
         val p = doc.pages.getOrNull(i) ?: return
         repo.update(nbId) { m ->

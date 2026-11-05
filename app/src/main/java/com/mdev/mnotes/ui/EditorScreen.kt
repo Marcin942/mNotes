@@ -64,7 +64,10 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import com.mdev.mnotes.core.pen.SliderStep
 import androidx.compose.material.icons.rounded.Share
+import androidx.compose.material.icons.rounded.DarkMode
+import androidx.compose.material.icons.rounded.LightMode
 import androidx.compose.material.icons.rounded.QuestionMark
 import androidx.compose.material.icons.rounded.FormatColorFill
 import androidx.compose.material.icons.rounded.Subtitles
@@ -1469,7 +1472,7 @@ private fun ToolPanel(ed: Editor, set: com.mdev.mnotes.data.Settings, panel: Pan
                         SectionLabel(T.t("Rozmiar", "Size")); Spacer(Modifier.weight(1f))
                         Text(String.format("%.0f pt", set.eraserSize), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
-                    MSlider(set.eraserSize, 1f, 60f) { set.eraserSize = it }
+                    MSlider(set.eraserSize, 1f, 60f, step = 1f) { set.eraserSize = it }
                     ToggleRow(T.t("Gumka pomija zakreślacz", "Eraser ignores highlighter"), set.eraserKeepHighlighter) { set.eraserKeepHighlighter = it }
                     HorizontalDivider(Modifier.padding(vertical = 6.dp), color = m.line)
                     Chip(T.t("Wyczyść stronę", "Clear page"), false, { ed.clearPage(); close() }, icon = Icons.Rounded.Delete)
@@ -1764,7 +1767,7 @@ private fun PenPanel(ed: Editor, set: com.mdev.mnotes.data.Settings, onColorSets
             glyph = { c -> WidthGlyph(slot.widths[i], c, Modifier.size(20.dp)) },
         )
     }
-    MSlider(slot.width, spec.minWidth, spec.maxWidth) { v -> ed.editKit { it.withWidth(kind, slot.widthIndex, v) } }
+    MSlider(slot.width, spec.minWidth, spec.maxWidth, step = 0.1f) { v -> ed.editKit { it.withWidth(kind, slot.widthIndex, v) } }
 
     SectionLabel(T.t("Styl linii", "Line style"))
     LineStyleRow(slot.style) { s -> ed.editKit { it.withStyle(kind, s) } }
@@ -1833,13 +1836,26 @@ private fun PenPanel(ed: Editor, set: com.mdev.mnotes.data.Settings, onColorSets
     }
 }
 
+/**
+ * Suwak w kolorach aplikacji. [step] > 0 dokłada po bokach „−” i „+”, które przesuwają wartość o jeden krok
+ * (suwaki grubości: palcem trudno trafić dokładnie w 1 pt albo w 0,1 pt różnicy).
+ */
 @Composable
-fun MSlider(value: Float, min: Float, max: Float, onFinish: (() -> Unit)? = null, onChange: (Float) -> Unit) {
+fun MSlider(value: Float, min: Float, max: Float, onFinish: (() -> Unit)? = null, step: Float = 0f, onChange: (Float) -> Unit) {
     val m = mint
-    Slider(
-        value.coerceIn(min, max), onChange, valueRange = min..max, onValueChangeFinished = onFinish, modifier = Modifier.fillMaxWidth().height(32.dp),
+    val v = value.coerceIn(min, max)
+    @Composable
+    fun Bar(mod: Modifier) = Slider(
+        v, onChange, valueRange = min..max, onValueChangeFinished = onFinish, modifier = mod.height(32.dp),
         colors = SliderDefaults.colors(thumbColor = m.accent, activeTrackColor = m.accent, inactiveTrackColor = m.line),
     )
+    if (step <= 0f) { Bar(Modifier.fillMaxWidth()); return }
+    fun bump(dir: Int) { onChange(SliderStep.next(v, dir, step, min, max)); onFinish?.invoke() }
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        IconBtn(Icons.Rounded.Remove, T.t("Mniej o krok", "One step less"), { bump(-1) }, enabled = v > min, size = 30.dp, iconSize = 18.dp)
+        Bar(Modifier.weight(1f).padding(horizontal = 4.dp))
+        IconBtn(Icons.Rounded.Add, T.t("Więcej o krok", "One step more"), { bump(1) }, enabled = v < max, size = 30.dp, iconSize = 18.dp)
+    }
 }
 
 @Composable
@@ -2041,8 +2057,11 @@ private fun SelColorPanel(ed: Editor, els: List<Element>) {
             ColorPicker(first?.let { colorOf(it) } ?: 0xFF000000.toInt(), { ed.recolorSel(it) }, mixed = colors.size > 1, recent = ed.kit.sets.filter { !it.hl }.flatMap { it.colors.take(it.visible) }.distinct(), onPipette = { ed.startPipette { c -> ed.recolorSel(c) } })
             if (hasStroke) {
                 val w = (els.firstOrNull { it is InkStroke } as InkStroke).width
-                SectionLabel(T.t("Grubość", "Width"))
-                MSlider(w, 0.3f, 24f) { ed.setSelWidth(it) }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    SectionLabel(T.t("Grubość", "Width")); Spacer(Modifier.weight(1f))
+                    Text(String.format("%.1f pt", w), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                MSlider(w, 0.3f, 24f, step = 0.1f) { ed.setSelWidth(it) }
                 SectionLabel(T.t("Styl linii", "Line style"))
                 LineStyleRow(els.filterIsInstance<InkStroke>().map { it.line }.distinct().singleOrNull()) { ed.setSelLine(it) }
             }
@@ -2472,6 +2491,18 @@ private fun StylePanel(ed: Editor, close: () -> Unit) {
                 }
                 Text(T.t("Treść zostaje na miejscu; to, co wyjdzie poza nową krawędź, przesuń lassem.", "Content stays in place; move anything past the new edge with the lasso."), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
+            // Ręczna korekta tonu (stare zeszyty, PDF-y źle zmierzone przy imporcie); działa też na strony PDF.
+            HorizontalDivider(Modifier.padding(vertical = 6.dp), color = m.line)
+            SectionLabel(T.t("Strona uznawana za", "Page treated as"))
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Chip(T.t("Jasną", "Light"), !spec.darkPaper, { ed.setPageTone(all, idx, false) }, icon = Icons.Rounded.LightMode)
+                Chip(T.t("Ciemną", "Dark"), spec.darkPaper, { ed.setPageTone(all, idx, true) }, icon = Icons.Rounded.DarkMode)
+            }
+            Text(
+                T.t("Od tego zależy, czy tryb ciemny i jasny zamieniają tę stronę oraz jak działa na niej zakreślacz. Popraw, gdy strona (np. ciemny slajd PDF) jest pokazana odwrotnie. Zmienia kolor papieru; da się cofnąć.",
+                    "This decides whether dark and light mode convert this page and how the highlighter works on it. Fix it when a page (e.g. a dark PDF slide) is shown the wrong way round. Changes the paper colour; can be undone."),
+                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
     }
 }

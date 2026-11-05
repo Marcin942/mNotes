@@ -169,6 +169,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.setValue
@@ -293,6 +294,8 @@ fun EditorScreen(main: Editor, tabs: TabsCtl, onExit: () -> Unit, onSettings: ()
     // 2b-A7: stanowisko — otwarty zeszyt i dokumenty dołożone pod nim; paski, panele i menu działają na aktywnym rzędzie.
     // Rzędy zamyka Editor.close() głównego zeszytu (3c-B3), nie zniknięcie ekranu (Ustawienia, blokada).
     val st = remember(main) { main.station ?: Station(ctx, main) }
+    // LP-1: karta tego okna dołożona na stanowisko zostaje kartą (nie jest „otwarta w innym oknie”).
+    SideEffect { st.ownTab = { tabs.tabs.has(it) } }
     val ed = st.active
     val set = ed.settings
     val m = mint
@@ -547,16 +550,18 @@ private fun TopChrome(
     val m = mint
     val title = ed.repo.meta(ed.nbId)?.title ?: ""
     ed.structTick
+    // LP-1: przy stanowisku pasek kart pokazuje też jego dokumenty, więc staje już przy jednej karcie.
+    val strip = tabs.showStrip || (tabs.enabled && ed.station?.on == true)
     BoxWithConstraints(Modifier.fillMaxWidth().background(m.chrome)) {
         // Przy jednym dokumencie pasek ma być cały na wierzchu: tytuł oddaje mu miejsce, a gdy i tak się nie mieści,
         // pasek dostaje własny wiersz. Przy kartach zostaje w linii i sam zwija najmniej ważne narzędzia pod „⋯”.
         val spare = maxWidth.value - HEADER_FIXED - (BarFit.length(barItemCount(set.barConfig, set.undoDock != 0), 3, barSize(set).value, true) + 8f)
-        val inline = inlineBar && (tabs.showStrip || spare >= TITLE_MIN)
+        val inline = inlineBar && (strip || spare >= TITLE_MIN)
         Column(Modifier.fillMaxWidth()) {
             Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
                 IconBtn(Icons.AutoMirrored.Rounded.ArrowBack, T.t("Biblioteka", "Library"), onExit, shortcut = "Esc")
-                if (tabs.showStrip) {
-                    TabStrip(tabs, Modifier.weight(if (inline) 0.38f else 1f).padding(horizontal = 4.dp))
+                if (strip) {
+                    TabStrip(tabs, Modifier.weight(if (inline) 0.38f else 1f).padding(horizontal = 4.dp), st = ed.station)
                 } else {
                     Row(Modifier.then(if (inline) Modifier.widthIn(max = spare.coerceIn(TITLE_MIN, 220f).dp) else Modifier.weight(1f)), verticalAlignment = Alignment.CenterVertically) {
                         Text(
@@ -567,7 +572,7 @@ private fun TopChrome(
                     }
                     if (inline) Spacer(Modifier.width(4.dp))
                 }
-                if (inline) Box(Modifier.weight(if (tabs.showStrip) 0.62f else 1f), contentAlignment = Alignment.Center) { ToolBar(ed, set, false, panel, pickTool, holdTool, pickPen) }
+                if (inline) Box(Modifier.weight(if (strip) 0.62f else 1f), contentAlignment = Alignment.Center) { ToolBar(ed, set, false, panel, pickTool, holdTool, pickPen) }
                 PageCluster(ed, panel, toggle, goTo, pickImage, widthDp >= 600)
             }
             if (set.toolbarPos == 0 && !inline) {

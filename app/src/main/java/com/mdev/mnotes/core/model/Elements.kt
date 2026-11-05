@@ -256,10 +256,12 @@ sealed class BoxElement : Element() {
             r,
             hypot(ux, uy),
             flip,
+            hypot(vx, vy),
         )
     }
 
-    protected class BoxGeom(val cx: Float, val cy: Float, val w: Float, val h: Float, val rot: Float, val sx: Float, val mirror: Boolean)
+    /** [sx], [sy]: skala wzdłuż lokalnej osi x i y ramki (różne przy rozciąganiu w jedną oś, LP-4). */
+    protected class BoxGeom(val cx: Float, val cy: Float, val w: Float, val h: Float, val rot: Float, val sx: Float, val mirror: Boolean, val sy: Float = sx)
 }
 
 class TextBox(
@@ -285,6 +287,11 @@ class TextBox(
     val lineSpacing: Float = 1f,
     /** Zawartość odbita w osi lokalnej x; patrz [BoxElement.mirror]. */
     override val mirror: Boolean = false,
+    /**
+     * LP-4: poziome rozciągnięcie liter (1 = bez rozciągnięcia, 2 = litery dwa razy szersze). Wiersze łamią się na
+     * szerokości `w / stretch` w czcionce [size], a wynik jest rozciągany w osi x pola.
+     */
+    val stretch: Float = 1f,
 ) : BoxElement() {
 
     val bold: Boolean get() = style and STYLE_BOLD != 0
@@ -300,16 +307,22 @@ class TextBox(
         rot: Float = this.rot, text: String = this.text, size: Float = this.size, color: Int = this.color,
         family: Int = this.family, style: Int = this.style, align: Int = this.align, fill: Int = this.fill,
         locked: Boolean = this.locked, fit: Int = this.fit, lineSpacing: Float = this.lineSpacing,
-        mirror: Boolean = this.mirror,
-    ) = TextBox(id, cx, cy, w, h, rot, text, size, color, family, style, align, fill, locked, fit, lineSpacing, mirror)
+        mirror: Boolean = this.mirror, stretch: Float = this.stretch,
+    ) = TextBox(id, cx, cy, w, h, rot, text, size, color, family, style, align, fill, locked, fit, lineSpacing, mirror, stretch)
 
     override fun transformed(m: Affine): TextBox {
         val g = mapBox(m)
-        // Rozmiar czcionki podąża za skalą wzdłuż osi tekstu; wysokość wynika z układu tekstu.
-        return copy(cx = g.cx, cy = g.cy, w = g.w, h = h * g.sx, rot = g.rot, size = size * g.sx, mirror = g.mirror)
+        // Rozmiar czcionki podąża za skalą w pionie pola, a różnica skal poziomej i pionowej (rozciąganie w jedną oś,
+        // LP-4) idzie do [stretch]; przy skali jednorodnej stretch się nie zmienia. Podział na wiersze zostaje ten sam.
+        val sy = g.sy.coerceAtLeast(1e-4f)
+        val st = (stretch * g.sx / sy).coerceIn(MIN_STRETCH, MAX_STRETCH)
+        return copy(cx = g.cx, cy = g.cy, w = g.w, h = h * sy, rot = g.rot, size = size * sy, mirror = g.mirror, stretch = st)
     }
 
     companion object {
+        const val MIN_STRETCH = 0.02f
+        const val MAX_STRETCH = 50f
+
         const val FAMILY_SANS = 0
         const val FAMILY_SERIF = 1
         const val FAMILY_MONO = 2

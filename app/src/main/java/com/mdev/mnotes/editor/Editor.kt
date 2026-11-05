@@ -947,6 +947,36 @@ class Editor(val ctx: Context, val nbId: String) {
         replaceSel { it.transformed(m) }
     }
 
+    /** LP-4: wymiary plików obrazów (px, po EXIF) dla „Przywróć proporcje”; czytane raz na plik, tylko nagłówek. */
+    private val imageSizes = HashMap<String, Pair<Int, Int>?>()
+
+    private fun imagePx(im: ImageEl): Pair<Int, Int>? =
+        imageSizes.getOrPut(im.asset) { Assets.imageSize(repo.assetFile(nbId, im.asset)) }
+
+    /** Czy menu ma pokazać „Przywróć proporcje”: jeden niezablokowany tekst rozciągnięty albo obraz o proporcjach innych niż plik. */
+    fun canRestoreAspect(): Boolean {
+        if (readOnly) return false
+        val e = selElements().singleOrNull() ?: return false
+        if (e.locked) return false
+        return when (e) {
+            is TextBox -> com.mdev.mnotes.core.edit.Stretch.isStretched(e)
+            is ImageEl -> imagePx(e)?.let { (w, h) -> com.mdev.mnotes.core.edit.Stretch.isImageStretched(e, w.toFloat(), h.toFloat()) } == true
+            else -> false
+        }
+    }
+
+    /** LP-4: znosi rozciągnięcie tekstu albo przywraca obrazowi proporcje pliku (jedna zmiana w historii). */
+    fun restoreAspectSel() {
+        if (!canRestoreAspect()) return
+        replaceSel { e ->
+            when (e) {
+                is TextBox -> com.mdev.mnotes.core.edit.Stretch.restoredText(e)
+                is ImageEl -> imagePx(e)?.let { (w, h) -> com.mdev.mnotes.core.edit.Stretch.restoredImage(e, w.toFloat(), h.toFloat()) } ?: e
+                else -> e
+            }
+        }
+    }
+
     // — Tekst i obrazy —
     private val textMeasure by lazy { com.mdev.mnotes.render.PageRenderer(app.assets).textMeasure }
 

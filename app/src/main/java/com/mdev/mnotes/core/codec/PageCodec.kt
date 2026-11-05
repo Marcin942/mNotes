@@ -73,6 +73,8 @@ object PageCodec {
     private const val FLAG_IMAGE_FX = 2048
     // Pole tekstowe lub obraz odbite w osi lokalnej x. Bez ogona: starsza wersja pomija bit i rysuje bez odbicia.
     private const val FLAG_MIRROR = 4096
+    /** LP-4: tekst rozciągnięty w osi x (f32 po odstępie wierszy); starsza wersja pominie ogon i pokaże litery bez rozciągnięcia. */
+    private const val FLAG_TEXT_STRETCH = 8192
     private const val Q = 100f
 
     fun encode(content: PageContent): ByteArray {
@@ -218,7 +220,9 @@ object PageCodec {
     private fun writeText(w: ByteWriter, t: TextBox) {
         val fit = when (t.fit) { TextBox.FIT_AUTO -> FLAG_TEXT_AUTO; TextBox.FIT_FIXED -> FLAG_TEXT_FIXED; else -> 0 }
         val lines = t.lineSpacing != 1f
-        w.varint((if (t.locked) FLAG_LOCKED else 0) or fit or (if (lines) FLAG_TEXT_LINES else 0) or (if (t.mirror) FLAG_MIRROR else 0))
+        val stretched = t.stretch != 1f
+        w.varint((if (t.locked) FLAG_LOCKED else 0) or fit or (if (lines) FLAG_TEXT_LINES else 0) or (if (t.mirror) FLAG_MIRROR else 0) or
+            (if (stretched) FLAG_TEXT_STRETCH else 0))
         w.f32(t.cx); w.f32(t.cy); w.f32(t.w); w.f32(t.h); w.f32(t.rot)
         w.f32(t.size)
         w.i32(t.color)
@@ -226,6 +230,7 @@ object PageCodec {
         w.i32(t.fill)
         w.string(t.text)
         if (lines) w.f32(t.lineSpacing)
+        if (stretched) w.f32(t.stretch)
     }
 
     private fun readText(r: ByteReader): TextBox {
@@ -237,8 +242,9 @@ object PageCodec {
         val fill = r.i32()
         val text = r.string()
         val lineSpacing = if (flags and FLAG_TEXT_LINES != 0) r.f32().coerceIn(0.5f, 4f) else 1f
+        val stretch = if (flags and FLAG_TEXT_STRETCH != 0 && r.remaining >= 4) r.f32().takeIf { it.isFinite() }?.coerceIn(TextBox.MIN_STRETCH, TextBox.MAX_STRETCH) ?: 1f else 1f
         val fit = when { flags and FLAG_TEXT_AUTO != 0 -> TextBox.FIT_AUTO; flags and FLAG_TEXT_FIXED != 0 -> TextBox.FIT_FIXED; else -> TextBox.FIT_HEIGHT }
-        return TextBox(Ids.next(), cx, cy, w, h, rot, text, size, color, family, style, align, fill, flags and FLAG_LOCKED != 0, fit, lineSpacing, flags and FLAG_MIRROR != 0)
+        return TextBox(Ids.next(), cx, cy, w, h, rot, text, size, color, family, style, align, fill, flags and FLAG_LOCKED != 0, fit, lineSpacing, flags and FLAG_MIRROR != 0, stretch)
     }
 
     private fun writeImage(w: ByteWriter, im: ImageEl) {

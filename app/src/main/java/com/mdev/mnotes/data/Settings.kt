@@ -180,6 +180,8 @@ class Settings(ctx: Context) {
         set(v) { snipModePref = com.mdev.mnotes.core.edit.SnipMode.of(v) }
     /** Tło poza obrysem lassa przy kopiowaniu wycinka do schowka: `ClipExport.BG_NONE`/`BG_BLACK`/`BG_WHITE`. */
     var snipClipBg by Pref("snip.clip_bg", 0)
+    /** LP-4: uchwyty w połowie boków ramki zaznaczenia rozciągają w jedną oś (bez zachowania proporcji). */
+    var stretchHandles by Pref("select.stretch", false)
     var lassoTouch by Pref("lasso.touch", false)     // lasso „tylko zahacz”: wystarczy musnąć obiekt pętlą; domyślnie zbalansowane (połowa obiektu w pętli)
     // 2c-A15: dawny „toolbar.tool_strip” przechodzi na listwę przy pierwszym uruchomieniu — przed odczytem helperStrip.
     init {

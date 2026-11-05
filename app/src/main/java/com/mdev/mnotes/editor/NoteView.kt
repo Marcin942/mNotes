@@ -30,6 +30,7 @@ import com.mdev.mnotes.core.edit.EraseMath
 import com.mdev.mnotes.core.edit.EraseSession
 import com.mdev.mnotes.core.edit.ImageCut
 import com.mdev.mnotes.core.edit.PipetteMath
+import com.mdev.mnotes.core.edit.Stretch
 import com.mdev.mnotes.core.geom.Affine
 import com.mdev.mnotes.core.geom.Attach
 import com.mdev.mnotes.core.geom.Bounds
@@ -245,6 +246,8 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
     private var ghostUntil = 0L
     private var lStartX = 0f; private var lStartY = 0f
     private var lAx = 0f; private var lAy = 0f; private var lHx = 0f; private var lHy = 0f
+    /** LP-4: [LM.SCALE] z uchwytu bocznego — rozciąga tylko wzdłuż osi kotwica → uchwyt. */
+    private var lStretch = false
     private var lAngleStart = 0f
     private var vIdx = 0; private var vBase: Stroke? = null; private var vDx = 0f; private var vDy = 0f
     /** Przeciągany jest punkt kontrolny krzywej Béziera (F17), a nie wierzchołek łamanej. */
@@ -1052,6 +1055,17 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
         val shape = shapeSel()
         if (ed.transformMode) {
             if (poly == null && shape == null) for (k in 0..3) { c.drawCircle(cs[2 * k], cs[2 * k + 1], r, handleFill); c.drawCircle(cs[2 * k], cs[2 * k + 1], r, handleStroke) }
+            // LP-4: uchwyty boczne — „pigułki” wzdłuż krawędzi ramki, jak przy polu tekstowym
+            if (stretchActive()) for (k in 0..3) {
+                val k2 = (k + 1) % 4
+                val hx = (cs[2 * k] + cs[2 * k2]) / 2; val hy = (cs[2 * k + 1] + cs[2 * k2 + 1]) / 2
+                val deg = Math.toDegrees(atan2(cs[2 * k2 + 1] - cs[2 * k + 1], cs[2 * k2] - cs[2 * k]).toDouble()).toFloat()
+                val hw = r * 1.6f; val hh = r * 0.6f
+                c.save(); c.rotate(deg, hx, hy)
+                c.drawRoundRect(hx - hw, hy - hh, hx + hw, hy + hh, r * 0.6f, r * 0.6f, handleFill)
+                c.drawRoundRect(hx - hw, hy - hh, hx + hw, hy + hh, r * 0.6f, r * 0.6f, handleStroke)
+                c.restore()
+            }
             val rot = rotateHandle(cs, topmost = !(lLifting && lm == LM.ROTATE))
             c.drawLine(rot[2], rot[3], rot[0], rot[1], handleStroke)
             c.drawCircle(rot[0], rot[1], r, handleFill); c.drawCircle(rot[0], rot[1], r, handleStroke)
@@ -2941,10 +2955,22 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
     /** Jedyny zaznaczony, niezablokowany tekst (4 uchwyty boków); w trakcie zmiany rozmiaru — jego bieżąca wersja. */
     private fun textSel(): TextBox? {
         if (lLifting) return if (lm == LM.RESIZE) lEls.firstOrNull() as? TextBox else null
+        // LP-4: uchwyty boczne rozciągania leżą w tych samych miejscach co uchwyty zawijania tekstu i wygrywają
+        if (stretchActive()) return null
         val s = ed.sel ?: return null
         if (s.ids.size != 1) return null
         val e = ed.selElements().singleOrNull() as? TextBox ?: return null
         return if (e.locked) null else e
+    }
+
+    /** LP-4: czy ramka zaznaczenia ma uchwyty boczne rozciągające w jedną oś (ustawienie + tryb „Skaluj i obracaj”). */
+    private fun stretchActive(): Boolean =
+        settings.stretchHandles && ed.transformMode && ed.sel != null && polySel() == null && shapeSel() == null
+
+    /** Środek boku [k] ramki (między rogami k i k+1 w [cs]) — x w [0], y w [1]. */
+    private fun sideMid(cs: FloatArray, k: Int): FloatArray {
+        val k2 = (k + 1) % 4
+        return floatArrayOf((cs[2 * k] + cs[2 * k2]) / 2, (cs[2 * k + 1] + cs[2 * k2 + 1]) / 2)
     }
 
     private fun textHandleX(t: TextBox, side: TextFit.Side): Float = when (side) {
@@ -3641,6 +3667,16 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
                         lHx = pgX(pi, cs[2 * k]); lHy = pgY(pi, cs[2 * k + 1])
                         return
                     }
+                    if (stretchActive()) for (k in 0..3) {
+                        val m = sideMid(cs, k)
+                        if (hypot(curX - m[0], curY - m[1]) >= hr) continue
+                        prepareTransform(LM.SCALE, s, b, px, py)
+                        val o = sideMid(cs, (k + 2) % 4)
+                        lAx = pgX(pi, o[0]); lAy = pgY(pi, o[1])
+                        lHx = pgX(pi, m[0]); lHy = pgY(pi, m[1])
+                        lStretch = true
+                        return
+                    }
                 }
                 if (b.inflate(10f * dp / zoom).contains(px, py)) { prepareTransform(if (locked) LM.NONE else LM.MOVE, s, b, px, py); return }
             }
@@ -3666,7 +3702,7 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
 
     private fun prepareTransform(kind: LM, s: Sel, b: Bounds, px: Float, py: Float) {
         lm = kind; lIds = s.ids; lBounds = b; lStartX = px; lStartY = py
-        lM = Affine.IDENTITY; lLifting = false; rotSnapped = false
+        lM = Affine.IDENTITY; lLifting = false; rotSnapped = false; lStretch = false
     }
 
     private fun liftSelection() {
@@ -3759,7 +3795,8 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
                         else axesMoveSnap(dx, dy)?.let { dx = it[0]; dy = it[1] }
                         Affine.translation(dx, dy)
                     }
-                    LM.SCALE -> {
+                    // LP-4: to samo przekształcenie trafia potem do Element.transformed — jak skala z rogu
+                    LM.SCALE -> if (lStretch) Stretch.handle(lAx, lAy, lHx, lHy, px, py) else {
                         val vx = lHx - lAx; val vy = lHy - lAy
                         val d2 = (vx * vx + vy * vy).coerceAtLeast(1e-3f)
                         val s = (((px - lAx) * vx + (py - lAy) * vy) / d2).coerceIn(0.05f, 30f)
@@ -3979,6 +4016,7 @@ class NoteView(ctx: Context, val ed: Editor) : View(ctx), DocListener {
         if (ed.transformMode) {
             if (hypot(sx - rot[0], sy - rot[1]) < ROTATE_HIT_DP * dp) return true
             if (st == null && sh == null) for (k in 0..3) if (hypot(sx - cs[2 * k], sy - cs[2 * k + 1]) < hr) return true
+            if (stretchActive()) for (k in 0..3) { val m = sideMid(cs, k); if (hypot(sx - m[0], sy - m[1]) < hr) return true }
         }
         return b.inflate(10f * dp / zoom).contains(pgX(pi, sx), pgY(pi, sy))
     }

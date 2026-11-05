@@ -331,7 +331,10 @@ class PageRenderer(private val assets: Assets?) {
         return Typeface.create(base, st)
     }
 
-    /** Układ tekstu pola — wspólny dla rysowania i dla pomiaru wysokości przy edycji. */
+    /**
+     * Układ tekstu pola — wspólny dla rysowania i dla pomiaru wysokości przy edycji. [widthPt] to szerokość na stronie;
+     * tekst rozciągnięty (LP-4) łamie się na `widthPt / stretch` i dopiero przy rysowaniu dostaje skalę w osi x.
+     */
     fun layoutFor(t: TextBox, widthPt: Float = t.w): StaticLayout {
         val tp = TextPaint(Paint.ANTI_ALIAS_FLAG)
         tp.textSize = t.size
@@ -341,7 +344,7 @@ class PageRenderer(private val assets: Assets?) {
         tp.isStrikeThruText = t.strike
         val al = when (t.align) { TextBox.ALIGN_CENTER -> Layout.Alignment.ALIGN_CENTER; TextBox.ALIGN_END -> Layout.Alignment.ALIGN_OPPOSITE; else -> Layout.Alignment.ALIGN_NORMAL }
         val txt = if (t.text.isEmpty()) " " else t.text
-        val b = StaticLayout.Builder.obtain(txt, 0, txt.length, tp, max(1, widthPt.toInt())).setAlignment(al).setIncludePad(false).setLineSpacing(0f, t.lineSpacing)
+        val b = StaticLayout.Builder.obtain(txt, 0, txt.length, tp, max(1, (widthPt / t.stretch).toInt())).setAlignment(al).setIncludePad(false).setLineSpacing(0f, t.lineSpacing)
         // F27: wyjustowanie rozciąga odstępy między słowami (ostatni wiersz akapitu zostaje do lewej).
         if (t.align == TextBox.ALIGN_JUSTIFY) b.setJustificationMode(Layout.JUSTIFICATION_MODE_INTER_WORD)
         return b.build()
@@ -354,7 +357,7 @@ class PageRenderer(private val assets: Assets?) {
             val l = layoutFor(t, UNWRAPPED)
             var w = 0f
             for (i in 0 until l.lineCount) w = max(w, l.getLineWidth(i))
-            return w
+            return w * t.stretch
         }
 
         override fun textHeight(t: TextBox, width: Float): Float = layoutFor(t, width).height.toFloat()
@@ -371,6 +374,7 @@ class PageRenderer(private val assets: Assets?) {
         }
         // ręcznie ustawiona ramka przycina tekst, który się w niej nie mieści
         if (t.fit == TextBox.FIT_FIXED) c.clipRect(0f, 0f, t.w, t.h)
+        if (t.stretch != 1f) c.scale(t.stretch, 1f)
         layoutFor(t).draw(c)
         c.restore()
     }
@@ -434,11 +438,12 @@ class PageRenderer(private val assets: Assets?) {
      */
     private fun drawTilted(c: Canvas, nb: String, bmp: Bitmap, im: ImageEl) {
         val f = com.mdev.mnotes.core.edit.CropGeom.frameOf(im.crop, bmp.width.toFloat(), bmp.height.toFloat())
-        val s = im.w / (2f * f.hw)
+        // LP-4: obraz rozciągnięty w jedną oś ma inną skalę w poziomie i w pionie
+        val sx = im.w / (2f * f.hw); val sy = im.h / (2f * f.hh)
         tiltMatrix.reset()
         tiltMatrix.postTranslate(-f.cx, -f.cy)
         tiltMatrix.postRotate(Math.toDegrees(-f.a.toDouble()).toFloat())
-        tiltMatrix.postScale(s, s)
+        tiltMatrix.postScale(sx, sy)
         tiltMatrix.postTranslate(im.cx, im.cy)
         val sh = android.graphics.BitmapShader(bmp, android.graphics.Shader.TileMode.CLAMP, android.graphics.Shader.TileMode.CLAMP)
         sh.setLocalMatrix(tiltMatrix)

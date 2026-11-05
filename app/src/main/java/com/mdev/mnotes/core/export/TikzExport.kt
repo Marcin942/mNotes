@@ -299,8 +299,10 @@ object TikzExport {
             if (t.italic) font.append("\\itshape")
             val o = arrayListOf(
                 "text=" + color(t.color), "anchor=center", "inner sep=0pt", "align=left",
-                "text width=" + num(t.w * CM) + "cm", "font=" + font,
+                "text width=" + num(t.w / t.stretch * CM) + "cm", "font=" + font,
             )
+            // LP-4: tekst rozciągnięty w osi x łamie się na węższej szerokości i dostaje skalę poziomą
+            if (t.stretch != 1f) o += "xscale=" + num(t.stretch.toDouble())
             val deg = -Math.toDegrees(t.rot.toDouble())
             if (abs(deg) >= 0.05) o += "rotate=" + num(deg)
             val txt = t.text.trimEnd().split('\n').joinToString("\\\\ ") { latexText(it) }

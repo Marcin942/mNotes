@@ -398,6 +398,9 @@ class Exporter(private val repo: Repository, private val assets: Assets, private
         val generic = when (TextBox.generic(t.family)) { TextBox.FAMILY_SERIF -> "serif"; TextBox.FAMILY_MONO -> "monospace"; TextBox.FAMILY_HAND -> "cursive"; else -> "sans-serif" }
         val fam = TextBox.fontName(t.family)?.let { "'$it', $generic" } ?: generic
         val deco = listOfNotNull("underline".takeIf { t.underline }, "line-through".takeIf { t.strike }).joinToString(" ")
+        // LP-4: litery rozciągnięte w osi x pola, od jego lewej krawędzi
+        val stretched = t.stretch != 1f
+        if (stretched) sb.append("<g transform=\"matrix(${f(t.stretch)} 0 0 1 ${f(x0 * (1f - t.stretch))} 0)\">\n")
         for (l in 0 until lay.lineCount) {
             val line = lay.text.substring(lay.getLineStart(l), lay.getLineEnd(l)).trimEnd('\n')
             if (line.isEmpty()) continue
@@ -407,6 +410,7 @@ class Exporter(private val repo: Repository, private val assets: Assets, private
             if (deco.isNotEmpty()) sb.append(" text-decoration=\"$deco\"")
             sb.append(" xml:space=\"preserve\">${esc(line)}</text>\n")
         }
+        if (stretched) sb.append("</g>\n")
         if (clip) sb.append("</g>\n")
         sb.append("</g>\n")
     }

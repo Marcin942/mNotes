@@ -2245,6 +2245,9 @@ internal fun CtxMenuOverlay(ed: Editor, openStyle: (() -> Unit)?, tools: Editor 
                 if (cm.hasSel) {
                     Item(T.t("Odbij w poziomie", "Flip horizontally"), enabled = ed.canFlipSel()) { ed.flipSel(true) }
                     Item(T.t("Odbij w pionie", "Flip vertically"), enabled = ed.canFlipSel()) { ed.flipSel(false) }
+                    // LP-4: tekst i obraz rozciągnięte uchwytem bocznym wracają do swoich proporcji
+                    if (ed.selElements().singleOrNull().let { it is com.mdev.mnotes.core.model.TextBox || it is com.mdev.mnotes.core.model.ImageEl })
+                        Item(T.t("Przywróć proporcje", "Restore proportions"), enabled = ed.canRestoreAspect()) { ed.restoreAspectSel() }
                     Item(T.t("Na wierzch", "Bring to front")) { ed.frontSel() }
                     Item(T.t("Na spód", "Send to back")) { ed.backSel() }
                     Item(T.t("Usuń", "Delete"), "Del") { ed.deleteSel() }

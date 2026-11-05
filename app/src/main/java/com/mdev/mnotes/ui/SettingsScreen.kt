@@ -563,6 +563,11 @@ private fun EditorPrefs(set: com.mdev.mnotes.data.Settings) {
             Choice(listOf(T.t("Połowa w pętli", "Half in the loop"), T.t("Wystarczy dotknąć", "Just touch")), if (set.lassoTouch) 1 else 0) { set.lassoTouch = it == 1 }
         }
         Text(lassoModeHint(set.lassoTouch), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(bottom = 6.dp))
+        ToggleRow(T.t("Uchwyty boczne rozciągają w jedną oś", "Side handles stretch along one axis"), set.stretchHandles, keys = "zaznaczanie lasso uchwyt bok rozciągnij rozciąganie szerokość wysokość proporcje skaluj stretch side handle width height aspect") { set.stretchHandles = it }
+        Text(
+            T.t("Działa w trybie „Skaluj i obracaj”. Proporcje tekstu i obrazu przywraca pozycja menu kontekstowego.", "Works in “Resize & rotate” mode. Restore the proportions of text or an image from its context menu."),
+            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(bottom = 6.dp),
+        )
         // 3c-B4: Wycinek — fragment strony (np. slajdu) jako obraz do zeszytu.
         Opt(T.t("Kształt wycinka", "Snip shape"), "wycinek nożyczki fragment slajd obraz prostokąt lasso maska snip scissors slide image rectangle") {
             Choice(listOf(T.t("Prostokąt", "Rectangle"), T.t("Lasso (przezroczyste tło)", "Lasso (transparent outside)")), if (set.snipRect) 0 else 1) { set.snipRect = it == 0 }

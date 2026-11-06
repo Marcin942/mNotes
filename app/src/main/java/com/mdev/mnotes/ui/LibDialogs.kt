@@ -123,13 +123,19 @@ fun LibDialogs(st: LibState, onOpen: (String) -> Unit) {
             val cur = if (isFolder) repo.folder(id)?.name else repo.meta(id)?.title
             if (cur == null) { st.dialog = null; return }
             var name by remember { mutableStateOf(cur) }
+            var color by remember { mutableStateOf(if (isFolder) repo.folder(id)?.color ?: 0 else 0) }
             fun apply() {
                 val n = NameText.oneLine(name)
-                if (n.isNotEmpty()) { if (isFolder) repo.updateFolder(id) { it.copy(name = n) } else repo.update(id) { it.copy(title = n) } }
+                if (n.isNotEmpty()) { if (isFolder) repo.updateFolder(id) { it.copy(name = n, color = color) } else repo.update(id) { it.copy(title = n) } }
                 st.dialog = null
             }
-            MDialog(T.t("Zmień nazwę", "Rename"), { st.dialog = null }, T.t("Zapisz", "Save"), ::apply, confirmEnabled = name.isNotBlank()) {
+            MDialog(if (isFolder) T.t("Nazwa i kolor folderu", "Folder name and color") else T.t("Zmień nazwę", "Rename"), { st.dialog = null }, T.t("Zapisz", "Save"), ::apply, confirmEnabled = name.isNotBlank()) {
                 MField(name, { name = it }, Modifier.fillMaxWidth(), onDone = ::apply)
+                if (isFolder) {
+                    Spacer(Modifier.height(14.dp))
+                    SectionLabel(T.t("Kolor", "Color"))
+                    FolderColors(color) { color = it }
+                }
             }
         }
         is LibDialog.FolderColor -> {

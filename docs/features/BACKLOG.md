@@ -262,6 +262,8 @@ Wszystko poniżej: kod + testy JVM, **bez testu na tablecie**. Gałęzie `noc/*`
 - [x] LP-7 Przyciski − i + przy każdym suwaku grubości (pióro: 0,1 pt, gumka: 1 pt, grubość zaznaczonej kreski, rozmiar gumki w Ustawieniach); wartość spoza siatki kroku idzie do najbliższego węzła w danym kierunku (`core/pen/SliderStep`).
 - [x] LP-8 Ręczne uznanie strony za jasną albo ciemną (dół panelu „Styl strony”, ta strona albo wszystkie): decyduje o zamianie kolorów w trybie ciemnym i o zakreślaczu, poprawia stare dokumenty źle rozpoznane; cofalne (`PageTone.withTone`, `Editor.setPageTone`).
 - [x] LP-9 Bez błysków jasnych kafelków po przełączeniu trybu ciemnego: zmiana motywu wyrzuca kafelki z pamięci (`PageCache.dropAll`), zamiast rysować stare jasne do czasu ponownego renderu.
+- [x] LP-10 Okładki zeszytów: trzy nowe stonowane kolory (kakao, zieleń butelkowa, mgła) oraz trzy nowe wzory — „Całki” (znaki ∫ i wykres z sumą Riemanna), „Molekuły” (styren i kofeina) i „Rozpady jąder” (jądro, cząstka alfa i krzywa rozpadu z czasami połowicznego zaniku). Wzory są czystą logiką (`data/CoverScience`, testy `CoverScienceTest`, podgląd PNG włączany plikiem `app/build/podglad-nauka.on`); kody stylu 10–12 w `CoverStyle`, starsza wersja aplikacji pokaże je jako gładkie.
+- [x] LP-11 Kolor folderu: przycisk palety na pasku zaznaczenia (dla jednego folderu) oraz wybór koloru w oknie „Nazwa i kolor folderu” (dawniej tylko „Zmień nazwę”); menu kontekstowe „Kolor folderu…” zostaje.
 
 ## Poza zakresem (świadomie)
 - [-] Rozpoznawanie pisma → tekst, formuły → LaTeX (EDT-046/047), OCR wyszukiwanie w piśmie odręcznym — brak lokalnego silnika offline w zależnościach; wróci, gdy będzie model on-device.

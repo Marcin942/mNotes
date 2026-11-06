@@ -3,6 +3,8 @@
 Wersja: **0.1.0** (tag `v0.1.0`, `versionName` w `app/build.gradle.kts`). Aktualizacja: 2026-10-25 (okna kontekstowe: EDT-099). Źródło prawdy o zakresie: `docs/features/BACKLOG.md` (103 × `[x]`, 18 × `[~]`, 3 × `[ ]`).
 Katalog jest repozytorium git (gałąź `main`, od 2026-10-03) — „zapis do repo” = commit; aktualizuj ten plik i BACKLOG na końcu każdej partii.
 
+**2026-11-06 (gałąź `feat/okladki-foldery`):** LP-10 (3 kolory i 3 wzory okładek: całki, molekuły, rozpady jąder) i LP-11 (kolor folderu z paska zaznaczenia i okna nazwy) — szczegóły w BACKLOG, sekcja L. Czeka na sprawdzenie na tablecie.
+
 ## Cel i założenia
 - Użytkownik: „równie funkcjonalna jak GoodNotes, bardzo estetyczna, podobająca się użytkownikowi Linux Mint”, wszystkie funkcje rozpisane w BACKLOG i wdrażane, **oszczędnie tokenowo** (duże spójne pliki, częste kompilacje, bez sub-agentów, bez zbędnego czytania).
 - Założenie (niepotwierdzone, wpisać w raporcie końcowym): „użytkownik Linux Mint” = ceni Mint-Y (akcent #87CF3E), bibliotekę à la Nemo, skróty i paletę poleceń, mysz/prawy przycisk/DeX, otwarte formaty, folder synchronizacji, prywatność/offline, konfigurowalność. Platforma pozostaje Androidem.

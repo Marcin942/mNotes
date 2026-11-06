@@ -24,7 +24,7 @@ class CoverStarsTest {
     fun newStylesAppendedWithoutRenumberingOldOnes() {
         assertEquals(6, CoverStyle.ARCS)
         assertEquals(listOf(7, 8, 9), starry)
-        assertEquals(10, CoverStyle.COUNT)
+        assertTrue(CoverStyle.COUNT >= 10)
         for (s in CoverStyle.PLAIN..CoverStyle.ARCS) assertTrue(CoverStars.layout(s).stars.isEmpty())
     }
 

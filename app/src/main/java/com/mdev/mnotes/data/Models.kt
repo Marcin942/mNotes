@@ -27,7 +27,11 @@ object CoverStyle {
     const val STARS = 7
     const val STARS_BIG = 8
     const val CONSTELLATIONS = 9
-    const val COUNT = 10
+    /** Wzory z nauk ścisłych ([CoverScience]); starsza wersja aplikacji pokaże te okładki jako gładkie. */
+    const val INTEGRALS = 10
+    const val MOLECULES = 11
+    const val DECAY = 12
+    const val COUNT = 13
 }
 
 data class Folder(

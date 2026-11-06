@@ -262,6 +262,9 @@ Wszystko poniżej: kod + testy JVM, **bez testu na tablecie**. Gałęzie `noc/*`
 - [x] LP-7 Przyciski − i + przy każdym suwaku grubości (pióro: 0,1 pt, gumka: 1 pt, grubość zaznaczonej kreski, rozmiar gumki w Ustawieniach); wartość spoza siatki kroku idzie do najbliższego węzła w danym kierunku (`core/pen/SliderStep`).
 - [x] LP-8 Ręczne uznanie strony za jasną albo ciemną (dół panelu „Styl strony”, ta strona albo wszystkie): decyduje o zamianie kolorów w trybie ciemnym i o zakreślaczu, poprawia stare dokumenty źle rozpoznane; cofalne (`PageTone.withTone`, `Editor.setPageTone`).
 - [x] LP-9 Bez błysków jasnych kafelków po przełączeniu trybu ciemnego: zmiana motywu wyrzuca kafelki z pamięci (`PageCache.dropAll`), zamiast rysować stare jasne do czasu ponownego renderu.
+- [x] LP-10 Przytrzymanie − / + przy suwaku powtarza krok ok. 7 razy na sekundę (po 0,4 s od pierwszego kroku), do puszczenia albo końca zakresu.
+- [x] LP-11 Panel koloru zaznaczenia jest wysoki na prawie cały ekran (było 460 dp), więc grubość i styl linii widać bez przewijania.
+- [x] LP-12 Zmiana koloru i grubości zaznaczenia suwakiem to jeden krok cofania na puszczenie (a przy dłuższym przeciąganiu co 2 s), nie krok na każdą klatkę (`core/edit/EditBurst`).
 
 ## Poza zakresem (świadomie)
 - [-] Rozpoznawanie pisma → tekst, formuły → LaTeX (EDT-046/047), OCR wyszukiwanie w piśmie odręcznym — brak lokalnego silnika offline w zależnościach; wróci, gdy będzie model on-device.

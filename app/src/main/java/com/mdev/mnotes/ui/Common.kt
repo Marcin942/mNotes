@@ -374,13 +374,16 @@ fun SectionLabel(text: String, modifier: Modifier = Modifier) {
 
 /** Suwak z gradientowym torem (do HSV). */
 @Composable
-fun GradientSlider(value: Float, brush: Brush, onChange: (Float) -> Unit, modifier: Modifier = Modifier) {
+fun GradientSlider(value: Float, brush: Brush, onChange: (Float) -> Unit, modifier: Modifier = Modifier, onFinish: (() -> Unit)? = null) {
+    val finish = androidx.compose.runtime.rememberUpdatedState(onFinish)
     var w by remember { mutableStateOf(1f) }
     val m = mint
     Box(
         modifier.fillMaxWidth().height(26.dp).onSizeChanged { w = it.width.toFloat().coerceAtLeast(1f) }
-            .pointerInput(Unit) { detectTapGestures { onChange((it.x / w).coerceIn(0f, 1f)) } }
-            .pointerInput(Unit) { detectDragGestures { c, _ -> onChange((c.position.x / w).coerceIn(0f, 1f)); c.consume() } },
+            .pointerInput(Unit) { detectTapGestures { onChange((it.x / w).coerceIn(0f, 1f)); finish.value?.invoke() } }
+            .pointerInput(Unit) {
+                detectDragGestures(onDragEnd = { finish.value?.invoke() }, onDragCancel = { finish.value?.invoke() }) { c, _ -> onChange((c.position.x / w).coerceIn(0f, 1f)); c.consume() }
+            },
         contentAlignment = Alignment.CenterStart,
     ) {
         Box(Modifier.fillMaxWidth().height(12.dp).clip(RoundedCornerShape(6.dp)).background(brush).border(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.5f), RoundedCornerShape(6.dp)))
@@ -424,6 +427,11 @@ fun ColorPicker(
     onPipette: (() -> Unit)? = null, highlighter: Boolean = false,
     /** Zaznaczono elementy o różnych kolorach: podgląd jest tęczowy, a żaden kolor z palety nie jest „wybrany”. */
     mixed: Boolean = false,
+    /**
+     * Koniec jednej zmiany: puszczenie suwaka, stuknięcie w kolor, pełny kod hex. Kto zapisuje historię cofania,
+     * zamyka tu krok, a w [onChange] tylko pokazuje kolor.
+     */
+    onFinish: (() -> Unit)? = null,
 ) {
     val hsv = remember(color) { FloatArray(3).also { android.graphics.Color.colorToHSV(color, it) } }
     var hex by remember(color, mixed) { mutableStateOf(if (mixed) "" else String.format("%06X", color and 0xFFFFFF)) }
@@ -439,26 +447,26 @@ fun ColorPicker(
             val dot = ((maxWidth - 8.dp * (per - 1)) / per).coerceIn(18.dp, 30.dp)
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 for (row in pal.chunked(per)) Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    for (c in row) Dot(shown(c), dot, selected = !mixed && (c and 0xFFFFFF) == (color and 0xFFFFFF), onClick = { onChange(c) })
+                    for (c in row) Dot(shown(c), dot, selected = !mixed && (c and 0xFFFFFF) == (color and 0xFFFFFF), onClick = { onChange(c); onFinish?.invoke() })
                 }
             }
         }
         if (recent.isNotEmpty()) {
             Text(T.t("Ostatnie", "Recent"), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                for (c in recent.take(10)) Dot(shown(c), 24.dp, onClick = { onChange(c) })
+                for (c in recent.take(10)) Dot(shown(c), 24.dp, onClick = { onChange(c); onFinish?.invoke() })
             }
         }
         val hues = remember { Brush.horizontalGradient(List(7) { Color(android.graphics.Color.HSVToColor(floatArrayOf(it * 60f, 1f, 1f))) }) }
-        GradientSlider(hsv[0] / 360f, hues, { emit(it * 360f, hsv[1].coerceAtLeast(0.05f), hsv[2].coerceAtLeast(0.05f)) })
-        GradientSlider(hsv[1], Brush.horizontalGradient(listOf(Color(android.graphics.Color.HSVToColor(floatArrayOf(hsv[0], 0f, hsv[2]))), Color(android.graphics.Color.HSVToColor(floatArrayOf(hsv[0], 1f, hsv[2]))))), { emit(hsv[0], it, hsv[2]) })
-        GradientSlider(hsv[2], Brush.horizontalGradient(listOf(Color.Black, Color(android.graphics.Color.HSVToColor(floatArrayOf(hsv[0], hsv[1], 1f))))), { emit(hsv[0], hsv[1], it) })
+        GradientSlider(hsv[0] / 360f, hues, { emit(it * 360f, hsv[1].coerceAtLeast(0.05f), hsv[2].coerceAtLeast(0.05f)) }, onFinish = onFinish)
+        GradientSlider(hsv[1], Brush.horizontalGradient(listOf(Color(android.graphics.Color.HSVToColor(floatArrayOf(hsv[0], 0f, hsv[2]))), Color(android.graphics.Color.HSVToColor(floatArrayOf(hsv[0], 1f, hsv[2]))))), { emit(hsv[0], it, hsv[2]) }, onFinish = onFinish)
+        GradientSlider(hsv[2], Brush.horizontalGradient(listOf(Color.Black, Color(android.graphics.Color.HSVToColor(floatArrayOf(hsv[0], hsv[1], 1f))))), { emit(hsv[0], hsv[1], it) }, onFinish = onFinish)
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             Dot(shown(color), 32.dp, mixed = mixed)
             MField(hex, { s ->
                 val t = s.uppercase().filter { it in "0123456789ABCDEF" }.take(6)
                 hex = t
-                if (t.length == 6) set(0xFF000000.toInt() or t.toInt(16))
+                if (t.length == 6) { set(0xFF000000.toInt() or t.toInt(16)); onFinish?.invoke() }
             }, Modifier.width(140.dp), leading = { Text("#", color = MaterialTheme.colorScheme.onSurfaceVariant) })
             if (onPipette != null) IconBtn(Icons.Rounded.Colorize, T.t("Pipeta — pobierz kolor ze strony", "Eyedropper — pick a color from the page"), onPipette, size = 36.dp, iconSize = 20.dp, shortcut = "I")
         }

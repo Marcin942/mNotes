@@ -364,6 +364,7 @@ class Editor(val ctx: Context, val nbId: String) {
 
     /** Wykonanie z zapisem na stosie cofania. */
     fun exec(edit: DocEdit) {
+        endBurst()
         val follow = liveFollow(edit, after = false)
         val grown = boardGrowth(edit, follow)
         doc.exec(grown?.first ?: follow?.let { DocEdit.Group(listOf(edit, it)) } ?: edit); undoTick++
@@ -426,15 +427,17 @@ class Editor(val ctx: Context, val nbId: String) {
         shift?.let { (dx, dy) -> view?.boardShifted(dx, dy) }
     }
     fun record(edit: DocEdit) {
+        endBurst()
         val follow = liveFollow(edit, after = true)
         follow?.apply(doc)
         doc.record(follow?.let { DocEdit.Group(listOf(edit, it)) } ?: edit); undoTick++; boardAfter(edit)
     }
 
     // — Zaznaczenie —
-    fun clearSel() { if (sel != null) { sel = null; transformMode = false; pointEdit = false; selTick++ } }
+    fun clearSel() { endBurst(); if (sel != null) { sel = null; transformMode = false; pointEdit = false; selTick++ } }
 
     fun select(pageId: String, ids: Set<Int>) {
+        endBurst()
         val old = sel
         if (old == null || old.pageId != pageId || old.ids != ids) { transformMode = false; pointEdit = false }
         sel = if (ids.isEmpty()) null else Sel(pageId, ids)
@@ -532,9 +535,9 @@ class Editor(val ctx: Context, val nbId: String) {
         selTick++
     }
 
-    fun recolorSel(color: Int) {
+    fun recolorSel(color: Int, live: Boolean = false) {
         val p = selPage() ?: return
-        replaceSel { e ->
+        styleSel(live) { e ->
             native(p, when (e) { is Stroke -> e.withStyle(color = if (e.pen == PenKind.HIGHLIGHTER) com.mdev.mnotes.ui.softenForHighlighter(color) else color); is TextBox -> e.copy(color = color); is FillEl -> e.copy(color = if (e.hl) com.mdev.mnotes.ui.softenForHighlighter(color) else color); else -> e })
         }
     }
@@ -551,7 +554,42 @@ class Editor(val ctx: Context, val nbId: String) {
         return (shownTheme(p)?.native(e) ?: e) as E
     }
 
-    fun setSelWidth(w: Float) = replaceSel { e -> if (e is Stroke) e.withStyle(width = w) else e }
+    fun setSelWidth(w: Float, live: Boolean = false) = styleSel(live) { e -> if (e is Stroke) e.withStyle(width = w) else e }
+
+    // — Seria zmian z suwaka (kolor, grubość): jeden krok cofania na puszczenie albo na każde 2 s ([EditBurst]) —
+    private val burst = com.mdev.mnotes.core.edit.EditBurst()
+    private var burstPage: String? = null
+    private var burstBefore: com.mdev.mnotes.core.model.PageContent? = null
+
+    private fun styleSel(live: Boolean, f: (Element) -> Element) = if (live) replaceSelLive(f) else replaceSel(f)
+
+    /** Jak [replaceSel], ale bez wpisu cofania na każdą klatkę: krok zapisuje [endBurst]. */
+    private fun replaceSelLive(f: (Element) -> Element) {
+        val p = selPage() ?: return
+        if (burstPage != p.id) endBurst()
+        if (burst.change(SystemClock.uptimeMillis())) closeBurst()
+        if (burstBefore == null) { burstPage = p.id; burstBefore = doc.content(p) }
+        val map = selElements().associate { it.id to f(it) }
+        val edit = ElementsEdit.replace(doc.content(p), map)
+        if (!edit.isEmpty) { doc.applyElements(p.id, edit); lastEditAt = SystemClock.uptimeMillis() }
+        selTick++
+    }
+
+    /** Zamyka serię zmian z suwaka jednym krokiem cofania (puszczenie suwaka, inna edycja, cofnij). */
+    fun endBurst() { if (burst.end()) closeBurst() }
+
+    private fun closeBurst() {
+        val before = burstBefore ?: return
+        val pageId = burstPage
+        burstBefore = null; burstPage = null
+        val p = pageId?.let { doc.page(it) } ?: return
+        val edit = ElementsEdit.diff(before, doc.content(p))
+        if (edit.isEmpty) return
+        val e = DocEdit.Elements(p.id, edit)
+        val follow = liveFollow(e, after = true)
+        follow?.apply(doc)
+        doc.record(follow?.let { DocEdit.Group(listOf(e, it)) } ?: e); undoTick++; boardAfter(e)
+    }
 
     fun setSelLine(line: LineStyle) = replaceSel { e -> if (e is Stroke) e.withStyle(line = line) else e }
 
@@ -873,6 +911,7 @@ class Editor(val ctx: Context, val nbId: String) {
     }
 
     fun commitSelPreview() {
+        endBurst()
         val prev = elPreview ?: return
         elPreview = null
         val p = doc.page(prev.pageId) ?: return

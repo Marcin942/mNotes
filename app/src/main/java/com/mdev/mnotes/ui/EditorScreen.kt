@@ -55,6 +55,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.role
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
@@ -258,6 +259,8 @@ import com.mdev.mnotes.editor.T
 import com.mdev.mnotes.editor.Tool
 import kotlin.math.roundToInt
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import kotlinx.coroutines.flow.conflate
 
 enum class Panel { PEN, ERASER, LASSO, TAPE, PAINTER, FILL, PAGES, STYLE, MORE, SELCOLOR, IMAGEFX, ALIGN, BOARD, PHONE }
@@ -1850,12 +1853,53 @@ fun MSlider(value: Float, min: Float, max: Float, onFinish: (() -> Unit)? = null
         colors = SliderDefaults.colors(thumbColor = m.accent, activeTrackColor = m.accent, inactiveTrackColor = m.line),
     )
     if (step <= 0f) { Bar(Modifier.fillMaxWidth()); return }
-    fun bump(dir: Int) { onChange(SliderStep.next(v, dir, step, min, max)); onFinish?.invoke() }
-    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        IconBtn(Icons.Rounded.Remove, T.t("Mniej o krok", "One step less"), { bump(-1) }, enabled = v > min, size = 30.dp, iconSize = 18.dp)
-        Bar(Modifier.weight(1f).padding(horizontal = 4.dp))
-        IconBtn(Icons.Rounded.Add, T.t("Więcej o krok", "One step more"), { bump(1) }, enabled = v < max, size = 30.dp, iconSize = 18.dp)
+    val cur = androidx.compose.runtime.rememberUpdatedState(v)
+    val change = androidx.compose.runtime.rememberUpdatedState(onChange)
+    // Wartość po kroku czytana z [cur] dopiero w następnym kroku: przy 7 krokach na sekundę ekran zdąży ją przyjąć.
+    val bump: (Int) -> Boolean = { dir ->
+        val n = SliderStep.next(cur.value, dir, step, min, max)
+        if (n != cur.value) change.value(n)
+        n > min && n < max
     }
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        RepeatBtn(Icons.Rounded.Remove, T.t("Mniej o krok", "One step less"), v > min, { bump(-1) }, onFinish)
+        Bar(Modifier.weight(1f).padding(horizontal = 4.dp))
+        RepeatBtn(Icons.Rounded.Add, T.t("Więcej o krok", "One step more"), v < max, { bump(1) }, onFinish)
+    }
+}
+
+/** Przytrzymanie: pierwszy krok od razu, po chwili ok. 7 kroków na sekundę ([SliderStep.REPEAT_MS]), do puszczenia albo końca zakresu. */
+@Composable
+private fun RepeatBtn(icon: androidx.compose.ui.graphics.vector.ImageVector, tip: String, enabled: Boolean, step: () -> Boolean, onFinish: (() -> Unit)?) {
+    val m = mint
+    var pressed by remember { mutableStateOf(false) }
+    val on = androidx.compose.runtime.rememberUpdatedState(enabled)
+    val doStep = androidx.compose.runtime.rememberUpdatedState(step)
+    val finish = androidx.compose.runtime.rememberUpdatedState(onFinish)
+    val tick = rememberTick()
+    val base = MaterialTheme.colorScheme.onSurface
+    Box(
+        Modifier.size(30.dp).clip(RoundedCornerShape(10.dp)).background(if (pressed && enabled) m.hover else Color.Transparent)
+            .semantics { contentDescription = tip; role = Role.Button }
+            .pointerInput(Unit) {
+                kotlinx.coroutines.coroutineScope {
+                    awaitEachGesture {
+                        awaitFirstDown()
+                        if (!on.value) return@awaitEachGesture
+                        pressed = true; tick()
+                        val job = launch {
+                            var more = doStep.value()
+                            delay(SliderStep.REPEAT_DELAY_MS)
+                            while (more) { more = doStep.value(); delay(SliderStep.REPEAT_MS) }
+                        }
+                        waitForUpOrCancellation()
+                        job.cancel(); pressed = false
+                        finish.value?.invoke()
+                    }
+                }
+            },
+        contentAlignment = Alignment.Center,
+    ) { Icon(icon, null, Modifier.size(18.dp), tint = if (enabled) base else base.copy(alpha = 0.32f)) }
 }
 
 @Composable
@@ -2048,20 +2092,23 @@ private fun SelectionButtons(ed: Editor, panel: Panel?, toggle: (Panel) -> Unit,
 
 @Composable
 private fun SelColorPanel(ed: Editor, els: List<Element>) {
+    // Wysokość z ekranu: przy 460 dp grubość i styl linii były pod krawędzią, a przewijanie łatwo zmieniało kolor.
+    val maxH = (androidx.compose.ui.platform.LocalConfiguration.current.screenHeightDp - 120).coerceAtLeast(460).dp
+    androidx.compose.runtime.DisposableEffect(Unit) { onDispose { ed.endBurst() } }
     FloatingCard(Modifier.width(320.dp)) {
-        Column(Modifier.heightIn(max = 460.dp).verticalScroll(rememberScrollState()).padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Column(Modifier.heightIn(max = maxH).verticalScroll(rememberScrollState()).padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             val colors = els.mapNotNull { colorOf(it) }.map { it and 0xFFFFFF }.distinct()
             val first = els.firstOrNull { colorOf(it) != null }
             val hasStroke = els.any { it is InkStroke }
             SectionLabel(T.t("Kolor", "Color"))
-            ColorPicker(first?.let { colorOf(it) } ?: 0xFF000000.toInt(), { ed.recolorSel(it) }, mixed = colors.size > 1, recent = ed.kit.sets.filter { !it.hl }.flatMap { it.colors.take(it.visible) }.distinct(), onPipette = { ed.startPipette { c -> ed.recolorSel(c) } })
+            ColorPicker(first?.let { colorOf(it) } ?: 0xFF000000.toInt(), { ed.recolorSel(it, live = true) }, onFinish = { ed.endBurst() }, mixed = colors.size > 1, recent = ed.kit.sets.filter { !it.hl }.flatMap { it.colors.take(it.visible) }.distinct(), onPipette = { ed.startPipette { c -> ed.recolorSel(c) } })
             if (hasStroke) {
                 val w = (els.firstOrNull { it is InkStroke } as InkStroke).width
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     SectionLabel(T.t("Grubość", "Width")); Spacer(Modifier.weight(1f))
                     Text(String.format("%.1f pt", w), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
-                MSlider(w, 0.3f, 24f, step = 0.1f) { ed.setSelWidth(it) }
+                MSlider(w, 0.3f, 24f, onFinish = { ed.endBurst() }, step = 0.1f) { ed.setSelWidth(it, live = true) }
                 SectionLabel(T.t("Styl linii", "Line style"))
                 LineStyleRow(els.filterIsInstance<InkStroke>().map { it.line }.distinct().singleOrNull()) { ed.setSelLine(it) }
             }

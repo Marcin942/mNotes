@@ -28,6 +28,9 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.PathEffect
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.graphics.lerp
@@ -39,6 +42,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.mdev.mnotes.editor.T
+import com.mdev.mnotes.data.CoverScience
 import com.mdev.mnotes.data.CoverStars
 import com.mdev.mnotes.data.CoverStyle
 import kotlin.math.hypot
@@ -50,6 +54,8 @@ object CoverPalette {
     val colors: List<Int> = listOf(
         0xFF6B8F7B, 0xFF5E7FA3, 0xFF2F4468, 0xFF7F6A93, 0xFFB5694F, 0xFFB86F82,
         0xFFC9A05A, 0xFFB5A58E, 0xFF7C8450, 0xFF3F8586, 0xFF424850, 0xFF74384A,
+        // Kakao, zieleń butelkowa i mgła (szaroniebieski): dopisane na końcu, żeby kolejność starych nie drgnęła.
+        0xFF7B5E4B, 0xFF35594A, 0xFF8CA3B3,
     ).map { it.toInt() }
 
     val default: Int = colors[0]
@@ -115,6 +121,25 @@ fun CoverArt(color: Int, style: Int, modifier: Modifier = Modifier) {
                     val far = hypot(c.x, c.y)
                     var r = w * 0.2f
                     while (r < far) { drawCircle(pat, r, c, style = Stroke(max(w * 0.01f, px))); r += w * 0.14f }
+                }
+                CoverStyle.INTEGRALS, CoverStyle.MOLECULES, CoverStyle.DECAY -> {
+                    // Wzory z nauk ścisłych ([CoverScience]): cienkie linie, więc krycie jak przy gwiazdkach, nie jak przy pasach.
+                    val lay = CoverScience.layout(style, h / w)
+                    val top = if (lightBase) 0.20f else 0.30f
+                    val dash = PathEffect.dashPathEffect(floatArrayOf(w * 0.018f, w * 0.014f))
+                    for (pl in lay.polys) {
+                        val p = Path(); p.moveTo(pl.pts[0] * w, pl.pts[1] * w)
+                        var k = 2; while (k < pl.pts.size) { p.lineTo(pl.pts[k] * w, pl.pts[k + 1] * w); k += 2 }
+                        if (pl.closed) p.close()
+                        val col = ink.copy(alpha = top * pl.a)
+                        if (pl.fill) drawPath(p, col)
+                        else drawPath(p, col, style = Stroke(max(pl.width * w, px * 0.7f), cap = StrokeCap.Round, join = StrokeJoin.Round, pathEffect = if (pl.dash) dash else null))
+                    }
+                    for (d in lay.discs) {
+                        val col = ink.copy(alpha = top * d.a)
+                        if (d.fill) drawCircle(col, max(d.r * w, px * 0.7f), Offset(d.x * w, d.y * w))
+                        else drawCircle(col, d.r * w, Offset(d.x * w, d.y * w), style = Stroke(max(d.width * w, px * 0.7f)))
+                    }
                 }
                 CoverStyle.STARS, CoverStyle.STARS_BIG, CoverStyle.CONSTELLATIONS -> {
                     // 3c-A14: gwiazdki trochę wyraźniejsze od innych wzorów (drobne), jasność każdej z układu.
@@ -182,7 +207,8 @@ fun CoverPicker(cover: Int, style: Int, onCover: (Int) -> Unit, onStyle: (Int) -
     if (open) ColorPicker(cover, onCover, Modifier.padding(top = 8.dp))
     FlowRow(Modifier.padding(top = 10.dp), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         val names = listOf(T.t("Gładka", "Plain"), T.t("Pasy", "Stripes"), T.t("Kropki", "Dots"), T.t("Fale", "Waves"), T.t("Kratka", "Grid"), T.t("Len", "Linen"), T.t("Łuki", "Arcs"),
-            T.t("Gwiazdki", "Starry"), T.t("Gwiazdy", "Stars"), T.t("Gwiazdozbiory", "Constellations"))
+            T.t("Gwiazdki", "Starry"), T.t("Gwiazdy", "Stars"), T.t("Gwiazdozbiory", "Constellations"),
+            T.t("Całki", "Integrals"), T.t("Molekuły", "Molecules"), T.t("Rozpady jąder", "Nuclear decay"))
         for (i in 0 until CoverStyle.COUNT) Chip(names[i], style == i, { onStyle(i) })
     }
 }

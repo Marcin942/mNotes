@@ -823,6 +823,7 @@ private fun SelectionBar(st: LibState, ops: LibOps, inTrash: Boolean, order: Lis
                 IconBtn(Icons.Rounded.ContentCopy, T.t("Duplikuj", "Duplicate"), { ops.duplicate(st.sel) })
                 if (st.sel.size == 1) IconBtn(Icons.Rounded.Palette, T.t("Okładka", "Cover"), { st.dialog = LibDialog.Cover(ops.nbs(st.sel).first()) })
             }
+            if (st.sel.size == 1 && st.sel.first().startsWith("f:")) IconBtn(Icons.Rounded.Palette, T.t("Kolor folderu", "Folder color"), { st.dialog = LibDialog.FolderColor(st.sel.first().substring(2)) })
             if (st.sel.size == 1) IconBtn(Icons.Rounded.Edit, T.t("Zmień nazwę", "Rename"), { st.dialog = LibDialog.Rename(st.sel.first()) }, shortcut = "F2")
             IconBtn(Icons.Rounded.DriveFileMove, T.t("Przenieś", "Move"), { st.dialog = LibDialog.Move(st.sel) })
             IconBtn(Icons.Rounded.Delete, T.t("Do kosza", "Move to trash"), { ops.trash(st.sel) }, shortcut = "Del")

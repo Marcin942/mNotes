@@ -1139,7 +1139,6 @@ private fun ItemMenu(st: LibState, ops: LibOps, inTrash: Boolean) {
                 if (!multi && !isFolder) { val ctx = LocalContext.current; Item(Icons.Rounded.OpenInNew, T.t("Otwórz w nowym oknie", "Open in new window")) { ctx.openNewWindow(keyId(mt.key)) } }
                 if (!multi) Item(Icons.Rounded.Edit, T.t("Zmień nazwę…", "Rename…"), "F2") { st.dialog = LibDialog.Rename(mt.key) }
                 if (!multi && !isFolder) Item(Icons.Rounded.Palette, T.t("Zmień okładkę…", "Change cover…")) { st.dialog = LibDialog.Cover(keyId(mt.key)) }
-                if (!multi && isFolder) Item(Icons.Rounded.Palette, T.t("Kolor folderu…", "Folder color…")) { st.dialog = LibDialog.FolderColor(keyId(mt.key)) }
                 if (!isFolder || multi) {
                     val ids = ops.nbs(st.sel)
                     if (ids.isNotEmpty()) {

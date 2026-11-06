@@ -49,8 +49,8 @@ object CoverScience {
     // ─────────────── Całki ───────────────
 
     private fun integrals(b: Builder, ar: Float) {
-        integralSign(b, 0.70f, 0.20f, 0.155f, 1f)
-        integralSign(b, 0.31f, 0.22f, 0.085f, 0.6f)
+        integralSign(b, 0.70f, 0.19f, 0.17f, 1f)
+        integralSign(b, 0.30f, 0.22f, 0.11f, 0.65f)
 
         // Wykres: oś, krzywa f(u) = exp(−((u−½)/0,27)²) i suma Riemanna (środki przedziałów) między a i b.
         val ox = 0.21f; val oy = ar - 0.15f; val wx = 0.70f; val hy = 0.40f
@@ -77,37 +77,45 @@ object CoverScience {
         for (u in listOf(ua, ub)) b.line(px(u), oy - 0.012f, px(u), oy + 0.022f, 0.0055f, 0.9f)
     }
 
-    /** Znak ∫ pisany piórem: pochylony rdzeń z haczykami i kulkami na końcach, grubszy w środku. */
+    /**
+     * Kontur znaku ∫ (wersja „display”) z fontu Latin Modern Math, czyli ten sam kształt co w TeX-u (licencja GUST Font
+     * License, zezwala na takie użycie). Układ: środek w (0, 0), wysokość od −1 do 1, oś y w górę; pary x, y.
+     */
+    private val INTEGRAL_GLYPH = floatArrayOf(
+        0.3992f, 0.9163f, 0.3970f, 0.9338f, 0.3908f, 0.9499f, 0.3812f, 0.9641f, 0.3687f, 0.9764f, 0.3539f, 0.9863f,
+        0.3373f, 0.9938f, 0.3195f, 0.9984f, 0.3011f, 1.0000f, 0.2762f, 0.9954f, 0.2529f, 0.9818f, 0.2308f, 0.9593f,
+        0.2098f, 0.9280f, 0.1897f, 0.8881f, 0.1703f, 0.8398f, 0.1514f, 0.7831f, 0.1328f, 0.7183f, 0.1264f, 0.6944f,
+        0.1105f, 0.6327f, 0.0868f, 0.5368f, 0.0568f, 0.4101f, 0.0224f, 0.2563f, -0.0149f, 0.0789f, -0.0534f, -0.1184f,
+        -0.0914f, -0.3321f, -0.1003f, -0.3843f, -0.1094f, -0.4372f, -0.1189f, -0.4904f, -0.1286f, -0.5434f, -0.1386f, -0.5959f,
+        -0.1490f, -0.6473f, -0.1596f, -0.6972f, -0.1706f, -0.7453f, -0.1778f, -0.7742f, -0.1875f, -0.8097f, -0.1998f, -0.8485f,
+        -0.2146f, -0.8874f, -0.2320f, -0.9232f, -0.2522f, -0.9527f, -0.2752f, -0.9728f, -0.3011f, -0.9802f, -0.3127f, -0.9793f,
+        -0.3233f, -0.9770f, -0.3327f, -0.9736f, -0.3407f, -0.9698f, -0.3472f, -0.9660f, -0.3520f, -0.9627f, -0.3550f, -0.9604f,
+        -0.3560f, -0.9595f, -0.3458f, -0.9580f, -0.3369f, -0.9550f, -0.3294f, -0.9507f, -0.3231f, -0.9452f, -0.3182f, -0.9388f,
+        -0.3147f, -0.9315f, -0.3126f, -0.9237f, -0.3119f, -0.9154f, -0.3129f, -0.9050f, -0.3157f, -0.8960f, -0.3201f, -0.8884f,
+        -0.3257f, -0.8822f, -0.3323f, -0.8774f, -0.3396f, -0.8740f, -0.3473f, -0.8720f, -0.3551f, -0.8713f, -0.3632f, -0.8719f,
+        -0.3711f, -0.8739f, -0.3785f, -0.8772f, -0.3852f, -0.8820f, -0.3909f, -0.8882f, -0.3953f, -0.8960f, -0.3982f, -0.9053f,
+        -0.3992f, -0.9163f, -0.3971f, -0.9331f, -0.3913f, -0.9487f, -0.3821f, -0.9630f, -0.3698f, -0.9754f, -0.3550f, -0.9856f,
+        -0.3381f, -0.9934f, -0.3193f, -0.9983f, -0.2993f, -1.0000f, -0.2518f, -0.9904f, -0.2112f, -0.9630f, -0.1763f, -0.9196f,
+        -0.1459f, -0.8621f, -0.1190f, -0.7923f, -0.0944f, -0.7122f, -0.0708f, -0.6236f, -0.0473f, -0.5284f, -0.0218f, -0.4216f,
+        0.0027f, -0.3145f, 0.0262f, -0.2073f, 0.0487f, -0.0998f, 0.0703f, 0.0079f, 0.0908f, 0.1158f, 0.1105f, 0.2239f,
+        0.1292f, 0.3321f, 0.1416f, 0.4034f, 0.1541f, 0.4729f, 0.1665f, 0.5401f, 0.1788f, 0.6044f, 0.1909f, 0.6651f,
+        0.2030f, 0.7217f, 0.2148f, 0.7735f, 0.2264f, 0.8200f, 0.2313f, 0.8395f, 0.2379f, 0.8636f, 0.2461f, 0.8901f,
+        0.2555f, 0.9166f, 0.2661f, 0.9411f, 0.2776f, 0.9614f, 0.2900f, 0.9751f, 0.3029f, 0.9802f, 0.3131f, 0.9795f,
+        0.3226f, 0.9775f, 0.3313f, 0.9746f, 0.3390f, 0.9712f, 0.3456f, 0.9676f, 0.3509f, 0.9642f, 0.3547f, 0.9614f,
+        0.3569f, 0.9595f, 0.3464f, 0.9580f, 0.3373f, 0.9550f, 0.3296f, 0.9507f, 0.3232f, 0.9452f, 0.3183f, 0.9388f,
+        0.3147f, 0.9315f, 0.3126f, 0.9237f, 0.3119f, 0.9154f, 0.3129f, 0.9050f, 0.3157f, 0.8960f, 0.3201f, 0.8884f,
+        0.3257f, 0.8822f, 0.3323f, 0.8774f, 0.3396f, 0.8740f, 0.3473f, 0.8720f, 0.3551f, 0.8713f, 0.3632f, 0.8719f,
+        0.3711f, 0.8739f, 0.3785f, 0.8772f, 0.3852f, 0.8820f, 0.3909f, 0.8882f, 0.3953f, 0.8960f, 0.3982f, 0.9053f,
+        0.3992f, 0.9163f,
+    )
+
+    /** Znak ∫ jak w TeX-u: wypełniony kontur fontu, skalowany tak, by miał wysokość 2·[half] wokół (cx, cy). */
     private fun integralSign(b: Builder, cx: Float, cy: Float, half: Float, a: Float) {
-        val p = ArrayList<FloatArray>()
-        fun cubic(x0: Float, y0: Float, x1: Float, y1: Float, x2: Float, y2: Float, x3: Float, y3: Float) {
-            for (k in 0..14) {
-                val t = k / 15f; val u = 1 - t
-                p += floatArrayOf(u * u * u * x0 + 3 * u * u * t * x1 + 3 * u * t * t * x2 + t * t * t * x3,
-                    u * u * u * y0 + 3 * u * u * t * y1 + 3 * u * t * t * y2 + t * t * t * y3)
-            }
-        }
-        cubic(-0.60f, 0.64f, -0.52f, 1.00f, -0.04f, 1.04f, 0.00f, 0.52f)
-        cubic(0.00f, 0.52f, 0.02f, 0.18f, -0.02f, -0.18f, 0.00f, -0.52f)
-        cubic(0.00f, -0.52f, 0.04f, -1.04f, 0.52f, -1.00f, 0.60f, -0.64f)
-        p += floatArrayOf(0.60f, -0.64f)
-        val pts = p.map { floatArrayOf(cx + (it[0] - 0.20f * it[1]) * half, cy + it[1] * half) }
-        val m = pts.size
-        val left = ArrayList<Float>(); val right = ArrayList<Float>()
-        for (i in 0 until m) {
-            val j0 = maxOf(i - 1, 0); val j1 = minOf(i + 1, m - 1)
-            var dx = pts[j1][0] - pts[j0][0]; var dy = pts[j1][1] - pts[j0][1]
-            val len = hypot(dx, dy).coerceAtLeast(1e-6f); dx /= len; dy /= len
-            val t = i / (m - 1f)
-            val hw = half * (0.012f + 0.052f * sin(PI.toFloat() * t).coerceAtLeast(0f).pow(0.7f))
-            left += pts[i][0] - dy * hw; left += pts[i][1] + dx * hw
-            right += pts[i][0] + dy * hw; right += pts[i][1] - dx * hw
-        }
-        val out = ArrayList<Float>(left)
-        for (i in m - 1 downTo 0) { out += right[2 * i]; out += right[2 * i + 1] }
-        b.polys += Poly(out.toFloatArray(), closed = true, fill = true, width = 0f, a = a)
-        b.discs += Disc(pts.first()[0], pts.first()[1], half * 0.085f, true, 0f, a)
-        b.discs += Disc(pts.last()[0], pts.last()[1], half * 0.085f, true, 0f, a)
+        val g = INTEGRAL_GLYPH
+        val out = FloatArray(g.size)
+        var i = 0
+        while (i < g.size) { out[i] = cx + g[i] * half; out[i + 1] = cy - g[i + 1] * half; i += 2 }
+        b.polys += Poly(out, closed = true, fill = true, width = 0f, a = a)
     }
 
     // ─────────────── Molekuły ───────────────
